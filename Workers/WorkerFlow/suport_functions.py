@@ -1,5 +1,5 @@
 from SQLfunctions.Inserts import inserindo_em_cliente_caso_seja_novo
-from SQLfunctions.Querys import buscar_conversa_ativa
+
 
 def verifica_se_cliente_novo_ou_nao(wa_id_telefone):
     id_cliente, inserido = inserindo_em_cliente_caso_seja_novo(wa_id_telefone)
