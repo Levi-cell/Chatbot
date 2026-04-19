@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.utils.html import format_html
 from django.urls import reverse
 import logging
+from ativando_numero import registrar_numero_whatsapp
 
 from .models import (
     Cliente,
@@ -42,11 +43,39 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_filter = ("status_ativo",)
     ordering = ("nome",)
 
-    exclude = ("access_token",)
-    readonly_fields = ("access_token",)
-
     list_per_page = 50
     empty_value_display = "-"
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+
+        # 🔥 só executa quando cria uma nova unidade
+        if not change:
+            try:
+                status, resposta = registrar_numero_whatsapp(obj.phone_number_id)
+
+                if status != 200:
+                    logger.error(f"Erro ao registrar número {obj.phone_number_id}: {resposta}")
+                    self.message_user(
+                        request,
+                        f"Erro ao registrar número no WhatsApp: {resposta}",
+                        level=messages.ERROR
+                    )
+                else:
+                    logger.info(f"Número {obj.phone_number_id} registrado com sucesso")
+                    self.message_user(
+                        request,
+                        "Número registrado com sucesso no WhatsApp!",
+                        level=messages.SUCCESS
+                    )
+
+            except Exception as e:
+                logger.exception(f"Erro inesperado ao registrar número {obj.phone_number_id}")
+                self.message_user(
+                    request,
+                    f"Erro inesperado ao registrar número: {str(e)}",
+                    level=messages.ERROR
+                )
 
     def link_agendamento_clickable(self, obj):
         if obj.link_agendamento:
@@ -211,7 +240,6 @@ class FilaMensagensAdmin(admin.ModelAdmin):
 
     actions = ["reprocessar", "marcar_erro"]
 
-    # 🔒 Proteção contra cagada humana
     def has_add_permission(self, request):
         return False
 
@@ -243,7 +271,13 @@ class FilaMensagensAdmin(admin.ModelAdmin):
         logger.warning(f"{request.user} marcou {queryset.count()} mensagens como erro")
 
     def status_colorido(self, obj):
-        cor = "green" if obj.status == "success" else "red"
+        cores = {
+            "sent": "green",
+            "failed": "red",
+            "pending": "#555",
+            "processing": "orange",
+        }
+        cor = cores.get(obj.status, "#000")
         return format_html('<b style="color:{};">{}</b>', cor, obj.status)
 
     status_colorido.short_description = "Status"
@@ -295,7 +329,6 @@ class HistoricoMensagensAdmin(admin.ModelAdmin):
 
     empty_value_display = "-"
 
-    # 🔒 histórico não deve ser alterado
     def has_add_permission(self, request):
         return False
 
@@ -310,4 +343,4 @@ class HistoricoMensagensAdmin(admin.ModelAdmin):
         )
 
     def get_readonly_fields(self, request, obj=None):
-        return [field.name for field in self.model._meta.fields]
+        return [field.name for field in self.model._meta.fields]
