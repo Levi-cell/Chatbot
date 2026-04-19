@@ -168,16 +168,14 @@ def criar_tabelas():
             email VARCHAR(200) UNIQUE
         );
 
-        -- UNIDADE
+        -- UNIDADE (corrigido)
         CREATE TABLE IF NOT EXISTS chatbot.unidade (
             id_unidade SERIAL PRIMARY KEY,
             nome VARCHAR(300) UNIQUE NOT NULL,
             cnpj VARCHAR(50) UNIQUE NOT NULL,
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
-            waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
-            access_token VARCHAR(300) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             status_ativo BOOLEAN DEFAULT TRUE
         );
@@ -200,17 +198,14 @@ def criar_tabelas():
 
             last_interaction_at TIMESTAMPTZ,
 
-            -- 🔥 CONTROLE DE MENSAGEM
             last_message_from VARCHAR(10)
                 CHECK (last_message_from IN ('cliente','bot')),
 
-            -- 🔥 FOLLOW-UP
             followup_stage INTEGER DEFAULT 0,
             followup_last_sent_at TIMESTAMPTZ NULL,
 
             lead_no_funil BOOLEAN DEFAULT FALSE,
 
-            -- 🔒 LOCK
             processing BOOLEAN DEFAULT FALSE,
             processing_started_at TIMESTAMPTZ NULL,
             lock_version INTEGER DEFAULT 0,
@@ -230,7 +225,7 @@ def criar_tabelas():
                 REFERENCES chatbot.etapa(id_etapa)
                 ON DELETE SET NULL
         );
-        
+
         CREATE UNIQUE INDEX IF NOT EXISTS idx_conversa_unica_ativa
         ON chatbot.conversa (id_cliente, id_unidade)
         WHERE status_ativa = TRUE;
@@ -307,6 +302,7 @@ def criar_tabelas():
         print("❌ Erro ao criar tabelas:", erro)
 
 def alterar_banco():
+
     try:
         cursor.execute("""
             ALTER TABLE chatbot.fila_mensagens

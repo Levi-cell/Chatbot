@@ -1,9 +1,12 @@
 from Workers.WorkerFlow.suport_functions import verifica_se_cliente_novo_ou_nao
 from Database.connectionAWS import cursor, conn
 
+"""Note aqui que não povoamos unidade no banco dentro do fluxo povoa_banco
+a unidade já preenchida diretamente no django-admin de forma manual a medidas que novos
+contratos são feitos"""
 
 def povoa_banco(id_mensagem, cliente_telefone, conteudo_texto, tipo_mensagem, id_phone_unidade, unidade_telefone,
-                data_recebimento, id_hash, retry_count):
+                data_recebimento, id_hash, retry_count, id_unidade):
 
 
 
@@ -14,20 +17,10 @@ def povoa_banco(id_mensagem, cliente_telefone, conteudo_texto, tipo_mensagem, id
     return
 
 
-from Workers.WorkerFlow.suport_functions import (
-    verifica_se_cliente_novo_ou_nao,
-    adiciona_ou_valida_conversa_ativa_entre_cliente_unidade
-)
-from Database.connectionAWS import cursor
 
 
-def tentar_lock_conversa(id_conversa):
-    cursor.execute("SELECT chatbot.lock_conversa(%s);", (id_conversa,))
-    return cursor.fetchone()[0]
 
 
-def unlock_conversa(id_conversa):
-    cursor.execute("SELECT chatbot.unlock_conversa(%s);", (id_conversa,))
 
 
 # def povoa_banco(...):

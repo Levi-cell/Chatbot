@@ -1,9 +1,17 @@
 import time
-from SQLfunctions.Querys import (
-    pegar_mensagens_da_fila,
-    pegar_unidades)
-from Database.connectionAWS import cursor, conn
+from Database.connectionAWS import conn
+from SQLfunctions.Deletes import deletar_mensagem_por_id
+from SQLfunctions.Querys import pegar_mensagens_da_fila
+from SQLfunctions.Updates import marcar_mensagem_como_enviada
 from Workers.WorkerFlow.Flow.povoando_banco import povoa_banco
+from Workers.cache.cache_unidade import (
+    inicializar_cache_unidades,
+    atualizar_cache_se_necessario,
+    obter_id_unidade,
+    UnidadeNaoEncontrada)
+from Workers.tratamento_erro.expection_process import tratar_erro_processamento
+
+
 
 
 def worker_flow():
@@ -11,25 +19,22 @@ def worker_flow():
 
     MAX_RETRY = 3
 
-    # preparando cache para unidades
-    unidades_map = pegar_unidades()
-    last_reload = time.time()
+    # 🔥 Cache inicial de unidades
+    unidades_map, last_reload = inicializar_cache_unidades()
 
     while True:
 
-        # Atualizando cache para unidades
-        if time.time() - last_reload > 60:
-            unidades_map = pegar_unidades()
-            last_reload = time.time()
-            print("🔄 Cache atualizado")
+        # 🔄 Atualiza cache de unidades
+        unidades_map, last_reload = atualizar_cache_se_necessario(
+            unidades_map,
+            last_reload
+        )
 
-        id_mensagem = None  # evita erro de variável não definida
+        id_mensagem = None
 
         try:
             registro = pegar_mensagens_da_fila()
             time.sleep(6)
-
-            # linhas de teste
 
             print("ciclo")
             print(registro)
@@ -38,105 +43,64 @@ def worker_flow():
                 time.sleep(1)
                 continue
 
-            id_mensagem = registro[0]
-            cliente_telefone = registro[1]
-            conteudo_texto = registro[2]
-            tipo_mensagem = registro[3]
+            # Persiste o dequeue (processing + retry_count) antes de processar; senão o
+            # rollback na exceção desfaz o UPDATE da função SQL e o retry_count nunca sobe.
+            conn.commit()
 
-            id_phone_unidade = registro[4]
-
-            # para setar unidade com cache perfomatico
-            id_unidade = unidades_map.get(id_phone_unidade)
-
-            if not id_unidade:
-                # 🔥 fallback pro banco (caso unidade nova)
-                cursor.execute("""
-                    SELECT id_unidade
-                    FROM chatbot.unidade
-                    WHERE phone_number_id = %s
-                """, (id_phone_unidade,))
-
-                result = cursor.fetchone()
-
-                if not result:
-                    raise Exception(f"Unidade não encontrada: {id_phone_unidade}")
-
-                id_unidade = result[0]
-
-                # 🔥 opcional: já atualiza o cache em runtime
-                unidades_map[id_phone_unidade] = id_unidade
-
-            unidade_telefone = registro[5]
-            data_recebimento = registro[6]
-            id_hash = registro[7]
-            retry_count = registro[8]
-
-            print(id_mensagem, cliente_telefone, conteudo_texto, tipo_mensagem,
-                  id_phone_unidade, unidade_telefone, data_recebimento, id_hash, retry_count)
+            (
+                id_mensagem,
+                cliente_telefone,
+                conteudo_texto,
+                tipo_mensagem,
+                id_phone_unidade,
+                unidade_telefone,
+                data_recebimento,
+                id_hash,
+                retry_count
+            ) = registro
 
             print(f"📩 Processando mensagem {id_mensagem} de {cliente_telefone}")
 
-            # ============================================================
-            # 🔥 FLUXO DO CHATBOT
-            # ============================================================
-            povoa_banco(id_mensagem,
-                        cliente_telefone,
-                        conteudo_texto,
-                        tipo_mensagem,
-                        id_unidade,
-                        unidade_telefone,
-                        data_recebimento,
-                        id_hash,
-                        retry_count)
+            # 🔥 resolve unidade (cache + fallback)
+            id_unidade = obter_id_unidade(id_phone_unidade, unidades_map)
 
+            # 🔥 fluxo principal
+            povoa_banco(
+                id_mensagem,
+                cliente_telefone,
+                conteudo_texto,
+                tipo_mensagem,
+                id_phone_unidade,
+                unidade_telefone,
+                data_recebimento,
+                id_hash,
+                retry_count,
+                id_unidade
+            )
 
-            cursor.execute("""
-                UPDATE chatbot.fila_mensagens
-                SET 
-                    status = 'sent',
-                    last_error = NULL  -- limpa erro antigo se sucesso
-                WHERE id_mensagem = %s
-            """, (id_mensagem,))
+            # 🔥 marca como enviada
+            marcar_mensagem_como_enviada(id_mensagem)
 
             conn.commit()
 
             print(f"✅ Mensagem {id_mensagem} processada com sucesso")
 
-        except Exception as erro:
-            conn.rollback()  # REGRA DE OURO: Limpa tudo o que foi feito na tentativa antes de reagendar
-            print(f"❌ Erro ao processar mensagem: {erro}")
+        except UnidadeNaoEncontrada as erro:
+            conn.rollback()
+            print(f"⚠️ Unidade inválida: {erro}")
 
-            if id_mensagem is None:
-                print("⚠️ Erro antes de identificar mensagem")
-                continue
-
-            try:
-                # Primeiro tenta deletar se já bateu o limite de retries
-
-                cursor.execute("""
-                    DELETE FROM chatbot.fila_mensagens 
-                    WHERE id_mensagem = %s AND retry_count >= %s;
-                """, (id_mensagem, MAX_RETRY))
-
-
-
-                # Para as que NÃO foram deletadas (ainda tem tentativas), volta para pending com 2 minutos
-                cursor.execute("""
-                    UPDATE chatbot.fila_mensagens
-                    SET 
-                        status = 'pending',
-                        next_attempt_at = NOW() + INTERVAL '2 minutes',
-                        last_error = %s
-                    WHERE id_mensagem = %s AND retry_count < %s;
-                """, (str(erro), id_mensagem, MAX_RETRY))
-
+            # Sem unidade no banco: não adianta retry (ex.: cliente cancelou / número só na Meta).
+            if id_mensagem is not None:
+                n = deletar_mensagem_por_id(id_mensagem)
                 conn.commit()
+                if n:
+                    print(f"🗑️ Mensagem {id_mensagem} removida da fila (phone_number_id sem unidade)")
+                else:
+                    print(f"ℹ️ Mensagem {id_mensagem} já não estava na fila")
 
-                print(f"🔁 Mensagem {id_mensagem} tratada (retry ou failed)")
-
-            except Exception as erro2:
-                conn.rollback()
-                print(f"🚨 Erro crítico ao reagendar: {erro2}")
+        except Exception as erro:
+            conn.rollback()
+            tratar_erro_processamento(id_mensagem, erro, MAX_RETRY)
 
 
 worker_flow()
