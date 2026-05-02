@@ -71,3 +71,87 @@ def obter_id_unidade(id_phone_unidade, unidades_map):
         unidades_map[phone_key] = id_unidade
 
     return int(id_unidade)
+
+
+#### CACHE COM REDIS
+
+
+# from redis_client import get_redis
+# from SQLfunctions.Querys import pegar_unidades, buscar_id_unidade_por_phone_id
+#
+# REDIS_KEY = "unidades_cache"
+# TTL = 60  # segundos
+#
+#
+# class UnidadeNaoEncontrada(Exception):
+#     pass
+#
+#
+# def carregar_cache_redis():
+#     r = get_redis()
+#
+#     unidades = pegar_unidades()
+#
+#     if not unidades:
+#         return
+#
+#     # salva tudo como hash no redis
+#     r.hset(REDIS_KEY, mapping=unidades)
+#     r.expire(REDIS_KEY, TTL)
+#
+#     print(f"📦 Cache Redis carregado: {len(unidades)} unidades")
+#
+#
+# def obter_id_unidade(id_phone_unidade):
+#     r = get_redis()
+#
+#     phone_key = _normalizar_phone_number_id(id_phone_unidade)
+#
+#     if phone_key is None:
+#         raise UnidadeNaoEncontrada("phone_number_id inválido")
+#
+#     # 🔥 tenta pegar do Redis
+#     id_unidade = r.hget(REDIS_KEY, phone_key)
+#
+#     if id_unidade:
+#         return int(id_unidade)
+#
+#     # 🔥 fallback no banco
+#     id_unidade = buscar_id_unidade_por_phone_id(phone_key)
+#
+#     if not _id_unidade_valido(id_unidade):
+#         raise UnidadeNaoEncontrada(f"Unidade não encontrada: {phone_key}")
+#
+#     # 🔥 salva no Redis
+#     r.hset(REDIS_KEY, phone_key, id_unidade)
+#
+#     return int(id_unidade)
+#
+#
+# def atualizar_cache_se_necessario():
+#     r = get_redis()
+#
+#     # se a chave expirou → recarrega
+#     if not r.exists(REDIS_KEY):
+#         print("🔄 Recarregando cache Redis...")
+#         carregar_cache_redis()
+#
+#
+# # ---------- utils (mantidos) ----------
+#
+# def _id_unidade_valido(id_unidade):
+#     if id_unidade is None:
+#         return False
+#     try:
+#         return int(id_unidade) > 0
+#     except:
+#         return False
+#
+#
+# def _normalizar_phone_number_id(id_phone_unidade):
+#     if id_phone_unidade is None:
+#         return None
+#     if isinstance(id_phone_unidade, str):
+#         s = id_phone_unidade.strip()
+#         return s if s else None
+#     return id_phone_unidade

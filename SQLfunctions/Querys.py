@@ -33,6 +33,8 @@ def pegar_mensagens_da_fila():
     cursor.execute("SELECT * FROM chatbot.dequeue_message();")
     registro = cursor.fetchone()
 
+    conn.commit()
+
 
     return registro
 
