@@ -5,9 +5,10 @@ from Database.bankScript import (
     definir_timezone_role,
     alterar_banco
 )
-
+from Database.connectionTest import connection_teste_psql
 
 def setup_database_aws():
+    connection_teste_psql()
     definir_timezone_role()
     criar_tabelas()
     alterar_banco()
@@ -17,4 +18,4 @@ def setup_database_aws():
     print("🚀 Banco totalmente configurado")
 
 
-setup_database_aws()
+setup_database_aws()

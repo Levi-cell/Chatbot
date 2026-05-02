@@ -1,13 +1,14 @@
 from Database.connectionAWS import conn, cursor
 
-cursor.execute("SELECT version();")
-version = cursor.fetchone()
+def connection_teste_psql():
+    cursor.execute("SELECT version();")
+    version = cursor.fetchone()
 
-print("Database version:")
-print("-------------------------")
-print(version[0])
+    print("Database version:")
+    print("-------------------------")
+    print(version[0])
 
-cursor.close()
-conn.close()
+    cursor.close()
+    conn.close()
 
-print("hi")
+

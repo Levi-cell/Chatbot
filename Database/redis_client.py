@@ -19,6 +19,13 @@ def get_redis():
 
     return _redis_client
 
-
+def confirmar_conexao_redis():
+    try:
+        r = get_redis()
+        r.set("teste_conexao", "ok", ex=5)  # expira em 5s
+        return r.get("teste_conexao") == "ok"
+    except Exception as e:
+        print(f"Erro ao conectar no Redis: {e}")
+        return False
 
 
