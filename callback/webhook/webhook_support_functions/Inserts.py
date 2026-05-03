@@ -1,10 +1,15 @@
-from Database.connectionAWS import cursor, conn
+from Database.connectionAWS import get_conn
 import logging
 
 logger = logging.getLogger(__name__)
 
 def inserir_dados_na_tabela(dados):
+    conn = None
     try:
+
+        conn = get_conn()
+        cursor = conn.cursor()
+
         if not dados or dados.get("erro"):
             logger.warning("Dados inválidos não inseridos")
             return False
@@ -48,6 +53,11 @@ def inserir_dados_na_tabela(dados):
         return True
 
     except Exception:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         logger.error("Erro ao inserir dados na fila", exc_info=True)
         return False
+
+    finally:
+        if conn:
+            conn.close()

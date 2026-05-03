@@ -1,6 +1,4 @@
-from Database.connectionAWS import cursor, conn
-
-def inserindo_em_cliente_caso_seja_novo(waid_telefone):
+def inserindo_em_cliente_caso_seja_novo(waid_telefone, cursor):
     try:
         cursor.execute("""
             INSERT INTO chatbot.cliente (waid_telefone)
@@ -24,9 +22,8 @@ def inserindo_em_cliente_caso_seja_novo(waid_telefone):
         raise ValueError(f"Anomalia Crítica: Cliente do telefone {waid_telefone} desapareceu da base durante a verificação!")
 
     except Exception as e:
-        conn.rollback()
         print(f"Erro ao inserir cliente: {e}")
-        raise e  # Propagando o erro para acionar o except no worker_flow
+        raise
 
 
 

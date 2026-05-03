@@ -1,9 +1,16 @@
-from Database.connectionAWS import conn, cursor
+from typing import final
+
+from Database.connectionAWS import get_conn
 
 
 def criar_funcoes_lock():
 
+    conn = None
+
     try:
+
+        conn = get_conn()
+        cursor = conn.cursor()
 
         cursor.execute("""
 
@@ -64,13 +71,23 @@ def criar_funcoes_lock():
         print("✅ Funções de lock/unlock criadas com sucesso!")
 
     except Exception as erro:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         print("❌ Erro ao criar funções de lock:", erro)
+
+    finally:
+        if conn:
+            conn.close()
 
 
 def criar_funcao_dequeue_message():
 
+    conn = None
+
     try:
+
+        conn = get_conn()
+        cursor = conn.cursor()
 
         cursor.execute("""
 
@@ -147,12 +164,20 @@ def criar_funcao_dequeue_message():
         print("✅ Função dequeue_message criada com sucesso!")
 
     except Exception as erro:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         print("❌ Erro ao criar função dequeue_message:", erro)
+    finally:
+        if conn:
+            conn.close()
 
 
 def criar_tabelas():
+
+    conn = None
     try:
+        conn = get_conn()
+        cursor = conn.cursor()
 
         cursor.execute("""
 
@@ -298,12 +323,23 @@ def criar_tabelas():
         print("✅ Estrutura do banco criada com sucesso!")
 
     except Exception as erro:
-        conn.rollback()
+
+        if conn:
+            conn.rollback()
         print("❌ Erro ao criar tabelas:", erro)
+
+    finally:
+        if conn:
+            conn.close()
 
 def alterar_banco():
 
+    conn = None
+
     try:
+        conn = get_conn()
+        cursor = conn.cursor()
+
         cursor.execute("""
             ALTER TABLE chatbot.fila_mensagens
             ADD COLUMN IF NOT EXISTS last_error TEXT;
@@ -313,12 +349,22 @@ def alterar_banco():
         print("✅ Coluna 'last_error' adicionada (ou já existente) com sucesso!")
 
     except Exception as erro:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         print("❌ Erro ao alterar banco (last_error):", erro)
+
+    finally:
+        if conn:
+            conn.close()
 
 
 def definir_timezone_role():
+    conn = None
     try:
+
+        conn = get_conn()
+        cursor = conn.cursor()
+
         cursor.execute("""
             ALTER ROLE fushi
             SET timezone TO 'America/Sao_Paulo';
@@ -328,7 +374,48 @@ def definir_timezone_role():
         print("✅ Timezone do ROLE 'fushi' definido com sucesso!")
 
     except Exception as e:
-        conn.rollback()
+
+        if conn:
+            conn.rollback()
         print("❌ Erro ao definir timezone do ROLE:", e)
 
+    finally:
+        if conn:
+            conn.close()
 
+def configurar_timeouts_avancados():
+    conn = None
+
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+
+        # 🔥 essencial (perfeito)
+        cursor.execute("""
+            ALTER ROLE fushi
+            SET idle_in_transaction_session_timeout = '30min';
+        """)
+
+        # 🔥 melhor escolha pro seu caso
+        cursor.execute("""
+            ALTER ROLE fushi
+            SET statement_timeout = '10min';
+        """)
+
+        # 🔥 ajustado pro seu padrão
+        cursor.execute("""
+            ALTER ROLE fushi
+            SET lock_timeout = '15s';
+        """)
+
+        conn.commit()
+        print("✅ Timeouts avançados configurados com sucesso")
+
+    except Exception as erro:
+        if conn:
+            conn.rollback()
+        print(f"❌ Erro ao configurar timeouts: {erro}")
+
+    finally:
+        if conn:
+            conn.close()

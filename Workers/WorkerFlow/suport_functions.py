@@ -1,8 +1,8 @@
 from SQLfunctions.Inserts import inserindo_em_cliente_caso_seja_novo
 
 
-def verifica_se_cliente_novo_ou_nao(wa_id_telefone):
-    id_cliente, inserido = inserindo_em_cliente_caso_seja_novo(wa_id_telefone)
+def verifica_se_cliente_novo_ou_nao(wa_id_telefone, cursor):
+    id_cliente, inserido = inserindo_em_cliente_caso_seja_novo(wa_id_telefone, cursor)
 
     if inserido:
         print(f"O cliente é novo e seu ID é {id_cliente}")

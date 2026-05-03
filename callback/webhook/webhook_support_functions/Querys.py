@@ -1,10 +1,15 @@
 import logging
-from Database.connectionAWS import cursor
+from Database.connectionAWS import get_conn
 
 logger = logging.getLogger(__name__)
 
 def buscar_timestamp_mensagem(id_hash):
+    conn = None
     try:
+
+        conn = get_conn()
+        cursor = conn.cursor()
+
         cursor.execute("""
             SELECT received_data_hora
             FROM chatbot.fila_mensagens
@@ -25,3 +30,7 @@ def buscar_timestamp_mensagem(id_hash):
     except Exception:
         logger.error("Erro ao buscar timestamp", exc_info=True)
         return None
+
+    finally:
+        if conn:
+            conn.close()

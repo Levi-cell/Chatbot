@@ -1,9 +1,8 @@
-from Database.connectionAWS import cursor, conn
 
 """Aqui não só existe querys de consulta mas também querys que
 chama funções SQL, na dúvida consulte Bankscript.py"""
 
-def pegar_unidades():
+def pegar_unidades(cursor):
     cursor.execute("""
         SELECT phone_number_id, id_unidade
         FROM chatbot.unidade
@@ -16,7 +15,7 @@ def pegar_unidades():
 
     return resultado
 
-def pegar_mensagens_da_fila():
+def pegar_mensagens_da_fila(cursor):
     """Aqui usamos uma função que criamos dentro do nosso script SQL
 
     a função chatbot.dequeue_message já consulta a fila de mensagens e
@@ -33,12 +32,12 @@ def pegar_mensagens_da_fila():
     cursor.execute("SELECT * FROM chatbot.dequeue_message();")
     registro = cursor.fetchone()
 
-    conn.commit()
+     ## AQUI PRECISAMOS COMMITAR POIS A FUNÇÂO SQL TRAZ OPERAÇÔES UPDATES
 
 
     return registro
 
-def buscar_id_unidade_por_phone_id(phone_number_id):
+def buscar_id_unidade_por_phone_id(phone_number_id, cursor):
     cursor.execute("""
         SELECT id_unidade
         FROM chatbot.unidade
@@ -49,7 +48,7 @@ def buscar_id_unidade_por_phone_id(phone_number_id):
     return result[0] if result else None
 
 
-def buscar_last_message_from_conversa(cliente_telefone, id_phone_unidade):
+def buscar_last_message_from_conversa(cliente_telefone, id_phone_unidade, cursor):
     """
     Busca o campo last_message_from da conversa ativa do cliente
     para a unidade correspondente.
@@ -68,12 +67,12 @@ def buscar_last_message_from_conversa(cliente_telefone, id_phone_unidade):
     resultado = cursor.fetchone()
     return resultado[0] if resultado else None
 
-def tentar_lock_conversa(id_conversa):
+def tentar_lock_conversa(id_conversa, cursor):
     cursor.execute("SELECT chatbot.lock_conversa(%s);", (id_conversa,))
     return cursor.fetchone()[0]
 
 
-def unlock_conversa(id_conversa):
+def unlock_conversa(id_conversa, cursor):
     cursor.execute("SELECT chatbot.unlock_conversa(%s);", (id_conversa,))
 
 def verifica_existencia_conversa():
@@ -83,7 +82,7 @@ def verifica_existencia_hist_msg():
     print("hi")
 
 
-# def buscar_conversa_ativa(cliente_telefone, id_phone_unidade):
+# def buscar_conversa_ativa(cliente_telefone, id_phone_unidade, cursor):
 #     """
 #     Busca a conversa ativa do cliente para a unidade correspondente.
 #     Retorna todos os campos da tabela conversa.

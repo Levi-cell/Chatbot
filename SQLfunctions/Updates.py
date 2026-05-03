@@ -1,7 +1,4 @@
-from Database.connectionAWS import cursor
-
-
-def marcar_mensagem_como_enviada(id_mensagem):
+def marcar_mensagem_como_enviada(id_mensagem, cursor):
     cursor.execute("""
         UPDATE chatbot.fila_mensagens
         SET status = 'sent',
@@ -9,7 +6,7 @@ def marcar_mensagem_como_enviada(id_mensagem):
         WHERE id_mensagem = %s
     """, (id_mensagem,))
 
-def reagendar_mensagem(id_mensagem, erro, max_retry):
+def reagendar_mensagem(id_mensagem, erro, max_retry, cursor):
     cursor.execute("""
         UPDATE chatbot.fila_mensagens
         SET 

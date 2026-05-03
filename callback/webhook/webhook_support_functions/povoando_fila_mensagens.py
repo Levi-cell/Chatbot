@@ -95,6 +95,6 @@ def povoando_fila(data):
     else:
         logger.error(f"Falha ao inserir na fila | id_msg={id_hash}")
 
-    buscar_timestamp_mensagem(id_hash)
+    buscar_timestamp_mensagem(id_hash) # APENAS PARA DEBUG
 
     return

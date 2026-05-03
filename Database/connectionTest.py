@@ -1,6 +1,10 @@
-from Database.connectionAWS import conn, cursor
+from Database.connectionAWS import get_conn
 
 def connection_teste_psql():
+
+    conn = get_conn()
+    cursor = conn.cursor()
+
     cursor.execute("SELECT version();")
     version = cursor.fetchone()
 
@@ -8,7 +12,6 @@ def connection_teste_psql():
     print("-------------------------")
     print(version[0])
 
-    cursor.close()
     conn.close()
 
 

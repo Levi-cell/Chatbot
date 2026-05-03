@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, date
-from Database.connectionAWS import conn, cursor
+from Database.connectionAWS import get_conn
 
 # so executar manualmente quando precisar criar partições
 
@@ -27,7 +27,11 @@ def criar_particoes_historico_mensagens(meses_a_frente=3):
 
     particoes_criadas = []
 
+    conn = None
+
     try:
+        conn = get_conn()
+        cursor = conn.cursor()
 
         for i in range(meses_a_frente + 1):
 
@@ -55,8 +59,13 @@ def criar_particoes_historico_mensagens(meses_a_frente=3):
         print(f"🚀 Mês atual + {meses_a_frente} meses à frente prontos!")
 
     except Exception as e:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         print("❌ Erro criando partições")
         print(e)
+
+    finally:
+        if conn:
+            conn.close()
 
 criar_particoes_historico_mensagens(3)
