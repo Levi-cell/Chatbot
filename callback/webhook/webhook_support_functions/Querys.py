@@ -34,3 +34,16 @@ def buscar_timestamp_mensagem(id_hash):
     finally:
         if conn:
             conn.close()
+
+def pegar_unidades_webhook(cursor):
+    cursor.execute("""
+        SELECT phone_number_id, id_unidade
+        FROM chatbot.unidade
+        WHERE status_ativo = TRUE
+    """)
+
+    resultado = {row[0]: row[1] for row in cursor.fetchall()}
+
+    print(f"📦 Cache de unidades carregado: {len(resultado)} unidades")
+
+    return resultado
