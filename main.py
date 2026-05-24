@@ -1,11 +1,92 @@
+import logging
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
 
-#### NÂO EXECUTAR POR ENQUANTO
-
-from Database.setup_database import setup_database_aws
-from Database.redis_client import confirmar_conexao_redis
-
-def run_workers():
+from core.cache.cache_unidade import REDIS_KEY, carregar_cache_redis
+from core.database.connection_aws import get_conn
+from core.database.redis_client import get_redis_safe
+from core.logging_config import setup_logging
 
 
-    setup_database_aws()
-    confirmar_conexao_redis()
+PROJECT_ROOT = Path(__file__).resolve().parent
+CALLBACK_DIR = PROJECT_ROOT / "callback"
+CREATE_NEW_CONSOLE = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+
+setup_logging()
+logger = logging.getLogger("dev.main")
+
+
+def carregar_cache_inicial():
+    conn = None
+
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+
+        total_banco = carregar_cache_redis(cursor)
+        total_redis = get_redis_safe().hlen(REDIS_KEY)
+
+        if total_redis != total_banco:
+            raise RuntimeError(
+                f"Cache inconsistente: banco={total_banco}, redis={total_redis}"
+            )
+
+        logger.info("cache_inicial_ok | unidades=%s", total_redis)
+
+    finally:
+        if conn:
+            conn.close()
+
+
+def abrir_terminal(nome, comando, pasta, env):
+    comando_cmd = f"title {nome} && {subprocess.list2cmdline(comando)}"
+
+    return subprocess.Popen(
+        ["cmd", "/k", comando_cmd],
+        cwd=pasta,
+        env=env,
+        creationflags=CREATE_NEW_CONSOLE,
+    )
+
+
+def montar_ambiente():
+    env = os.environ.copy()
+    pythonpath = env.get("PYTHONPATH")
+
+    if pythonpath:
+        env["PYTHONPATH"] = f"{PROJECT_ROOT}{os.pathsep}{pythonpath}"
+    else:
+        env["PYTHONPATH"] = str(PROJECT_ROOT)
+
+    return env
+
+
+def main():
+    carregar_cache_inicial()
+
+    env = montar_ambiente()
+
+    abrir_terminal(
+        "Chatbot Webhook",
+        [sys.executable, "manage.py", "runserver", *sys.argv[1:]],
+        CALLBACK_DIR,
+        env,
+    )
+
+    time.sleep(2)
+
+    abrir_terminal(
+        "Chatbot Worker",
+        [sys.executable, "-m", "workers.worker_flow.flow_main"],
+        PROJECT_ROOT,
+        env,
+    )
+
+    logger.info("ambiente_dev_iniciado | webhook=terminal worker=terminal")
+
+
+if __name__ == "__main__":
+    main()

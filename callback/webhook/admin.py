@@ -1,8 +1,11 @@
 from django.contrib import admin, messages
+from django.db import transaction
 from django.utils.html import format_html
 from django.urls import reverse
 import logging
-from ativando_numero import registrar_numero_whatsapp
+
+from core.cache.cache_unidade import recarregar_cache_unidades
+from core.integrations.whatsapp.ativando_numero import registrar_numero_whatsapp
 
 from .models import (
     Cliente,
@@ -16,9 +19,6 @@ from .models import (
 logger = logging.getLogger(__name__)
 
 
-# =========================
-# Unidade
-# =========================
 @admin.register(Unidade)
 class UnidadeAdmin(admin.ModelAdmin):
 
@@ -48,34 +48,42 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        transaction.on_commit(recarregar_cache_unidades)
 
-        # 🔥 só executa quando cria uma nova unidade
         if not change:
             try:
                 status, resposta = registrar_numero_whatsapp(obj.phone_number_id)
 
                 if status != 200:
-                    logger.error(f"Erro ao registrar número {obj.phone_number_id}: {resposta}")
+                    logger.error(f"Erro ao registrar numero {obj.phone_number_id}: {resposta}")
                     self.message_user(
                         request,
-                        f"Erro ao registrar número no WhatsApp: {resposta}",
+                        f"Erro ao registrar numero no WhatsApp: {resposta}",
                         level=messages.ERROR
                     )
                 else:
-                    logger.info(f"Número {obj.phone_number_id} registrado com sucesso")
+                    logger.info(f"Numero {obj.phone_number_id} registrado com sucesso")
                     self.message_user(
                         request,
-                        "Número registrado com sucesso no WhatsApp!",
+                        "Numero registrado com sucesso no WhatsApp!",
                         level=messages.SUCCESS
                     )
 
             except Exception as e:
-                logger.exception(f"Erro inesperado ao registrar número {obj.phone_number_id}")
+                logger.exception(f"Erro inesperado ao registrar numero {obj.phone_number_id}")
                 self.message_user(
                     request,
-                    f"Erro inesperado ao registrar número: {str(e)}",
+                    f"Erro inesperado ao registrar numero: {str(e)}",
                     level=messages.ERROR
                 )
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        transaction.on_commit(recarregar_cache_unidades)
+
+    def delete_queryset(self, request, queryset):
+        super().delete_queryset(request, queryset)
+        transaction.on_commit(recarregar_cache_unidades)
 
     def link_agendamento_clickable(self, obj):
         if obj.link_agendamento:
@@ -88,9 +96,6 @@ class UnidadeAdmin(admin.ModelAdmin):
     link_agendamento_clickable.short_description = "Agendamento"
 
 
-# =========================
-# Cliente
-# =========================
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
 
@@ -112,9 +117,6 @@ class ClienteAdmin(admin.ModelAdmin):
     empty_value_display = "-"
 
 
-# =========================
-# Etapa
-# =========================
 @admin.register(Etapa)
 class EtapaAdmin(admin.ModelAdmin):
 
@@ -130,9 +132,6 @@ class EtapaAdmin(admin.ModelAdmin):
     empty_value_display = "-"
 
 
-# =========================
-# Conversa
-# =========================
 @admin.register(Conversa)
 class ConversaAdmin(admin.ModelAdmin):
 
@@ -190,21 +189,23 @@ class ConversaAdmin(admin.ModelAdmin):
     def cliente_link(self, obj):
         if not obj.id_cliente:
             return "-"
+
         try:
             url = reverse(
                 "admin:webhook_cliente_change",
                 args=[obj.id_cliente.id_cliente]
             )
-            return format_html('<a href="{}">{}</a>', url, obj.id_cliente.nome or obj.id_cliente.waid_telefone)
-        except:
+            return format_html(
+                '<a href="{}">{}</a>',
+                url,
+                obj.id_cliente.nome or obj.id_cliente.waid_telefone
+            )
+        except Exception:
             return obj.id_cliente.nome or obj.id_cliente.waid_telefone
 
     cliente_link.short_description = "Cliente"
 
 
-# =========================
-# Fila de Mensagens
-# =========================
 @admin.register(FilaMensagens)
 class FilaMensagensAdmin(admin.ModelAdmin):
 
@@ -251,7 +252,6 @@ class FilaMensagensAdmin(admin.ModelAdmin):
 
     @admin.action(description="Reprocessar mensagens selecionadas")
     def reprocessar(self, request, queryset):
-
         if queryset.count() > 100:
             self.message_user(
                 request,
@@ -261,13 +261,11 @@ class FilaMensagensAdmin(admin.ModelAdmin):
             return
 
         queryset.update(status="pending", retry_count=0, last_error=None)
-
         logger.info(f"{request.user} reprocessou {queryset.count()} mensagens")
 
     @admin.action(description="Marcar como erro")
     def marcar_erro(self, request, queryset):
         queryset.update(status="failed")
-
         logger.warning(f"{request.user} marcou {queryset.count()} mensagens como erro")
 
     def status_colorido(self, obj):
@@ -297,9 +295,6 @@ class FilaMensagensAdmin(admin.ModelAdmin):
     erro_resumido.short_description = "Erro"
 
 
-# =========================
-# Histórico de Mensagens
-# =========================
 @admin.register(HistoricoMensagens)
 class HistoricoMensagensAdmin(admin.ModelAdmin):
 

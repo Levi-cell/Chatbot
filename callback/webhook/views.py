@@ -1,45 +1,91 @@
-from .webhook_support_functions.povoando_fila_mensagens import povoando_fila
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-import logging
 import json
+import logging
 
-logger = logging.getLogger(__name__)
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from core.cache.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
+from core.cache.cache_unidade import unidade_esta_ativa
+from core.logging_config import short_value
+from .services.populating_fila_mensagens import povoando_fila
+
+
+logger = logging.getLogger("webhook.request")
 
 VERIFY_TOKEN = "123456"
 
+
 @csrf_exempt
 def callback(request):
+    logger.info("request_recebido | metodo=%s path=%s", request.method, request.path)
 
-    # ✅ Log sempre (independente de erro)
-    logger.info(f"Webhook chamado | metodo={request.method}")
-
-    # 🔐 Verificação Meta
     if request.method == "GET":
         mode = request.GET.get("hub.mode")
         token = request.GET.get("hub.verify_token")
         challenge = request.GET.get("hub.challenge")
 
         if mode == "subscribe" and token == VERIFY_TOKEN:
-            logger.info("Webhook verificado com sucesso")
+            logger.info("verificacao_meta_ok | mode=%s", mode)
             return HttpResponse(challenge)
 
-        logger.warning("Falha na verificação do webhook")
-        return HttpResponse("Webhook ativo ✅")
+        logger.warning("verificacao_meta_falhou | mode=%s", mode)
+        return HttpResponse("Webhook ativo")
 
-    # 📩 Receber mensagem
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
-            print(data)
+    if request.method != "POST":
+        logger.warning("metodo_nao_permitido | metodo=%s", request.method)
+        return JsonResponse({"status": "method_not_allowed"}, status=405)
+
+    try:
+        data = json.loads(request.body.decode("utf-8"))
+
+        phone_number_id = _extrair_phone_number_id(data)
+        cliente_telefone = _extrair_cliente_telefone(data)
+
+        if not unidade_esta_ativa(phone_number_id):
+            logger.info(
+                "mensagem_ignorada | motivo=unidade_inativa phone_number_id=%s",
+                short_value(phone_number_id),
+            )
+            return JsonResponse({"status": "ignored"})
+
+        if cliente_telefone and conversa_esta_bloqueada_cache(
+            cliente_telefone,
+            phone_number_id,
+        ):
+            logger.info(
+                "mensagem_ignorada | motivo=conversa_bloqueada cliente=%s phone_number_id=%s",
+                short_value(cliente_telefone),
+                short_value(phone_number_id),
+            )
+            return JsonResponse({
+                "status": "ignored",
+                "reason": "blocked_conversation",
+            })
+
+        if povoando_fila(data):
+            logger.info(
+                "request_processado | status=enfileirado phone_number_id=%s",
+                short_value(phone_number_id),
+            )
+        else:
+            logger.warning(
+                "request_processado | status=nao_enfileirado phone_number_id=%s",
+                short_value(phone_number_id),
+            )
+
+    except Exception:
+        logger.exception("request_erro")
+
+    return JsonResponse({"status": "ok"})
 
 
-            logger.info("Evento recebido no webhook")
+def _extrair_phone_number_id(data):
+    value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
+    metadata = value.get("metadata", {})
+    return metadata.get("phone_number_id")
 
-            povoando_fila(data)
 
-        except Exception:
-            # ✅ Log correto de erro (com stack trace)
-            logger.error("Erro no webhook", exc_info=True)
-
-        return JsonResponse({"status": "ok"})
+def _extrair_cliente_telefone(data):
+    value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
+    contacts = value.get("contacts", [{}])
+    return contacts[0].get("wa_id") if contacts else None
