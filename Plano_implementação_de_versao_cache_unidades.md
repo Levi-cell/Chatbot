@@ -39,8 +39,6 @@ def garantir_linha_cache_unidades(cursor):
 
 
 def buscar_versao_cache_unidades(cursor):
-    garantir_linha_cache_unidades(cursor)
-
     cursor.execute("""
         SELECT versao
         FROM chatbot.cache_controle
