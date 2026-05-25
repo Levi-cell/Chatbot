@@ -153,6 +153,29 @@ def buscar_finalizou_em_conversa(id_conversa, cursor):
     resultado = cursor.fetchone()
     return resultado[0] if resultado else None
 
+def buscar_conversa_bloqueada_por_cliente_unidade(
+    cliente_telefone,
+    id_phone_unidade,
+    cursor,
+):
+    cursor.execute("""
+        SELECT c.finalizou_em
+        FROM chatbot.conversa c
+        JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        WHERE cl.waid_telefone = %s
+          AND u.phone_number_id = %s
+          AND u.status_ativo = TRUE
+          AND c.status_ativa = FALSE
+          AND c.id_etapa_atual = 7
+          AND c.finalizou_em > NOW() - INTERVAL '30 days'
+        ORDER BY c.finalizou_em DESC
+        LIMIT 1;
+    """, (cliente_telefone, id_phone_unidade))
+
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
+
 
 # def buscar_conversa_ativa(id_cliente, id_unidade, cursor):
 #     """

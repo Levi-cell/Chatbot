@@ -2,8 +2,10 @@ import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
+from core.database.connection_aws import get_conn
 from core.database.redis_client import get_redis_safe
 from core.logging_config import short_value
+from core.repositories.querys import buscar_conversa_bloqueada_por_cliente_unidade
 
 
 logger = logging.getLogger("cache.bloqueia_conversa")
@@ -20,23 +22,29 @@ def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
         return False
 
     try:
-        r = get_redis_safe()
+        r = get_redis_safe(retries=1, delay=0)
         return bool(r.exists(key))
 
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_indisponivel | cliente=%s unidade=%s erro=%s",
+            "cache_bloqueio_indisponivel | acao=fallback_banco cliente=%s unidade=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,
         )
-        return False
+
+    return _conversa_esta_bloqueada_banco_e_repara_cache(
+        cliente_telefone,
+        id_phone_unidade,
+    )
 
 
 def registrar_bloqueio_conversa_cache(
     cliente_telefone,
     id_phone_unidade,
     finalizou_em=None,
+    redis_retries=1,
+    redis_delay=0,
 ):
     key = _cache_key(cliente_telefone, id_phone_unidade)
 
@@ -60,7 +68,7 @@ def registrar_bloqueio_conversa_cache(
     }
 
     try:
-        r = get_redis_safe()
+        r = get_redis_safe(retries=redis_retries, delay=redis_delay)
         r.hset(key, mapping=payload)
         r.expire(key, ttl)
 
@@ -82,14 +90,19 @@ def registrar_bloqueio_conversa_cache(
         return False
 
 
-def remover_bloqueio_conversa_cache(cliente_telefone, id_phone_unidade):
+def remover_bloqueio_conversa_cache(
+    cliente_telefone,
+    id_phone_unidade,
+    redis_retries=1,
+    redis_delay=0,
+):
     key = _cache_key(cliente_telefone, id_phone_unidade)
 
     if key is None:
         return False
 
     try:
-        r = get_redis_safe()
+        r = get_redis_safe(retries=redis_retries, delay=redis_delay)
         return bool(r.delete(key))
 
     except Exception as exc:
@@ -101,7 +114,57 @@ def remover_bloqueio_conversa_cache(cliente_telefone, id_phone_unidade):
         )
         return False
 
- ### EXCLUSIVO PARA DEV
+
+def _conversa_esta_bloqueada_banco_e_repara_cache(
+    cliente_telefone,
+    id_phone_unidade,
+):
+    conn = None
+
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+
+        finalizou_em = buscar_conversa_bloqueada_por_cliente_unidade(
+            cliente_telefone,
+            id_phone_unidade,
+            cursor,
+        )
+
+        if finalizou_em is None:
+            remover_bloqueio_conversa_cache(
+                cliente_telefone,
+                id_phone_unidade,
+                redis_retries=1,
+                redis_delay=0,
+            )
+            return False
+
+        registrar_bloqueio_conversa_cache(
+            cliente_telefone,
+            id_phone_unidade,
+            finalizou_em,
+            redis_retries=1,
+            redis_delay=0,
+        )
+
+        return True
+
+    except Exception as exc:
+        logger.exception(
+            "fallback_banco_bloqueio_falhou | cliente=%s unidade=%s erro=%s",
+            short_value(cliente_telefone),
+            short_value(id_phone_unidade),
+            exc,
+        )
+        return False
+
+    finally:
+        if conn:
+            conn.close()
+
+
+# EXCLUSIVO PARA DEV
 def limpar_cache_conversas_bloqueadas_dev():
     # Exclusivo para DEV: use ao recriar o banco para remover bloqueios antigos do Redis.
     try:
