@@ -23,6 +23,7 @@ def carregar_cache_inicial():
     conn = None
 
     try:
+        logger.info("cache_inicial_carregando | acao=validar_unidades")
         conn = get_conn()
         cursor = conn.cursor()
 
@@ -43,6 +44,12 @@ def carregar_cache_inicial():
 
 def abrir_terminal(nome, comando, pasta, env):
     comando_cmd = f"title {nome} && {subprocess.list2cmdline(comando)}"
+    logger.info(
+        "terminal_abrindo | acao=start_process nome=%s pasta=%s comando=%s",
+        nome,
+        pasta,
+        subprocess.list2cmdline(comando),
+    )
 
     return subprocess.Popen(
         ["cmd", "/k", comando_cmd],
@@ -61,10 +68,15 @@ def montar_ambiente():
     else:
         env["PYTHONPATH"] = str(PROJECT_ROOT)
 
+    logger.debug(
+        "ambiente_montado | acao=definir_pythonpath project_root=%s",
+        PROJECT_ROOT,
+    )
     return env
 
 
 def main():
+    logger.info("ambiente_dev_iniciando | acao=bootstrap")
     carregar_cache_inicial()
 
     env = montar_ambiente()

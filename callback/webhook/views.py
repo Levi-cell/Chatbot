@@ -7,6 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 from core.cache.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
 from core.cache.cache_unidade import unidade_esta_ativa
 from core.logging_config import short_value
+from .services.flood_guard import responder_se_flood
 from .services.populating_fila_mensagens import povoando_fila
 
 
@@ -43,17 +44,21 @@ def callback(request):
 
         if not unidade_esta_ativa(phone_number_id):
             logger.info(
-                "mensagem_ignorada | motivo=unidade_inativa phone_number_id=%s",
+                "mensagem_ignorada | motivo=unidade_inativa acao=nao_enfileirar cliente=%s phone_number_id=%s",
+                short_value(cliente_telefone),
                 short_value(phone_number_id),
             )
             return JsonResponse({"status": "ignored"})
+
+        if resposta_flood := responder_se_flood(data):
+            return resposta_flood
 
         if cliente_telefone and conversa_esta_bloqueada_cache(
             cliente_telefone,
             phone_number_id,
         ):
             logger.info(
-                "mensagem_ignorada | motivo=conversa_bloqueada cliente=%s phone_number_id=%s",
+                "mensagem_ignorada | motivo=conversa_bloqueada acao=nao_enfileirar cliente=%s phone_number_id=%s",
                 short_value(cliente_telefone),
                 short_value(phone_number_id),
             )
@@ -64,17 +69,23 @@ def callback(request):
 
         if povoando_fila(data):
             logger.info(
-                "request_processado | status=enfileirado phone_number_id=%s",
+                "request_processado | status=enfileirado acao=fila_insert cliente=%s phone_number_id=%s",
+                short_value(cliente_telefone),
                 short_value(phone_number_id),
             )
         else:
             logger.warning(
-                "request_processado | status=nao_enfileirado phone_number_id=%s",
+                "request_processado | status=nao_enfileirado acao=ignorar cliente=%s phone_number_id=%s",
+                short_value(cliente_telefone),
                 short_value(phone_number_id),
             )
 
     except Exception:
-        logger.exception("request_erro")
+        logger.exception(
+            "request_erro | acao=retornar_ok metodo=%s path=%s",
+            request.method,
+            request.path,
+        )
 
     return JsonResponse({"status": "ok"})
 

@@ -3,8 +3,8 @@ import logging
 
 logger = logging.getLogger("db.querys")
 
-"""Aqui nÃ£o sÃ³ existe querys de consulta mas tambÃ©m querys que
-chama funÃ§Ãµes SQL, na dÃºvida consulte Bankscript.py"""
+"""Aqui nao so existe querys de consulta mas tambem querys que
+chama funcoes SQL, na duvida consulte Bankscript.py"""
 
 
 def pegar_unidades(cursor):
@@ -20,27 +20,26 @@ def pegar_unidades(cursor):
 
     return resultado
 
+
+def buscar_unidades_para_listagem_bloqueios(cursor):
+    cursor.execute("""
+        SELECT id_unidade, nome, phone_number_id
+        FROM chatbot.unidade
+        WHERE phone_number_id IS NOT NULL
+          AND phone_number_id <> ''
+        ORDER BY id_unidade;
+    """)
+
+    return cursor.fetchall()
+
+
 def pegar_mensagens_da_fila(cursor):
-    """Aqui usamos uma funÃ§Ã£o que criamos dentro do nosso script SQL
-
-    a funÃ§Ã£o chatbot.dequeue_message jÃ¡ consulta a fila de mensagens e
-    tambÃ©m faz uma validaÃ§Ã£o evitando que vÃ¡rios workers peguem a mesma mensagem,
-    entÃ£o o SELECT da funÃ§Ã£o abaixo estÃ¡ pegando os registros validados a partir
-    dessa funÃ§Ã£o SQL, pense que a funÃ§Ã£o python faz uma consulta e dentro da consulta o
-    SQL executa outra funÃ§Ã£o. Em suma, essa funÃ§Ã£o serve para arquitetura complexas com
-    varios workers e arquiteturas simples.
-
-    OBS: dequeue_message Ã© igual a fila de mensagens em inglÃªs, a funÃ§Ã£o mexe diretamente
-    com a tabela e suas interligaÃ§Ãµes pelo banco.
-
-    """
     cursor.execute("SELECT * FROM chatbot.dequeue_message();")
     registro = cursor.fetchone()
-
-     ## AQUI PRECISAMOS COMMITAR POIS A FUNÃ‡Ã‚O SQL TRAZ OPERAÃ‡Ã”ES UPDATES
-
-
+    if registro:
+        logger.debug("fila_dequeue | acao=reservar id_mensagem=%s", registro[0])
     return registro
+
 
 def buscar_id_unidade_por_phone_id(phone_number_id, cursor):
     cursor.execute("""
@@ -51,14 +50,15 @@ def buscar_id_unidade_por_phone_id(phone_number_id, cursor):
     """, (phone_number_id,))
 
     result = cursor.fetchone()
+    logger.debug(
+        "unidade_consulta | acao=buscar_por_phone phone_number_id=%s encontrada=%s",
+        phone_number_id,
+        bool(result),
+    )
     return result[0] if result else None
 
 
 def buscar_last_message_from_conversa(cliente_telefone, id_phone_unidade, cursor):
-    """
-    Busca o campo last_message_from da conversa ativa do cliente
-    para a unidade correspondente.
-    """
     cursor.execute("""
         SELECT c.last_message_from
         FROM chatbot.conversa c
@@ -71,16 +71,48 @@ def buscar_last_message_from_conversa(cliente_telefone, id_phone_unidade, cursor
     """, (cliente_telefone, id_phone_unidade))
 
     resultado = cursor.fetchone()
+    logger.debug(
+        "conversa_consulta | acao=last_message_from cliente=%s phone_number_id=%s encontrada=%s",
+        cliente_telefone,
+        id_phone_unidade,
+        bool(resultado),
+    )
     return resultado[0] if resultado else None
 
+
 def tentar_lock_conversa(id_conversa, cursor):
-    cursor.execute("SELECT chatbot.lock_conversa(%s);", (id_conversa,))
-    return cursor.fetchone()[0]
+    cursor.execute("SELECT lock_ok, lock_version_atual FROM chatbot.lock_conversa(%s);", (id_conversa,))
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        logger.warning(
+            "conversa_lock_sem_retorno | acao=negar_lock id_conversa=%s",
+            id_conversa,
+        )
+        return False, None
+
+    logger.debug(
+        "conversa_lock_resultado | acao=lock id_conversa=%s lock_ok=%s lock_version=%s",
+        id_conversa,
+        bool(resultado[0]),
+        resultado[1],
+    )
+    return bool(resultado[0]), resultado[1]
 
 
-def unlock_conversa(id_conversa, cursor):
-    cursor.execute("SELECT chatbot.unlock_conversa(%s);", (id_conversa,))
-    return cursor.fetchone()[0]
+def unlock_conversa(id_conversa, lock_version, cursor):
+    if lock_version is None:
+        return False
+
+    cursor.execute("SELECT chatbot.unlock_conversa(%s, %s);", (id_conversa, lock_version))
+    resultado = cursor.fetchone()
+    logger.debug(
+        "conversa_unlock_resultado | acao=unlock id_conversa=%s lock_version=%s liberada=%s",
+        id_conversa,
+        lock_version,
+        bool(resultado[0]) if resultado else False,
+    )
+    return bool(resultado[0]) if resultado else False
 
 
 def buscar_estado_conversa(id_cliente, id_unidade, cursor):
@@ -139,7 +171,15 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
         LIMIT 1;
     """, (id_cliente, id_unidade, id_cliente, id_unidade))
 
-    return cursor.fetchone()
+    resultado = cursor.fetchone()
+    logger.debug(
+        "conversa_estado_consultado | acao=buscar_estado id_cliente=%s id_unidade=%s encontrada=%s estado=%s",
+        id_cliente,
+        id_unidade,
+        bool(resultado),
+        resultado[4] if resultado else None,
+    )
+    return resultado
 
 
 def buscar_finalizou_em_conversa(id_conversa, cursor):
@@ -151,7 +191,13 @@ def buscar_finalizou_em_conversa(id_conversa, cursor):
     """, (id_conversa,))
 
     resultado = cursor.fetchone()
+    logger.debug(
+        "conversa_finalizacao_consultada | acao=buscar_finalizou_em id_conversa=%s encontrada=%s",
+        id_conversa,
+        bool(resultado),
+    )
     return resultado[0] if resultado else None
+
 
 def buscar_conversa_bloqueada_por_cliente_unidade(
     cliente_telefone,
@@ -174,7 +220,56 @@ def buscar_conversa_bloqueada_por_cliente_unidade(
     """, (cliente_telefone, id_phone_unidade))
 
     resultado = cursor.fetchone()
+    logger.debug(
+        "conversa_bloqueada_consultada | acao=buscar_bloqueio cliente=%s phone_number_id=%s bloqueada=%s",
+        cliente_telefone,
+        id_phone_unidade,
+        bool(resultado),
+    )
     return resultado[0] if resultado else None
+
+
+def existe_mensagem_anterior_aberta_conversa(
+    id_conversa,
+    id_mensagem_atual,
+    received_data_hora,
+    cursor,
+):
+    if id_conversa is None:
+        return False
+
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1
+            FROM chatbot.fila_mensagens
+            WHERE id_conversa = %s
+              AND id_mensagem <> %s
+              AND status IN ('pending', 'processing')
+              AND (
+                  received_data_hora < %s
+                  OR (
+                      received_data_hora = %s
+                      AND id_mensagem < %s
+                  )
+              )
+            LIMIT 1
+        );
+    """, (
+        id_conversa,
+        id_mensagem_atual,
+        received_data_hora,
+        received_data_hora,
+        id_mensagem_atual,
+    ))
+
+    resultado = bool(cursor.fetchone()[0])
+    logger.debug(
+        "fila_ordem_consultada | acao=verificar_anterior id_conversa=%s id_mensagem=%s existe_anterior=%s",
+        id_conversa,
+        id_mensagem_atual,
+        resultado,
+    )
+    return resultado
 
 
 # def buscar_conversa_ativa(id_cliente, id_unidade, cursor):

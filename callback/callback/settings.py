@@ -56,7 +56,7 @@ LOGGING = {
 
     "formatters": {
         "verbose": {
-            "format": "%(asctime)s | %(levelname)-7s | %(name)-32s | %(message)s",
+            "format": "%(asctime)s | %(levelname)-7s | %(name)-32s | %(filename)s:%(lineno)d | %(message)s",
             "datefmt": "%H:%M:%S",
         },
     },

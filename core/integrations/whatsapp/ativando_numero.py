@@ -1,7 +1,10 @@
 
-# PHONE_NUMBER_ID = "954435134428733"
+import logging
+
 import requests
 
+
+logger = logging.getLogger("whatsapp.registro")
 
 
 def registrar_numero_whatsapp(phone_number_id, pin="123456"):
@@ -19,5 +22,10 @@ def registrar_numero_whatsapp(phone_number_id, pin="123456"):
     }
 
     response = requests.post(url, headers=headers, json=payload)
+    logger.info(
+        "whatsapp_numero_registro_resposta | acao=registrar_numero phone_number_id=%s status=%s",
+        phone_number_id,
+        response.status_code,
+    )
 
     return response.status_code, response.json()

@@ -1,4 +1,10 @@
+import logging
+
 from core.database.connection_aws import get_conn
+
+
+logger = logging.getLogger("db.seed")
+
 
 def insere_etapa_once():
 
@@ -41,18 +47,18 @@ def insere_etapa_once():
         )
 
         conn.commit()
-        print("Etapas inseridas com sucesso!")
+        logger.info(
+            "banco_seed_ok | acao=inserir_etapas linhas=%s",
+            cursor.rowcount,
+        )
 
     except Exception as erro:
         if conn:
             conn.rollback()
-        print("Erro ao inserir etapas:", erro)
+        logger.exception("banco_seed_erro | acao=inserir_etapas erro=%s", erro)
 
     finally:
         if conn:
             conn.close()
 
 
-
-### EXECUTAR AMANHÃ
-insere_etapa_once()

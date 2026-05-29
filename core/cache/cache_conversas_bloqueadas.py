@@ -27,7 +27,7 @@ def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
 
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_indisponivel | acao=fallback_banco cliente=%s unidade=%s erro=%s",
+            "cache_bloqueio_indisponivel | acao=fallback_banco cliente=%s phone_number_id=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,
@@ -55,7 +55,7 @@ def registrar_bloqueio_conversa_cache(
 
     if ttl <= 0:
         logger.info(
-            "cache_bloqueio_ignorado | motivo=ttl_expirado cliente=%s unidade=%s",
+            "cache_bloqueio_ignorado | motivo=ttl_expirado acao=nao_registrar cliente=%s phone_number_id=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
         )
@@ -73,7 +73,7 @@ def registrar_bloqueio_conversa_cache(
         r.expire(key, ttl)
 
         logger.info(
-            "cache_bloqueio_registrado | cliente=%s unidade=%s ttl=%s",
+            "cache_bloqueio_registrado | acao=registrar cliente=%s phone_number_id=%s ttl=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             ttl,
@@ -82,7 +82,7 @@ def registrar_bloqueio_conversa_cache(
 
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_registrar_falhou | cliente=%s unidade=%s erro=%s",
+            "cache_bloqueio_registrar_falhou | acao=ignorar cliente=%s phone_number_id=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,
@@ -107,7 +107,7 @@ def remover_bloqueio_conversa_cache(
 
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_remover_falhou | cliente=%s unidade=%s erro=%s",
+            "cache_bloqueio_remover_falhou | acao=ignorar cliente=%s phone_number_id=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,
@@ -152,7 +152,7 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
 
     except Exception as exc:
         logger.exception(
-            "fallback_banco_bloqueio_falhou | cliente=%s unidade=%s erro=%s",
+            "fallback_banco_bloqueio_falhou | acao=liberar_por_falha cliente=%s phone_number_id=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,

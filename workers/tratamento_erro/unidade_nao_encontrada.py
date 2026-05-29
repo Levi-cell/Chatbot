@@ -13,6 +13,10 @@ def handle_unidade_nao_encontrada(cursor, id_mensagem, erro):
             tratar_unidade_nao_encontrada(id_mensagem, erro, cursor)
 
     except Exception:
-        logger.exception("handler_unidade_falhou | id_mensagem=%s erro=%s", id_mensagem, erro)
+        logger.exception(
+            "handler_unidade_falhou | acao=ignorar_handler id_mensagem=%s erro=%s",
+            id_mensagem,
+            erro,
+        )
 
     time.sleep(2)

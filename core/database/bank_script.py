@@ -1,4 +1,9 @@
+import logging
+
 from core.database.connection_aws import get_conn
+
+
+logger = logging.getLogger("db.setup")
 
 
 def criar_funcoes_lock():
@@ -12,7 +17,55 @@ def criar_funcoes_lock():
 
         cursor.execute("""
 
+        DROP FUNCTION IF EXISTS chatbot.lock_conversa(INT);
+        DROP FUNCTION IF EXISTS chatbot.unlock_conversa(INT);
+        DROP FUNCTION IF EXISTS chatbot.unlock_conversa(INT, INT);
+
         CREATE OR REPLACE FUNCTION chatbot.lock_conversa(p_id_conversa INT)
+        RETURNS TABLE (
+            lock_ok BOOLEAN,
+            lock_version_atual INT
+        )
+        LANGUAGE plpgsql
+        AS $$
+
+        DECLARE
+            v_lock_version INT;
+
+        BEGIN
+
+            UPDATE chatbot.conversa c
+            SET
+                processing = TRUE,
+                processing_started_at = NOW(),
+                lock_version = COALESCE(c.lock_version, 0) + 1
+            WHERE
+                c.id_conversa = p_id_conversa
+                AND (
+                    c.processing = FALSE
+                    OR c.processing_started_at < NOW() - INTERVAL '119.9 seconds'
+                )
+            RETURNING c.lock_version INTO v_lock_version;
+
+            IF v_lock_version IS NULL THEN
+                RETURN QUERY SELECT FALSE, NULL::INT;
+                RETURN;
+            END IF;
+
+            RETURN QUERY SELECT TRUE, v_lock_version;
+
+        END;
+
+        $$;
+
+        """)
+
+        cursor.execute("""
+
+        CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(
+            p_id_conversa INT,
+            p_lock_version INT
+        )
         RETURNS BOOLEAN
         LANGUAGE plpgsql
         AS $$
@@ -24,15 +77,10 @@ def criar_funcoes_lock():
 
             UPDATE chatbot.conversa
             SET
-                processing = TRUE,
-                processing_started_at = NOW(),
-                lock_version = lock_version + 1
-            WHERE
-                id_conversa = p_id_conversa
-                AND (
-                    processing = FALSE
-                    OR processing_started_at < NOW() - INTERVAL '110 seconds'
-                );
+                processing = FALSE,
+                processing_started_at = NULL
+            WHERE id_conversa = p_id_conversa
+              AND lock_version = p_lock_version;
 
             GET DIAGNOSTICS updated_rows = ROW_COUNT;
 
@@ -44,34 +92,13 @@ def criar_funcoes_lock():
 
         """)
 
-        cursor.execute("""
-
-        CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(p_id_conversa INT)
-        RETURNS VOID
-        LANGUAGE plpgsql
-        AS $$
-
-        BEGIN
-
-            UPDATE chatbot.conversa
-            SET
-                processing = FALSE,
-                processing_started_at = NULL
-            WHERE id_conversa = p_id_conversa;
-
-        END;
-
-        $$;
-
-        """)
-
         conn.commit()
-        print("✅ Funções de lock/unlock criadas com sucesso!")
+        logger.info("banco_setup_ok | acao=criar_funcoes_lock")
 
     except Exception as erro:
         if conn:
             conn.rollback()
-        print("❌ Erro ao criar funções de lock:", erro)
+        logger.exception("banco_setup_erro | acao=criar_funcoes_lock erro=%s", erro)
 
     finally:
         if conn:
@@ -122,8 +149,8 @@ def criar_funcao_dequeue_message():
                         f.status = 'processing'
                         AND f.processing_started_at < NOW() - INTERVAL '2 minutes'
                     )
-                ORDER BY 
-                    CASE 
+                ORDER BY
+                    CASE
                         WHEN f.status = 'pending' THEN f.next_attempt_at
                         WHEN f.status = 'processing' THEN f.processing_started_at
                     END NULLS FIRST,
@@ -159,12 +186,12 @@ def criar_funcao_dequeue_message():
         """)
 
         conn.commit()
-        print("✅ Função dequeue_message criada com sucesso!")
+        logger.info("banco_setup_ok | acao=criar_funcao_dequeue_message")
 
     except Exception as erro:
         if conn:
             conn.rollback()
-        print("❌ Erro ao criar função dequeue_message:", erro)
+        logger.exception("banco_setup_erro | acao=criar_funcao_dequeue_message erro=%s", erro)
     finally:
         if conn:
             conn.close()
@@ -191,7 +218,23 @@ def criar_tabelas():
             email VARCHAR(200) UNIQUE
         );
 
-        -- UNIDADE (corrigido)
+        -- DEPENDENTE
+        CREATE TABLE IF NOT EXISTS chatbot.dependente (
+            id_dependente SERIAL PRIMARY KEY,
+            id_cliente INT NOT NULL,
+            nome_dependente VARCHAR(200),
+            telefone_dependente VARCHAR(50) UNIQUE,
+            email_dependente VARCHAR(200) UNIQUE,
+
+            FOREIGN KEY (id_cliente)
+                REFERENCES chatbot.cliente(id_cliente)
+                ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dependente_cliente
+        ON chatbot.dependente (id_cliente);
+
+        -- UNIDADE
         CREATE TABLE IF NOT EXISTS chatbot.unidade (
             id_unidade SERIAL PRIMARY KEY,
             nome VARCHAR(300) UNIQUE NOT NULL,
@@ -268,18 +311,20 @@ def criar_tabelas():
         INCLUDE (id_conversa, id_etapa_atual)
         WHERE status_ativa = FALSE;
 
-        -- HISTÓRICO
+        -- HISTORICO
         CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens (
             id_mensagem SERIAL,
             id_conversa INT NOT NULL,
             id_etapa INT,
             received_data_hora TIMESTAMPTZ NOT NULL,
             cliente_telefone VARCHAR(100) NOT NULL,
-            conteudo_texto TEXT NOT NULL,
+            conteudo_texto TEXT,
             tipo_mensagem VARCHAR(20) NOT NULL,
             id_hash_msg VARCHAR(255) NOT NULL,
             id_phone_unidade VARCHAR(100) NOT NULL,
             unidade_telefone VARCHAR(100) NOT NULL,
+            origem VARCHAR(10) NOT NULL,
+            status_envio VARCHAR(20),
 
             PRIMARY KEY (id_mensagem, received_data_hora),
 
@@ -289,7 +334,21 @@ def criar_tabelas():
 
             FOREIGN KEY (id_etapa)
                 REFERENCES chatbot.etapa(id_etapa)
-                ON DELETE SET NULL
+                ON DELETE SET NULL,
+
+            CONSTRAINT chk_historico_origem
+                CHECK (origem IN ('cliente', 'bot')),
+
+            CONSTRAINT chk_historico_status_envio
+                CHECK (
+                    (origem = 'cliente' AND status_envio IS NULL)
+                    OR
+                    (
+                        origem = 'bot'
+                        AND status_envio IS NOT NULL
+                        AND status_envio IN ('pending', 'sent', 'failed')
+                    )
+                )
         )
         PARTITION BY RANGE (received_data_hora);
 
@@ -297,9 +356,13 @@ def criar_tabelas():
         PARTITION OF chatbot.historico_mensagens
         DEFAULT;
 
+        CREATE INDEX IF NOT EXISTS idx_historico_conversa_data
+        ON chatbot.historico_mensagens (id_conversa, received_data_hora DESC);
+
         -- FILA
         CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
             id_mensagem SERIAL PRIMARY KEY,
+            id_conversa INT NULL,
             status VARCHAR(20) NOT NULL DEFAULT 'pending',
             retry_count INTEGER DEFAULT 0,
             next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
@@ -311,6 +374,11 @@ def criar_tabelas():
             id_hash_msg VARCHAR(255) UNIQUE NOT NULL,
             id_phone_unidade VARCHAR(100) NOT NULL,
             unidade_telefone VARCHAR(100) NOT NULL,
+
+            FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE SET NULL,
+
             CHECK (status IN ('pending','processing','sent','failed'))
         );
 
@@ -320,20 +388,26 @@ def criar_tabelas():
         CREATE INDEX IF NOT EXISTS idx_fila_processing_timeout
         ON chatbot.fila_mensagens (processing_started_at);
 
+        CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
+        ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
+        WHERE id_conversa IS NOT NULL
+          AND status IN ('pending','processing');
+
         """)
 
         conn.commit()
-        print("✅ Estrutura do banco criada com sucesso!")
+        logger.info("banco_setup_ok | acao=criar_tabelas")
 
     except Exception as erro:
 
         if conn:
             conn.rollback()
-        print("❌ Erro ao criar tabelas:", erro)
+        logger.exception("banco_setup_erro | acao=criar_tabelas erro=%s", erro)
 
     finally:
         if conn:
             conn.close()
+
 
 def alterar_banco():
 
@@ -346,15 +420,39 @@ def alterar_banco():
         cursor.execute("""
             ALTER TABLE chatbot.fila_mensagens
             ADD COLUMN IF NOT EXISTS last_error TEXT;
+
+            ALTER TABLE chatbot.fila_mensagens
+            ADD COLUMN IF NOT EXISTS id_conversa INT NULL;
+
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conname = 'fk_fila_conversa'
+                      AND conrelid = 'chatbot.fila_mensagens'::regclass
+                ) THEN
+                    ALTER TABLE chatbot.fila_mensagens
+                    ADD CONSTRAINT fk_fila_conversa
+                    FOREIGN KEY (id_conversa)
+                    REFERENCES chatbot.conversa(id_conversa)
+                    ON DELETE SET NULL;
+                END IF;
+            END $$;
+
+            CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
+            ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
+            WHERE id_conversa IS NOT NULL
+              AND status IN ('pending','processing');
         """)
 
         conn.commit()
-        print("✅ Coluna 'last_error' adicionada (ou já existente) com sucesso!")
+        logger.info("banco_setup_ok | acao=alterar_banco")
 
     except Exception as erro:
         if conn:
             conn.rollback()
-        print("❌ Erro ao alterar banco (last_error):", erro)
+        logger.exception("banco_setup_erro | acao=alterar_banco erro=%s", erro)
 
     finally:
         if conn:
@@ -374,17 +472,18 @@ def definir_timezone_role():
         """)
 
         conn.commit()
-        print("✅ Timezone do ROLE 'fushi' definido com sucesso!")
+        logger.info("banco_setup_ok | acao=definir_timezone_role role=fushi")
 
     except Exception as e:
 
         if conn:
             conn.rollback()
-        print("❌ Erro ao definir timezone do ROLE:", e)
+        logger.exception("banco_setup_erro | acao=definir_timezone_role role=fushi erro=%s", e)
 
     finally:
         if conn:
             conn.close()
+
 
 def configurar_timeouts_avancados():
     conn = None
@@ -393,31 +492,28 @@ def configurar_timeouts_avancados():
         conn = get_conn()
         cursor = conn.cursor()
 
-        # 🔥 essencial (perfeito)
         cursor.execute("""
             ALTER ROLE fushi
             SET idle_in_transaction_session_timeout = '30min';
         """)
 
-        # 🔥 melhor escolha pro seu caso
         cursor.execute("""
             ALTER ROLE fushi
             SET statement_timeout = '10min';
         """)
 
-        # 🔥 ajustado pro seu padrão
         cursor.execute("""
             ALTER ROLE fushi
             SET lock_timeout = '15s';
         """)
 
         conn.commit()
-        print("✅ Timeouts avançados configurados com sucesso")
+        logger.info("banco_setup_ok | acao=configurar_timeouts_avancados role=fushi")
 
     except Exception as erro:
         if conn:
             conn.rollback()
-        print(f"❌ Erro ao configurar timeouts: {erro}")
+        logger.exception("banco_setup_erro | acao=configurar_timeouts_avancados erro=%s", erro)
 
     finally:
         if conn:

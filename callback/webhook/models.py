@@ -7,6 +7,9 @@ class Cliente(models.Model):
     waid_telefone = models.CharField(unique=True, max_length=50)
     email = models.CharField(unique=True, max_length=200, blank=True, null=True)
 
+    def __str__(self):
+        return self.nome or self.waid_telefone
+
     class Meta:
         managed = False
         db_table = 'cliente'
@@ -51,6 +54,13 @@ class Etapa(models.Model):
 
 class FilaMensagens(models.Model):
     id_mensagem = models.AutoField(primary_key=True)
+    id_conversa = models.ForeignKey(
+        Conversa,
+        models.SET_NULL,
+        db_column='id_conversa',
+        blank=True,
+        null=True,
+    )
     status = models.CharField(
         max_length=20,
         default="pending",
@@ -98,11 +108,28 @@ class HistoricoMensagens(models.Model):
     received_data_hora = models.DateTimeField()
 
     cliente_telefone = models.CharField(max_length=100)
-    conteudo_texto = models.TextField()
+    conteudo_texto = models.TextField(blank=True, null=True)
     tipo_mensagem = models.CharField(max_length=20)
     id_hash_msg = models.CharField(max_length=255)
     id_phone_unidade = models.CharField(max_length=100)
     unidade_telefone = models.CharField(max_length=100)
+    origem = models.CharField(
+        max_length=10,
+        choices=[
+            ("cliente", "cliente"),
+            ("bot", "bot"),
+        ],
+    )
+    status_envio = models.CharField(
+        max_length=20,
+        blank=True,
+        null=True,
+        choices=[
+            ("pending", "pending"),
+            ("sent", "sent"),
+            ("failed", "failed"),
+        ],
+    )
 
     class Meta:
         managed = False
@@ -120,6 +147,37 @@ class Unidade(models.Model):
     link_agendamento = models.CharField(unique=True, max_length=400)
     status_ativo = models.BooleanField(blank=True, null=True, default=True)
 
+    def __str__(self):
+        return self.nome
+
     class Meta:
         managed = False
         db_table = 'unidade'
+
+
+class ClienteBloqueadoMeta(models.Model):
+    id_bloqueio = models.AutoField(primary_key=True)
+    id_cliente = models.ForeignKey(
+        Cliente,
+        models.SET_NULL,
+        db_column='id_cliente',
+        blank=True,
+        null=True,
+        related_name='bloqueios_meta',
+    )
+    wa_id_cliente = models.CharField(max_length=50)
+    id_unidade = models.ForeignKey(
+        Unidade,
+        models.DO_NOTHING,
+        db_column='id_unidade',
+        related_name='bloqueios_meta',
+    )
+    phone_id_unidade = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"{self.wa_id_cliente} / {self.phone_id_unidade}"
+
+    class Meta:
+        managed = False
+        db_table = 'cliente_bloqueado_meta'
+        unique_together = (('wa_id_cliente', 'id_unidade'),)

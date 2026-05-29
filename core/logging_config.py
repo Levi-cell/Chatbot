@@ -2,7 +2,7 @@ import logging
 import sys
 
 
-LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)-32s | %(message)s"
+LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)-32s | %(filename)s:%(lineno)d | %(message)s"
 DATE_FORMAT = "%H:%M:%S"
 
 

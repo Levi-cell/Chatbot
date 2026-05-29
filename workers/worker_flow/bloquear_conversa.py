@@ -1,6 +1,7 @@
 import logging
 
 from core.cache.cache_conversas_bloqueadas import registrar_bloqueio_conversa_cache
+from core.logging_config import short_value
 from core.repositories.deletes import deletar_mensagem_por_id
 from core.repositories.querys import buscar_finalizou_em_conversa
 
@@ -26,11 +27,12 @@ def tratar_conversa_bloqueada(
     deletadas = deletar_mensagem_por_id(id_mensagem, cursor)
 
     logger.info(
-        "mensagem_ignorada | motivo=conversa_bloqueada id=%s cliente=%s unidade=%s id_conversa=%s removida=%s",
+        "mensagem_ignorada | motivo=conversa_bloqueada acao=registrar_cache_remover_fila id_mensagem=%s cliente=%s phone_number_id=%s id_conversa=%s finalizou_em=%s removida=%s",
         id_mensagem,
-        cliente_telefone,
-        id_phone_unidade,
+        short_value(cliente_telefone),
+        short_value(id_phone_unidade),
         id_conversa,
+        finalizou_em,
         deletadas,
     )
 

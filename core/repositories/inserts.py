@@ -1,5 +1,7 @@
 import logging
 
+from core.logging_config import short_value
+
 
 logger = logging.getLogger("db.inserts")
 
@@ -23,12 +25,21 @@ def inserindo_em_cliente_caso_seja_novo(waid_telefone, cursor):
         result = cursor.fetchone()
 
         if result:
+            logger.debug(
+                "cliente_insert_resultado | acao=obter_cliente telefone=%s id_cliente=%s inserido=%s",
+                short_value(waid_telefone),
+                result[0],
+                inserido,
+            )
             return result[0], inserido
 
         raise ValueError(f"Anomalia Crítica: Cliente do telefone {waid_telefone} desapareceu da base durante a verificação!")
 
     except Exception:
-        logger.exception("cliente_insert_erro | telefone=%s", waid_telefone)
+        logger.exception(
+            "cliente_insert_erro | acao=rollback telefone=%s",
+            short_value(waid_telefone),
+        )
         raise
 
 def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
@@ -47,6 +58,12 @@ def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
         result = cursor.fetchone()
 
         if result:
+            logger.debug(
+                "conversa_insert_resultado | acao=criar_conversa id_cliente=%s id_unidade=%s id_conversa=%s",
+                id_cliente,
+                id_unidade,
+                result[0],
+            )
             return result[0]
 
         raise ValueError(
@@ -56,7 +73,7 @@ def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
 
     except Exception:
         logger.exception(
-            "conversa_insert_erro | id_cliente=%s id_unidade=%s",
+            "conversa_insert_erro | acao=rollback id_cliente=%s id_unidade=%s",
             id_cliente,
             id_unidade,
         )

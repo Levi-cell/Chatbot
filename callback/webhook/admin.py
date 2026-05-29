@@ -1,14 +1,19 @@
 from django.contrib import admin, messages
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils.html import format_html
 from django.urls import reverse
 import logging
 
 from core.cache.cache_unidade import recarregar_cache_unidades
+from core.cache.cache_bloqueio_meta import remover_cliente_bloqueado_meta_cache
 from core.integrations.whatsapp.ativando_numero import registrar_numero_whatsapp
+from core.integrations.whatsapp.pywa_tools import desbloquear_usuario_meta
+from core.logging_config import short_value
+from core.repositories.cache_control import incrementar_versao_cache_unidades
 
 from .models import (
     Cliente,
+    ClienteBloqueadoMeta,
     Conversa,
     Etapa,
     FilaMensagens,
@@ -48,21 +53,30 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        transaction.on_commit(recarregar_cache_unidades)
+        self._registrar_alteracao_cache_unidades()
 
         if not change:
             try:
                 status, resposta = registrar_numero_whatsapp(obj.phone_number_id)
 
                 if status != 200:
-                    logger.error(f"Erro ao registrar numero {obj.phone_number_id}: {resposta}")
+                    logger.error(
+                        "whatsapp_numero_registrar_falhou | acao=registrar_numero phone_number_id=%s status=%s resposta=%s",
+                        short_value(obj.phone_number_id),
+                        status,
+                        resposta,
+                    )
                     self.message_user(
                         request,
                         f"Erro ao registrar numero no WhatsApp: {resposta}",
                         level=messages.ERROR
                     )
                 else:
-                    logger.info(f"Numero {obj.phone_number_id} registrado com sucesso")
+                    logger.info(
+                        "whatsapp_numero_registrado | acao=registrar_numero phone_number_id=%s status=%s",
+                        short_value(obj.phone_number_id),
+                        status,
+                    )
                     self.message_user(
                         request,
                         "Numero registrado com sucesso no WhatsApp!",
@@ -70,7 +84,10 @@ class UnidadeAdmin(admin.ModelAdmin):
                     )
 
             except Exception as e:
-                logger.exception(f"Erro inesperado ao registrar numero {obj.phone_number_id}")
+                logger.exception(
+                    "whatsapp_numero_registrar_erro | acao=registrar_numero phone_number_id=%s",
+                    short_value(obj.phone_number_id),
+                )
                 self.message_user(
                     request,
                     f"Erro inesperado ao registrar numero: {str(e)}",
@@ -79,10 +96,17 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     def delete_model(self, request, obj):
         super().delete_model(request, obj)
-        transaction.on_commit(recarregar_cache_unidades)
+        self._registrar_alteracao_cache_unidades()
 
     def delete_queryset(self, request, queryset):
         super().delete_queryset(request, queryset)
+        self._registrar_alteracao_cache_unidades()
+
+    def _registrar_alteracao_cache_unidades(self):
+        with connection.cursor() as cursor:
+            versao = incrementar_versao_cache_unidades(cursor)
+
+        logger.info("cache_unidades_versao_incrementada | acao=incrementar_versao versao=%s", versao)
         transaction.on_commit(recarregar_cache_unidades)
 
     def link_agendamento_clickable(self, obj):
@@ -211,6 +235,7 @@ class FilaMensagensAdmin(admin.ModelAdmin):
 
     list_display = (
         "id_mensagem",
+        "id_conversa",
         "status_colorido",
         "tipo_mensagem",
         "cliente_telefone",
@@ -224,11 +249,13 @@ class FilaMensagensAdmin(admin.ModelAdmin):
     search_fields = (
         "cliente_telefone",
         "id_hash_msg",
+        "id_conversa__id_conversa",
     )
 
     list_filter = (
         "status",
         "tipo_mensagem",
+        "id_conversa",
     )
 
     ordering = ("-received_data_hora",)
@@ -248,7 +275,7 @@ class FilaMensagensAdmin(admin.ModelAdmin):
         return False
 
     def get_queryset(self, request):
-        return super().get_queryset(request)
+        return super().get_queryset(request).select_related("id_conversa")
 
     @admin.action(description="Reprocessar mensagens selecionadas")
     def reprocessar(self, request, queryset):
@@ -261,12 +288,20 @@ class FilaMensagensAdmin(admin.ModelAdmin):
             return
 
         queryset.update(status="pending", retry_count=0, last_error=None)
-        logger.info(f"{request.user} reprocessou {queryset.count()} mensagens")
+        logger.info(
+            "admin_fila_reprocessada | acao=reprocessar usuario=%s total=%s",
+            request.user,
+            queryset.count(),
+        )
 
     @admin.action(description="Marcar como erro")
     def marcar_erro(self, request, queryset):
         queryset.update(status="failed")
-        logger.warning(f"{request.user} marcou {queryset.count()} mensagens como erro")
+        logger.warning(
+            "admin_fila_marcada_erro | acao=marcar_failed usuario=%s total=%s",
+            request.user,
+            queryset.count(),
+        )
 
     def status_colorido(self, obj):
         cores = {
@@ -300,7 +335,9 @@ class HistoricoMensagensAdmin(admin.ModelAdmin):
 
     list_display = (
         "id_mensagem",
+        "origem",
         "tipo_mensagem",
+        "status_envio",
         "id_conversa",
         "id_etapa",
         "cliente_telefone",
@@ -313,6 +350,8 @@ class HistoricoMensagensAdmin(admin.ModelAdmin):
     )
 
     list_filter = (
+        "origem",
+        "status_envio",
         "id_etapa",
         "tipo_mensagem",
     )
@@ -339,3 +378,126 @@ class HistoricoMensagensAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         return [field.name for field in self.model._meta.fields]
+
+
+@admin.register(ClienteBloqueadoMeta)
+class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id_bloqueio",
+        "cliente_link",
+        "wa_id_cliente",
+        "id_unidade",
+        "phone_id_unidade",
+    )
+
+    search_fields = (
+        "wa_id_cliente",
+        "phone_id_unidade",
+        "id_cliente__waid_telefone",
+        "id_cliente__nome",
+        "id_unidade__nome",
+    )
+
+    list_filter = ("id_unidade",)
+    ordering = ("wa_id_cliente", "id_unidade__nome")
+    list_per_page = 50
+    empty_value_display = "-"
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_readonly_fields(self, request, obj=None):
+        return [field.name for field in self.model._meta.fields]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "id_cliente",
+            "id_unidade",
+        )
+
+    def delete_model(self, request, obj):
+        wa_id_cliente = obj.wa_id_cliente
+        phone_id_unidade = obj.phone_id_unidade
+
+        super().delete_model(request, obj)
+
+        transaction.on_commit(
+            lambda: self._desbloquear_meta(
+                request,
+                wa_id_cliente,
+                phone_id_unidade,
+            )
+        )
+
+    def delete_queryset(self, request, queryset):
+        bloqueios = list(
+            queryset.values_list(
+                "wa_id_cliente",
+                "phone_id_unidade",
+            )
+        )
+
+        super().delete_queryset(request, queryset)
+
+        transaction.on_commit(
+            lambda: self._desbloquear_varios_meta(request, bloqueios)
+        )
+
+    def cliente_link(self, obj):
+        if not obj.id_cliente:
+            return "-"
+
+        try:
+            url = reverse(
+                "admin:webhook_cliente_change",
+                args=[obj.id_cliente.id_cliente],
+            )
+            return format_html(
+                '<a href="{}">{}</a>',
+                url,
+                obj.id_cliente.nome or obj.id_cliente.waid_telefone,
+            )
+        except Exception:
+            return obj.id_cliente.nome or obj.id_cliente.waid_telefone
+
+    cliente_link.short_description = "Cliente"
+
+    def _desbloquear_varios_meta(self, request, bloqueios):
+        for wa_id_cliente, phone_id_unidade in bloqueios:
+            self._desbloquear_meta(request, wa_id_cliente, phone_id_unidade)
+
+    def _desbloquear_meta(self, request, wa_id_cliente, phone_id_unidade):
+        try:
+            desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade)
+            remover_cliente_bloqueado_meta_cache(
+                wa_id_cliente,
+                phone_id_unidade,
+            )
+
+            logger.warning(
+                "admin_cliente_desbloqueado_meta | acao=desbloquear_meta usuario=%s wa_id_cliente=%s phone_id_unidade=%s",
+                request.user,
+                short_value(wa_id_cliente),
+                short_value(phone_id_unidade),
+            )
+
+            self.message_user(
+                request,
+                f"Cliente {wa_id_cliente} desbloqueado na unidade {phone_id_unidade}.",
+                level=messages.SUCCESS,
+            )
+
+        except Exception as exc:
+            logger.exception(
+                "admin_desbloqueio_meta_falhou | acao=desbloquear_meta usuario=%s wa_id_cliente=%s phone_id_unidade=%s erro=%s",
+                request.user,
+                short_value(wa_id_cliente),
+                short_value(phone_id_unidade),
+                exc,
+            )
+            self.message_user(
+                request,
+                f"Registro removido, mas falhou ao desbloquear na Meta: {exc}",
+                level=messages.ERROR,
+            )

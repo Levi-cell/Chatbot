@@ -1,7 +1,9 @@
-import redis
+import logging
 import threading
 import time
-import logging
+
+import redis
+
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +13,7 @@ _lock = threading.Lock()
 
 def get_redis():
     """
-    Singleton thread-safe com inicialização única do client Redis.
+    Singleton thread-safe com inicializacao unica do client Redis.
     """
 
     global _redis_client
@@ -26,12 +28,12 @@ def get_redis():
 
 def _create_client():
     """
-    Cria conexão Redis com validação inicial.
+    Cria conexao Redis com validacao inicial.
     """
 
     try:
         client = redis.Redis(
-            host='redis-14738.crce216.sa-east-1-2.ec2.cloud.redislabs.com',
+            host="redis-14738.crce216.sa-east-1-2.ec2.cloud.redislabs.com",
             port=14738,
             decode_responses=True,
             username="default",
@@ -41,23 +43,22 @@ def _create_client():
             health_check_interval=30,
         )
 
-        # 🔥 valida conexão real
         client.ping()
 
-        logger.info("Redis conectado com sucesso")
+        logger.info("redis_conectado | status=ok")
         return client
 
     except Exception as e:
-        logger.error(f"Falha ao conectar no Redis: {e}")
+        logger.error("redis_conectar_falhou | erro=%s", e)
         raise
 
 
 def get_redis_safe(retries=3, delay=2):
     """
-    Versão resiliente para worker.
+    Versao resiliente para worker.
     - tenta reutilizar client
-    - valida conexão com ping
-    - recria se necessário
+    - valida conexao com ping
+    - recria se necessario
     """
 
     global _redis_client
@@ -66,22 +67,23 @@ def get_redis_safe(retries=3, delay=2):
         try:
             client = get_redis()
 
-            # valida conexão viva
             client.ping()
 
             return client
 
         except Exception as e:
             logger.warning(
-                f"Redis indisponível (tentativa {attempt}/{retries}): {e}"
+                "redis_indisponivel | tentativa=%s total=%s erro=%s",
+                attempt,
+                retries,
+                e,
             )
 
-            # força recriação do client
             _redis_client = None
 
             time.sleep(delay)
 
-    raise ConnectionError("Redis indisponível após múltiplas tentativas")
+    raise ConnectionError("Redis indisponivel apos multiplas tentativas")
 
 
 def confirmar_conexao_redis():
@@ -91,9 +93,10 @@ def confirmar_conexao_redis():
 
     try:
         client = get_redis_safe()
-        return print(client.ping())
+        resultado = client.ping()
+        logger.info("redis_healthcheck_ok | ping=%s", resultado)
+        return resultado
 
     except Exception as e:
-        logger.error(f"Erro ao conectar no Redis: {e}")
+        logger.error("redis_healthcheck_falhou | erro=%s", e)
         return False
-

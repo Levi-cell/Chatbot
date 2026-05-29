@@ -1,8 +1,11 @@
 import logging
+import threading
+import time
 
 from core.database.connection_aws import get_conn
 from core.database.redis_client import get_redis_safe
 from core.logging_config import short_value
+from core.repositories.cache_control import buscar_versao_cache_unidades
 from core.repositories.querys import buscar_id_unidade_por_phone_id, pegar_unidades
 
 
@@ -10,7 +13,13 @@ logger = logging.getLogger("cache.unidades")
 
 REDIS_KEY = "unidades_cache"
 CACHE_VERSION_KEY = "unidades_cache_version"
+CACHE_DB_VERSION_KEY = "unidades_cache_db_version"
 CACHE_TEMP_KEY = f"{REDIS_KEY}:tmp"
+VERSAO_CHECK_INTERVAL_SEGUNDOS = 300
+
+_redis_unidades_falhou = False
+_ultima_checagem_versao = 0
+_versao_lock = threading.Lock()
 
 
 class UnidadeNaoEncontrada(Exception):
@@ -39,7 +48,7 @@ def recarregar_cache_unidades():
         return carregar_cache_redis(cursor)
 
     except Exception as exc:
-        logger.exception("cache_recarregar_falhou | origem=admin erro=%s", exc)
+        logger.exception("cache_recarregar_falhou | origem=admin acao=manter_cache_atual erro=%s", exc)
         return None
 
     finally:
@@ -50,9 +59,11 @@ def recarregar_cache_unidades():
 def carregar_cache_redis(cursor, redis_retries=3, redis_delay=2):
     r = get_redis_safe(retries=redis_retries, delay=redis_delay)
     unidades = _normalizar_unidades(pegar_unidades(cursor))
-    total = _salvar_cache(r, unidades)
+    versao_banco = buscar_versao_cache_unidades(cursor)
+    total = _salvar_cache(r, unidades, versao_banco)
 
-    logger.info("cache_atualizado | unidades=%s", total)
+    _marcar_versao_conferida()
+    logger.info("cache_atualizado | acao=salvar_redis unidades=%s versao=%s", total, versao_banco)
     return total
 
 
@@ -68,6 +79,7 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
 
     try:
         r = get_redis_safe(retries=1, delay=0)
+        _sincronizar_cache_unidades_por_versao(r, origem="worker", cursor=cursor)
 
         if _cache_valido(r):
             id_unidade = r.hget(REDIS_KEY, phone_key)
@@ -86,6 +98,7 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
         raise
 
     except Exception as exc:
+        _marcar_redis_falhou()
         logger.warning(
             "cache_indisponivel | acao=fallback_banco origem=worker phone_number_id=%s erro=%s",
             short_value(phone_key),
@@ -101,21 +114,22 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
 
     return int(id_unidade)
 
-## REDUNDANTE
 
-# def garantir_cache_unidades_se_necessario(cursor):
-#     try:
-#         r = get_redis_safe(retries=1, delay=0)
-#
-#         if not _cache_valido(r):
-#             logger.info("cache_invalido | acao=recarregar origem=worker")
-#             return carregar_cache_redis(cursor, redis_retries=1, redis_delay=0)
-#
-#         return None
-#
-#     except Exception as exc:
-#         logger.warning("cache_validacao_falhou | origem=worker erro=%s", exc)
-#         return None
+def garantir_cache_unidades_se_necessario(cursor):
+    try:
+        r = get_redis_safe(retries=1, delay=0)
+        _sincronizar_cache_unidades_por_versao(r, origem="manual", cursor=cursor)
+
+        if not _cache_valido(r):
+            logger.info("cache_invalido | acao=recarregar origem=manual")
+            return carregar_cache_redis(cursor, redis_retries=1, redis_delay=0)
+
+        return None
+
+    except Exception as exc:
+        _marcar_redis_falhou()
+        logger.warning("cache_validacao_falhou | origem=manual acao=manter_cache_atual erro=%s", exc)
+        return None
 
 
 def unidade_esta_ativa(phone_number_id):
@@ -126,6 +140,7 @@ def unidade_esta_ativa(phone_number_id):
 
     try:
         r = get_redis_safe(retries=1, delay=0)
+        _sincronizar_cache_unidades_por_versao(r, origem="webhook")
 
         if _cache_valido(r):
             return bool(r.hexists(REDIS_KEY, phone_key))
@@ -136,6 +151,7 @@ def unidade_esta_ativa(phone_number_id):
         )
 
     except Exception as exc:
+        _marcar_redis_falhou()
         logger.warning(
             "cache_indisponivel | acao=fallback_banco origem=webhook phone_number_id=%s erro=%s",
             short_value(phone_key),
@@ -160,7 +176,7 @@ def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
 
     except Exception as exc:
         logger.exception(
-            "fallback_banco_unidade_falhou | origem=webhook phone_number_id=%s erro=%s",
+            "fallback_banco_unidade_falhou | origem=webhook acao=retornar_false phone_number_id=%s erro=%s",
             short_value(phone_key),
             exc,
         )
@@ -171,35 +187,80 @@ def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
             conn.close()
 
 
+def _sincronizar_cache_unidades_por_versao(r, origem, cursor=None):
+    if not _deve_conferir_versao():
+        return None
+
+    with _versao_lock:
+        if not _deve_conferir_versao():
+            return None
+
+        conn = None
+
+        try:
+            cursor_uso = cursor
+
+            if cursor_uso is None:
+                conn = get_conn()
+                cursor_uso = conn.cursor()
+
+            versao_banco = buscar_versao_cache_unidades(cursor_uso)
+            versao_redis = _int_ou_none(r.get(CACHE_DB_VERSION_KEY))
+
+            if versao_redis != versao_banco or not _cache_valido(r):
+                logger.info(
+                    "cache_versao_divergente | origem=%s redis=%s banco=%s acao=recarregar",
+                    origem,
+                    versao_redis,
+                    versao_banco,
+                )
+                return carregar_cache_redis(cursor_uso, redis_retries=1, redis_delay=0)
+
+            _marcar_versao_conferida()
+            return None
+
+        except Exception as exc:
+            _marcar_checagem_tentada()
+            logger.warning(
+                "cache_versao_checar_falhou | origem=%s acao=manter_cache_atual erro=%s",
+                origem,
+                exc,
+            )
+            return None
+
+        finally:
+            if conn:
+                conn.close()
+
+
 def _tentar_recarregar_cache(cursor, origem):
     try:
         return carregar_cache_redis(cursor, redis_retries=1, redis_delay=0)
 
     except Exception as exc:
+        _marcar_redis_falhou()
         logger.warning(
-            "cache_reparo_falhou | origem=%s erro=%s",
+            "cache_reparo_falhou | origem=%s acao=manter_cache_atual erro=%s",
             origem,
             exc,
         )
         return None
 
 
-def _salvar_cache(r, unidades):
+def _salvar_cache(r, unidades, versao_banco):
     total = len(unidades)
-
-    if total == 0:
-        pipe = r.pipeline()
-        pipe.delete(REDIS_KEY)
-        pipe.delete(CACHE_TEMP_KEY)
-        pipe.set(CACHE_VERSION_KEY, 0)
-        pipe.execute()
-        return 0
 
     pipe = r.pipeline()
     pipe.delete(CACHE_TEMP_KEY)
-    pipe.hset(CACHE_TEMP_KEY, mapping=unidades)
-    pipe.rename(CACHE_TEMP_KEY, REDIS_KEY)
+
+    if total > 0:
+        pipe.hset(CACHE_TEMP_KEY, mapping=unidades)
+        pipe.rename(CACHE_TEMP_KEY, REDIS_KEY)
+    else:
+        pipe.delete(REDIS_KEY)
+
     pipe.set(CACHE_VERSION_KEY, total)
+    pipe.set(CACHE_DB_VERSION_KEY, versao_banco)
     pipe.execute()
 
     return total
@@ -221,6 +282,41 @@ def _cache_valido(r):
 
     except Exception:
         return False
+
+
+def _deve_conferir_versao():
+    agora = time.monotonic()
+
+    if _redis_unidades_falhou:
+        return True
+
+    if _ultima_checagem_versao == 0:
+        return True
+
+    return (agora - _ultima_checagem_versao) >= VERSAO_CHECK_INTERVAL_SEGUNDOS
+
+
+def _marcar_redis_falhou():
+    global _redis_unidades_falhou
+    _redis_unidades_falhou = True
+
+
+def _marcar_versao_conferida():
+    global _redis_unidades_falhou, _ultima_checagem_versao
+    _redis_unidades_falhou = False
+    _ultima_checagem_versao = time.monotonic()
+
+
+def _marcar_checagem_tentada():
+    global _ultima_checagem_versao
+    _ultima_checagem_versao = time.monotonic()
+
+
+def _int_ou_none(valor):
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def _normalizar_unidades(unidades_raw):

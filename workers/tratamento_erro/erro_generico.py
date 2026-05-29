@@ -13,6 +13,9 @@ def handle_erro_generico(cursor, id_mensagem, erro, max_retry):
             tratar_erro_processamento(id_mensagem, erro, max_retry, cursor)
 
     except Exception:
-        logger.exception("handler_generico_falhou | id_mensagem=%s", id_mensagem)
+        logger.exception(
+            "handler_generico_falhou | acao=ignorar_handler id_mensagem=%s",
+            id_mensagem,
+        )
 
     time.sleep(2)

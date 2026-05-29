@@ -16,7 +16,7 @@ def inserir_dados_na_tabela_fila(dados):
         cursor = conn.cursor()
 
         if not dados or dados.get("erro"):
-            logger.warning("fila_insert_ignorado | motivo=dados_invalidos")
+            logger.warning("fila_insert_ignorado | motivo=dados_invalidos acao=nao_inserir")
             return False
 
         cursor.execute("""
@@ -53,17 +53,17 @@ def inserir_dados_na_tabela_fila(dados):
 
         if cursor.rowcount == 0:
             logger.info(
-                "fila_duplicada | id_msg=%s cliente=%s unidade=%s",
+                "fila_duplicada | motivo=id_msg_repetido acao=ignorar id_msg=%s cliente=%s phone_number_id=%s",
                 short_value(dados["id_hash_msg"]),
-                dados["cliente_telefone"],
-                dados["id_phone_unidade"],
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
             )
         else:
             logger.info(
-                "fila_insert_ok | id_msg=%s cliente=%s unidade=%s tipo=%s",
+                "fila_insert_ok | acao=enfileirar id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
                 short_value(dados["id_hash_msg"]),
-                dados["cliente_telefone"],
-                dados["id_phone_unidade"],
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
                 dados["tipo_mensagem"],
             )
 
@@ -74,7 +74,7 @@ def inserir_dados_na_tabela_fila(dados):
             conn.rollback()
 
         logger.exception(
-            "fila_insert_erro | id_msg=%s",
+            "fila_insert_erro | acao=rollback id_msg=%s",
             short_value(dados.get("id_hash_msg") if dados else None),
         )
         return False
@@ -152,22 +152,28 @@ def povoando_fila(data):
     dados = extrair_dados_whatsapp(data)
 
     if dados.get("erro"):
-        logger.warning("fila_extracao_falhou | motivo=%s", dados.get("erro"))
+        logger.warning(
+            "fila_extracao_falhou | motivo=%s acao=nao_enfileirar",
+            dados.get("erro"),
+        )
         return False
 
     id_hash = dados["id_hash_msg"]
 
     logger.info(
-        "fila_recebida | id_msg=%s cliente=%s unidade=%s tipo=%s",
+        "fila_recebida | acao=preparar_insert id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
         short_value(id_hash),
-        dados["cliente_telefone"],
-        dados["id_phone_unidade"],
+        short_value(dados["cliente_telefone"]),
+        short_value(dados["id_phone_unidade"]),
         dados["tipo_mensagem"],
     )
 
     sucesso = inserir_dados_na_tabela_fila(dados)
 
     if not sucesso:
-        logger.error("fila_enfileirar_falhou | id_msg=%s", short_value(id_hash))
+        logger.error(
+            "fila_enfileirar_falhou | motivo=insert_false acao=nao_enfileirada id_msg=%s",
+            short_value(id_hash),
+        )
 
     return sucesso

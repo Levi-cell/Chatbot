@@ -1,10 +1,16 @@
+import logging
 from datetime import datetime, timezone, date
+
 from core.database.connection_aws import get_conn
 
-# so executar manualmente quando precisar criar partições
+
+logger = logging.getLogger("db.particoes")
+
+# so executar manualmente quando precisar criar particoes
+
 
 def add_months(base_date, months):
-    """Avança meses corretamente"""
+    """Avanca meses corretamente."""
     year = base_date.year + (base_date.month - 1 + months) // 12
     month = (base_date.month - 1 + months) % 12 + 1
     return date(year, month, 1)
@@ -12,15 +18,15 @@ def add_months(base_date, months):
 
 def criar_particoes_historico_mensagens(meses_a_frente=3):
     """
-    Cria partições mensais para historico_mensagens.
+    Cria particoes mensais para historico_mensagens.
 
-    Estratégia:
-    - Cria mês atual + N meses à frente
-    - Seguro para rodar 1x por mês
+    Estrategia:
+    - Cria mes atual + N meses a frente
+    - Seguro para rodar 1x por mes
     """
 
     if meses_a_frente < 0:
-        raise ValueError("meses_a_frente não pode ser negativo")
+        raise ValueError("meses_a_frente nao pode ser negativo")
 
     hoje = datetime.now(timezone.utc).date()
     primeiro_dia_mes = hoje.replace(day=1)
@@ -34,7 +40,6 @@ def criar_particoes_historico_mensagens(meses_a_frente=3):
         cursor = conn.cursor()
 
         for i in range(meses_a_frente + 1):
-
             inicio = add_months(primeiro_dia_mes, i)
             fim = add_months(primeiro_dia_mes, i + 1)
 
@@ -47,25 +52,29 @@ def criar_particoes_historico_mensagens(meses_a_frente=3):
             """
 
             cursor.execute(sql, (inicio, fim))
-
             particoes_criadas.append(nome_particao)
 
         conn.commit()
 
-        print("✅ Partições garantidas:")
-        for p in particoes_criadas:
-            print(f"   - {p}")
+        logger.info(
+            "particoes_garantidas | acao=criar_particoes meses_a_frente=%s total=%s particoes=%s",
+            meses_a_frente,
+            len(particoes_criadas),
+            ",".join(particoes_criadas),
+        )
 
-        print(f"🚀 Mês atual + {meses_a_frente} meses à frente prontos!")
-
-    except Exception as e:
+    except Exception as erro:
         if conn:
             conn.rollback()
-        print("❌ Erro criando partições")
-        print(e)
+        logger.exception(
+            "particoes_erro | acao=criar_particoes meses_a_frente=%s erro=%s",
+            meses_a_frente,
+            erro,
+        )
 
     finally:
         if conn:
             conn.close()
+
 
 # criar_particoes_historico_mensagens(3)
