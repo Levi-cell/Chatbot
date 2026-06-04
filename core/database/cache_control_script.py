@@ -14,7 +14,7 @@ def criar_cache_controle():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         criar_tabela_cache_controle_sql(cursor)

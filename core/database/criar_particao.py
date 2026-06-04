@@ -36,7 +36,7 @@ def criar_particoes_historico_mensagens(meses_a_frente=3):
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         for i in range(meses_a_frente + 1):

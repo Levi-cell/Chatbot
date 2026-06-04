@@ -172,3 +172,25 @@ def cliente_bloqueado_meta_existe_banco(
         existe,
     )
     return existe
+
+
+def listar_bloqueios_meta_banco_para_reconciliacao(cursor):
+    cursor.execute("""
+        SELECT
+            cbm.id_bloqueio,
+            cbm.wa_id_cliente,
+            cbm.id_unidade,
+            cbm.phone_id_unidade,
+            u.nome
+        FROM chatbot.cliente_bloqueado_meta cbm
+        JOIN chatbot.unidade u
+          ON u.id_unidade = cbm.id_unidade
+        ORDER BY cbm.id_unidade, cbm.wa_id_cliente;
+    """)
+
+    resultados = cursor.fetchall()
+    logger.debug(
+        "bloqueio_meta_reconciliacao_consulta | acao=listar_banco total=%s",
+        len(resultados),
+    )
+    return resultados

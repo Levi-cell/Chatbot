@@ -123,7 +123,12 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
                 id_etapa_atual,
                 status_ativa,
                 finalizou_em,
-                'ativa' AS estado
+                'ativa' AS estado,
+                status_dependente,
+                last_message_from,
+                followup_stage,
+                followup_last_sent_at,
+                lead_no_funil
             FROM chatbot.conversa
             WHERE id_cliente = %s
               AND id_unidade = %s
@@ -141,7 +146,12 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
                      AND finalizou_em > NOW() - INTERVAL '30 days'
                     THEN 'bloqueada'
                     ELSE 'liberada'
-                END AS estado
+                END AS estado,
+                status_dependente,
+                last_message_from,
+                followup_stage,
+                followup_last_sent_at,
+                lead_no_funil
             FROM chatbot.conversa
             WHERE id_cliente = %s
               AND id_unidade = %s
@@ -154,7 +164,12 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
             id_etapa_atual,
             status_ativa,
             finalizou_em,
-            estado
+            estado,
+            status_dependente,
+            last_message_from,
+            followup_stage,
+            followup_last_sent_at,
+            lead_no_funil
         FROM conversa_ativa
 
         UNION ALL
@@ -164,7 +179,12 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
             id_etapa_atual,
             status_ativa,
             finalizou_em,
-            estado
+            estado,
+            status_dependente,
+            last_message_from,
+            followup_stage,
+            followup_last_sent_at,
+            lead_no_funil
         FROM ultima_conversa
         WHERE NOT EXISTS (SELECT 1 FROM conversa_ativa)
 
@@ -268,6 +288,121 @@ def existe_mensagem_anterior_aberta_conversa(
         id_conversa,
         id_mensagem_atual,
         resultado,
+    )
+    return resultado
+
+
+def buscar_ultimas_mensagens_historico(id_conversa, cursor, limite=6):
+    cursor.execute("""
+        SELECT
+            id_mensagem,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
+        LIMIT %s;
+    """, (id_conversa, limite))
+
+    resultados = cursor.fetchall()
+    logger.debug(
+        "historico_consultado | acao=buscar_ultimas id_conversa=%s total=%s limite=%s",
+        id_conversa,
+        len(resultados),
+        limite,
+    )
+    return resultados
+
+
+def buscar_historico_cliente_por_mensagem_fila(
+    id_conversa,
+    id_mensagem_fila,
+    id_hash_msg,
+    cursor,
+):
+    cursor.execute("""
+        SELECT
+            id_mensagem,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+          AND quem_enviou = 'cliente'
+          AND id_mensagem_fila = %s
+          AND id_hash_msg = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
+        LIMIT 1;
+    """, (id_conversa, id_mensagem_fila, id_hash_msg))
+
+    resultado = cursor.fetchone()
+    logger.debug(
+        "historico_cliente_consultado | acao=buscar_por_fila id_conversa=%s id_mensagem_fila=%s encontrado=%s",
+        id_conversa,
+        id_mensagem_fila,
+        bool(resultado),
+    )
+    return resultado
+
+
+def buscar_resposta_bot_por_mensagem_cliente(
+    id_conversa,
+    id_mensagem_fila,
+    id_hash_cliente_origem,
+    cursor,
+):
+    cursor.execute("""
+        SELECT
+            id_mensagem,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+          AND quem_enviou = 'bot'
+          AND id_mensagem_fila = %s
+          AND id_hash_cliente_origem = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
+        LIMIT 1;
+    """, (id_conversa, id_mensagem_fila, id_hash_cliente_origem))
+
+    resultado = cursor.fetchone()
+    logger.debug(
+        "historico_bot_consultado | acao=buscar_resposta_por_origem id_conversa=%s id_mensagem_fila=%s encontrado=%s",
+        id_conversa,
+        id_mensagem_fila,
+        bool(resultado),
     )
     return resultado
 

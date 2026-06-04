@@ -17,7 +17,7 @@ def buscar_cliente_cache(waid_telefone):
         return None
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         id_cliente = r.get(key)
 
         if id_cliente is None:
@@ -75,7 +75,7 @@ def salvar_cliente_cache(waid_telefone, id_cliente):
         return False
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         r.setex(key, CLIENTE_CACHE_TTL_SEGUNDOS, int(id_cliente))
 
         logger.debug(
@@ -103,7 +103,7 @@ def remover_cliente_cache(waid_telefone):
         return False
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         r.delete(key)
 
         logger.debug(

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -12,6 +13,14 @@ SECRET_KEY = 'django-insecure-)m%ovcl#x6ks*d3h#!!+=ue988%v(d01j$b3@)^#ymae9clf*z
 DEBUG = True
 
 ALLOWED_HOSTS = ["*"]
+
+WEBHOOK_MAX_BODY_BYTES = int(os.getenv("WEBHOOK_MAX_BODY_BYTES", 256 * 1024))
+
+META_APP_SECRET = os.getenv("META_APP_SECRET", "")
+META_WEBHOOK_SIGNATURE_REQUIRED = (
+    os.getenv("META_WEBHOOK_SIGNATURE_REQUIRED", "False").strip().lower()
+    in {"1", "true", "yes", "sim"}
+)
 
 INSTALLED_APPS = [
     'django.contrib.admin',

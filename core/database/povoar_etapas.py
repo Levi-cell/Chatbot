@@ -11,7 +11,7 @@ def insere_etapa_once():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         etapa_1 = "Saudação e introdução ao supera"
@@ -60,5 +60,4 @@ def insere_etapa_once():
     finally:
         if conn:
             conn.close()
-
 

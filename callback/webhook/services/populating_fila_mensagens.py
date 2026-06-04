@@ -3,6 +3,7 @@ from datetime import datetime
 
 from core.database.connection_aws import get_conn
 from core.logging_config import short_value
+from core.repositories.turno_cliente import avaliar_turno_cliente_para_fila
 
 
 logger = logging.getLogger("webhook.fila")
@@ -12,12 +13,35 @@ def inserir_dados_na_tabela_fila(dados):
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
 
         if not dados or dados.get("erro"):
             logger.warning("fila_insert_ignorado | motivo=dados_invalidos acao=nao_inserir")
-            return False
+            return {
+                "status": "ignored",
+                "reason": "dados_invalidos",
+            }
+
+        turno = avaliar_turno_cliente_para_fila(
+            cursor=cursor,
+            cliente_telefone=dados["cliente_telefone"],
+            id_phone_unidade=dados["id_phone_unidade"],
+            usar_lock=True,
+        )
+
+        if not turno["pode_enfileirar"]:
+            conn.commit()
+            logger.info(
+                "fila_insert_ignorado | motivo=%s acao=nao_inserir_turno cliente=%s phone_number_id=%s",
+                turno["motivo"],
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
+            )
+            return {
+                "status": "ignored",
+                "reason": turno["motivo"],
+            }
 
         cursor.execute("""
             INSERT INTO chatbot.fila_mensagens (
@@ -34,7 +58,7 @@ def inserir_dados_na_tabela_fila(dados):
                 unidade_telefone
             )
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (id_hash_msg) DO NOTHING
+            ON CONFLICT DO NOTHING
         """, (
             dados["status"],
             dados["retry_count"],
@@ -53,21 +77,27 @@ def inserir_dados_na_tabela_fila(dados):
 
         if cursor.rowcount == 0:
             logger.info(
-                "fila_duplicada | motivo=id_msg_repetido acao=ignorar id_msg=%s cliente=%s phone_number_id=%s",
+                "fila_insert_ignorado | motivo=conflito_unico acao=nao_inserir id_msg=%s cliente=%s phone_number_id=%s",
                 short_value(dados["id_hash_msg"]),
                 short_value(dados["cliente_telefone"]),
                 short_value(dados["id_phone_unidade"]),
             )
-        else:
-            logger.info(
-                "fila_insert_ok | acao=enfileirar id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
-                short_value(dados["id_hash_msg"]),
-                short_value(dados["cliente_telefone"]),
-                short_value(dados["id_phone_unidade"]),
-                dados["tipo_mensagem"],
-            )
+            return {
+                "status": "ignored",
+                "reason": "conflito_unico",
+            }
 
-        return True
+        logger.info(
+            "fila_insert_ok | acao=enfileirar id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
+            short_value(dados["id_hash_msg"]),
+            short_value(dados["cliente_telefone"]),
+            short_value(dados["id_phone_unidade"]),
+            dados["tipo_mensagem"],
+        )
+        return {
+            "status": "inserted",
+            "reason": None,
+        }
 
     except Exception:
         if conn:
@@ -77,7 +107,10 @@ def inserir_dados_na_tabela_fila(dados):
             "fila_insert_erro | acao=rollback id_msg=%s",
             short_value(dados.get("id_hash_msg") if dados else None),
         )
-        return False
+        return {
+            "status": "error",
+            "reason": "insert_exception",
+        }
 
     finally:
         if conn:
@@ -156,7 +189,10 @@ def povoando_fila(data):
             "fila_extracao_falhou | motivo=%s acao=nao_enfileirar",
             dados.get("erro"),
         )
-        return False
+        return {
+            "status": "ignored",
+            "reason": dados.get("erro"),
+        }
 
     id_hash = dados["id_hash_msg"]
 
@@ -168,12 +204,13 @@ def povoando_fila(data):
         dados["tipo_mensagem"],
     )
 
-    sucesso = inserir_dados_na_tabela_fila(dados)
+    resultado = inserir_dados_na_tabela_fila(dados)
 
-    if not sucesso:
+    if resultado["status"] == "error":
         logger.error(
-            "fila_enfileirar_falhou | motivo=insert_false acao=nao_enfileirada id_msg=%s",
+            "fila_enfileirar_falhou | motivo=%s acao=nao_enfileirada id_msg=%s",
+            resultado["reason"],
             short_value(id_hash),
         )
 
-    return sucesso
+    return resultado

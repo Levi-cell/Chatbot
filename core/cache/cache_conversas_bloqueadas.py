@@ -22,7 +22,7 @@ def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
         return False
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         return bool(r.exists(key))
 
     except Exception as exc:
@@ -68,7 +68,7 @@ def registrar_bloqueio_conversa_cache(
     }
 
     try:
-        r = get_redis_safe(retries=redis_retries, delay=redis_delay)
+        r = get_redis_safe(retries=redis_retries, delay=redis_delay, validate=False)
         r.hset(key, mapping=payload)
         r.expire(key, ttl)
 
@@ -102,7 +102,7 @@ def remover_bloqueio_conversa_cache(
         return False
 
     try:
-        r = get_redis_safe(retries=redis_retries, delay=redis_delay)
+        r = get_redis_safe(retries=redis_retries, delay=redis_delay, validate=False)
         return bool(r.delete(key))
 
     except Exception as exc:
@@ -122,7 +122,7 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
 
         finalizou_em = buscar_conversa_bloqueada_por_cliente_unidade(

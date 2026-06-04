@@ -19,7 +19,7 @@ def marcar_mensagem_como_enviada(id_mensagem, cursor):
     )
 
 
-def vincular_mensagem_a_conversa(id_mensagem, id_conversa, cursor):
+def vincular_mensagem_fila_a_conversa(id_mensagem, id_conversa, cursor):
     cursor.execute("""
         UPDATE chatbot.fila_mensagens
         SET id_conversa = %s

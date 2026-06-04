@@ -24,7 +24,7 @@ def carregar_cache_inicial():
 
     try:
         logger.info("cache_inicial_carregando | acao=validar_unidades")
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         total_banco = carregar_cache_redis(cursor)

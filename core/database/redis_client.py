@@ -53,11 +53,11 @@ def _create_client():
         raise
 
 
-def get_redis_safe(retries=3, delay=2):
+def get_redis_safe(retries=3, delay=2, validate=True):
     """
     Versao resiliente para worker.
     - tenta reutilizar client
-    - valida conexao com ping
+    - valida conexao com ping quando validate=True
     - recria se necessario
     """
 
@@ -67,7 +67,8 @@ def get_redis_safe(retries=3, delay=2):
         try:
             client = get_redis()
 
-            client.ping()
+            if validate:
+                client.ping()
 
             return client
 

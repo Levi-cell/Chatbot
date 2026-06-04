@@ -1,122 +1,195 @@
 import logging
+import time
 
-from core.cache.cache_cliente import buscar_cliente_cache
-from core.repositories.inserts import (
-    inserindo_em_cliente_caso_seja_novo,
-    inserindo_em_conversa_caso_seja_nova,
+from core.cache.cache_cliente import salvar_cliente_cache
+from core.logging_config import short_value
+from core.repositories.querys import (
+    existe_mensagem_anterior_aberta_conversa,
+    unlock_conversa,
 )
-from core.repositories.querys import buscar_estado_conversa
+from core.repositories.updates import (
+    marcar_mensagem_como_enviada,
+    reagendar_mensagem_sem_erro,
+)
 
 
 logger = logging.getLogger("worker.support")
 
 
-def valida_cliente(wa_id_telefone, cursor):
-    id_cliente_cache = buscar_cliente_cache(wa_id_telefone)
+def criar_estado_ciclo():
+    return {
+        "id_mensagem": None,
+        "id_cliente": None,
+        "id_conversa": None,
+        "id_unidade": None,
+        "estado": None,
+        "lock_ok": False,
+        "lock_version": None,
+        "cliente_telefone": None,
+        "id_phone_unidade": None,
+        "tipo_mensagem": None,
+    }
 
-    if id_cliente_cache:
-        logger.info(
-            "cliente_cache_hit | acao=usar_cliente id_cliente=%s",
-            id_cliente_cache,
-        )
-        return id_cliente_cache, False, False
 
-    id_cliente, inserido = inserindo_em_cliente_caso_seja_novo(wa_id_telefone, cursor)
-
-    if inserido:
-        logger.info(
-            "cliente_criado | origem=banco acao=usar_cliente id_cliente=%s",
-            id_cliente,
-        )
-    else:
-        logger.info(
-            "cliente_existente | origem=banco acao=usar_cliente id_cliente=%s",
-            id_cliente,
-        )
-
-    return id_cliente, inserido, True
-
-def valida_conversa(id_cliente, id_unidade, inserido, cursor):
-
-    ## PRIMEIRA VEZ QUE O CLIENTE CONVERSA COM UMA UNIDADE SUPERA
-    if inserido:
-        id_conversa = inserindo_em_conversa_caso_seja_nova(
-            id_cliente,
-            id_unidade,
-            cursor,
-        )
-        logger.info(
-            "conversa_criada | motivo=cliente_novo acao=usar_conversa id_cliente=%s id_unidade=%s id_conversa=%s estado=nova",
-            id_cliente,
-            id_unidade,
-            id_conversa,
-        )
-        return id_conversa, "nova", None
-
-    estado_conversa = buscar_estado_conversa(id_cliente, id_unidade, cursor)
-
-    ## AQUI SIGNIFICA QUE É A PRIMEIRA CONVERSA DO CLIENTE COM A UNIDADE
-    if not estado_conversa:
-        id_conversa = inserindo_em_conversa_caso_seja_nova(
-            id_cliente,
-            id_unidade,
-            cursor,
-        )
-        logger.info(
-            "conversa_criada | motivo=sem_historico_unidade acao=usar_conversa id_cliente=%s id_unidade=%s id_conversa=%s estado=liberada",
-            id_cliente,
-            id_unidade,
-            id_conversa,
-        )
-        return id_conversa, "liberada", None
-
+def montar_mensagem_fila(registro):
     (
-        id_conversa,
-        id_etapa_atual,
-        status_ativa,
-        finalizou_em,
-        estado,
-    ) = estado_conversa
+        id_mensagem,
+        cliente_telefone,
+        conteudo_texto,
+        tipo_mensagem,
+        id_phone_unidade,
+        unidade_telefone,
+        data_recebimento,
+        id_hash,
+        retry_count,
+    ) = registro
 
-    ## AQUI O CLIENTE JÁ TEM UMA CONVERSA EM ANDAMENTO COM A UNIDADE
-    if estado == "ativa":
-        logger.info(
-            "conversa_ativa | acao=usar_conversa id_cliente=%s id_unidade=%s id_conversa=%s",
-            id_cliente,
-            id_unidade,
-            id_conversa,
-        )
-        return id_conversa, estado, None
+    return {
+        "id_mensagem": id_mensagem,
+        "cliente_telefone": cliente_telefone,
+        "conteudo_texto": conteudo_texto,
+        "tipo_mensagem": tipo_mensagem,
+        "id_phone_unidade": id_phone_unidade,
+        "unidade_telefone": unidade_telefone,
+        "data_recebimento": data_recebimento,
+        "id_hash": id_hash,
+        "retry_count": retry_count,
+    }
 
-    ## O CLIENTE JÁ FINALIZOU UMA CONVERSA COM A UNIDADE NOS ÚLTIMOS 30 DIAS
-    if estado == "bloqueada":
-        logger.info(
-            "conversa_bloqueada | motivo=finalizada_30_dias acao=bloquear_mensagem id_cliente=%s id_unidade=%s id_conversa=%s id_etapa=%s finalizou_em=%s",
-            id_cliente,
-            id_unidade,
-            id_conversa,
-            id_etapa_atual,
-            finalizou_em,
-        )
-        return id_conversa, estado, id_etapa_atual
 
-    ## O CLIENTE JÁ TEVE OUTRA CONVERSA COM A UNIDADE POREM FOI FINALIZADA A MAIS DE 30 DIAS
-    if estado == "liberada":
-        id_conversa_nova = inserindo_em_conversa_caso_seja_nova(
-            id_cliente,
-            id_unidade,
-            cursor,
-        )
-        logger.info(
-            "conversa_criada | motivo=bloqueio_expirado acao=usar_conversa id_cliente=%s id_unidade=%s id_conversa=%s conversa_anterior=%s estado=liberada",
-            id_cliente,
-            id_unidade,
-            id_conversa_nova,
-            id_conversa,
-        )
-        return id_conversa_nova, estado, None
+def atualizar_estado_com_mensagem(estado_ciclo, mensagem):
+    estado_ciclo["id_mensagem"] = mensagem["id_mensagem"]
+    estado_ciclo["cliente_telefone"] = mensagem["cliente_telefone"]
+    estado_ciclo["id_phone_unidade"] = mensagem["id_phone_unidade"]
+    estado_ciclo["tipo_mensagem"] = mensagem["tipo_mensagem"]
 
-    raise ValueError(
-        f"Estado de conversa inválido: {estado} "
-        f"(id_cliente={id_cliente}, id_unidade={id_unidade}, status_ativa={status_ativa})"
+
+def atualizar_estado_com_contexto(estado_ciclo, contexto_banco):
+    contexto_conversa = contexto_banco["conversa"]
+
+    estado_ciclo["id_cliente"] = contexto_banco["id_cliente"]
+    estado_ciclo["id_unidade"] = contexto_banco["id_unidade"]
+    estado_ciclo["id_conversa"] = contexto_conversa["id_conversa"]
+    estado_ciclo["estado"] = contexto_conversa["estado"]
+
+
+def atualizar_estado_lock(estado_ciclo, lock_ok, lock_version):
+    estado_ciclo["lock_ok"] = lock_ok
+    estado_ciclo["lock_version"] = lock_version
+
+
+def aguardar_fila_vazia():
+    logger.debug("fila_vazia | acao=aguardar segundos=30")
+    time.sleep(30)
+
+
+def confirmar_cache_cliente_se_pendente(contexto_banco):
+    if not contexto_banco.get("cliente_cache_pendente"):
+        return False
+
+    salvar_cliente_cache(
+        contexto_banco["cliente_telefone"],
+        contexto_banco["id_cliente"],
     )
+    contexto_banco["cliente_cache_pendente"] = False
+
+    logger.debug(
+        "cliente_cache_confirmado | acao=salvar cliente=%s id_cliente=%s",
+        short_value(contexto_banco["cliente_telefone"]),
+        contexto_banco["id_cliente"],
+    )
+    return True
+
+
+def logar_lock_recusado(mensagem, contexto_banco):
+    contexto_conversa = contexto_banco["conversa"]
+
+    logger.info(
+        "conversa_lock_recusado | motivo=conversa_em_processamento acao=continuar id_mensagem=%s cliente=%s phone_number_id=%s id_unidade=%s id_conversa=%s",
+        mensagem["id_mensagem"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
+        contexto_banco["id_unidade"],
+        contexto_conversa["id_conversa"],
+    )
+
+
+def reagendar_se_houver_mensagem_anterior(
+    mensagem,
+    contexto_banco,
+    lock_version,
+    cursor,
+):
+    contexto_conversa = contexto_banco["conversa"]
+    id_conversa = contexto_conversa["id_conversa"]
+
+    existe_anterior = existe_mensagem_anterior_aberta_conversa(
+        id_conversa,
+        mensagem["id_mensagem"],
+        mensagem["data_recebimento"],
+        cursor,
+    )
+
+    if not existe_anterior:
+        return False
+
+    reagendar_mensagem_sem_erro(
+        mensagem["id_mensagem"],
+        cursor,
+        delay_seconds=30,
+    )
+
+    logger.info(
+        "mensagem_reagendada | motivo=mensagem_anterior_aberta acao=aguardar_ordem id_mensagem=%s cliente=%s phone_number_id=%s id_conversa=%s lock_version=%s",
+        mensagem["id_mensagem"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
+        id_conversa,
+        lock_version,
+    )
+    return True
+
+
+def finalizar_mensagem_processada(
+    mensagem,
+    contexto_banco,
+    lock_version,
+    cursor,
+):
+    contexto_conversa = contexto_banco["conversa"]
+
+    marcar_mensagem_como_enviada(mensagem["id_mensagem"], cursor)
+
+    logger.info(
+        "mensagem_processada | acao=marcar_sent id_mensagem=%s cliente=%s phone_number_id=%s id_unidade=%s id_conversa=%s estado=%s lock_version=%s",
+        mensagem["id_mensagem"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
+        contexto_banco["id_unidade"],
+        contexto_conversa["id_conversa"],
+        contexto_conversa["estado"],
+        lock_version,
+    )
+
+
+def liberar_lock_conversa_se_necessario(cursor, estado_ciclo):
+    if not (
+        estado_ciclo["lock_ok"]
+        and estado_ciclo["id_conversa"]
+        and estado_ciclo["lock_version"] is not None
+    ):
+        return None
+
+    unlock_realizado = unlock_conversa(
+        estado_ciclo["id_conversa"],
+        estado_ciclo["lock_version"],
+        cursor,
+    )
+
+    logger.debug(
+        "conversa_unlock | acao=liberar id_conversa=%s lock_version=%s liberada=%s",
+        estado_ciclo["id_conversa"],
+        estado_ciclo["lock_version"],
+        unlock_realizado,
+    )
+    return unlock_realizado

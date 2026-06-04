@@ -10,7 +10,7 @@ def connection_teste_psql():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("SELECT version();")

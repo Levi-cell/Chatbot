@@ -14,17 +14,19 @@ setup = {
 }
 
 
-# conn = psycopg2.connect(**setup)
-# cursor = conn.cursor()
+def get_conn(application_name=None):
+    connect_kwargs = dict(setup)
 
-def get_conn():
-    conn = psycopg2.connect(**setup,
-                            application_name= "worker_chatbot")
+    if application_name:
+        connect_kwargs["application_name"] = application_name
+
+    conn = psycopg2.connect(**connect_kwargs)
     logger.debug(
-        "banco_conexao_aberta | acao=connect host=%s database=%s user=%s",
+        "banco_conexao_aberta | acao=connect host=%s database=%s user=%s application_name=%s",
         setup["host"],
         setup["database"],
         setup["user"],
+        application_name,
     )
     return conn
 

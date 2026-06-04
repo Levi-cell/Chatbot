@@ -111,9 +111,18 @@ class HistoricoMensagens(models.Model):
     conteudo_texto = models.TextField(blank=True, null=True)
     tipo_mensagem = models.CharField(max_length=20)
     id_hash_msg = models.CharField(max_length=255)
+    id_mensagem_fila = models.ForeignKey(
+        FilaMensagens,
+        models.SET_NULL,
+        db_column='id_mensagem_fila',
+        blank=True,
+        null=True,
+        related_name='historicos_originados',
+    )
+    id_hash_cliente_origem = models.CharField(max_length=255, blank=True, null=True)
     id_phone_unidade = models.CharField(max_length=100)
     unidade_telefone = models.CharField(max_length=100)
-    origem = models.CharField(
+    quem_enviou = models.CharField(
         max_length=10,
         choices=[
             ("cliente", "cliente"),

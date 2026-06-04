@@ -30,7 +30,7 @@ def carregar_unidades_redis_primeira_vez():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="cache_chatbot")
         cursor = conn.cursor()
         return carregar_cache_redis(cursor)
 
@@ -43,7 +43,7 @@ def recarregar_cache_unidades():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="cache_chatbot")
         cursor = conn.cursor()
         return carregar_cache_redis(cursor)
 
@@ -78,7 +78,7 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
         raise UnidadeNaoEncontrada("phone_number_id invalido")
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         _sincronizar_cache_unidades_por_versao(r, origem="worker", cursor=cursor)
 
         if _cache_valido(r):
@@ -117,7 +117,7 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
 
 def garantir_cache_unidades_se_necessario(cursor):
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         _sincronizar_cache_unidades_por_versao(r, origem="manual", cursor=cursor)
 
         if not _cache_valido(r):
@@ -139,7 +139,7 @@ def unidade_esta_ativa(phone_number_id):
         return False
 
     try:
-        r = get_redis_safe(retries=1, delay=0)
+        r = get_redis_safe(retries=1, delay=0, validate=False)
         _sincronizar_cache_unidades_por_versao(r, origem="webhook")
 
         if _cache_valido(r):
@@ -165,7 +165,7 @@ def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
 
         id_unidade = buscar_id_unidade_por_phone_id(phone_key, cursor)
@@ -201,7 +201,7 @@ def _sincronizar_cache_unidades_por_versao(r, origem, cursor=None):
             cursor_uso = cursor
 
             if cursor_uso is None:
-                conn = get_conn()
+                conn = get_conn(application_name=_application_name_por_origem(origem))
                 cursor_uso = conn.cursor()
 
             versao_banco = buscar_versao_cache_unidades(cursor_uso)
@@ -317,6 +317,16 @@ def _int_ou_none(valor):
         return int(valor)
     except (TypeError, ValueError):
         return None
+
+
+def _application_name_por_origem(origem):
+    if origem == "worker":
+        return "worker_chatbot"
+
+    if origem == "webhook":
+        return "webhook_chatbot"
+
+    return "cache_chatbot"
 
 
 def _normalizar_unidades(unidades_raw):

@@ -12,7 +12,7 @@ def criar_funcoes_lock():
 
     try:
 
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -111,7 +111,7 @@ def criar_funcao_dequeue_message():
 
     try:
 
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -201,7 +201,7 @@ def criar_tabelas():
 
     conn = None
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -321,9 +321,11 @@ def criar_tabelas():
             conteudo_texto TEXT,
             tipo_mensagem VARCHAR(20) NOT NULL,
             id_hash_msg VARCHAR(255) NOT NULL,
+            id_mensagem_fila INT,
+            id_hash_cliente_origem VARCHAR(255),
             id_phone_unidade VARCHAR(100) NOT NULL,
             unidade_telefone VARCHAR(100) NOT NULL,
-            origem VARCHAR(10) NOT NULL,
+            quem_enviou VARCHAR(10) NOT NULL,
             status_envio VARCHAR(20),
 
             PRIMARY KEY (id_mensagem, received_data_hora),
@@ -336,15 +338,15 @@ def criar_tabelas():
                 REFERENCES chatbot.etapa(id_etapa)
                 ON DELETE SET NULL,
 
-            CONSTRAINT chk_historico_origem
-                CHECK (origem IN ('cliente', 'bot')),
+            CONSTRAINT chk_historico_quem_enviou
+                CHECK (quem_enviou IN ('cliente', 'bot')),
 
             CONSTRAINT chk_historico_status_envio
                 CHECK (
-                    (origem = 'cliente' AND status_envio IS NULL)
+                    (quem_enviou = 'cliente' AND status_envio IS NULL)
                     OR
                     (
-                        origem = 'bot'
+                        quem_enviou = 'bot'
                         AND status_envio IS NOT NULL
                         AND status_envio IN ('pending', 'sent', 'failed')
                     )
@@ -358,6 +360,18 @@ def criar_tabelas():
 
         CREATE INDEX IF NOT EXISTS idx_historico_conversa_data
         ON chatbot.historico_mensagens (id_conversa, received_data_hora DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_historico_bot_mensagem_fila
+        ON chatbot.historico_mensagens (
+            id_conversa,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_etapa,
+            received_data_hora DESC
+        )
+        WHERE quem_enviou = 'bot'
+          AND id_mensagem_fila IS NOT NULL
+          AND id_hash_cliente_origem IS NOT NULL;
 
         -- FILA
         CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
@@ -381,6 +395,22 @@ def criar_tabelas():
 
             CHECK (status IN ('pending','processing','sent','failed'))
         );
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'fk_historico_mensagem_fila'
+                  AND conrelid = 'chatbot.historico_mensagens'::regclass
+            ) THEN
+                ALTER TABLE chatbot.historico_mensagens
+                ADD CONSTRAINT fk_historico_mensagem_fila
+                FOREIGN KEY (id_mensagem_fila)
+                REFERENCES chatbot.fila_mensagens(id_mensagem)
+                ON DELETE SET NULL;
+            END IF;
+        END $$;
 
         CREATE INDEX IF NOT EXISTS idx_fila_status_time
         ON chatbot.fila_mensagens (status, next_attempt_at);
@@ -414,7 +444,7 @@ def alterar_banco():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -463,7 +493,7 @@ def definir_timezone_role():
     conn = None
     try:
 
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -489,7 +519,7 @@ def configurar_timeouts_avancados():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""

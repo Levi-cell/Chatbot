@@ -35,5 +35,3 @@ def tratar_conversa_bloqueada(
         finalizou_em,
         deletadas,
     )
-
-    return

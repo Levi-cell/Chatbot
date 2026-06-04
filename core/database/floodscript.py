@@ -10,7 +10,7 @@ def criar_tabelas_bloqueio_flood():
     conn = None
 
     try:
-        conn = get_conn()
+        conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
         cursor.execute("""
