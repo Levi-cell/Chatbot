@@ -43,7 +43,7 @@ def criar_funcoes_lock():
                 c.id_conversa = p_id_conversa
                 AND (
                     c.processing = FALSE
-                    OR c.processing_started_at < NOW() - INTERVAL '119.9 seconds'
+                    OR c.processing_started_at < NOW() - INTERVAL '110.0 seconds'
                 )
             RETURNING c.lock_version INTO v_lock_version;
 
