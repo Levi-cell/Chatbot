@@ -8,18 +8,22 @@ from django.utils.html import format_html
 
 from core.cache.cache_unidade import recarregar_cache_unidades
 from core.integrations.whatsapp.tools.ativando_numero import registrar_numero_whatsapp
+from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
 from core.integrations.whatsapp.block import desbloquear_usuario_meta
 from core.logging_config import short_value
 from core.repositories.cache_control import incrementar_versao_cache_unidades
 
 from .models import (
+    CacheControle,
     Cliente,
     ClienteBloqueadoMeta,
     Conversa,
+    Dependente,
     Etapa,
     FilaMensagens,
     HistoricoMensagens,
     Unidade,
+    WebhookFloodEvento,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,56 +70,78 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_per_page = 50
     empty_value_display = "-"
 
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        base_form = super().get_form(request, obj, change=change, **kwargs)
+        model_admin = self
+
+        class UnidadeAdminForm(base_form):
+            def _post_clean(self):
+                super()._post_clean()
+
+                if change or self.errors:
+                    return
+
+                phone_number_id = self.cleaned_data.get("phone_number_id")
+
+                if not phone_number_id:
+                    return
+
+                if not model_admin._registrar_meta_antes_de_salvar(
+                    request,
+                    phone_number_id,
+                ):
+                    self.add_error(
+                        "phone_number_id",
+                        "A Meta falhou ao registrar este numero. Unidade nao foi salva.",
+                    )
+
+        return UnidadeAdminForm
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         self._registrar_alteracao_cache_unidades()
 
-        if not change:
-            try:
-                status, resposta = registrar_numero_whatsapp(obj.phone_number_id)
-
-                if status != 200:
-                    logger.error(
-                        "whatsapp_numero_registrar_falhou | acao=registrar_numero phone_number_id=%s status=%s resposta=%s",
-                        short_value(obj.phone_number_id),
-                        status,
-                        resposta,
-                    )
-                    self.message_user(
-                        request,
-                        f"Erro ao registrar numero no WhatsApp: {resposta}",
-                        level=messages.ERROR,
-                    )
-                else:
-                    logger.info(
-                        "whatsapp_numero_registrado | acao=registrar_numero phone_number_id=%s status=%s",
-                        short_value(obj.phone_number_id),
-                        status,
-                    )
-                    self.message_user(
-                        request,
-                        "Numero registrado com sucesso no WhatsApp!",
-                        level=messages.SUCCESS,
-                    )
-
-            except Exception as e:
-                logger.exception(
-                    "whatsapp_numero_registrar_erro | acao=registrar_numero phone_number_id=%s",
-                    short_value(obj.phone_number_id),
-                )
-                self.message_user(
-                    request,
-                    f"Erro inesperado ao registrar numero: {str(e)}",
-                    level=messages.ERROR,
-                )
-
     def delete_model(self, request, obj):
+        if not self._meta_desregistrada_nesta_requisicao(request, obj):
+            if not self._desregistrar_meta_antes_de_excluir(request, obj):
+                return
+
         super().delete_model(request, obj)
         self._registrar_alteracao_cache_unidades()
 
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop("delete_selected", None)
+        return actions
+
     def delete_queryset(self, request, queryset):
-        super().delete_queryset(request, queryset)
-        self._registrar_alteracao_cache_unidades()
+        logger.warning(
+            "admin_unidade_exclusao_massa_bloqueada | acao=manter_registros usuario=%s total=%s",
+            request.user,
+            queryset.count(),
+        )
+        self.message_user(
+            request,
+            "Exclusao em massa de unidade nao permitida. Exclua uma unidade por vez.",
+            level=messages.ERROR,
+        )
+
+    def delete_view(self, request, object_id, extra_context=None):
+        if request.method == "POST":
+            obj = self.get_object(request, object_id)
+
+            if obj and not self._desregistrar_meta_antes_de_excluir(request, obj):
+                return HttpResponseRedirect(
+                    reverse(
+                        "admin:webhook_unidade_change",
+                        args=[object_id],
+                    )
+                )
+
+            if obj:
+                self._marcar_meta_desregistrada_na_requisicao(request, obj)
+
+        return super().delete_view(request, object_id, extra_context)
 
     def _registrar_alteracao_cache_unidades(self):
         with connection.cursor() as cursor:
@@ -137,6 +163,111 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     link_agendamento_clickable.short_description = "Agendamento"
 
+    def _registrar_meta_antes_de_salvar(self, request, phone_number_id):
+        try:
+            status, resposta = registrar_numero_whatsapp(phone_number_id)
+
+            if not self._meta_resposta_sucesso(status, resposta):
+                logger.error(
+                    "whatsapp_numero_registrar_falhou | acao=bloquear_save phone_number_id=%s status=%s resposta=%s",
+                    short_value(phone_number_id),
+                    status,
+                    resposta,
+                )
+                self.message_user(
+                    request,
+                    f"Erro ao registrar numero no WhatsApp. Unidade nao foi salva: {resposta}",
+                    level=messages.ERROR,
+                )
+                return False
+
+            logger.info(
+                "whatsapp_numero_registrado | acao=permitir_save phone_number_id=%s status=%s",
+                short_value(phone_number_id),
+                status,
+            )
+            self.message_user(
+                request,
+                "Numero registrado com sucesso no WhatsApp. Unidade salva no banco.",
+                level=messages.SUCCESS,
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "whatsapp_numero_registrar_erro | acao=bloquear_save phone_number_id=%s erro=%s",
+                short_value(phone_number_id),
+                exc,
+            )
+            self.message_user(
+                request,
+                f"Erro inesperado ao registrar numero. Unidade nao foi salva: {exc}",
+                level=messages.ERROR,
+            )
+            return False
+
+    def _desregistrar_meta_antes_de_excluir(self, request, obj):
+        try:
+            status, resposta = desregistrar_numero_whatsapp(obj.phone_number_id)
+
+            if not self._meta_resposta_sucesso(status, resposta):
+                logger.error(
+                    "whatsapp_numero_desregistrar_falhou | acao=bloquear_delete phone_number_id=%s status=%s resposta=%s",
+                    short_value(obj.phone_number_id),
+                    status,
+                    resposta,
+                )
+                self.message_user(
+                    request,
+                    f"Erro ao remover registro do numero na Meta. Unidade mantida no banco: {resposta}",
+                    level=messages.ERROR,
+                )
+                return False
+
+            logger.warning(
+                "whatsapp_numero_desregistrado | acao=permitir_delete phone_number_id=%s status=%s",
+                short_value(obj.phone_number_id),
+                status,
+            )
+            self.message_user(
+                request,
+                "Registro do numero removido na Meta. Unidade removida do banco.",
+                level=messages.SUCCESS,
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "whatsapp_numero_desregistrar_erro | acao=bloquear_delete phone_number_id=%s erro=%s",
+                short_value(obj.phone_number_id),
+                exc,
+            )
+            self.message_user(
+                request,
+                f"Erro inesperado ao remover registro do numero na Meta. Unidade mantida no banco: {exc}",
+                level=messages.ERROR,
+            )
+            return False
+
+    def _marcar_meta_desregistrada_na_requisicao(self, request, obj):
+        ids = getattr(request, "_unidades_meta_desregistradas", set())
+        ids.add(obj.id_unidade)
+        request._unidades_meta_desregistradas = ids
+
+    def _meta_desregistrada_nesta_requisicao(self, request, obj):
+        ids = getattr(request, "_unidades_meta_desregistradas", set())
+        return obj.id_unidade in ids
+
+    @staticmethod
+    def _meta_resposta_sucesso(status, resposta):
+        if status not in (200, 204):
+            return False
+
+        if isinstance(resposta, dict) and resposta.get("success") is False:
+            return False
+
+        return True
+
 
 @admin.register(Cliente)
 class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
@@ -157,6 +288,33 @@ class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     ordering = ("nome",)
     list_per_page = 50
     empty_value_display = "-"
+
+
+@admin.register(Dependente)
+class DependenteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "id_dependente",
+        "id_cliente",
+        "nome_dependente",
+        "telefone_dependente",
+        "email_dependente",
+    )
+
+    search_fields = (
+        "nome_dependente",
+        "telefone_dependente",
+        "email_dependente",
+        "id_cliente__waid_telefone",
+        "id_cliente__nome",
+    )
+
+    ordering = ("id_dependente",)
+    list_per_page = 50
+    empty_value_display = "-"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("id_cliente")
 
 
 @admin.register(Etapa)
@@ -348,6 +506,45 @@ class HistoricoMensagensAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
             "id_etapa",
             "id_mensagem_fila",
         )
+
+
+@admin.register(WebhookFloodEvento)
+class WebhookFloodEventoAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "id_evento",
+        "wa_id_cliente",
+        "phone_id_unidade",
+        "id_hash_msg",
+        "received_at",
+    )
+
+    search_fields = (
+        "wa_id_cliente",
+        "phone_id_unidade",
+        "id_hash_msg",
+    )
+
+    list_filter = ("phone_id_unidade",)
+    ordering = ("-received_at",)
+    date_hierarchy = "received_at"
+    list_per_page = 50
+    empty_value_display = "-"
+
+
+@admin.register(CacheControle)
+class CacheControleAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "nome",
+        "versao",
+        "atualizado_em",
+    )
+
+    search_fields = ("nome",)
+    ordering = ("nome",)
+    list_per_page = 50
+    empty_value_display = "-"
 
 
 @admin.register(ClienteBloqueadoMeta)

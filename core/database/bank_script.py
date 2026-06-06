@@ -456,11 +456,61 @@ def alterar_banco():
 
             DO $$
             BEGIN
-                IF NOT EXISTS (
+                IF EXISTS (
                     SELECT 1
                     FROM pg_constraint
                     WHERE conname = 'fk_fila_conversa'
                       AND conrelid = 'chatbot.fila_mensagens'::regclass
+                )
+                AND (
+                    SELECT COUNT(*)
+                    FROM pg_constraint c
+                    WHERE c.contype = 'f'
+                      AND c.conrelid = 'chatbot.fila_mensagens'::regclass
+                      AND c.confrelid = 'chatbot.conversa'::regclass
+                      AND c.conkey = ARRAY[
+                          (
+                              SELECT attnum
+                              FROM pg_attribute
+                              WHERE attrelid = 'chatbot.fila_mensagens'::regclass
+                                AND attname = 'id_conversa'
+                          )
+                      ]::SMALLINT[]
+                      AND c.confkey = ARRAY[
+                          (
+                              SELECT attnum
+                              FROM pg_attribute
+                              WHERE attrelid = 'chatbot.conversa'::regclass
+                                AND attname = 'id_conversa'
+                          )
+                      ]::SMALLINT[]
+                ) > 1 THEN
+                    ALTER TABLE chatbot.fila_mensagens
+                    DROP CONSTRAINT fk_fila_conversa;
+                END IF;
+
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint c
+                    WHERE c.contype = 'f'
+                      AND c.conrelid = 'chatbot.fila_mensagens'::regclass
+                      AND c.confrelid = 'chatbot.conversa'::regclass
+                      AND c.conkey = ARRAY[
+                          (
+                              SELECT attnum
+                              FROM pg_attribute
+                              WHERE attrelid = 'chatbot.fila_mensagens'::regclass
+                                AND attname = 'id_conversa'
+                          )
+                      ]::SMALLINT[]
+                      AND c.confkey = ARRAY[
+                          (
+                              SELECT attnum
+                              FROM pg_attribute
+                              WHERE attrelid = 'chatbot.conversa'::regclass
+                                AND attname = 'id_conversa'
+                          )
+                      ]::SMALLINT[]
                 ) THEN
                     ALTER TABLE chatbot.fila_mensagens
                     ADD CONSTRAINT fk_fila_conversa
@@ -474,6 +524,61 @@ def alterar_banco():
             ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
             WHERE id_conversa IS NOT NULL
               AND status IN ('pending','processing');
+
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'chatbot'
+                      AND table_name = 'historico_mensagens'
+                      AND column_name = 'origem'
+                )
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'chatbot'
+                      AND table_name = 'historico_mensagens'
+                      AND column_name = 'quem_enviou'
+                ) THEN
+                    ALTER TABLE chatbot.historico_mensagens
+                    RENAME COLUMN origem TO quem_enviou;
+                END IF;
+            END $$;
+
+            ALTER TABLE chatbot.historico_mensagens
+            ADD COLUMN IF NOT EXISTS id_mensagem_fila INT;
+
+            ALTER TABLE chatbot.historico_mensagens
+            ADD COLUMN IF NOT EXISTS id_hash_cliente_origem VARCHAR(255);
+
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_constraint
+                    WHERE conname = 'fk_historico_mensagem_fila'
+                      AND conrelid = 'chatbot.historico_mensagens'::regclass
+                ) THEN
+                    ALTER TABLE chatbot.historico_mensagens
+                    ADD CONSTRAINT fk_historico_mensagem_fila
+                    FOREIGN KEY (id_mensagem_fila)
+                    REFERENCES chatbot.fila_mensagens(id_mensagem)
+                    ON DELETE SET NULL;
+                END IF;
+            END $$;
+
+            CREATE INDEX IF NOT EXISTS idx_historico_bot_mensagem_fila
+            ON chatbot.historico_mensagens (
+                id_conversa,
+                id_mensagem_fila,
+                id_hash_cliente_origem,
+                id_etapa,
+                received_data_hora DESC
+            )
+            WHERE quem_enviou = 'bot'
+              AND id_mensagem_fila IS NOT NULL
+              AND id_hash_cliente_origem IS NOT NULL;
         """)
 
         conn.commit()

@@ -1,373 +1,350 @@
-# Desafios para a proxima versao
+# Desafios e Evolucoes para a V2
 
-Este documento registra fragilidades conhecidas da V1 e ideias para a V2.
+Este documento registra os buracos conhecidos da V1, as decisoes aceitas para a primeira producao e as tarefas futuras que devem orientar a V2.
 
-A V1 prioriza simplicidade, controle manual e consistencia suficiente para primeira producao. Algumas situacoes raras foram aceitas conscientemente para nao transformar o worker e o webhook em uma arquitetura mais complexa antes da hora.
+A V1 foi desenhada para ser simples, controlavel e suficientemente protegida para operar com poucas unidades no inicio. O objetivo da V2 nao e "corrigir bagunca"; e evoluir uma base que ja nasceu com protecoes importantes, mas que propositalmente evita uma arquitetura pesada antes de existir demanda real.
 
-## Principio atual da V1
+## Estado Atual da V1
 
-Na V1, a regra mais importante do worker e:
+### Alinhamento com o codigo real
+
+Este documento deve ser lido com uma separacao clara:
+
+```text
+V1 ja aplicada no codigo
+V1 em fechamento pelo plano atual
+V2 futura
+```
+
+Ja esta aplicado no codigo da V1:
+
+- webhook com regra de turno por cliente/unidade;
+- webhook liberando nova mensagem quando a fila aberta ja tem resposta do bot registrada;
+- `avaliar_turno_cliente_para_fila`;
+- `valida_historico` registrando a mensagem do cliente;
+- `valida_historico` buscando resposta do bot ja vinculada a mensagem atual;
+- `reagendar_se_houver_mensagem_anterior` como segunda camada de ordem no worker;
+- commits, rollbacks e close concentrados em `worker_flow.py`;
+- worker ainda como funcao, com apenas uma instancia prevista para a V1.
+
+Ainda esta em fechamento pelo plano atual da V1:
+
+- chamada real do `flow_sender` dentro do `worker_flow`;
+- sender da etapa 1 usando Meta/PyWa;
+- `ErroEnvioMeta`;
+- `BancoFalhouAposEnvioMeta`;
+- `atualizar_banco_com_contexto_final`;
+- registro da resposta do bot no historico apos envio real da Meta.
+
+Portanto, quando este documento fala sobre `ErroEnvioMeta`, `BancoFalhouAposEnvioMeta` e `atualizar_banco_com_contexto_final`, ele esta considerando a V1 completa apos o plano atual ser aplicado. A V2 deve partir dessa V1 completa, nao do estado parcial anterior ao envio real do bot.
+
+### Principio central
+
+Na V1, a regra mais importante do worker continua sendo:
 
 ```text
 Marcar a mensagem da fila como sent deve ser sempre a ultima coisa do ciclo.
 ```
 
-Essa regra existe para garantir o contexto de turno.
+Essa regra preserva o turno da conversa.
 
-Na V1, a ideia base e:
-
-```text
-cada turno/etapa deve trabalhar com 1 mensagem valida do cliente e 1 resposta do bot.
-```
-
-Ou seja, enquanto o bot ainda nao concluiu a resposta daquele turno, novas mensagens do cliente para a mesma unidade nao devem entrar no fluxo.
-
-O que muda no inicio da conversa e que a etapa 1 tem um comportamento especial: o bot inicia a etapa 2 logo depois de finalizar a etapa 1, no mesmo ciclo.
-
-Exemplo:
+Conceito de turno na V1:
 
 ```text
-etapa 1:
-cliente: ola
-bot: saudacao
-
-inicio da etapa 2 no mesmo ciclo:
-bot: pergunta para quem e o atendimento
-```
-
-Nesse caso, a primeira mensagem do cliente abre a conversa, a saudacao fecha a etapa 1 e a pergunta do bot ja deixa a conversa posicionada na etapa 2 aguardando resposta do cliente.
-
-Enquanto a mensagem nao esta `sent`, ela permanece `pending` ou `processing`.
-
-Isso permite que o webhook aplique uma regra simples:
-
-```text
-Se ja existe mensagem pending ou processing para o mesmo wa_id + phone_id_unidade, ignora a nova mensagem.
-```
-
-Com isso, o webhook nao precisa entender etapa, historico, conversa ou `last_message_from`. Ele atua como porteiro barato. O worker atua como cerebro do fluxo.
-
-Na V2, pode ser avaliado um modelo mais flexivel de contexto por turno.
-
-Exemplo de possibilidade futura:
-
-```text
-analisar ate 3 mensagens do cliente e ate 3 mensagens do bot por turno
-```
-
-Isso permitiria interpretar melhor casos em que o cliente manda ideias quebradas em varias mensagens curtas. Ainda sera decidido se a V2 tera IA para interpretar esse contexto ou se continuara com regras deterministicas por etapa.
-
-## Desafio 1 - Microjanela entre resposta do bot e liberacao do proximo turno
-
-### Cenario
-
-Fluxo esperado do worker:
-
-```text
-1. Worker processa a mensagem do cliente.
-2. Worker envia resposta do bot pela Meta.
-3. Worker registra historico do bot.
-4. Worker atualiza conversa, incluindo last_message_from='bot'.
-5. Worker marca a mensagem da fila como sent.
-6. Worker faz commit final.
-```
-
-Existe uma microjanela teorica entre:
-
-```text
-last_message_from='bot'
-```
-
-e:
-
-```text
-fila_mensagens.status='sent'
-```
-
-Se o cliente enviar uma nova mensagem exatamente nesse intervalo, o webhook ainda pode encontrar a mensagem anterior como `processing`.
-
-Como a regra do webhook e:
-
-```text
-pending/processing bloqueia nova mensagem
-```
-
-a nova mensagem sera ignorada.
-
-### Impacto
-
-Uma mensagem valida de um cliente real poderia ser ignorada.
-
-Na pratica, isso e quase impossivel para um humano, porque o cliente teria que:
-
-```text
-receber a mensagem no WhatsApp
-ler ou perceber a mensagem
-digitar ou tocar na resposta
-enviar
-Meta processar
-Meta chamar o webhook
-nosso servidor receber o POST
-```
-
-tudo isso entre dois updates finais do worker.
-
-Esse cenario e mais provavel com:
-
-- robo;
-- automacao;
-- teste artificial;
-- timing extremo da Meta;
-- servidor travando exatamente no fim do ciclo.
-
-### Observacao transacional importante
-
-Se `last_message_from='bot'` e `status='sent'` forem atualizados na mesma transacao e so houver commit no final, outro request do webhook nao enxerga `last_message_from='bot'` antes do commit.
-
-Mesmo assim, ele ainda enxerga a mensagem antiga como `processing`, porque o dequeue ja foi commitado antes.
-
-Entao a decisao do webhook continua sendo:
-
-```text
-existe processing -> ignora
-```
-
-### Solucoes possiveis na V2
-
-Opcao 1 - Aceitar a microjanela
-
-Continuar com a regra simples:
-
-```text
-pending/processing bloqueia sempre
+1 mensagem valida do cliente
+1 resposta do bot
 sent libera o proximo turno
 ```
 
-Essa e a opcao mais simples e provavelmente suficiente.
-
-Opcao 2 - Criar tabela de eventos ignorados
-
-Registrar mensagens ignoradas por `fila_aberta` em uma tabela leve ou log estruturado.
-
-Depois, seria possivel auditar:
+A etapa atual da conversa continua sendo representada por `conversa.id_etapa_atual`. O conceito de turno e operacional: ele responde perguntas como:
 
 ```text
-cliente respondeu durante janela de fila processing?
-isso aconteceu com frequencia?
+quem falou por ultimo?
+existe mensagem do cliente em processamento?
+o bot ja respondeu aquela mensagem?
+o cliente pode enviar a proxima mensagem?
 ```
 
-Opcao 3 - Reprocessamento seletivo
+### Etapa 1 na V1
 
-Criar um mecanismo futuro que recupere mensagens ignoradas em casos muito especificos.
+A etapa 1 nao deve mais pular automaticamente para a etapa 2 no mesmo ciclo.
 
-Isso exige cuidado, porque pode reabrir o problema de multiplas mensagens por turno.
-
-Opcao 4 - Webhook consultar estado da conversa
-
-Usar `last_message_from='bot'` no webhook para liberar mensagens mesmo com fila `processing`.
-
-Esta opcao nao e recomendada para a V1, porque quebra a regra simples:
+Fluxo esperado:
 
 ```text
-uma mensagem aberta por cliente/unidade
+cliente: ola
+bot: mensagem da etapa 1
 ```
 
-Para funcionar bem, exigiria novas regras no indice, no worker e no historico.
-
-## Desafio 2 - Envio duplicado se o worker cair depois de enviar pela Meta e antes do commit
-
-### Cenario
-
-Fluxo possivel:
+No futuro, a mensagem da etapa 1 pode ter botao, por exemplo:
 
 ```text
-1. Worker recebe mensagem do cliente.
-2. Worker monta resposta.
-3. Worker envia mensagem pela Meta.
-4. Meta aceita o envio.
-5. Antes do worker registrar historico/atualizar conversa/marcar sent/commit, o processo cai.
+Estou pronto para agendar uma aula demonstrativa
 ```
 
-Como a Meta e externa ao banco, o envio nao participa da transacao PostgreSQL.
+O cliente clicando ou respondendo abre o proximo turno, e ai o fluxo segue para a etapa 2.
 
-Se o worker cair depois que a Meta aceitou a mensagem, mas antes do commit do banco, o banco nao registra que o bot respondeu.
+### Webhook na V1
 
-Depois:
+O webhook e o porteiro do sistema. Ele deve ser barato, rapido e protetor.
+
+Fluxo conceitual:
 
 ```text
-1. A mensagem antiga fica processing ate timeout.
-2. O worker pega a mensagem novamente.
-3. O banco parece nao ter historico do envio anterior.
-4. O worker pode enviar a mesma resposta de novo.
+1. validar Content-Type JSON
+2. validar tamanho maximo do body
+3. validar assinatura da Meta
+4. parsear JSON
+5. aplicar antiflood 15 mensagens em 5 segundos por wa_id + phone_id
+6. validar unidade ativa
+7. validar conversa bloqueada temporariamente
+8. validar turno do cliente
+9. inserir na fila
 ```
 
-### Impacto
+### Regra atual de turno no webhook
 
-O cliente pode receber mensagem duplicada do bot.
-
-Esse risco e mais real que a microjanela do desafio 1, porque envolve queda entre chamada externa e commit local.
-
-### Por que rollback nao resolve totalmente
-
-Rollback protege o banco.
-
-Mas rollback nao desfaz uma mensagem ja enviada pela Meta.
-
-Entao o sistema pode ficar neste estado:
+A V1 nao usa mais a regra antiga e cega:
 
 ```text
-Meta: mensagem enviada
-Banco: mensagem nao registrada
+qualquer pending/processing bloqueia sempre
 ```
 
-### Solucoes possiveis na V2
+Agora o webhook avalia a fila aberta do mesmo cliente/unidade.
 
-Opcao 1 - Outbox de mensagens do bot
-
-Criar uma tabela de outbox:
+Se nao existe fila aberta:
 
 ```text
-bot_outbox
-- id_outbox
-- id_conversa
-- id_mensagem_fila
-- id_etapa
-- payload
-- status: pending, sending, sent, failed
-- id_hash_msg_meta
-- tentativas
-- criado_em
-- enviado_em
+pode enfileirar
 ```
 
-Fluxo:
+Se existe fila aberta sem resposta do bot registrada:
 
 ```text
-1. Worker decide que precisa enviar mensagem.
-2. Worker cria registro na outbox.
-3. Commit.
-4. Um sender/outbox processor envia para Meta.
-5. Sender atualiza outbox como sent com id_hash da Meta.
-6. Worker ou processo de reconciliacao atualiza conversa/historico.
+nao enfileira
 ```
 
-Vantagem:
-
-- reduz duplicidade;
-- permite retry controlado;
-- permite auditoria;
-- separa decisao de envio do envio externo.
-
-Desvantagem:
-
-- arquitetura mais complexa;
-- mais tabelas;
-- mais estados;
-- exige reconciliacao.
-
-Opcao 2 - Idempotency key interna
-
-Gerar uma chave deterministica para cada mensagem do bot:
+Se existe fila aberta, mas todas as mensagens abertas daquele cliente/unidade ja tem resposta do bot registrada:
 
 ```text
-id_conversa + etapa + tipo_resposta + id_mensagem_cliente
+pode enfileirar por recuperacao
 ```
 
-Antes de enviar, verificar se ja existe registro com essa chave.
-
-Limitacao:
-
-Se o envio ocorreu na Meta mas o banco caiu antes de salvar a chave, ainda pode duplicar.
-
-Opcao 3 - Registrar intencao antes de enviar
-
-Antes de chamar a Meta:
+Uma fila aberta e considerada respondida quando existe prova no banco:
 
 ```text
-INSERT historico/status pending para mensagem do bot
-COMMIT
+conversa.last_message_from = 'bot'
+historico_mensagens.quem_enviou = 'bot'
+historico_mensagens.status_envio = 'sent'
+historico_mensagens.id_mensagem_fila = fila_mensagens.id_mensagem
+historico_mensagens.id_hash_cliente_origem = fila_mensagens.id_hash_msg
 ```
 
-Depois envia Meta e atualiza para `sent`.
+Essa regra resolve o buraco antigo em que o cliente poderia responder o bot, mas a fila anterior ainda nao estava marcada como `sent`.
 
-Vantagem:
+### Worker na V1
 
-- se cair depois, o banco sabe que havia uma intencao de envio.
+Na V1 existe apenas um worker ativo.
 
-Desvantagem:
+Mesmo assim, o corpo do worker ja foi escrito pensando em race condition:
 
-- se a Meta falhar, o banco mostra uma mensagem planejada mas nao enviada;
-- exige tratar status `pending/failed` no historico do bot;
-- complica o fluxo atual.
+- `dequeue_message()` com `FOR UPDATE SKIP LOCKED`;
+- status `pending` e `processing`;
+- timeout para mensagem travada em `processing`;
+- `lock_conversa`;
+- `unlock_conversa` com `lock_version`;
+- `reagendar_se_houver_mensagem_anterior`;
+- commits e rollbacks centralizados em `worker_flow.py`;
+- idempotencia por historico do bot vinculado a mensagem da fila;
+- `sent` como ultima etapa do ciclo.
 
-Opcao 4 - Aceitar risco na V1
+Isso permite que a V1 use um worker unico, mas com corpo preparado para evoluir para multiplas instancias na V2.
 
-Para primeira producao, aceitar que queda exatamente entre Meta e commit pode duplicar resposta.
+### Flow sender planejado para fechar a V1
 
-Mitigacoes:
+O desenho esperado para fechar a V1 com envio real pela Meta e:
 
-- logs claros;
-- `validar_historico` idempotente quando houver historico confirmado;
-- operacao com um worker unico;
-- monitoramento manual.
+```text
+1. valida_historico registra a mensagem do cliente
+2. flow_sender decide a etapa
+3. flow_sender chama o sender da etapa
+4. sender da etapa envia pela Meta/PyWa
+5. sender retorna contexto de sucesso com id_hash_msg_bot
+6. worker chama atualizar_banco_com_contexto_final
+7. banco registra historico do bot e last_message_from='bot'
+8. worker comita
+9. worker marca fila como sent
+10. worker comita de novo
+```
 
-## Desafio 3 - Mensagem valida ignorada por fila aberta apos resposta do bot
+Se a Meta falhar:
 
-Este desafio e parecido com a microjanela, mas visto pelo lado do webhook.
+```text
+ErroEnvioMeta
+rollback
+nao registra historico do bot
+nao atualiza last_message_from='bot'
+nao marca sent
+mensagem volta por retry
+```
+
+Se a Meta enviar, mas o banco falhar antes de registrar a resposta:
+
+```text
+BancoFalhouAposEnvioMeta
+log critico
+risco raro de duplicidade
+mensagem volta por retry
+```
+
+## Buraco Principal Ainda Aberto na V1
+
+## Desafio 1 - Meta enviou, mas banco/worker caiu antes de atualizar o banco
+
+Este e o principal risco transacional restante da V1.
 
 ### Cenario
 
 ```text
-1. Worker ja enviou a resposta do bot.
-2. Worker ainda nao marcou a mensagem antiga como sent.
-3. Cliente envia nova mensagem.
-4. Webhook encontra mensagem antiga como processing.
-5. Webhook ignora a nova mensagem por fila_aberta.
+1. Worker processa mensagem do cliente.
+2. Worker chama flow_sender.
+3. flow_sender chama sender da etapa.
+4. Meta/PyWa envia a mensagem com sucesso.
+5. Worker recebe id_hash_msg_bot.
+6. Antes de atualizar historico do bot e conversa, o banco cai ou o processo cai.
+```
+
+Resultado:
+
+```text
+Meta: mensagem enviada ao cliente
+Banco: nao sabe que a mensagem foi enviada
+Fila: nao virou sent
+```
+
+Depois de 2 minutos, ou pelo tratamento de retry:
+
+```text
+1. Worker pega a mesma mensagem de novo.
+2. valida_historico procura resposta do bot para aquela mensagem.
+3. Banco nao tem resposta registrada.
+4. flow_sender pode enviar a mesma resposta novamente.
 ```
 
 ### Impacto
 
-O cliente pode precisar mandar a mensagem de novo.
+O cliente pode receber uma resposta duplicada.
 
-### Por que foi aceito na V1
+Esse risco nao e causado pelo webhook. Ele existe porque a Meta e um sistema externo e nao participa da transacao PostgreSQL.
 
-A regra da V1 e simples:
+Rollback protege o banco, mas nao desfaz uma mensagem ja enviada pela Meta.
 
-```text
-fila aberta = turno ainda fechado
-sent = turno liberado
-```
+### Status na V1
 
-Essa regra e facil de entender, barata de executar e evita multiplas mensagens por turno.
+Aceito como risco raro para primeira producao.
 
-### Solucoes futuras
+Mitigacoes atuais:
 
-- medir frequencia real desse evento;
-- registrar logs estruturados de mensagens ignoradas por `fila_aberta`;
-- se isso acontecer muito, avaliar tabela de eventos ignorados;
-- evitar resolver isso consultando `last_message_from` no webhook antes de haver evidencias reais.
+- log critico especifico;
+- retry controlado;
+- um worker unico;
+- idempotencia quando o banco ja tem historico do bot;
+- webhook com recuperacao quando a fila aberta ja foi respondida pelo bot.
 
-## Desafio 4 - Mensagens ignoradas nao ficam no historico
+### Tarefa para V2
+
+Criar uma solucao transacional mais forte para envio externo, provavelmente com outbox, checkpoint ou estado intermediario oficial.
+
+## Casos Que a V1 Agora Trata Melhor
+
+## Caso 1 - Worker caiu depois de registrar resposta do bot, mas antes de marcar sent
 
 ### Cenario
 
-Na V1, mensagens extras do cliente enquanto existe fila aberta sao ignoradas no webhook.
+```text
+1. Worker envia resposta pela Meta.
+2. Worker insere historico do bot.
+3. Worker atualiza conversa para last_message_from='bot'.
+4. Worker comita.
+5. Worker cai antes de marcar fila como sent.
+```
 
-Elas nao entram em:
+### Comportamento na V1
 
-- fila;
-- historico;
-- fluxo do worker.
+O banco tem prova da resposta do bot.
+
+O webhook pode aceitar uma nova mensagem do cliente mesmo com fila anterior aberta, porque a fila aberta ja esta respondida.
+
+Se o worker pegar a mensagem antiga de novo:
+
+```text
+valida_historico encontra resposta_bot_para_mensagem_atual
+flow_sender nao reenvia
+worker marca a fila antiga como sent
+```
+
+Se o worker pegar uma mensagem nova antes de fechar a antiga:
+
+```text
+reagendar_se_houver_mensagem_anterior segura a mensagem nova
+mensagem antiga fecha primeiro
+mensagem nova processa depois
+```
+
+Esse caso deixou de ser o principal buraco da V1.
+
+## Caso 2 - Cliente responde durante fila antiga processing, mas ja respondida pelo bot
+
+### Cenario
+
+```text
+1. Bot ja respondeu a mensagem A.
+2. Banco ja registrou historico do bot para A.
+3. A ainda esta pending/processing, nao sent.
+4. Cliente envia mensagem B.
+```
+
+### Comportamento na V1
+
+O webhook avalia se a fila aberta esta respondida.
+
+Se estiver:
+
+```text
+mensagem B entra na fila
+```
+
+O worker mantem a ordem com `reagendar_se_houver_mensagem_anterior`.
+
+Esse fluxo reduz muito a chance de mensagem valida ser ignorada.
+
+## Desafio 2 - Mensagens ignoradas nao ficam no historico
+
+Na V1, mensagens bloqueadas no webhook nao entram no historico da conversa.
+
+Exemplos:
+
+- mensagem enquanto existe fila aberta sem resposta do bot;
+- flood;
+- unidade inativa;
+- body invalido;
+- assinatura invalida;
+- content-type invalido;
+- conversa temporariamente bloqueada.
 
 ### Impacto
 
-O historico representa apenas mensagens uteis para o fluxo de negocio, nao tudo que o cliente tentou enviar.
+O historico da conversa registra o fluxo util para o negocio, nao tudo que chegou no endpoint.
 
-Isso e bom para o fluxo, mas reduz auditoria.
+Isso simplifica o fluxo, mas reduz auditoria.
 
-### Solucao futura
+### Tarefa para V2
 
-Criar uma tabela separada para eventos ignorados:
+Avaliar uma tabela de eventos ignorados apenas para auditoria, suporte e metricas.
+
+Ela nao deve dirigir o fluxo principal do chatbot.
+
+Exemplo conceitual:
 
 ```text
 webhook_evento_ignorado
@@ -381,164 +358,213 @@ webhook_evento_ignorado
 - payload_resumido
 ```
 
-Importante: essa tabela nao deve ser usada pelo fluxo principal.
+## Desafio 3 - Outbox para mensagens do bot
 
-Ela deve servir apenas para auditoria, suporte e monitoramento.
+A V1 envia mensagem pela Meta diretamente dentro do ciclo do worker.
 
-## Desafio 5 - V1 usa um unico worker
-
-Na V1, o sistema roda apenas um worker.
-
-Mesmo assim, o corpo do worker ja foi pensado com protecoes para race condition:
-
-- `dequeue_message()` com `FOR UPDATE SKIP LOCKED`;
-- status `pending` e `processing`;
-- timeout para mensagens travadas em `processing`;
-- `lock_conversa`;
-- `unlock_conversa` com `lock_version`;
-- checagem de mensagem anterior aberta;
-- `reagendar_se_houver_mensagem_anterior`;
-- commits e rollbacks centralizados em `worker_flow.py`.
-
-Isso significa que a V1 ainda e simples, mas o desenho ja prepara caminho para multiplos workers.
-
-## Ideia futura - Separar fila, historico e estado oficial do turno
-
-Durante a evolucao do projeto, surgiu uma ideia para reduzir microjanelas e diminuir risco de duplicidade:
+Isso e simples, mas cria o risco do desafio principal:
 
 ```text
-1. Worker pega a mensagem da fila.
-2. Worker salva a mensagem do cliente no historico.
-3. Worker remove ou finaliza a mensagem da fila.
-4. Worker usa outro estado oficial para indicar que o bot ainda precisa responder.
+Meta enviou
+banco nao registrou
+retry duplica
 ```
 
-Essa ideia muda o papel da fila.
+### Tarefa para V2
 
-Na V1, a fila faz dois papeis:
+Estudar outbox de mensagens do bot.
+
+Objetivo:
+
+- registrar intencao de envio antes da chamada externa;
+- controlar retry da Meta;
+- separar decisao conversacional do envio externo;
+- auditar payloads enviados;
+- reduzir duplicidade quando processo cai;
+- permitir reconciliacao.
+
+Exemplo conceitual:
 
 ```text
-1. transporte da mensagem;
-2. trava de turno aberto.
+bot_outbox
+- id_outbox
+- id_conversa
+- id_mensagem_fila
+- id_etapa
+- tipo_mensagem
+- payload
+- status
+- id_hash_msg_meta
+- tentativas
+- criado_em
+- enviado_em
+- erro
 ```
 
-Ou seja:
+Possiveis estados:
 
 ```text
-pending/processing = turno fechado para novas mensagens do cliente
-sent = turno liberado
+pending
+sending
+sent
+failed
+reconciled
 ```
 
-Na ideia futura, a fila seria apenas transporte.
+## Desafio 4 - Banco reconhecendo estados intermediarios
 
-O estado oficial do turno ficaria em outro lugar, provavelmente na tabela `conversa` ou em uma nova tabela.
+Na V1, o sistema evita fazer commit apos cada `INSERT`, `UPDATE` ou `DELETE`.
 
-Exemplo de fluxo futuro:
+A regra e:
 
 ```text
-1. cliente envia mensagem
-2. webhook coloca na fila
-3. worker pega mensagem da fila
-4. worker salva mensagem do cliente no historico
-5. worker atualiza conversa.turno_status = 'bot_processando'
-6. worker remove/finaliza mensagem da fila
-7. commit
-8. bot envia resposta
-9. worker salva historico do bot
-10. worker atualiza conversa.turno_status = 'aguardando_cliente'
-11. commit
+commit por bloco logico
 ```
 
-Nesse modelo, o webhook nao olharia mais apenas para `pending/processing`.
+Isso mantem o fluxo simples e evita expor estados incompletos como verdade oficial.
 
-Ele consultaria o estado oficial:
+Na V2, se quisermos commits mais frequentes, o banco precisa reconhecer estados intermediarios oficialmente.
 
-```text
-se conversa.turno_status != 'aguardando_cliente', ignora
-```
+Isso significa que nao basta o Python "saber" que esta em um meio de fluxo. O banco precisa conseguir representar esse meio de fluxo de forma consultavel, auditavel e recuperavel.
 
-ou:
+Exemplos de estados intermediarios que poderiam existir:
 
 ```text
-se conversa.turno_aberto_para_cliente = false, ignora
-```
-
-### Vantagens possiveis
-
-- fila fica apenas como mecanismo de transporte;
-- historico registra a mensagem do cliente mais cedo;
-- o turno passa a ter um estado explicito;
-- pode facilitar recuperacao de falhas parciais;
-- pode permitir aceitar/rejeitar mensagens com base em estado de negocio mais detalhado.
-
-### Desvantagens
-
-- exige nova coluna ou nova tabela;
-- webhook passa a consultar estado de conversa/turno;
-- aumenta custo por mensagem;
-- exige tratar estados intermediarios;
-- exige logica de recuperacao mais complexa;
-- exige que o banco saiba diferenciar varios estados do turno.
-
-Estados possiveis que poderiam existir:
-
-```text
-aguardando_cliente
-cliente_respondeu
-bot_processando
-bot_enviado
-erro_validacao_cliente
-erro_envio_bot
+cliente_salvo_no_historico
+resposta_bot_planejada
+resposta_bot_enviando
+resposta_bot_enviada_meta
+historico_bot_salvo
+conversa_atualizada
+fila_finalizada
 turno_finalizado
 ```
 
-### Relacao com etapa
+### O que o banco precisa ter para identificar esses estados
 
-A tabela `conversa.id_etapa_atual` ja representa bem a etapa atual do fluxo.
+Para estados intermediarios serem seguros, o banco precisa ter pelo menos:
 
-O conceito de turno e mais operacional:
+- chave de idempotencia da operacao;
+- status operacional claro;
+- timestamps de entrada e saida do estado;
+- identificador do worker que assumiu o estado;
+- contador de tentativas;
+- ultimo erro;
+- vinculo com `id_conversa`;
+- vinculo com `id_mensagem_fila`;
+- vinculo com `id_hash_msg` da mensagem do cliente;
+- vinculo com `id_hash_msg_bot` quando a Meta confirmar envio;
+- constraints que impecam duplicidade logica;
+- indices para consultar rapidamente estado pendente/travado;
+- funcoes SQL ou updates atomicos para avancar estado.
 
-```text
-quem deve falar agora?
-existe uma resposta do cliente sendo processada?
-o bot ja respondeu?
-o cliente pode enviar nova mensagem?
-```
-
-Por isso, talvez a V2 nao precise de uma tabela `turno`.
-
-Pode ser suficiente adicionar colunas de estado operacional na propria tabela `conversa`, caso esse modelo seja adotado.
-
-### Decisao para a V1
-
-Nao aplicar essa ideia na V1.
-
-Na V1, manter:
+Exemplo conceitual de campos:
 
 ```text
-fila pending/processing bloqueia novas mensagens
-fila sent libera proximo turno
+estado_operacional
+checkpoint_atual
+idempotency_key
+locked_by_worker
+locked_at
+tentativas
+last_error
+created_at
+updated_at
+completed_at
 ```
 
-Essa decisao mantem o webhook simples e evita criar estados intermediarios antes de necessidade real em producao.
+O ponto principal:
 
-## Evolucao esperada para V2 - Worker como classe
+```text
+se o worker cair, o proximo worker nao pode adivinhar o que aconteceu.
+ele deve consultar o banco e saber exatamente de qual checkpoint continuar.
+```
 
-Na V2, o worker deve deixar de ser apenas uma funcao solta e virar uma classe.
+### Tarefas de back-end para detectar estados intermediarios
 
-Hoje:
+Na V2, o back-end deve ter tarefas especificas para:
+
+- detectar estado parado ha tempo demais;
+- detectar envio Meta confirmado mas nao persistido no historico;
+- detectar historico do bot salvo mas conversa nao atualizada;
+- detectar conversa atualizada mas fila nao finalizada;
+- detectar fila `processing` expirada;
+- detectar outbox `sending` travada;
+- detectar resposta do bot planejada, mas nunca enviada;
+- detectar divergencia entre `historico_mensagens`, `fila_mensagens`, `conversa` e Meta;
+- decidir se deve continuar, reparar, alertar ou pausar.
+
+Essas tarefas podem virar:
+
+- jobs periodicos;
+- funcoes administrativas;
+- comandos manuais;
+- processos de reconciliacao;
+- checks no inicio do ciclo do worker.
+
+### Tarefas de persistencia para estados intermediarios
+
+Na V2, cada avanco importante deve salvar estado suficiente para recuperacao.
+
+Exemplo conceitual:
+
+```text
+1. salvar intencao de resposta do bot
+2. commit
+3. enviar Meta
+4. salvar id_hash_msg_bot
+5. commit
+6. inserir historico do bot
+7. atualizar conversa
+8. finalizar fila/turno
+```
+
+Isso so e seguro se cada estado intermediario tiver significado oficial.
+
+Se nao houver esse modelo, commits frequentes aumentam risco de:
+
+- duplicidade;
+- mensagem perdida;
+- conversa em estado incoerente;
+- webhook liberando turno cedo demais;
+- worker retomando do ponto errado.
+
+### Tarefa para V2
+
+Decidir se vale criar:
+
+- colunas de checkpoint;
+- tabela de turno operacional;
+- outbox;
+- status mais granular no historico do bot;
+- funcoes SQL para avancar estados com seguranca.
+
+Tambem decidir onde esses estados devem morar:
+
+- na tabela `conversa`;
+- em uma nova tabela `turno_operacional`;
+- em uma tabela `bot_outbox`;
+- em uma tabela de `processamento_mensagem`;
+- ou em uma combinacao pequena dessas estruturas.
+
+Decisao importante:
+
+```text
+nao criar estados intermediarios apenas em variaveis Python.
+estado intermediario que precisa sobreviver a queda deve estar no banco.
+```
+
+## Desafio 5 - Worker como classe
+
+Na V1:
 
 ```text
 worker_flow()
 ```
 
-Futuro:
+Na V2, o worker deve virar classe.
 
-```text
-WorkerChatbot
-```
-
-Ideia:
+Exemplo conceitual:
 
 ```python
 class WorkerChatbot:
@@ -554,103 +580,35 @@ class WorkerChatbot:
         ...
 ```
 
-O corpo que hoje esta dentro de `worker_flow()` vira o corpo da classe.
+O corpo protegido contra race condition que hoje esta em `worker_flow()` deve virar o corpo operacional da classe.
 
-As protecoes contra race condition continuam as mesmas, mas ficam encapsuladas por instancia.
+### Tarefas para V2
 
-## V2 - Multiplas instancias de worker
+- criar `WorkerChatbot`;
+- manter commits/rollbacks claros por ciclo;
+- manter `sent` como ultima operacao;
+- incluir `worker_id` nos logs;
+- permitir configuracao por instancia;
+- preparar inicializacao e parada controlada.
 
-Com worker em classe, sera possivel criar:
+## Desafio 6 - Controlador de workers
 
-- um controlador manual de workers;
-- um gerenciador que cria workers conforme demanda;
-- workers com identificador proprio;
-- logs por worker;
-- limites por worker;
-- desligamento controlado;
-- restart controlado.
+Na V1, um worker deve ser suficiente para poucas unidades.
 
-Exemplo conceitual:
+Na V2, quando houver mais unidades e mais volume, sera necessario um controlador.
 
-```python
-workers = [
-    WorkerChatbot(worker_id="worker-1", config=config),
-    WorkerChatbot(worker_id="worker-2", config=config),
-]
+### Tarefas para V2
 
-for worker in workers:
-    iniciar_em_thread_ou_processo(worker)
-```
-
-## V2 - Async, paralelismo e processos
-
-Opcoes futuras:
-
-### Threads
-
-Mais simples para iniciar multiplas instancias dentro do mesmo processo.
-
-Cuidados:
-
-- conexao de banco nao deve ser compartilhada entre threads;
-- cada ciclo deve abrir sua propria conexao ou pegar uma do pool;
-- logs precisam identificar `worker_id`.
-
-### Processos
-
-Mais isolado e mais parecido com producao.
-
-Cuidados:
-
-- cada processo tem sua propria memoria;
-- Redis/cache local por processo pode divergir;
-- observabilidade precisa ser melhor.
-
-### Async
-
-Pode ajudar se houver muitas chamadas de rede, como Meta e APIs externas.
-
-Mas o projeto atual usa `psycopg2` e chamadas sincronas. Migrar para async exigiria mais mudancas.
-
-Para V2, talvez seja melhor primeiro evoluir para multiplos workers sincronizados antes de migrar para async.
-
-## V2 - Pool de conexoes
-
-Hoje, cada ciclo pode fazer:
-
-```python
-conn = get_conn(application_name="worker_chatbot")
-```
-
-Isso e simples e seguro.
-
-Na V2, se houver muitos workers, pode ser interessante usar pool de conexoes.
-
-Possibilidades:
-
-- `psycopg2.pool.SimpleConnectionPool`;
-- `psycopg2.pool.ThreadedConnectionPool`;
-- pool externo como PgBouncer;
-- pool gerenciado pela infraestrutura.
-
-Cuidados:
-
-- nunca compartilhar a mesma conexao entre workers simultaneos;
-- devolver conexao ao pool sempre no `finally`;
-- rollback antes de devolver conexao com erro;
-- definir `application_name` por worker, se possivel.
-
-## V2 - Controlador de workers
-
-Um controlador futuro pode:
+Criar controlador capaz de:
 
 - iniciar N workers;
 - parar workers;
 - reiniciar worker travado;
-- ajustar quantidade conforme fila;
-- expor status;
+- ajustar quantidade de workers conforme demanda;
 - registrar heartbeat;
-- detectar worker sem progresso.
+- expor status;
+- controlar desligamento gracioso;
+- separar logs por worker.
 
 Possivel tabela futura:
 
@@ -660,338 +618,392 @@ worker_status
 - status
 - ultimo_ciclo_em
 - mensagem_atual
+- total_processadas
 - criado_em
 - atualizado_em
 ```
 
-## V2 - Banco reconhecendo estados intermediarios
+## Desafio 7 - Multiplas instancias, paralelismo e pool de conexoes
 
-Na V1, o worker evita fazer commit a cada `INSERT`, `UPDATE` ou `DELETE`.
-
-A regra atual e:
+A V1 abre conexao no ciclo do worker com:
 
 ```text
-commit por bloco logico
+get_conn(application_name="worker_chatbot")
 ```
 
-Principalmente no fluxo de resposta do bot:
+Isso e simples e seguro para um worker.
 
-```text
-historico cliente
-historico bot
-update conversa
-update etapa
-update last_message_from
-marcar fila como sent
-commit final
-```
+Na V2, com multiplos workers, sera necessario avaliar:
 
-Isso evita que o banco exponha estados incompletos como se fossem verdades oficiais.
+- pool de conexoes;
+- PgBouncer;
+- limite de conexoes no banco;
+- `application_name` por worker;
+- rollback antes de devolver conexao ao pool;
+- conexao nunca compartilhada simultaneamente entre workers.
 
-Para a V2, pode ser estudada uma arquitetura em que o banco reconhece estados intermediarios. Isso permitiria commits mais frequentes, inclusive depois de comandos individuais de `INSERT`, `UPDATE` e `DELETE`.
+Opcoes:
 
-Mas, para isso ser seguro, esses estados intermediarios precisam virar parte oficial do modelo.
-
-Exemplos de estados:
-
-```text
-cliente_salvo_no_historico
-bot_resposta_planejada
-bot_enviando
-bot_enviado_meta
-historico_bot_salvo
-conversa_atualizada
-fila_finalizada
-turno_finalizado
-```
-
-Com esse modelo, se o worker cair no meio, o proximo ciclo nao adivinha o que aconteceu. Ele consulta o estado intermediario e sabe de onde continuar.
-
-Possiveis mudancas necessarias:
-
-- tabela de outbox para mensagens do bot;
-- tabela ou colunas de checkpoint do processamento;
-- status mais granular para mensagens do bot;
-- estado operacional do turno na conversa ou em tabela propria;
-- funcoes SQL novas para lock/unlock de turno, outbox ou checkpoint;
-- jobs de reconciliacao;
-- idempotency keys para envios externos.
-
-Essa arquitetura e mais robusta, mas tambem mais complexa.
-
-Estimativa conceitual:
-
-```text
-V1 atual: cerca de 10 tabelas conceituais e 74 colunas de dominio.
-V2 com estados intermediarios: algo como 13 a 15 tabelas conceituais e 110 a 140 colunas de dominio.
-```
-
-Decisao para a V1:
-
-```text
-nao fazer commit por comando
-nao expor estados intermediarios desnecessarios
-manter commit por bloco logico
-manter sent como ultima etapa do ciclo
-```
-
-## Outras fragilidades transacionais para observar
-
-### Commit apos vincular mensagem a conversa
-
-Hoje o worker vincula a mensagem a uma conversa e faz commit antes de processar o restante.
-
-Isso e util para rastreabilidade e recuperacao.
-
-Mas significa que, se cair depois disso, a mensagem volta futuramente ja vinculada a conversa.
-
-O fluxo atual lida bem com isso, mas o `validar_historico` deve considerar que uma mensagem pode ja ter `id_conversa` mesmo sem historico completo.
-
-### Lock recusado deixa mensagem processing ate timeout
-
-Quando o lock da conversa e recusado, a mensagem pode permanecer `processing` ate o timeout de 2 minutos.
-
-Isso evita brigar pelo lock repetidamente, mas pode adicionar atraso.
-
-Para V2, avaliar se vale reagendar imediatamente a mensagem quando o lock for recusado.
-
-### Falha no unlock
-
-Se o unlock falhar, a conversa fica `processing` ate expirar pelo timeout de `lock_conversa`.
-
-O `lock_version` impede liberar lock errado, o que e bom.
-
-Para V2, pode haver alerta especifico para falha no unlock.
-
-### Historico parcial
-
-Quando `validar_historico` e `flow_sender` entrarem, sera importante evitar historico parcial confuso.
-
-Exemplo:
-
-```text
-historico cliente salvo
-historico bot nao salvo
-conversa nao atualizada
-fila nao sent
-```
-
-O `validar_historico` deve conseguir identificar e completar o fluxo.
-
-### Reenvio apos falha externa
-
-Toda chamada externa antes do commit final pode gerar duplicidade se a chamada externa teve sucesso e o banco nao registrou.
-
-Isso vale para:
-
-- Meta;
-- APIs externas;
-- servicos de agenda;
-- notificacoes futuras.
-
-Na V2, chamadas externas importantes devem avaliar padrao outbox.
-
-## V2 - Otimizacoes SQL para perguntas objetivas
-
-Na V1, o projeto ja usa bem a ideia de deixar o SQL responder perguntas objetivas do banco.
-
-Exemplos atuais positivos:
-
-```text
-existe mensagem aberta no turno?
-qual estado da conversa?
-existe mensagem anterior aberta na mesma conversa?
-ja existe resposta do bot para esta mensagem do cliente?
-```
-
-Esse padrao deve continuar na V2.
-
-A regra geral recomendada e:
-
-```text
-SQL responde existencia, vinculo, ultimo registro e estado.
-Python decide o fluxo conversacional.
-```
-
-Ou seja, evitar trazer muitas linhas para Python apenas para fazer `if`, `for`, filtro ou comparacao que o banco poderia responder diretamente com indice.
-
-### Candidato 1 - Ultima mensagem do bot e ultima mensagem do cliente
-
-Hoje o `valida_historico` pode buscar algumas mensagens recentes e depois o Python procura:
-
-```text
-ultima mensagem do bot
-ultima mensagem anterior do cliente
-```
-
-Na V2, se o `flow_sender` nao precisar do historico recente completo, isso pode virar uma consulta SQL objetiva.
-
-Possibilidades:
-
-```text
-buscar_ultima_mensagem_bot(id_conversa)
-buscar_ultima_mensagem_cliente(id_conversa)
-```
-
-ou uma query unica com:
-
-```sql
-DISTINCT ON (quem_enviou)
-```
-
-Objetivo:
-
-```text
-reduzir dados retornados
-reduzir loops em Python
-deixar o banco usar indice por conversa/data
-```
+- threads;
+- processos;
+- workers independentes;
+- async no futuro, se fizer sentido.
 
 Observacao:
 
 ```text
-nao otimizar antes de saber exatamente quanto contexto o flow_sender da V2 precisara.
+async nao deve ser a primeira evolucao obrigatoria.
 ```
 
-Se a V2 for analisar ate 3 mensagens do cliente e 3 do bot, ainda pode fazer sentido buscar um historico curto.
+Como o projeto usa chamadas sincronas e `psycopg2`, a evolucao mais natural e primeiro suportar multiplos workers sincronizados com isolamento correto.
 
-### Candidato 2 - Flood guard com multiplas regras
+## Desafio 8 - Redis, cache local e multiplos processos
 
-Na V1, o antiflood usa apenas uma regra:
+Na V1, alguns fallbacks usam memoria local quando Redis/banco falham.
+
+Com um processo unico, isso e aceitavel.
+
+Na V2, com multiplos processos ou multiplos servidores:
 
 ```text
-15 mensagens em 5 segundos
+memoria local nao e compartilhada
 ```
 
-Por isso, o loop em Python sobre as regras nao e um problema.
+### Tarefas para V2
 
-Se a V2 voltar a ter varias regras, como:
+- decidir o papel do Redis como fonte operacional temporaria;
+- criar alerta quando Redis falhar;
+- revisar fallback local para ambiente multi-worker;
+- avaliar cache distribuido;
+- criar reconciliacao quando fallback local registrar evento critico.
+
+## Desafio 9 - Reconciliacao banco x Meta
+
+A V1 tem utilitarios para listar bloqueios da Meta e comparar com o banco.
+
+Ainda falta transformar isso em rotina operacional.
+
+### Tarefas para V2
+
+- criar job de reconciliacao banco x Meta;
+- ler divergencias de bloqueio;
+- reportar divergencias;
+- opcionalmente corrigir divergencias com confirmacao;
+- ler arquivos de alerta critico gerados pelo webhook;
+- reconciliar bloqueios registrados fora do banco;
+- gerar relatorio legivel para operacao.
+
+## Desafio 10 - Alertas criticos
+
+Na V1, logs existem e alguns erros criticos podem ser registrados.
+
+Na V2, logs precisam virar alerta operacional.
+
+Eventos que devem gerar alerta:
+
+- `BancoFalhouAposEnvioMeta`;
+- falha repetida da Meta;
+- flood detectado;
+- Redis indisponivel;
+- banco indisponivel;
+- falha no unlock;
+- muitos retries;
+- mensagens removidas por `max_retry`;
+- divergencia banco x Meta.
+
+### Tarefas para V2
+
+- decidir canal de alerta;
+- criar dashboard;
+- criar arquivos/relatorios rotativos se necessario;
+- definir severidade;
+- definir quem deve agir.
+
+## Desafio 11 - Observabilidade e metricas
+
+Logs ajudam no debug, mas metricas ajudam a operar.
+
+### Tarefas para V2
+
+Medir:
+
+- mensagens recebidas por minuto;
+- mensagens enfileiradas;
+- mensagens ignoradas por motivo;
+- tempo medio no webhook;
+- tempo medio no worker;
+- fila pending;
+- fila processing;
+- mensagens com retry;
+- falhas Meta;
+- falhas banco;
+- bloqueios por flood;
+- quantidade por unidade;
+- tempo por etapa.
+
+## Desafio 12 - Infraestrutura AWS e Meta
+
+As protecoes em Django ajudam, mas nao substituem infraestrutura.
+
+### Tarefas para V2 / producao mais madura
+
+Na Meta:
+
+- app em modo live;
+- webhook no dominio final;
+- verify token correto;
+- App Secret configurado;
+- assinatura validada;
+- WABA/numeros conectados;
+- eventos corretos assinados.
+
+Na AWS:
+
+- dominio HTTPS;
+- Gunicorn/Uvicorn;
+- Nginx ou Load Balancer;
+- Security Groups;
+- CloudFront + WAF ou AWS WAF;
+- rate limit por IP/origem;
+- logs centralizados;
+- metricas;
+- alarmes;
+- segredos fora do codigo.
+
+## Desafio 13 - Segredos e criptografia
+
+Na V1, alguns segredos ainda podem estar em arquivo de configuracao.
+
+### Tarefas para V2
+
+- mover token da Meta para variavel de ambiente ou secret manager;
+- mover App Secret para variavel de ambiente ou secret manager;
+- mover credenciais de banco para ambiente seguro;
+- avaliar AWS Secrets Manager;
+- revisar logs para garantir que token nunca aparece;
+- documentar rotacao de token.
+
+## Desafio 14 - Interface operacional
+
+Hoje o Django admin cobre parte importante da operacao.
+
+Na V2, pode existir uma interface propria.
+
+### Tarefas futuras
+
+- tela de unidades;
+- tela de conversas;
+- tela de bloqueios Meta;
+- tela de relatorios de flood;
+- tela de fila;
+- tela de erros criticos;
+- botao para rodar reconciliacao;
+- filtros por unidade;
+- leitura de historico;
+- status de worker.
+
+## Desafio 15 - IA ou regras deterministicas
+
+A V1 deve seguir fluxo seco por etapas.
+
+Na V2, pode ser avaliado:
+
+- continuar com regras;
+- usar IA apenas para classificacao;
+- usar IA para extrair nome, idade e intencao;
+- usar IA para interpretar ate 3 mensagens recentes do cliente e 3 do bot;
+- usar IA apenas em fallback quando regra nao entender.
+
+Decisao ainda aberta:
 
 ```text
-10 mensagens em 5 segundos
-30 mensagens em 60 segundos
-60 mensagens em 1 segundo
+a V2 tera IA ou continuara deterministica?
 ```
 
-pode ser melhor criar uma consulta SQL que retorne diretamente:
+Mesmo com IA, o estado oficial da conversa deve continuar no banco.
+
+## Desafio 16 - Tratamento de respostas invalidas
+
+Na V1, ainda sera preciso implementar tratamentos por etapa.
+
+Exemplo:
 
 ```text
-regra estourada
-total da janela
-maior total observado
+bot: Qual seu nome?
+cliente: resposta invalida
+bot: Nao consegui usar esse nome. Digite novamente.
+cliente: Alice
 ```
 
-Isso evita multiplas consultas ao banco para a mesma chave `wa_id + phone_id`.
+### Decisao futura
 
-### Candidato 3 - Dados de bloqueio Meta em uma consulta
+Definir se mensagens invalidas entram no historico principal ou se entram em uma estrutura separada.
 
-Hoje, quando flood e detectado, o webhook busca dados de bloqueio em duas perguntas:
+Registrar tudo aumenta auditoria.
+
+Registrar apenas respostas validas simplifica o fluxo.
+
+Essa decisao deve ser feita com cuidado, porque pode afetar:
+
+- suporte;
+- auditoria;
+- IA futura;
+- entendimento de contexto;
+- simplicidade do historico.
+
+## Desafio 17 - Tipos de mensagem e componentes Meta
+
+A V1 comeca com mensagens simples.
+
+Na V2, o bot deve suportar melhor:
+
+- botoes;
+- listas;
+- templates;
+- links;
+- respostas interativas;
+- midias;
+- documentos;
+- mensagens unsupported;
+- payloads de componentes da Meta.
+
+Cada sender de etapa deve manter contrato padrao:
 
 ```text
-id_cliente pelo wa_id
-unidade pelo phone_id
+enviou
+resposta_ja_existia
+tipo_mensagem
+mensagem_bot ou payload resumido
+id_hash_msg_bot
+id_etapa_resultante
 ```
 
-Na V2, isso pode virar uma consulta unica retornando:
+Assim, `atualizar_banco_com_contexto_final` continua servindo para todas as etapas.
+
+## Desafio 18 - Otimizacoes SQL para perguntas objetivas
+
+A V1 ja usa bem SQL para perguntas objetivas.
+
+Regra para V2:
 
 ```text
-id_cliente
-id_unidade
-phone_id_unidade
-motivo
+SQL responde existencia, vinculo, ultimo registro e estado.
+Python decide comportamento conversacional.
 ```
 
-Ganho esperado:
+Possiveis evolucoes:
+
+- buscar ultima mensagem do bot diretamente em SQL;
+- buscar ultima mensagem do cliente diretamente em SQL;
+- consolidar query de flood se houver multiplas regras;
+- criar `try_enqueue_message(...)` como funcao SQL unica;
+- reduzir loops em Python quando o banco puder responder com indice;
+- manter legibilidade acima de micro-otimizacao.
+
+## Desafio 19 - Funcao SQL unica para enqueue
+
+Hoje o webhook faz etapas separadas:
 
 ```text
-menos round trips ao banco quando flood acontece
-codigo mais direto
+advisory lock
+avaliar turno
+inserir fila
 ```
 
-Baixa prioridade:
-
-```text
-isso so roda quando flood ja foi detectado, nao em mensagem normal.
-```
-
-### Candidato 4 - Insercao na fila como funcao SQL unica
-
-Hoje o webhook faz:
-
-```text
-1. advisory lock do turno
-2. verifica se ja existe pending/processing
-3. se puder, faz INSERT na fila
-```
-
-Na V2, isso poderia virar uma funcao SQL unica:
+Na V2, pode ser criada uma funcao SQL:
 
 ```text
 try_enqueue_message(...)
 ```
 
-Responsabilidades possiveis:
+Ela poderia retornar:
 
 ```text
-adquirir advisory lock
-verificar fila aberta
-inserir mensagem
-retornar status: inserted, fila_aberta, conflito_unico, dados_invalidos
+inserted
+fila_aberta_sem_resposta_bot
+fila_aberta_respondida_bot
+duplicada
+dados_invalidos
 ```
 
-Vantagens:
+Vantagem:
 
-```text
-menos round trips
-decisao atomica no banco
-webhook mais enxuto
-```
+- decisao mais atomica;
+- menos round trips;
+- webhook ainda mais enxuto.
 
-Desvantagens:
+Risco:
 
-```text
-mais logica no banco
-debug pode ficar menos intuitivo
-maior complexidade antes de necessidade real
-```
+- mais logica no banco;
+- debug menos intuitivo;
+- maior complexidade.
 
-Decisao para V1:
+## Desafio 20 - Escala por unidades
 
-```text
-nao aplicar agora.
-o fluxo atual ja esta seguro com advisory lock e indice parcial.
-```
+A V1 deve funcionar bem para poucas unidades.
 
-### O que nao deve virar SQL
+Na V2, quando o numero de unidades crescer, revisar:
 
-Nem toda regra deve ir para o banco.
+- volume por unidade;
+- filas por unidade;
+- prioridade por unidade;
+- limites por unidade;
+- metricas por unidade;
+- isolamento operacional;
+- capacidade do banco;
+- capacidade do Redis;
+- capacidade da Meta/API.
 
-Devem continuar em Python:
+## O Que a V2 Deve Preservar da V1
 
-```text
-decisoes conversacionais por etapa
-montagem de mensagens do bot
-extracao e interpretacao do payload da Meta
-regras que dependem de APIs externas
-logs de negocio mais expressivos
-fluxos que precisam ser lidos facilmente por desenvolvedores
-```
+Mesmo evoluindo, a V2 deve preservar:
 
-SQL deve responder fatos.
+- webhook enxuto;
+- worker como cerebro;
+- `sent` como ultima operacao ou equivalente operacional;
+- logs com motivo e acao;
+- SQL em repositories;
+- DDL/funcoes SQL em database;
+- commits e rollbacks visiveis no fluxo principal;
+- idempotencia antes de envio externo;
+- protecoes contra race condition;
+- controle manual pelo admin quando fizer sentido.
 
-Python deve decidir comportamento.
+## Resumo de Tarefas Futuras
 
-## Resumo da V2
-
-Pontos principais para V2:
+Principais tarefas da V2:
 
 - transformar worker em classe;
-- permitir multiplas instancias;
-- manter protecoes atuais de race condition;
+- criar controlador de workers;
+- suportar multiplas instancias;
 - avaliar pool de conexoes;
-- avaliar controlador manual ou automatico de workers;
-- criar observabilidade por worker;
-- estudar outbox para mensagens do bot;
-- registrar eventos ignorados se houver necessidade de auditoria;
-- melhorar recuperacao de falhas entre Meta e commit;
-- manter `sent` como ultima etapa do ciclo.
+- implementar outbox ou checkpoint para envio Meta;
+- reduzir risco Meta ok + banco falhou;
+- criar job de reconciliacao banco x Meta;
+- criar alertas criticos;
+- criar metricas operacionais;
+- revisar fallback local em arquitetura multi-processo;
+- amadurecer infraestrutura AWS/Meta;
+- mover segredos para ambiente seguro;
+- estudar interface operacional;
+- decidir uso de IA;
+- implementar tratamento de respostas invalidas;
+- suportar botoes/listas/templates;
+- avaliar tabela de eventos ignorados;
+- continuar otimizando SQL apenas onde houver ganho real.
+
+## Decisao Final para a V1
+
+Nao transformar a V1 em uma arquitetura de outbox, multi-worker e estado intermediario completo antes da primeira producao.
+
+A V1 deve fechar o fluxo principal, operar com seguranca suficiente, atender os primeiros clientes e gerar dados reais.
+
+A V2 deve nascer dos problemas reais observados em producao, principalmente:
+
+```text
+duplicidade apos Meta ok + banco/worker falhou
+volume exigindo multiplos workers
+necessidade de auditoria de eventos ignorados
+necessidade de observabilidade e alertas
+necessidade de IA ou tratamento mais sofisticado por etapa
+```

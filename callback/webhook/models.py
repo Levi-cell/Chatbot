@@ -15,6 +15,36 @@ class Cliente(models.Model):
         db_table = 'cliente'
 
 
+class Dependente(models.Model):
+    id_dependente = models.AutoField(primary_key=True)
+    id_cliente = models.ForeignKey(
+        Cliente,
+        models.CASCADE,
+        db_column='id_cliente',
+        related_name='dependentes',
+    )
+    nome_dependente = models.CharField(max_length=200, blank=True, null=True)
+    telefone_dependente = models.CharField(
+        unique=True,
+        max_length=50,
+        blank=True,
+        null=True,
+    )
+    email_dependente = models.CharField(
+        unique=True,
+        max_length=200,
+        blank=True,
+        null=True,
+    )
+
+    def __str__(self):
+        return self.nome_dependente or self.telefone_dependente or str(self.id_dependente)
+
+    class Meta:
+        managed = False
+        db_table = 'dependente'
+
+
 class Conversa(models.Model):
     id_conversa = models.AutoField(primary_key=True)
     id_cliente = models.ForeignKey(Cliente, models.DO_NOTHING, db_column='id_cliente')
@@ -190,3 +220,31 @@ class ClienteBloqueadoMeta(models.Model):
         managed = False
         db_table = 'cliente_bloqueado_meta'
         unique_together = (('wa_id_cliente', 'id_unidade'),)
+
+
+class WebhookFloodEvento(models.Model):
+    id_evento = models.BigAutoField(primary_key=True)
+    wa_id_cliente = models.CharField(max_length=50)
+    phone_id_unidade = models.CharField(max_length=100)
+    id_hash_msg = models.CharField(unique=True, max_length=255)
+    received_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.wa_id_cliente} / {self.phone_id_unidade}"
+
+    class Meta:
+        managed = False
+        db_table = 'webhook_flood_evento'
+
+
+class CacheControle(models.Model):
+    nome = models.CharField(primary_key=True, max_length=100)
+    versao = models.BigIntegerField(default=1)
+    atualizado_em = models.DateTimeField()
+
+    def __str__(self):
+        return self.nome
+
+    class Meta:
+        managed = False
+        db_table = 'cache_controle'
