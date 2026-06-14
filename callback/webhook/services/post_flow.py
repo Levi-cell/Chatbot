@@ -4,7 +4,7 @@ import logging
 from django.conf import settings
 from django.http import JsonResponse
 
-from core.cache.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
+from core.cache.runtime.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
 from core.cache.cache_unidade import unidade_esta_ativa
 from core.logging_config import short_value
 from .flood_guard import responder_se_flood
@@ -16,7 +16,7 @@ logger = logging.getLogger("webhook.post_flow")
 
 
 def responder_post_webhook(request):
-    print("-----------------------------------------------------------------NOVO EVENTO-----------------------------------------------------------------")
+    print("\n\n\n-----------------------------------------------------------------NOVO EVENTO-----------------------------------------------------------------\n\n\n")
 
     if resposta := _validar_content_type(request):
         return resposta

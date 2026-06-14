@@ -4,14 +4,18 @@ import psycopg2
 
 from core.cache.cache_unidade import UnidadeNaoEncontrada
 from core.database.connection_aws import get_conn
+from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
 from core.repositories.querys import pegar_mensagens_da_fila, tentar_lock_conversa
 from core.repositories.updates import vincular_mensagem_fila_a_conversa
 from workers.tratamento_erro.erro_conexao import handle_erro_conexao
 from workers.tratamento_erro.erro_generico import handle_erro_generico
+from workers.tratamento_erro.exceptions import BancoFalhouAposEnvioMeta
 from workers.tratamento_erro.unidade_nao_encontrada import handle_unidade_nao_encontrada
+from workers.worker_flow.flow_sender import flow_sender
 from workers.worker_flow.suport_functions import (
     aguardar_fila_vazia,
+    atualizar_banco_com_contexto_final,
     atualizar_estado_com_contexto,
     atualizar_estado_com_mensagem,
     atualizar_estado_lock,
@@ -22,6 +26,8 @@ from workers.worker_flow.suport_functions import (
     logar_lock_recusado,
     montar_mensagem_fila,
     reagendar_se_houver_mensagem_anterior,
+    reparar_cache_cliente_stale_se_fk_invalida,
+    reparar_cache_unidade_stale_se_fk_invalida,
 )
 from workers.worker_flow.tratar_bloqueio import tratar_conversa_bloqueada
 from workers.worker_flow.valida_banco import validar_banco_mensagem
@@ -38,7 +44,7 @@ def worker_flow():
     retry_delay = 5
 
     while True:
-        print("---------------------NOVO CICLO---------------------")
+        print("\n\n\n---------------------NOVO CICLO---------------------\n\n\n")
         logger.info("---------- ciclo_worker_inicio ----------")
 
         conn_ciclo = None
@@ -138,7 +144,36 @@ def worker_flow():
                 contexto_historico["mensagem_cliente_inserida"],
             )
 
-            # flow_sender
+            contexto_envio = flow_sender(contexto_historico)
+
+            try:
+                contexto_final = atualizar_banco_com_contexto_final(
+                    contexto_historico,
+                    contexto_envio,
+                    cursor_ciclo,
+                )
+                conn_ciclo.commit()
+
+            except Exception as erro:
+                if contexto_envio.get("enviou"):
+                    raise BancoFalhouAposEnvioMeta(
+                        "Banco falhou depois da Meta confirmar envio",
+                        id_mensagem=mensagem["id_mensagem"],
+                        id_conversa=id_conversa,
+                        id_hash_msg_bot=contexto_envio.get("id_hash_msg_bot"),
+                        id_etapa=contexto_envio.get("id_etapa_resultante"),
+                    ) from erro
+
+                raise
+
+            logger.debug(
+                "resposta_bot_contexto_final_ok | acao=commit id_mensagem=%s id_conversa=%s etapa=%s resposta_ja_existia=%s id_hash_msg_bot=%s",
+                mensagem["id_mensagem"],
+                id_conversa,
+                contexto_final["id_etapa_resultante"],
+                contexto_final["resposta_ja_existia"],
+                contexto_final["id_hash_msg_bot"],
+            )
 
             finalizar_mensagem_processada(
                 mensagem,
@@ -147,6 +182,50 @@ def worker_flow():
                 cursor_ciclo,
             )
             conn_ciclo.commit()
+
+        except ErroEnvioMeta as erro:
+            logger.warning(
+                "meta_envio_erro | acao=reagendar_sem_sent id_mensagem=%s cliente=%s phone_number_id=%s etapa=%s erro=%s",
+                estado_ciclo["id_mensagem"],
+                short_value(estado_ciclo["cliente_telefone"]),
+                short_value(estado_ciclo["id_phone_unidade"]),
+                erro.id_etapa,
+                erro,
+            )
+            if conn_ciclo:
+                conn_ciclo.rollback()
+
+            handle_erro_generico(
+                cursor_ciclo,
+                estado_ciclo["id_mensagem"],
+                erro,
+                max_retry,
+            )
+
+            if conn_ciclo:
+                conn_ciclo.commit()
+
+        except BancoFalhouAposEnvioMeta as erro:
+            logger.critical(
+                "banco_falhou_apos_envio_meta | risco=resposta_duplicada acao=reagendar_sem_sent id_mensagem=%s id_conversa=%s etapa=%s id_hash_msg_bot=%s erro=%s",
+                erro.id_mensagem,
+                erro.id_conversa,
+                erro.id_etapa,
+                erro.id_hash_msg_bot,
+                erro,
+            )
+            if conn_ciclo:
+                conn_ciclo.rollback()
+
+            handle_erro_generico(
+                cursor_ciclo,
+                estado_ciclo["id_mensagem"],
+                erro,
+                max_retry,
+            )
+
+            if conn_ciclo:
+                conn_ciclo.commit()
 
         except psycopg2.OperationalError as erro:
             logger.warning(
@@ -189,6 +268,9 @@ def worker_flow():
             )
             if conn_ciclo:
                 conn_ciclo.rollback()
+
+            reparar_cache_cliente_stale_se_fk_invalida(erro, estado_ciclo)
+            reparar_cache_unidade_stale_se_fk_invalida(erro, estado_ciclo)
 
             handle_erro_generico(
                 cursor_ciclo,

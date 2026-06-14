@@ -1,12 +1,16 @@
 import logging
 
 from django.contrib import admin, messages
-from django.db import connection, transaction
+from django.db import connection
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
-from core.cache.cache_unidade import recarregar_cache_unidades
+from core.cache.cache_unidade import (
+    CacheUnidadesIndisponivel,
+    recarregar_cache_unidades_ou_erro,
+    validar_cache_unidades_disponivel_ou_erro,
+)
 from core.integrations.whatsapp.tools.ativando_numero import registrar_numero_whatsapp
 from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
 from core.integrations.whatsapp.block import desbloquear_usuario_meta
@@ -22,6 +26,7 @@ from .models import (
     Etapa,
     FilaMensagens,
     HistoricoMensagens,
+    RespostasDesafios,
     Unidade,
     WebhookFloodEvento,
 )
@@ -70,6 +75,32 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_per_page = 50
     empty_value_display = "-"
 
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        try:
+            return super().changeform_view(
+                request,
+                object_id=object_id,
+                form_url=form_url,
+                extra_context=extra_context,
+            )
+
+        except CacheUnidadesIndisponivel as exc:
+            logger.exception(
+                "admin_unidade_cache_falhou | acao=rollback_admin object_id=%s erro=%s",
+                object_id,
+                exc,
+            )
+            self.message_user(
+                request,
+                (
+                    "O Redis falhou ao atualizar o cache de unidades. "
+                    "Nenhuma alteracao foi feita no banco. "
+                    "Se a Meta ja tiver sido chamada, ela respondeu com sucesso; tente novamente."
+                ),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(request.path)
+
     def get_form(self, request, obj=None, change=False, **kwargs):
         base_form = super().get_form(request, obj, change=change, **kwargs)
         model_admin = self
@@ -79,6 +110,12 @@ class UnidadeAdmin(admin.ModelAdmin):
                 super()._post_clean()
 
                 if change or self.errors:
+                    if change and not self.errors:
+                        model_admin._validar_cache_unidades_form(
+                            self,
+                            request,
+                            meta_validada=False,
+                        )
                     return
 
                 phone_number_id = self.cleaned_data.get("phone_number_id")
@@ -94,6 +131,13 @@ class UnidadeAdmin(admin.ModelAdmin):
                         "phone_number_id",
                         "A Meta falhou ao registrar este numero. Unidade nao foi salva.",
                     )
+                    return
+
+                model_admin._validar_cache_unidades_form(
+                    self,
+                    request,
+                    meta_validada=True,
+                )
 
         return UnidadeAdminForm
 
@@ -104,6 +148,14 @@ class UnidadeAdmin(admin.ModelAdmin):
     def delete_model(self, request, obj):
         if not self._meta_desregistrada_nesta_requisicao(request, obj):
             if not self._desregistrar_meta_antes_de_excluir(request, obj):
+                return
+
+        if not self._cache_validado_nesta_requisicao(request, obj):
+            if not self._validar_cache_unidades_antes_de_alterar(
+                request,
+                "excluir",
+                meta_validada=True,
+            ):
                 return
 
         super().delete_model(request, obj)
@@ -127,31 +179,67 @@ class UnidadeAdmin(admin.ModelAdmin):
         )
 
     def delete_view(self, request, object_id, extra_context=None):
-        if request.method == "POST":
-            obj = self.get_object(request, object_id)
+        try:
+            if request.method == "POST":
+                obj = self.get_object(request, object_id)
 
-            if obj and not self._desregistrar_meta_antes_de_excluir(request, obj):
-                return HttpResponseRedirect(
-                    reverse(
-                        "admin:webhook_unidade_change",
-                        args=[object_id],
+                if obj and not self._desregistrar_meta_antes_de_excluir(request, obj):
+                    return HttpResponseRedirect(
+                        reverse(
+                            "admin:webhook_unidade_change",
+                            args=[object_id],
+                        )
                     )
+
+                if obj and not self._validar_cache_unidades_antes_de_alterar(
+                    request,
+                    "excluir",
+                    meta_validada=True,
+                ):
+                    return HttpResponseRedirect(
+                        reverse(
+                            "admin:webhook_unidade_change",
+                            args=[object_id],
+                        )
+                    )
+
+                if obj:
+                    self._marcar_meta_desregistrada_na_requisicao(request, obj)
+                    self._marcar_cache_validado_na_requisicao(request, obj)
+
+            return super().delete_view(request, object_id, extra_context)
+
+        except CacheUnidadesIndisponivel as exc:
+            logger.exception(
+                "admin_unidade_cache_delete_falhou | acao=rollback_admin object_id=%s erro=%s",
+                object_id,
+                exc,
+            )
+            self.message_user(
+                request,
+                (
+                    "A Meta respondeu com sucesso, mas o Redis falhou. "
+                    "A unidade foi mantida no banco. Tente novamente."
+                ),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(
+                reverse(
+                    "admin:webhook_unidade_change",
+                    args=[object_id],
                 )
-
-            if obj:
-                self._marcar_meta_desregistrada_na_requisicao(request, obj)
-
-        return super().delete_view(request, object_id, extra_context)
+            )
 
     def _registrar_alteracao_cache_unidades(self):
         with connection.cursor() as cursor:
             versao = incrementar_versao_cache_unidades(cursor)
+            total_unidades = recarregar_cache_unidades_ou_erro(cursor)
 
         logger.info(
-            "cache_unidades_versao_incrementada | acao=incrementar_versao versao=%s",
+            "cache_unidades_versao_incrementada | acao=incrementar_versao_e_recarregar versao=%s unidades=%s",
             versao,
+            total_unidades,
         )
-        transaction.on_commit(recarregar_cache_unidades)
 
     def link_agendamento_clickable(self, obj):
         if obj.link_agendamento:
@@ -258,6 +346,71 @@ class UnidadeAdmin(admin.ModelAdmin):
         ids = getattr(request, "_unidades_meta_desregistradas", set())
         return obj.id_unidade in ids
 
+    def _marcar_cache_validado_na_requisicao(self, request, obj):
+        ids = getattr(request, "_unidades_cache_validadas", set())
+        ids.add(obj.id_unidade)
+        request._unidades_cache_validadas = ids
+
+    def _cache_validado_nesta_requisicao(self, request, obj):
+        ids = getattr(request, "_unidades_cache_validadas", set())
+        return obj.id_unidade in ids
+
+    def _validar_cache_unidades_form(self, form, request, meta_validada):
+        if self._validar_cache_unidades_antes_de_alterar(
+            request,
+            "salvar",
+            meta_validada=meta_validada,
+        ):
+            return
+
+        form.add_error(
+            None,
+            self._mensagem_cache_unidades_falhou(meta_validada),
+        )
+
+    def _validar_cache_unidades_antes_de_alterar(
+        self,
+        request,
+        acao,
+        meta_validada=False,
+    ):
+        try:
+            validar_cache_unidades_disponivel_ou_erro()
+            logger.info(
+                "cache_unidades_preflight_admin_ok | acao=%s",
+                acao,
+            )
+            return True
+
+        except CacheUnidadesIndisponivel as exc:
+            logger.error(
+                "cache_unidades_preflight_admin_falhou | acao=%s erro=%s",
+                acao,
+                exc,
+            )
+
+            if request is not None:
+                self.message_user(
+                    request,
+                    self._mensagem_cache_unidades_falhou(meta_validada),
+                    level=messages.ERROR,
+                )
+
+            return False
+
+    @staticmethod
+    def _mensagem_cache_unidades_falhou(meta_validada):
+        if meta_validada:
+            return (
+                "A Meta respondeu com sucesso, mas o Redis falhou. "
+                "Nenhuma alteracao foi feita no banco. Tente novamente."
+            )
+
+        return (
+            "O Redis falhou ao atualizar o cache de unidades. "
+            "Nenhuma alteracao foi feita no banco. Tente novamente."
+        )
+
     @staticmethod
     def _meta_resposta_sucesso(status, resposta):
         if status not in (200, 204):
@@ -326,7 +479,7 @@ class EtapaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     )
 
     search_fields = ("nome_etapa",)
-    ordering = ("nome_etapa",)
+    ordering = ("id_etapa",)
 
     list_per_page = 50
     empty_value_display = "-"
@@ -505,6 +658,38 @@ class HistoricoMensagensAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
             "id_conversa",
             "id_etapa",
             "id_mensagem_fila",
+        )
+
+
+@admin.register(RespostasDesafios)
+class RespostasDesafiosAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "id_resposta_desafio",
+        "id_conversa",
+        "id_etapa",
+        "resposta",
+        "id_historico_mensagem_cliente",
+        "criado_em",
+    )
+
+    search_fields = (
+        "resposta",
+    )
+
+    list_filter = (
+        "id_etapa",
+    )
+
+    ordering = ("-criado_em",)
+    date_hierarchy = "criado_em"
+    list_per_page = 50
+    empty_value_display = "-"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "id_conversa",
+            "id_etapa",
         )
 
 

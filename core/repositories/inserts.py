@@ -171,3 +171,98 @@ def inserir_historico_mensagem_cliente(
         bool(resultado[2]),
     )
     return resultado[0], resultado[1], bool(resultado[2])
+
+
+def inserir_historico_mensagem_bot(contexto_historico, contexto_envio, cursor):
+    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
+    id_hash_msg_bot = contexto_envio.get("id_hash_msg_bot")
+
+    if not id_hash_msg_bot:
+        raise ValueError("id_hash_msg_bot nao informado para historico do bot")
+
+    cursor.execute("""
+        WITH existente AS (
+            SELECT id_mensagem, received_data_hora
+            FROM chatbot.historico_mensagens
+            WHERE id_conversa = %s
+              AND quem_enviou = 'bot'
+              AND id_mensagem_fila = %s
+              AND id_hash_cliente_origem = %s
+            ORDER BY received_data_hora DESC, id_mensagem DESC
+            LIMIT 1
+        ),
+        inserido AS (
+            INSERT INTO chatbot.historico_mensagens (
+                id_conversa,
+                id_etapa,
+                received_data_hora,
+                cliente_telefone,
+                conteudo_texto,
+                tipo_mensagem,
+                id_hash_msg,
+                id_mensagem_fila,
+                id_hash_cliente_origem,
+                id_phone_unidade,
+                unidade_telefone,
+                quem_enviou,
+                status_envio
+            )
+            SELECT
+                %s,
+                %s,
+                NOW(),
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                'bot',
+                'sent'
+            WHERE NOT EXISTS (SELECT 1 FROM existente)
+            RETURNING id_mensagem, received_data_hora
+        )
+        SELECT id_mensagem, received_data_hora, TRUE AS inserido
+        FROM inserido
+
+        UNION ALL
+
+        SELECT id_mensagem, received_data_hora, FALSE AS inserido
+        FROM existente
+
+        LIMIT 1;
+    """, (
+        contexto_historico["id_conversa"],
+        mensagem_cliente["id_mensagem_fila"],
+        mensagem_cliente["id_hash_msg"],
+        contexto_historico["id_conversa"],
+        contexto_envio["id_etapa_resultante"],
+        mensagem_cliente["cliente_telefone"],
+        contexto_envio["mensagem_bot"],
+        contexto_envio.get("tipo_mensagem", "text"),
+        id_hash_msg_bot,
+        mensagem_cliente["id_mensagem_fila"],
+        mensagem_cliente["id_hash_msg"],
+        mensagem_cliente["id_phone_unidade"],
+        mensagem_cliente["unidade_telefone"],
+    ))
+
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        raise ValueError(
+            "Historico do bot nao foi inserido nem encontrado "
+            f"(id_conversa={contexto_historico['id_conversa']}, "
+            f"id_mensagem_fila={mensagem_cliente['id_mensagem_fila']})"
+        )
+
+    logger.debug(
+        "historico_bot_insert_resultado | acao=registrar_bot id_conversa=%s id_mensagem_fila=%s id_historico=%s inserido=%s",
+        contexto_historico["id_conversa"],
+        mensagem_cliente["id_mensagem_fila"],
+        resultado[0],
+        bool(resultado[2]),
+    )
+    return resultado[0], resultado[1], bool(resultado[2])

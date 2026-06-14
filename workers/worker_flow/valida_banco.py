@@ -1,6 +1,6 @@
 import logging
 
-from core.cache.cache_cliente import buscar_cliente_cache
+from core.cache.runtime.cache_cliente import buscar_cliente_cache
 from core.cache.cache_unidade import obter_id_unidade_redis_ou_plsql
 from core.logging_config import short_value
 from core.repositories.inserts import (

@@ -3,7 +3,7 @@ import threading
 import time
 
 from core.database.connection_aws import get_conn
-from core.database.redis_client import get_redis_safe
+from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
 from core.repositories.cache_control import buscar_versao_cache_unidades
 from core.repositories.querys import buscar_id_unidade_por_phone_id, pegar_unidades
@@ -23,6 +23,10 @@ _versao_lock = threading.Lock()
 
 
 class UnidadeNaoEncontrada(Exception):
+    pass
+
+
+class CacheUnidadesIndisponivel(Exception):
     pass
 
 
@@ -50,6 +54,58 @@ def recarregar_cache_unidades():
     except Exception as exc:
         logger.exception("cache_recarregar_falhou | origem=admin acao=manter_cache_atual erro=%s", exc)
         return None
+
+    finally:
+        if conn:
+            conn.close()
+
+
+def validar_cache_unidades_disponivel_ou_erro():
+    try:
+        r = get_redis_safe(retries=1, delay=0, validate=True)
+        key = f"{REDIS_KEY}:admin_preflight"
+        r.set(key, "ok", ex=10)
+        r.delete(key)
+
+        logger.debug("cache_unidades_preflight_ok | acao=permitir_admin")
+        return True
+
+    except Exception as exc:
+        _marcar_redis_falhou()
+        logger.exception(
+            "cache_unidades_preflight_falhou | acao=bloquear_admin erro=%s",
+            exc,
+        )
+        raise CacheUnidadesIndisponivel(
+            "Redis indisponivel para atualizar cache de unidades"
+        ) from exc
+
+
+def recarregar_cache_unidades_ou_erro(cursor=None):
+    conn = None
+
+    try:
+        cursor_uso = cursor
+
+        if cursor_uso is None:
+            conn = get_conn(application_name="cache_chatbot")
+            cursor_uso = conn.cursor()
+
+        return carregar_cache_redis(
+            cursor_uso,
+            redis_retries=1,
+            redis_delay=0,
+        )
+
+    except Exception as exc:
+        _marcar_redis_falhou()
+        logger.exception(
+            "cache_recarregar_falhou | origem=admin acao=bloquear_alteracao erro=%s",
+            exc,
+        )
+        raise CacheUnidadesIndisponivel(
+            "Redis falhou ao recriar cache de unidades"
+        ) from exc
 
     finally:
         if conn:

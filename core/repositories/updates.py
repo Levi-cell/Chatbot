@@ -38,6 +38,35 @@ def vincular_mensagem_fila_a_conversa(id_mensagem, id_conversa, cursor):
     return cursor.rowcount
 
 
+def atualizar_conversa_resposta_bot(id_conversa, id_etapa_resultante, cursor):
+    if id_etapa_resultante is None:
+        raise ValueError("id_etapa_resultante nao informado para atualizar conversa")
+
+    cursor.execute("""
+        UPDATE chatbot.conversa
+        SET
+            id_etapa_atual = %s,
+            last_message_from = 'bot',
+            last_interaction_at = NOW()
+        WHERE id_conversa = %s;
+    """, (id_etapa_resultante, id_conversa))
+
+    logger.debug(
+        "conversa_update | acao=registrar_resposta_bot id_conversa=%s etapa=%s linhas=%s",
+        id_conversa,
+        id_etapa_resultante,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada com resposta do bot "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
 def reagendar_mensagem_sem_erro(id_mensagem, cursor, delay_seconds=30):
     cursor.execute("""
         UPDATE chatbot.fila_mensagens

@@ -56,7 +56,7 @@ callback/webhook/services/meta_signature.py
 
 ```text
 callback/webhook/services/flood_guard.py
-core/cache/cache_bloqueio_meta.py
+core/cache/runtime/cache_flood_redis.py
 core/cache/cache_flood_memoria.py
 core/repositories/bloqueio_meta.py
 core/integrations/whatsapp/block.py
@@ -75,7 +75,8 @@ logs/reconciliacao_pendente/
 
 ```text
 core/cache/cache_unidade.py
-core/cache/cache_conversas_bloqueadas.py
+core/cache/runtime/cache_conversas_bloqueadas.py
+core/cache/cache_reset.py
 ```
 
 ### Inserção na fila
@@ -300,7 +301,7 @@ O anti-flood usa três camadas:
 Arquivo:
 
 ```text
-core/cache/cache_bloqueio_meta.py
+core/cache/runtime/cache_flood_redis.py
 ```
 
 Redis é a camada principal de rate limit.
@@ -577,7 +578,7 @@ Nesse caso a mensagem não entra na fila.
 Arquivo:
 
 ```text
-core/cache/cache_conversas_bloqueadas.py
+core/cache/runtime/cache_conversas_bloqueadas.py
 ```
 
 Essa regra é de negócio, não é bloqueio Meta.
@@ -697,6 +698,22 @@ Ao excluir um `ClienteBloqueadoMeta`:
 ```
 
 Exclusão em massa está desativada.
+
+Ao adicionar, editar ou excluir uma `Unidade`:
+
+```text
+1. Se a operacao envolver adicionar ou excluir, o admin valida a Meta primeiro.
+2. O admin valida se o Redis consegue atualizar o cache de unidades.
+3. Se Meta e Redis estiverem ok, a alteracao segue para o banco.
+4. Depois da alteracao no banco, a versao do cache de unidades e incrementada.
+5. O cache de unidades e recarregado no Redis.
+```
+
+Se a Meta falhar, a alteracao nao e feita no banco.
+
+Se o Redis falhar, a alteracao tambem nao e feita no banco e o admin pede para tentar novamente.
+
+Isso evita que `Unidade` fique sincronizada na Meta e no banco, mas com cache Redis antigo.
 
 ## Configurações Importantes
 
@@ -889,3 +906,4 @@ Redis falhou -> banco tenta.
 Banco falhou -> memória local tenta.
 Memória local detectou -> ignora, tenta Meta e registra TXT.
 ```
+

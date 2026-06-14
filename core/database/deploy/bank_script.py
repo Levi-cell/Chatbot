@@ -3,7 +3,7 @@ import logging
 from core.database.connection_aws import get_conn
 
 
-logger = logging.getLogger("db.setup")
+logger = logging.getLogger("db.deploy")
 
 
 def criar_funcoes_lock():
@@ -302,10 +302,6 @@ def criar_tabelas():
         CREATE INDEX IF NOT EXISTS idx_conversa_processing
         ON chatbot.conversa(processing, processing_started_at);
 
-        CREATE INDEX IF NOT EXISTS idx_conversa_ativa
-        ON chatbot.conversa (id_cliente, id_unidade)
-        WHERE status_ativa = TRUE;
-
         CREATE INDEX IF NOT EXISTS idx_conversa_ultima_inativa
         ON chatbot.conversa (id_cliente, id_unidade, finalizou_em DESC)
         INCLUDE (id_conversa, id_etapa_atual)
@@ -359,19 +355,54 @@ def criar_tabelas():
         DEFAULT;
 
         CREATE INDEX IF NOT EXISTS idx_historico_conversa_data
-        ON chatbot.historico_mensagens (id_conversa, received_data_hora DESC);
+        ON chatbot.historico_mensagens (
+            id_conversa,
+            received_data_hora DESC,
+            id_mensagem DESC
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_historico_cliente_mensagem_fila
+        ON chatbot.historico_mensagens (
+            id_conversa,
+            id_mensagem_fila,
+            id_hash_msg,
+            received_data_hora DESC,
+            id_mensagem DESC
+        )
+        WHERE quem_enviou = 'cliente'
+          AND id_mensagem_fila IS NOT NULL;
 
         CREATE INDEX IF NOT EXISTS idx_historico_bot_mensagem_fila
         ON chatbot.historico_mensagens (
             id_conversa,
             id_mensagem_fila,
             id_hash_cliente_origem,
-            id_etapa,
-            received_data_hora DESC
+            received_data_hora DESC,
+            id_mensagem DESC
         )
         WHERE quem_enviou = 'bot'
           AND id_mensagem_fila IS NOT NULL
           AND id_hash_cliente_origem IS NOT NULL;
+
+        -- RESPOSTAS DO DESAFIO
+        CREATE TABLE IF NOT EXISTS chatbot.respostas_desafios (
+            id_resposta_desafio SERIAL PRIMARY KEY,
+            id_conversa INT NOT NULL,
+            id_etapa INT NOT NULL,
+            resposta VARCHAR(10) NOT NULL,
+            id_historico_mensagem_cliente INT NULL,
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE CASCADE,
+
+            FOREIGN KEY (id_etapa)
+                REFERENCES chatbot.etapa(id_etapa),
+
+            CONSTRAINT uq_respostas_desafios_conversa_etapa
+                UNIQUE (id_conversa, id_etapa)
+        );
 
         -- FILA
         CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
@@ -388,6 +419,7 @@ def criar_tabelas():
             id_hash_msg VARCHAR(255) UNIQUE NOT NULL,
             id_phone_unidade VARCHAR(100) NOT NULL,
             unidade_telefone VARCHAR(100) NOT NULL,
+            last_error TEXT,
 
             FOREIGN KEY (id_conversa)
                 REFERENCES chatbot.conversa(id_conversa)
@@ -412,11 +444,13 @@ def criar_tabelas():
             END IF;
         END $$;
 
-        CREATE INDEX IF NOT EXISTS idx_fila_status_time
-        ON chatbot.fila_mensagens (status, next_attempt_at);
+        CREATE INDEX IF NOT EXISTS idx_fila_pending_next_attempt
+        ON chatbot.fila_mensagens (next_attempt_at, id_mensagem)
+        WHERE status = 'pending';
 
         CREATE INDEX IF NOT EXISTS idx_fila_processing_timeout
-        ON chatbot.fila_mensagens (processing_started_at);
+        ON chatbot.fila_mensagens (processing_started_at, id_mensagem)
+        WHERE status = 'processing';
 
         CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
         ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
@@ -433,161 +467,6 @@ def criar_tabelas():
         if conn:
             conn.rollback()
         logger.exception("banco_setup_erro | acao=criar_tabelas erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
-
-
-def alterar_banco():
-
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            ALTER TABLE chatbot.fila_mensagens
-            ADD COLUMN IF NOT EXISTS last_error TEXT;
-
-            ALTER TABLE chatbot.fila_mensagens
-            ADD COLUMN IF NOT EXISTS id_conversa INT NULL;
-
-            DO $$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM pg_constraint
-                    WHERE conname = 'fk_fila_conversa'
-                      AND conrelid = 'chatbot.fila_mensagens'::regclass
-                )
-                AND (
-                    SELECT COUNT(*)
-                    FROM pg_constraint c
-                    WHERE c.contype = 'f'
-                      AND c.conrelid = 'chatbot.fila_mensagens'::regclass
-                      AND c.confrelid = 'chatbot.conversa'::regclass
-                      AND c.conkey = ARRAY[
-                          (
-                              SELECT attnum
-                              FROM pg_attribute
-                              WHERE attrelid = 'chatbot.fila_mensagens'::regclass
-                                AND attname = 'id_conversa'
-                          )
-                      ]::SMALLINT[]
-                      AND c.confkey = ARRAY[
-                          (
-                              SELECT attnum
-                              FROM pg_attribute
-                              WHERE attrelid = 'chatbot.conversa'::regclass
-                                AND attname = 'id_conversa'
-                          )
-                      ]::SMALLINT[]
-                ) > 1 THEN
-                    ALTER TABLE chatbot.fila_mensagens
-                    DROP CONSTRAINT fk_fila_conversa;
-                END IF;
-
-                IF NOT EXISTS (
-                    SELECT 1
-                    FROM pg_constraint c
-                    WHERE c.contype = 'f'
-                      AND c.conrelid = 'chatbot.fila_mensagens'::regclass
-                      AND c.confrelid = 'chatbot.conversa'::regclass
-                      AND c.conkey = ARRAY[
-                          (
-                              SELECT attnum
-                              FROM pg_attribute
-                              WHERE attrelid = 'chatbot.fila_mensagens'::regclass
-                                AND attname = 'id_conversa'
-                          )
-                      ]::SMALLINT[]
-                      AND c.confkey = ARRAY[
-                          (
-                              SELECT attnum
-                              FROM pg_attribute
-                              WHERE attrelid = 'chatbot.conversa'::regclass
-                                AND attname = 'id_conversa'
-                          )
-                      ]::SMALLINT[]
-                ) THEN
-                    ALTER TABLE chatbot.fila_mensagens
-                    ADD CONSTRAINT fk_fila_conversa
-                    FOREIGN KEY (id_conversa)
-                    REFERENCES chatbot.conversa(id_conversa)
-                    ON DELETE SET NULL;
-                END IF;
-            END $$;
-
-            CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
-            ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
-            WHERE id_conversa IS NOT NULL
-              AND status IN ('pending','processing');
-
-            DO $$
-            BEGIN
-                IF EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = 'chatbot'
-                      AND table_name = 'historico_mensagens'
-                      AND column_name = 'origem'
-                )
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM information_schema.columns
-                    WHERE table_schema = 'chatbot'
-                      AND table_name = 'historico_mensagens'
-                      AND column_name = 'quem_enviou'
-                ) THEN
-                    ALTER TABLE chatbot.historico_mensagens
-                    RENAME COLUMN origem TO quem_enviou;
-                END IF;
-            END $$;
-
-            ALTER TABLE chatbot.historico_mensagens
-            ADD COLUMN IF NOT EXISTS id_mensagem_fila INT;
-
-            ALTER TABLE chatbot.historico_mensagens
-            ADD COLUMN IF NOT EXISTS id_hash_cliente_origem VARCHAR(255);
-
-            DO $$
-            BEGIN
-                IF NOT EXISTS (
-                    SELECT 1
-                    FROM pg_constraint
-                    WHERE conname = 'fk_historico_mensagem_fila'
-                      AND conrelid = 'chatbot.historico_mensagens'::regclass
-                ) THEN
-                    ALTER TABLE chatbot.historico_mensagens
-                    ADD CONSTRAINT fk_historico_mensagem_fila
-                    FOREIGN KEY (id_mensagem_fila)
-                    REFERENCES chatbot.fila_mensagens(id_mensagem)
-                    ON DELETE SET NULL;
-                END IF;
-            END $$;
-
-            CREATE INDEX IF NOT EXISTS idx_historico_bot_mensagem_fila
-            ON chatbot.historico_mensagens (
-                id_conversa,
-                id_mensagem_fila,
-                id_hash_cliente_origem,
-                id_etapa,
-                received_data_hora DESC
-            )
-            WHERE quem_enviou = 'bot'
-              AND id_mensagem_fila IS NOT NULL
-              AND id_hash_cliente_origem IS NOT NULL;
-        """)
-
-        conn.commit()
-        logger.info("banco_setup_ok | acao=alterar_banco")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=alterar_banco erro=%s", erro)
 
     finally:
         if conn:

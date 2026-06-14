@@ -1,6 +1,6 @@
 import logging
 
-from core.database.redis_client import get_redis_safe
+from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
 
 

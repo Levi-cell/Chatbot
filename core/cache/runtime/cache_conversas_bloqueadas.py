@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from core.database.connection_aws import get_conn
-from core.database.redis_client import get_redis_safe
+from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
 from core.repositories.querys import buscar_conversa_bloqueada_por_cliente_unidade
 

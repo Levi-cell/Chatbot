@@ -173,7 +173,41 @@ class HistoricoMensagens(models.Model):
     class Meta:
         managed = False
         db_table = 'historico_mensagens'
-        unique_together = (('id_mensagem', 'received_data_hora'),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id_mensagem", "received_data_hora"],
+                name="uq_historico_mensagens_id_data",
+            ),
+        ]
+
+
+class RespostasDesafios(models.Model):
+    id_resposta_desafio = models.AutoField(primary_key=True)
+    id_conversa = models.ForeignKey(
+        Conversa,
+        models.CASCADE,
+        db_column='id_conversa',
+        related_name='respostas_desafios',
+    )
+    id_etapa = models.ForeignKey(
+        Etapa,
+        models.DO_NOTHING,
+        db_column='id_etapa',
+        related_name='respostas_desafios',
+    )
+    resposta = models.CharField(max_length=10)
+    id_historico_mensagem_cliente = models.IntegerField(blank=True, null=True)
+    criado_em = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'respostas_desafios'
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id_conversa", "id_etapa"],
+                name="uq_respostas_desafios_conversa_etapa",
+            ),
+        ]
 
 
 class Unidade(models.Model):
@@ -219,7 +253,12 @@ class ClienteBloqueadoMeta(models.Model):
     class Meta:
         managed = False
         db_table = 'cliente_bloqueado_meta'
-        unique_together = (('wa_id_cliente', 'id_unidade'),)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["wa_id_cliente", "id_unidade"],
+                name="uq_cliente_bloqueado_meta_wa_unidade",
+            ),
+        ]
 
 
 class WebhookFloodEvento(models.Model):

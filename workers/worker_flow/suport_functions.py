@@ -1,13 +1,16 @@
 import logging
 import time
 
-from core.cache.cache_cliente import salvar_cliente_cache
+from core.cache.runtime.cache_cliente import remover_cliente_cache, salvar_cliente_cache
+from core.cache.cache_unidade import recarregar_cache_unidades
 from core.logging_config import short_value
+from core.repositories.inserts import inserir_historico_mensagem_bot
 from core.repositories.querys import (
     existe_mensagem_anterior_aberta_conversa,
     unlock_conversa,
 )
 from core.repositories.updates import (
+    atualizar_conversa_resposta_bot,
     marcar_mensagem_como_enviada,
     reagendar_mensagem_sem_erro,
 )
@@ -101,6 +104,45 @@ def confirmar_cache_cliente_se_pendente(contexto_banco):
     return True
 
 
+def reparar_cache_cliente_stale_se_fk_invalida(erro, estado_ciclo):
+    erro_texto = str(erro)
+
+    if "conversa_id_cliente_fkey" not in erro_texto:
+        return False
+
+    cliente_telefone = estado_ciclo.get("cliente_telefone")
+
+    if not cliente_telefone:
+        return False
+
+    removido = remover_cliente_cache(cliente_telefone)
+
+    logger.warning(
+        "cliente_cache_stale_reparado | motivo=fk_cliente_inexistente acao=remover_cache cliente=%s id_mensagem=%s removido=%s",
+        short_value(cliente_telefone),
+        estado_ciclo.get("id_mensagem"),
+        removido,
+    )
+    return removido
+
+
+def reparar_cache_unidade_stale_se_fk_invalida(erro, estado_ciclo):
+    erro_texto = str(erro)
+
+    if "conversa_id_unidade_fkey" not in erro_texto:
+        return False
+
+    total_unidades = recarregar_cache_unidades()
+
+    logger.warning(
+        "unidade_cache_stale_reparado | motivo=fk_unidade_inexistente acao=recarregar_cache_unidades phone_number_id=%s id_mensagem=%s unidades=%s",
+        short_value(estado_ciclo.get("id_phone_unidade")),
+        estado_ciclo.get("id_mensagem"),
+        total_unidades,
+    )
+    return total_unidades is not None
+
+
 def logar_lock_recusado(mensagem, contexto_banco):
     contexto_conversa = contexto_banco["conversa"]
 
@@ -148,6 +190,68 @@ def reagendar_se_houver_mensagem_anterior(
         lock_version,
     )
     return True
+
+
+def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, cursor):
+    id_conversa = contexto_historico["id_conversa"]
+    id_etapa_resultante = contexto_envio.get("id_etapa_resultante")
+
+    if contexto_envio.get("resposta_ja_existia"):
+        atualizar_conversa_resposta_bot(
+            id_conversa,
+            id_etapa_resultante,
+            cursor,
+        )
+
+        logger.info(
+            "resposta_bot_idempotente | motivo=resposta_ja_existia acao=atualizar_conversa id_conversa=%s etapa=%s id_hash_msg_bot=%s",
+            id_conversa,
+            id_etapa_resultante,
+            contexto_envio.get("id_hash_msg_bot"),
+        )
+        return {
+            "historico_bot_inserido": False,
+            "resposta_ja_existia": True,
+            "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
+            "id_etapa_resultante": id_etapa_resultante,
+        }
+
+    if not contexto_envio.get("enviou"):
+        raise ValueError(
+            "Contexto de envio sem resposta enviada e sem resposta existente"
+        )
+
+    id_historico_bot, data_historico_bot, historico_inserido = (
+        inserir_historico_mensagem_bot(
+            contexto_historico,
+            contexto_envio,
+            cursor,
+        )
+    )
+
+    atualizar_conversa_resposta_bot(
+        id_conversa,
+        id_etapa_resultante,
+        cursor,
+    )
+
+    logger.info(
+        "resposta_bot_persistida | acao=registrar_historico_e_conversa id_conversa=%s id_historico_bot=%s inserido=%s etapa=%s id_hash_msg_bot=%s",
+        id_conversa,
+        id_historico_bot,
+        historico_inserido,
+        id_etapa_resultante,
+        contexto_envio.get("id_hash_msg_bot"),
+    )
+
+    return {
+        "historico_bot_inserido": historico_inserido,
+        "resposta_ja_existia": False,
+        "id_historico_bot": id_historico_bot,
+        "data_historico_bot": data_historico_bot,
+        "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
+        "id_etapa_resultante": id_etapa_resultante,
+    }
 
 
 def finalizar_mensagem_processada(
