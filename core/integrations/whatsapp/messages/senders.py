@@ -11,8 +11,8 @@ logger = logging.getLogger("whatsapp.pywa")
 # URL dev webhook: https://gladys-tetrarchic-dovie.ngrok-free.dev/webhook
 
 
-def enviar_mensagem_texto(to, text, phone_id_unidade, cliente_wa_mock=None):
-    cliente_wa = _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock)
+def enviar_mensagem_texto(to, text, phone_id_unidade):
+    cliente_wa = conta_wa(phone_id_unidade)
 
     sent_message = cliente_wa.send_message(
         to=to,
@@ -36,9 +36,8 @@ def enviar_mensagem_texto_com_botao(
     titulo_botao,
     phone_id_unidade,
     callback_data=None,
-    cliente_wa_mock=None,
 ):
-    cliente_wa = _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock)
+    cliente_wa = conta_wa(phone_id_unidade)
     dados_callback = callback_data or titulo_botao
 
     sent_message = cliente_wa.send_message(
@@ -62,14 +61,6 @@ def enviar_mensagem_texto_com_botao(
     )
 
     return id_hash_msg
-
-
-def _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock=None):
-    # cliente_wa_mock existe apenas para testes; em producao sempre monta o WhatsApp da unidade.
-    if cliente_wa_mock is not None:
-        return cliente_wa_mock
-
-    return conta_wa(phone_id_unidade)
 
 
 def _extrair_id_mensagem_enviada(sent_message):

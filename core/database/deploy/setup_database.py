@@ -9,7 +9,7 @@ from core.database.deploy.bank_script import (
 )
 from core.database.deploy.floodscript import criar_tabelas_bloqueio_flood
 from core.database.deploy.cache_control_script import criar_cache_controle
-from core.database.connection_test import connection_teste_psql
+from core.database.connection_check import connection_teste_psql
 from core.database.deploy.povoar_etapas import insere_etapa_once
 from core.database.deploy.turno_cliente_script import criar_indices_turno_cliente
 from core.cache.cache_reset import resetar_cache_redis_dev

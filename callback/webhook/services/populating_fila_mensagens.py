@@ -32,12 +32,21 @@ def inserir_dados_na_tabela_fila(dados):
 
         if not turno["pode_enfileirar"]:
             conn.commit()
-            logger.info(
-                "fila_insert_ignorado | motivo=%s acao=nao_inserir_turno cliente=%s phone_number_id=%s",
-                turno["motivo"],
-                short_value(dados["cliente_telefone"]),
-                short_value(dados["id_phone_unidade"]),
-            )
+
+            if turno["motivo"] == "fila_aberta_sem_resposta_bot":
+                logger.info(
+                    "mensagem_ignorada | motivo=fila_aberta_pending_processing acao=nao_enfileirar cliente=%s phone_number_id=%s detalhe=ja_existe_mensagem_pending_ou_processing",
+                    short_value(dados["cliente_telefone"]),
+                    short_value(dados["id_phone_unidade"]),
+                )
+            else:
+                logger.info(
+                    "fila_insert_ignorado | motivo=%s acao=nao_inserir_turno cliente=%s phone_number_id=%s",
+                    turno["motivo"],
+                    short_value(dados["cliente_telefone"]),
+                    short_value(dados["id_phone_unidade"]),
+                )
+
             return {
                 "status": "ignored",
                 "reason": turno["motivo"],
@@ -140,10 +149,7 @@ def extrair_dados_whatsapp(data):
         message_id = message.get("id")
         timestamp = message.get("timestamp")
         tipo = message.get("type")
-
-        conteudo_texto = None
-        if tipo == "text":
-            conteudo_texto = message.get("text", {}).get("body")
+        conteudo_texto = extrair_conteudo_texto_mensagem(message, tipo)
 
         received_data_hora = datetime.fromtimestamp(int(timestamp))
 
@@ -179,6 +185,37 @@ def extrair_dados_whatsapp(data):
             "detalhe": str(erro),
             "raw": data,
         }
+
+
+def extrair_conteudo_texto_mensagem(message, tipo):
+    if tipo == "text":
+        return message.get("text", {}).get("body")
+
+    if tipo == "interactive":
+        return extrair_conteudo_interactive(message.get("interactive", {}))
+
+    if tipo == "button":
+        return extrair_conteudo_button(message.get("button", {}))
+
+    return None
+
+
+def extrair_conteudo_interactive(interactive):
+    tipo_interactive = interactive.get("type")
+
+    if tipo_interactive == "button_reply":
+        button_reply = interactive.get("button_reply", {})
+        return button_reply.get("title") or button_reply.get("id")
+
+    if tipo_interactive == "list_reply":
+        list_reply = interactive.get("list_reply", {})
+        return list_reply.get("title") or list_reply.get("id")
+
+    return None
+
+
+def extrair_conteudo_button(button):
+    return button.get("text") or button.get("payload")
 
 
 def povoando_fila(data):

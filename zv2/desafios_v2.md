@@ -824,7 +824,14 @@ Mesmo com IA, o estado oficial da conversa deve continuar no banco.
 
 ## Desafio 16 - Tratamento de respostas invalidas
 
-Na V1, ainda sera preciso implementar tratamentos por etapa.
+Na V1, o plano atual deixa uma base simples:
+
+- `flow_treat_unsupported_type` para tipos nao suportados, como midia, audio, documento e figurinha;
+- `flow_treat_context` como esqueleto para respostas fora do contexto esperado;
+- tratamentos registrando historico e usando o mesmo contrato transacional do `flow_sender`;
+- tratamento sem avancar etapa oficial.
+
+Na V2, ainda sera preciso implementar tratamentos por etapa com mais detalhe.
 
 Exemplo:
 
@@ -837,7 +844,7 @@ cliente: Alice
 
 ### Decisao futura
 
-Definir se mensagens invalidas entram no historico principal ou se entram em uma estrutura separada.
+Definir se mensagens invalidas continuam entrando no historico principal ou se entram em uma estrutura separada.
 
 Registrar tudo aumenta auditoria.
 
@@ -850,6 +857,13 @@ Essa decisao deve ser feita com cuidado, porque pode afetar:
 - IA futura;
 - entendimento de contexto;
 - simplicidade do historico.
+
+Tambem sera necessario decidir se `flow_treat_context` deve:
+
+- repetir a pergunta exata da etapa atual;
+- enviar botoes/listas da etapa atual novamente;
+- usar IA ou regras deterministicas para identificar resposta fora de contexto;
+- registrar categorias de erro, como `midia`, `texto_fora_contexto`, `botao_invalido`, `tentativa_maliciosa`.
 
 ## Desafio 17 - Tipos de mensagem e componentes Meta
 

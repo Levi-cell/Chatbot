@@ -1,9 +1,8 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from core.integrations.whatsapp.messages.senders import (
-    enviar_mensagem_texto_com_botao,
-)
+from core.integrations.whatsapp.messages import senders as senders_module
 
 
 class FakeClienteWa:
@@ -19,13 +18,13 @@ class WhatsappMessageSendersTests(unittest.TestCase):
     def test_enviar_mensagem_texto_com_botao_monta_button_pywa(self):
         cliente_wa = FakeClienteWa()
 
-        id_hash = enviar_mensagem_texto_com_botao(
-            to="5571999999999",
-            text="Ola!",
-            titulo_botao="Aperte em mim",
-            phone_id_unidade="123456",
-            cliente_wa_mock=cliente_wa,
-        )
+        with patch.object(senders_module, "conta_wa", return_value=cliente_wa):
+            id_hash = senders_module.enviar_mensagem_texto_com_botao(
+                to="5571999999999",
+                text="Ola!",
+                titulo_botao="Aperte em mim",
+                phone_id_unidade="123456",
+            )
 
         self.assertEqual(id_hash, "wamid.bot.fake")
         self.assertEqual(len(cliente_wa.calls), 1)

@@ -8,10 +8,10 @@ from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
 from core.repositories.querys import pegar_mensagens_da_fila, tentar_lock_conversa
 from core.repositories.updates import vincular_mensagem_fila_a_conversa
-from workers.tratamento_erro.erro_conexao import handle_erro_conexao
-from workers.tratamento_erro.erro_generico import handle_erro_generico
-from workers.tratamento_erro.exceptions import BancoFalhouAposEnvioMeta
-from workers.tratamento_erro.unidade_nao_encontrada import handle_unidade_nao_encontrada
+from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
+from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
+from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta
+from workers.tratamento_erros_externos.unidade_nao_encontrada import handle_unidade_nao_encontrada
 from workers.worker_flow.flow_sender import flow_sender
 from workers.worker_flow.suport_functions import (
     aguardar_fila_vazia,

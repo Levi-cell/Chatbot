@@ -7,8 +7,8 @@ from core.logging_config import short_value
 logger = logging.getLogger("whatsapp.block")
 
 
-def bloquear_usuario_meta(wa_id_cliente, phone_id_unidade, cliente_wa_mock=None):
-    cliente_wa = _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock)
+def bloquear_usuario_meta(wa_id_cliente, phone_id_unidade):
+    cliente_wa = conta_wa(phone_id_unidade)
 
     resultado = cliente_wa.block_users(
         users=[str(wa_id_cliente)],
@@ -28,8 +28,8 @@ def bloquear_usuario_meta(wa_id_cliente, phone_id_unidade, cliente_wa_mock=None)
     return resultado
 
 
-def desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade, cliente_wa_mock=None):
-    cliente_wa = _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock)
+def desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade):
+    cliente_wa = conta_wa(phone_id_unidade)
 
     resultado = cliente_wa.unblock_users(
         users=[str(wa_id_cliente)],
@@ -47,11 +47,3 @@ def desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade, cliente_wa_mock=No
     )
 
     return resultado
-
-
-def _obter_cliente_whatsapp(phone_id_unidade, cliente_wa_mock=None):
-    # cliente_wa_mock existe apenas para testes; em producao sempre monta o WhatsApp da unidade.
-    if cliente_wa_mock is not None:
-        return cliente_wa_mock
-
-    return conta_wa(phone_id_unidade)

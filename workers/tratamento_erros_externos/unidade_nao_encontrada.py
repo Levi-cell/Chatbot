@@ -1,7 +1,7 @@
 import logging
 import time
 
-from workers.tratamento_erro.expection_process import tratar_unidade_nao_encontrada
+from workers.tratamento_erros_externos.expection_process import tratar_unidade_nao_encontrada
 
 
 logger = logging.getLogger("worker.erro")

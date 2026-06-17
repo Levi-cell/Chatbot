@@ -3,7 +3,13 @@ from unittest.mock import patch
 
 from callback.webhook.services import populating_fila_mensagens as fila
 from tests.helpers import FakeConn, FakeCursor
-from tests.payloads import payload_sem_mensagem, payload_texto_meta
+from tests.payloads import (
+    payload_imagem_meta,
+    payload_interactive_button_meta,
+    payload_interactive_list_meta,
+    payload_sem_mensagem,
+    payload_texto_meta,
+)
 
 
 class PopulatingFilaTests(unittest.TestCase):
@@ -16,6 +22,33 @@ class PopulatingFilaTests(unittest.TestCase):
         self.assertEqual(dados["cliente_telefone"], "5571999999999")
         self.assertEqual(dados["id_phone_unidade"], "123456")
         self.assertEqual(dados["id_hash_msg"], "wamid.test.1")
+        self.assertEqual(dados["tipo_mensagem"], "text")
+        self.assertEqual(dados["conteudo_texto"], "ola")
+
+    def test_extrair_dados_whatsapp_interactive_button_preenche_conteudo_texto(self):
+        dados = fila.extrair_dados_whatsapp(
+            payload_interactive_button_meta(titulo_botao="Aperte em mim")
+        )
+
+        self.assertNotIn("erro", dados)
+        self.assertEqual(dados["tipo_mensagem"], "interactive")
+        self.assertEqual(dados["conteudo_texto"], "Aperte em mim")
+
+    def test_extrair_dados_whatsapp_interactive_list_preenche_conteudo_texto(self):
+        dados = fila.extrair_dados_whatsapp(
+            payload_interactive_list_meta(titulo_opcao="Opcao A")
+        )
+
+        self.assertNotIn("erro", dados)
+        self.assertEqual(dados["tipo_mensagem"], "interactive")
+        self.assertEqual(dados["conteudo_texto"], "Opcao A")
+
+    def test_extrair_dados_whatsapp_imagem_mantem_conteudo_texto_nulo(self):
+        dados = fila.extrair_dados_whatsapp(payload_imagem_meta())
+
+        self.assertNotIn("erro", dados)
+        self.assertEqual(dados["tipo_mensagem"], "image")
+        self.assertIsNone(dados["conteudo_texto"])
 
     def test_extrair_dados_whatsapp_sem_mensagem(self):
         dados = fila.extrair_dados_whatsapp(payload_sem_mensagem())
