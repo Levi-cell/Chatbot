@@ -2,48 +2,18 @@ import logging
 
 from core.logging_config import short_value
 from core.repositories.inserts import inserir_historico_mensagem_cliente
-from core.repositories.querys import (
-    buscar_resposta_bot_por_mensagem_cliente,
-    buscar_ultimas_mensagens_historico,
-)
+from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
 
 
 logger = logging.getLogger("worker.valida_historico")
 
 ETAPA_INICIAL = 1
 ETAPA_FINAL = 7
-ESTADOS_SEM_HISTORICO_ANTERIOR = {"nova", "liberada"}
 
 
 def valida_historico(mensagem, contexto_banco, cursor):
     contexto_conversa = contexto_banco["conversa"]
     id_conversa = contexto_conversa["id_conversa"]
-    estado_conversa = contexto_conversa.get("estado")
-
-    if _deve_consultar_historico_anterior(estado_conversa):
-        historico_anterior = _normalizar_historico(
-            buscar_ultimas_mensagens_historico(
-                id_conversa,
-                cursor,
-                limite=6,
-            )
-        )
-    else:
-        historico_anterior = []
-        logger.debug(
-            "historico_consulta_pulada | motivo=conversa_sem_historico_anterior acao=usar_historico_vazio id_conversa=%s estado=%s",
-            id_conversa,
-            estado_conversa,
-        )
-
-    ultima_mensagem_bot = _buscar_primeira_por_quem(
-        historico_anterior,
-        "bot",
-    )
-    ultima_mensagem_cliente_anterior = _buscar_primeira_por_quem(
-        historico_anterior,
-        "cliente",
-    )
 
     id_etapa_cliente = _resolver_etapa_cliente(contexto_conversa)
     id_etapa_resposta = _resolver_etapa_resposta(contexto_conversa, id_etapa_cliente)
@@ -109,10 +79,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         "last_message_from": contexto_conversa.get("last_message_from"),
         "mensagem_cliente_atual": mensagem_cliente_atual,
         "mensagem_cliente_inserida": cliente_inserido_no_historico,
-        "ultima_mensagem_bot": ultima_mensagem_bot,
-        "ultima_mensagem_cliente_anterior": ultima_mensagem_cliente_anterior,
         "resposta_bot_para_mensagem_atual": resposta_bot_para_mensagem_atual,
-        "historico_recente_anterior": historico_anterior,
         "texto_cliente_atual": mensagem["conteudo_texto"],
         "tipo_mensagem_atual": mensagem["tipo_mensagem"],
         "retry_count": mensagem["retry_count"],
@@ -141,14 +108,6 @@ def _resolver_etapa_resposta(contexto_conversa, id_etapa_cliente):
         return min(id_etapa_atual + 1, ETAPA_FINAL)
 
     return id_etapa_cliente
-
-
-def _normalizar_historico(registros):
-    return [_normalizar_linha_historico(registro) for registro in registros]
-
-
-def _deve_consultar_historico_anterior(estado_conversa):
-    return estado_conversa not in ESTADOS_SEM_HISTORICO_ANTERIOR
 
 
 def _normalizar_linha_historico(registro):
@@ -192,11 +151,3 @@ def _normalizar_resposta_bot(registro):
         return None
 
     return _normalizar_linha_historico(registro)
-
-
-def _buscar_primeira_por_quem(historico, quem_enviou):
-    for mensagem_historico in historico:
-        if mensagem_historico["quem_enviou"] == quem_enviou:
-            return mensagem_historico
-
-    return None

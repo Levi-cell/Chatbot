@@ -92,7 +92,7 @@ def main():
 
     abrir_terminal(
         "Chatbot Worker",
-        [sys.executable, "-m", "workers.worker_flow.flow_main"],
+        [sys.executable, "-m", "workers.worker_flow.main_worker"],
         PROJECT_ROOT,
         env,
     )

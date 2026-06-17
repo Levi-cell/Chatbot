@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import workers.worker_flow.flow_sender as flow_sender_module
+import workers.worker_flow.response_flow.flow_sender as flow_sender_module
 
 
 def contexto_historico_base(resposta_bot=None, etapa=1, retry=1):

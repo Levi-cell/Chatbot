@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from core.integrations.whatsapp import sender as sender_module
@@ -6,7 +7,7 @@ from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 
 
 class SenderEtapa1Tests(unittest.TestCase):
-    def test_retorna_contexto_quando_meta_envia_botao(self):
+    def test_retorna_contexto_quando_meta_envia_botao_com_saudacao_por_horario(self):
         chamadas = []
 
         def fake_enviar_mensagem_texto_com_botao(
@@ -22,19 +23,37 @@ class SenderEtapa1Tests(unittest.TestCase):
             sender_module,
             "enviar_mensagem_texto_com_botao",
             fake_enviar_mensagem_texto_com_botao,
+        ), patch.object(
+            sender_module,
+            "obter_saudacao_por_horario",
+            return_value="Boa tarde",
         ):
             resultado = sender_module.sender_etapa1("5571999999999", "123456")
 
         self.assertEqual(
             chamadas,
-            [("5571999999999", "Ola!", "Aperte em mim", "123456")],
+            [("5571999999999", "Ola! Boa tarde.", "Aperte em mim", "123456")],
         )
         self.assertTrue(resultado["enviou"])
         self.assertFalse(resultado["resposta_ja_existia"])
-        self.assertEqual(resultado["mensagem_bot"], "Ola!")
+        self.assertEqual(resultado["mensagem_bot"], "Ola! Boa tarde.")
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.1")
         self.assertEqual(resultado["id_etapa_resultante"], 1)
         self.assertEqual(resultado["tipo_mensagem"], "interactive_button")
+
+    def test_saudacao_por_horario(self):
+        self.assertEqual(
+            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 8)),
+            "Bom dia",
+        )
+        self.assertEqual(
+            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 14)),
+            "Boa tarde",
+        )
+        self.assertEqual(
+            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 22)),
+            "Boa noite",
+        )
 
     def test_meta_falhou_levanta_exception_controlada(self):
         def fake_falha(*_args, **_kwargs):

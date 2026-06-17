@@ -968,6 +968,109 @@ Na V2, quando o numero de unidades crescer, revisar:
 - capacidade do Redis;
 - capacidade da Meta/API.
 
+## Desafio 21 - Reavaliar `last_message_from`
+
+Na V1, a coluna `conversa.last_message_from` deixou de representar literalmente a ultima mensagem fisica no historico.
+
+O comportamento real da V1 e:
+
+- conversa nova nasce com `last_message_from = cliente`;
+- depois que o bot responde pela primeira vez, o fluxo tende a manter `last_message_from = bot`;
+- novas mensagens do cliente sao inseridas no historico, mas a conversa continua com `last_message_from = bot`;
+- ao fim de cada resposta valida do bot, o sistema atualiza novamente `last_message_from = bot`;
+- em tratamentos de midia/contexto, a mensagem do cliente e a resposta de tratamento entram no historico, mas a conversa nao avanca etapa.
+
+Isso significa que, na pratica, `last_message_from` virou mais um marcador de estado oficial do turno do que uma descricao da ultima linha do historico.
+
+### Por Que Nao Remover na V1
+
+Remover apenas esta linha do update atual seria perigoso:
+
+```sql
+last_message_from = 'bot'
+```
+
+Sem adaptar o restante do fluxo, a conversa poderia ficar presa com `last_message_from = cliente`, e o `valida_historico` poderia deixar de avancar corretamente para a proxima etapa.
+
+Remover a coluna inteira tambem exige mexer em pontos sensiveis:
+
+- `bank_script.py`;
+- `models.py`;
+- `admin.py`;
+- `inserts.py`;
+- `updates.py`;
+- `querys.py`;
+- `valida_banco.py`;
+- `valida_historico.py`;
+- `turno_cliente.py`;
+- testes de contrato do worker e webhook.
+
+Como a coluna nao gera custo relevante na V1, a decisao atual e manter.
+
+### Direcao Para V2
+
+Na V2, avaliar remover `last_message_from` ou trocar por uma coluna mais honesta semanticamente.
+
+Possiveis nomes:
+
+```text
+turno_status
+estado_turno
+status_turno
+```
+
+Possiveis valores:
+
+```text
+aguardando_cliente
+processando_resposta_cliente
+respondido_pelo_bot
+tratamento_enviado
+finalizado
+```
+
+A ideia e separar melhor:
+
+- historico fisico: o que realmente foi enviado/recebido;
+- estado de conversa: etapa atual, bloqueio, status do funil;
+- estado de turno: se o turno esta aberto, fechado, em tratamento ou em recuperacao.
+
+### Possivel Simplificacao Sem `last_message_from`
+
+Se a V2 remover `last_message_from`, o calculo da etapa pode ficar mais direto:
+
+```python
+if id_etapa_atual is None:
+    id_etapa_resposta = 1
+else:
+    id_etapa_resposta = min(id_etapa_atual + 1, 7)
+```
+
+Tratamentos continuariam usando a etapa atual do cliente, sem avancar conversa.
+
+Para a excecao do webhook em que existe fila aberta ja respondida pelo bot, a prova principal deve ser o historico do bot vinculado a mensagem da fila:
+
+```text
+historico.id_mensagem_fila = fila.id_mensagem
+historico.id_hash_cliente_origem = fila.id_hash_msg
+historico.quem_enviou = bot
+historico.status_envio = sent
+```
+
+Assim, o webhook nao dependeria de `last_message_from = bot` para liberar a recuperacao.
+
+### Tarefa Futura
+
+Criar um plano especifico para:
+
+- remover ou substituir `last_message_from`;
+- revisar o modelo de turno;
+- atualizar DDL, models e admin;
+- simplificar `valida_historico`;
+- revisar `turno_cliente`;
+- manter idempotencia por historico + `id_hash_cliente_origem`;
+- criar testes de regressao para avanço de etapa, tratamento de midia/contexto e recuperacao de fila aberta respondida.
+
 ## O Que a V2 Deve Preservar da V1
 
 Mesmo evoluindo, a V2 deve preservar:
@@ -1004,6 +1107,7 @@ Principais tarefas da V2:
 - implementar tratamento de respostas invalidas;
 - suportar botoes/listas/templates;
 - avaliar tabela de eventos ignorados;
+- reavaliar/remover `last_message_from` ou substituir por `turno_status`;
 - continuar otimizando SQL apenas onde houver ganho real.
 
 ## Decisao Final para a V1

@@ -257,7 +257,7 @@ After=network.target chatbot-web.service
 User=ubuntu
 WorkingDirectory=/home/ubuntu/Chatbot
 EnvironmentFile=/etc/chatbot.env
-ExecStart=/home/ubuntu/Chatbot/.venv/bin/python -m workers.worker_flow.flow_main
+ExecStart=/home/ubuntu/Chatbot/.venv/bin/python -m workers.worker_flow.main_worker
 Restart=always
 RestartSec=5
 
@@ -871,4 +871,3 @@ Sem WAF -> AWS WAF
 EC2 única -> arquitetura com autoscaling
 Logs locais/systemd -> CloudWatch estruturado
 ```
-

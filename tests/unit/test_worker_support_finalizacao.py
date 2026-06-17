@@ -57,6 +57,47 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         self.assertEqual([chamada[0] for chamada in chamadas], ["insert_bot", "update_conversa"])
         self.assertTrue(resultado["historico_bot_inserido"])
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot")
+        self.assertTrue(resultado["atualizar_conversa"])
+
+    def test_tratamento_persiste_bot_sem_atualizar_conversa(self):
+        chamadas = []
+
+        def fake_inserir_historico(contexto_historico, contexto_envio, cursor):
+            chamadas.append(("insert_bot", contexto_historico, contexto_envio, cursor))
+            return 301, "2026-01-01T00:00:00", True
+
+        def fake_atualizar_conversa(*_args, **_kwargs):
+            raise AssertionError("tratamento nao deve atualizar conversa")
+
+        contexto_envio = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "mensagem_bot": "Tratamento",
+            "id_hash_msg_bot": "wamid.bot.tratamento",
+            "id_etapa_resultante": 1,
+            "tipo_mensagem": "interactive_button",
+            "tratamento": True,
+            "atualizar_conversa": False,
+        }
+
+        with patch.object(
+            support,
+            "inserir_historico_mensagem_bot",
+            fake_inserir_historico,
+        ), patch.object(
+            support,
+            "atualizar_conversa_resposta_bot",
+            fake_atualizar_conversa,
+        ):
+            resultado = support.atualizar_banco_com_contexto_final(
+                contexto_historico_base(),
+                contexto_envio,
+                object(),
+            )
+
+        self.assertEqual([chamada[0] for chamada in chamadas], ["insert_bot"])
+        self.assertTrue(resultado["historico_bot_inserido"])
+        self.assertFalse(resultado["atualizar_conversa"])
 
     def test_resposta_ja_existia_nao_insere_historico_do_bot(self):
         chamadas = []
@@ -93,6 +134,39 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         self.assertEqual(chamadas, [(10, 1, cursor)])
         self.assertTrue(resultado["resposta_ja_existia"])
         self.assertFalse(resultado["historico_bot_inserido"])
+        self.assertTrue(resultado["atualizar_conversa"])
+
+    def test_resposta_ja_existia_de_tratamento_nao_atualiza_conversa(self):
+        def fake_inserir_historico(*_args, **_kwargs):
+            raise AssertionError("nao deve inserir historico quando resposta ja existe")
+
+        def fake_atualizar_conversa(*_args, **_kwargs):
+            raise AssertionError("tratamento idempotente nao deve atualizar conversa")
+
+        with patch.object(
+            support,
+            "inserir_historico_mensagem_bot",
+            fake_inserir_historico,
+        ), patch.object(
+            support,
+            "atualizar_conversa_resposta_bot",
+            fake_atualizar_conversa,
+        ):
+            resultado = support.atualizar_banco_com_contexto_final(
+                contexto_historico_base(),
+                {
+                    "enviou": False,
+                    "resposta_ja_existia": True,
+                    "id_hash_msg_bot": "wamid.bot.existente",
+                    "id_etapa_resultante": 1,
+                    "atualizar_conversa": False,
+                },
+                object(),
+            )
+
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertFalse(resultado["historico_bot_inserido"])
+        self.assertFalse(resultado["atualizar_conversa"])
 
     def test_contexto_sem_envio_e_sem_resposta_existente_falha(self):
         with self.assertRaises(ValueError):

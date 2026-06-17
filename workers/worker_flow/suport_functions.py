@@ -195,25 +195,29 @@ def reagendar_se_houver_mensagem_anterior(
 def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, cursor):
     id_conversa = contexto_historico["id_conversa"]
     id_etapa_resultante = contexto_envio.get("id_etapa_resultante")
+    atualizar_conversa = contexto_envio.get("atualizar_conversa", True)
 
     if contexto_envio.get("resposta_ja_existia"):
-        atualizar_conversa_resposta_bot(
-            id_conversa,
-            id_etapa_resultante,
-            cursor,
-        )
+        if atualizar_conversa:
+            atualizar_conversa_resposta_bot(
+                id_conversa,
+                id_etapa_resultante,
+                cursor,
+            )
 
         logger.info(
-            "resposta_bot_idempotente | motivo=resposta_ja_existia acao=atualizar_conversa id_conversa=%s etapa=%s id_hash_msg_bot=%s",
+            "resposta_bot_idempotente | motivo=resposta_ja_existia acao=atualizar_contexto id_conversa=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s",
             id_conversa,
             id_etapa_resultante,
             contexto_envio.get("id_hash_msg_bot"),
+            atualizar_conversa,
         )
         return {
             "historico_bot_inserido": False,
             "resposta_ja_existia": True,
             "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
             "id_etapa_resultante": id_etapa_resultante,
+            "atualizar_conversa": atualizar_conversa,
         }
 
     if not contexto_envio.get("enviou"):
@@ -229,19 +233,21 @@ def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, curso
         )
     )
 
-    atualizar_conversa_resposta_bot(
-        id_conversa,
-        id_etapa_resultante,
-        cursor,
-    )
+    if atualizar_conversa:
+        atualizar_conversa_resposta_bot(
+            id_conversa,
+            id_etapa_resultante,
+            cursor,
+        )
 
     logger.info(
-        "resposta_bot_persistida | acao=registrar_historico_e_conversa id_conversa=%s id_historico_bot=%s inserido=%s etapa=%s id_hash_msg_bot=%s",
+        "resposta_bot_persistida | acao=registrar_historico_e_contexto id_conversa=%s id_historico_bot=%s inserido=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s",
         id_conversa,
         id_historico_bot,
         historico_inserido,
         id_etapa_resultante,
         contexto_envio.get("id_hash_msg_bot"),
+        atualizar_conversa,
     )
 
     return {
@@ -251,6 +257,7 @@ def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, curso
         "data_historico_bot": data_historico_bot,
         "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
         "id_etapa_resultante": id_etapa_resultante,
+        "atualizar_conversa": atualizar_conversa,
     }
 
 

@@ -12,7 +12,9 @@ from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
 from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
 from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta
 from workers.tratamento_erros_externos.unidade_nao_encontrada import handle_unidade_nao_encontrada
-from workers.worker_flow.flow_sender import flow_sender
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+from workers.worker_flow.response_flow.flow_treat_context import flow_treat_context
+from workers.worker_flow.response_flow.flow_treat_unsupported_type import flow_treat_unsupported_type
 from workers.worker_flow.suport_functions import (
     aguardar_fila_vazia,
     atualizar_banco_com_contexto_final,
@@ -32,9 +34,13 @@ from workers.worker_flow.suport_functions import (
 from workers.worker_flow.tratar_bloqueio import tratar_conversa_bloqueada
 from workers.worker_flow.valida_banco import validar_banco_mensagem
 from workers.worker_flow.valida_historico import valida_historico
+from workers.worker_flow.valida_resposta_cliente import (
+    RESULTADO_MENSAGEM_FORA_DE_CONTEXTO,
+    RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO,
+    validar_resposta_cliente,
+)
 
-
-logger = logging.getLogger("worker.flow")
+logger = logging.getLogger("worker.response_flow")
 
 
 def worker_flow():
@@ -50,6 +56,7 @@ def worker_flow():
         conn_ciclo = None
         cursor_ciclo = None
         estado_ciclo = criar_estado_ciclo()
+        contexto_envio = {}
 
         try:
             conn_ciclo = get_conn(application_name="worker_chatbot")
@@ -63,7 +70,7 @@ def worker_flow():
             if not registro:
                 aguardar_fila_vazia()
                 continue
-            # Estado_ciclo é definido como um payload none, que na linha 61 recebe o valor de mensagem
+
             mensagem = montar_mensagem_fila(registro)
             atualizar_estado_com_mensagem(estado_ciclo, mensagem)
 
@@ -119,12 +126,11 @@ def worker_flow():
                 logar_lock_recusado(mensagem, contexto_banco)
                 continue
 
-            # SEGUNDA CAMA DE PROTEÇÂO DE TURNO na linha 126
             if reagendar_se_houver_mensagem_anterior(
-                mensagem,
-                contexto_banco,
-                lock_version,
-                cursor_ciclo,
+                    mensagem,
+                    contexto_banco,
+                    lock_version,
+                    cursor_ciclo,
             ):
                 conn_ciclo.commit()
                 continue
@@ -144,7 +150,23 @@ def worker_flow():
                 contexto_historico["mensagem_cliente_inserida"],
             )
 
-            contexto_envio = flow_sender(contexto_historico)
+            contexto_validacao = validar_resposta_cliente(contexto_historico)
+            resultado_validacao = contexto_validacao["resultado"]
+
+            if resultado_validacao == RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO:
+                contexto_envio = flow_treat_unsupported_type(
+                    contexto_historico,
+                    contexto_validacao,
+                )
+
+            elif resultado_validacao == RESULTADO_MENSAGEM_FORA_DE_CONTEXTO:
+                contexto_envio = flow_treat_context(
+                    contexto_historico,
+                    contexto_validacao,
+                )
+
+            else:
+                contexto_envio = flow_sender(contexto_historico)
 
             try:
                 contexto_final = atualizar_banco_com_contexto_final(
@@ -167,12 +189,14 @@ def worker_flow():
                 raise
 
             logger.debug(
-                "resposta_bot_contexto_final_ok | acao=commit id_mensagem=%s id_conversa=%s etapa=%s resposta_ja_existia=%s id_hash_msg_bot=%s",
+                "resposta_bot_contexto_final_ok | acao=commit id_mensagem=%s id_conversa=%s etapa=%s resposta_ja_existia=%s id_hash_msg_bot=%s tratamento=%s tipo_tratamento=%s",
                 mensagem["id_mensagem"],
                 id_conversa,
                 contexto_final["id_etapa_resultante"],
                 contexto_final["resposta_ja_existia"],
                 contexto_final["id_hash_msg_bot"],
+                contexto_envio.get("tratamento", False),
+                contexto_envio.get("tipo_tratamento"),
             )
 
             finalizar_mensagem_processada(
@@ -207,11 +231,13 @@ def worker_flow():
 
         except BancoFalhouAposEnvioMeta as erro:
             logger.critical(
-                "banco_falhou_apos_envio_meta | risco=resposta_duplicada acao=reagendar_sem_sent id_mensagem=%s id_conversa=%s etapa=%s id_hash_msg_bot=%s erro=%s",
+                "banco_falhou_apos_envio_meta | risco=resposta_duplicada acao=reagendar_sem_sent id_mensagem=%s id_conversa=%s etapa=%s id_hash_msg_bot=%s tratamento=%s tipo_tratamento=%s erro=%s",
                 erro.id_mensagem,
                 erro.id_conversa,
                 erro.id_etapa,
                 erro.id_hash_msg_bot,
+                contexto_envio.get("tratamento", False),
+                contexto_envio.get("tipo_tratamento"),
                 erro,
             )
             if conn_ciclo:
