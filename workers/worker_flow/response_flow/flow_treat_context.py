@@ -35,6 +35,7 @@ def flow_treat_context(contexto_historico, contexto_validacao):
             "tratamento": True,
             "tipo_tratamento": contexto_validacao["tipo_tratamento"],
             "atualizar_conversa": False,
+            "atualizar_last_from_bot": True,
         }
 
     logger.warning(

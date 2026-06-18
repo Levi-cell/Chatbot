@@ -44,6 +44,6 @@ def validar_resposta_cliente(contexto_historico):
             "Por enquanto consigo processar apenas mensagens de texto ou botoes. "
             "Envie sua resposta novamente em texto ou clique no botao para retornar ao atendimento."
         ),
-        "botao": "Retornar ao atendimento",
+        "botao": "Continuar",
         "avancar_etapa": False,
     }

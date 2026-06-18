@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime
 
-from core.database.connection_aws import get_conn
 from core.logging_config import short_value
 from core.repositories.turno_cliente import avaliar_turno_cliente_para_fila
 
@@ -9,121 +8,87 @@ from core.repositories.turno_cliente import avaliar_turno_cliente_para_fila
 logger = logging.getLogger("webhook.fila")
 
 
-def inserir_dados_na_tabela_fila(dados):
-    conn = None
+def inserir_dados_na_tabela_fila(dados, cursor):
+    if not dados or dados.get("erro"):
+        logger.warning("fila_insert_ignorado | motivo=dados_invalidos acao=nao_inserir")
+        return {
+            "status": "ignored",
+            "reason": "dados_invalidos",
+        }
 
-    try:
-        conn = get_conn(application_name="webhook_chatbot")
-        cursor = conn.cursor()
+    turno = avaliar_turno_cliente_para_fila(
+        cursor=cursor,
+        cliente_telefone=dados["cliente_telefone"],
+        id_phone_unidade=dados["id_phone_unidade"],
+        usar_lock=True,
+    )
 
-        if not dados or dados.get("erro"):
-            logger.warning("fila_insert_ignorado | motivo=dados_invalidos acao=nao_inserir")
-            return {
-                "status": "ignored",
-                "reason": "dados_invalidos",
-            }
-
-        turno = avaliar_turno_cliente_para_fila(
-            cursor=cursor,
-            cliente_telefone=dados["cliente_telefone"],
-            id_phone_unidade=dados["id_phone_unidade"],
-            usar_lock=True,
-        )
-
-        if not turno["pode_enfileirar"]:
-            conn.commit()
-
-            if turno["motivo"] == "fila_aberta_sem_resposta_bot":
-                logger.info(
-                    "mensagem_ignorada | motivo=fila_aberta_pending_processing acao=nao_enfileirar cliente=%s phone_number_id=%s detalhe=ja_existe_mensagem_pending_ou_processing",
-                    short_value(dados["cliente_telefone"]),
-                    short_value(dados["id_phone_unidade"]),
-                )
-            else:
-                logger.info(
-                    "fila_insert_ignorado | motivo=%s acao=nao_inserir_turno cliente=%s phone_number_id=%s",
-                    turno["motivo"],
-                    short_value(dados["cliente_telefone"]),
-                    short_value(dados["id_phone_unidade"]),
-                )
-
-            return {
-                "status": "ignored",
-                "reason": turno["motivo"],
-            }
-
-        cursor.execute("""
-            INSERT INTO chatbot.fila_mensagens (
-                status,
-                retry_count,
-                next_attempt_at,
-                processing_started_at,
-                received_data_hora,
-                cliente_telefone,
-                conteudo_texto,
-                tipo_mensagem,
-                id_hash_msg,
-                id_phone_unidade,
-                unidade_telefone
-            )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
-        """, (
-            dados["status"],
-            dados["retry_count"],
-            dados["next_attempt_at"],
-            dados["processing_started_at"],
-            dados["received_data_hora"],
-            dados["cliente_telefone"],
-            dados["conteudo_texto"],
-            dados["tipo_mensagem"],
-            dados["id_hash_msg"],
-            dados["id_phone_unidade"],
-            dados["unidade_telefone"],
-        ))
-
-        conn.commit()
-
-        if cursor.rowcount == 0:
+    if not turno["pode_enfileirar"]:
+        if turno["motivo"] == "fila_aberta_sem_resposta_bot":
             logger.info(
-                "fila_insert_ignorado | motivo=conflito_unico acao=nao_inserir id_msg=%s cliente=%s phone_number_id=%s",
-                short_value(dados["id_hash_msg"]),
+                "mensagem_ignorada | motivo=fila_aberta_pending_processing acao=nao_enfileirar cliente=%s phone_number_id=%s detalhe=ja_existe_mensagem_pending_ou_processing",
                 short_value(dados["cliente_telefone"]),
                 short_value(dados["id_phone_unidade"]),
             )
-            return {
-                "status": "ignored",
-                "reason": "conflito_unico",
-            }
+        else:
+            logger.info(
+                "fila_insert_ignorado | motivo=%s acao=nao_inserir_turno cliente=%s phone_number_id=%s",
+                turno["motivo"],
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
+            )
 
+        return {
+            "status": "ignored",
+            "reason": turno["motivo"],
+        }
+
+    cursor.execute("""
+        INSERT INTO chatbot.fila_mensagens (
+            status,
+            retry_count,
+            next_attempt_at,
+            processing_started_at,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_phone_unidade,
+            unidade_telefone
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT DO NOTHING
+    """, (
+        dados["status"],
+        dados["retry_count"],
+        dados["next_attempt_at"],
+        dados["processing_started_at"],
+        dados["received_data_hora"],
+        dados["cliente_telefone"],
+        dados["conteudo_texto"],
+        dados["tipo_mensagem"],
+        dados["id_hash_msg"],
+        dados["id_phone_unidade"],
+        dados["unidade_telefone"],
+    ))
+
+    if cursor.rowcount == 0:
         logger.info(
-            "fila_insert_ok | acao=enfileirar id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
+            "fila_insert_ignorado | motivo=conflito_unico acao=nao_inserir id_msg=%s cliente=%s phone_number_id=%s",
             short_value(dados["id_hash_msg"]),
             short_value(dados["cliente_telefone"]),
             short_value(dados["id_phone_unidade"]),
-            dados["tipo_mensagem"],
         )
         return {
-            "status": "inserted",
-            "reason": None,
+            "status": "ignored",
+            "reason": "conflito_unico",
         }
 
-    except Exception:
-        if conn:
-            conn.rollback()
-
-        logger.exception(
-            "fila_insert_erro | acao=rollback id_msg=%s",
-            short_value(dados.get("id_hash_msg") if dados else None),
-        )
-        return {
-            "status": "error",
-            "reason": "insert_exception",
-        }
-
-    finally:
-        if conn:
-            conn.close()
+    return {
+        "status": "inserted",
+        "reason": None,
+    }
 
 
 def extrair_dados_whatsapp(data):
@@ -218,7 +183,7 @@ def extrair_conteudo_button(button):
     return button.get("text") or button.get("payload")
 
 
-def povoando_fila(data):
+def preparar_dados_fila(data):
     dados = extrair_dados_whatsapp(data)
 
     if dados.get("erro"):
@@ -229,25 +194,22 @@ def povoando_fila(data):
         return {
             "status": "ignored",
             "reason": dados.get("erro"),
+            "dados": None,
         }
-
-    id_hash = dados["id_hash_msg"]
 
     logger.info(
         "fila_recebida | acao=preparar_insert id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
-        short_value(id_hash),
+        short_value(dados["id_hash_msg"]),
         short_value(dados["cliente_telefone"]),
         short_value(dados["id_phone_unidade"]),
         dados["tipo_mensagem"],
     )
+    return {
+        "status": "ready",
+        "reason": None,
+        "dados": dados,
+    }
 
-    resultado = inserir_dados_na_tabela_fila(dados)
 
-    if resultado["status"] == "error":
-        logger.error(
-            "fila_enfileirar_falhou | motivo=%s acao=nao_enfileirada id_msg=%s",
-            resultado["reason"],
-            short_value(id_hash),
-        )
-
-    return resultado
+def povoando_fila(dados, cursor):
+    return inserir_dados_na_tabela_fila(dados, cursor)

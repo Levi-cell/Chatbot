@@ -6,13 +6,15 @@ from django.http import JsonResponse
 
 from core.cache.runtime.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
 from core.cache.cache_unidade import unidade_esta_ativa
+from core.database.connection_aws import get_conn
 from core.logging_config import short_value
 from .flood_guard import responder_se_flood
 from .meta_signature import validar_assinatura_meta
-from .populating_fila_mensagens import povoando_fila
+from .populating_fila_mensagens import preparar_dados_fila, povoando_fila
 
 
 logger = logging.getLogger("webhook.post_flow")
+fila_logger = logging.getLogger("webhook.fila")
 
 
 def responder_post_webhook(request):
@@ -73,7 +75,16 @@ def responder_post_webhook(request):
                 "reason": "blocked_conversation",
             })
 
-        resultado_fila = povoando_fila(data)
+        preparacao_fila = preparar_dados_fila(data)
+
+        if preparacao_fila["status"] == "ready":
+            resultado_fila = _executar_transacao_fila(preparacao_fila["dados"])
+
+        else:
+            resultado_fila = {
+                "status": "ignored",
+                "reason": preparacao_fila["reason"],
+            }
 
         if resultado_fila["status"] == "inserted":
             logger.info(
@@ -106,6 +117,44 @@ def responder_post_webhook(request):
         )
 
     return JsonResponse({"status": "ok"})
+
+
+def _executar_transacao_fila(dados):
+    conn_webhook = None
+
+    try:
+        conn_webhook = get_conn(application_name="webhook_chatbot")
+        cursor_webhook = conn_webhook.cursor()
+        resultado = povoando_fila(dados, cursor_webhook)
+        conn_webhook.commit()
+
+        if resultado["status"] == "inserted":
+            fila_logger.info(
+                "fila_insert_ok | acao=enfileirar id_msg=%s cliente=%s phone_number_id=%s tipo=%s",
+                short_value(dados["id_hash_msg"]),
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
+                dados["tipo_mensagem"],
+            )
+
+        return resultado
+
+    except Exception:
+        if conn_webhook:
+            conn_webhook.rollback()
+
+        fila_logger.exception(
+            "fila_insert_erro | acao=rollback id_msg=%s",
+            short_value(dados.get("id_hash_msg") if dados else None),
+        )
+        return {
+            "status": "error",
+            "reason": "insert_exception",
+        }
+
+    finally:
+        if conn_webhook:
+            conn_webhook.close()
 
 
 def _validar_content_type(request):

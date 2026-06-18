@@ -11,6 +11,7 @@ from core.repositories.querys import (
 )
 from core.repositories.updates import (
     atualizar_conversa_resposta_bot,
+    atualizar_conversa_resposta_bot_sem_avancar,
     marcar_mensagem_como_enviada,
     reagendar_mensagem_sem_erro,
 )
@@ -192,25 +193,54 @@ def reagendar_se_houver_mensagem_anterior(
     return True
 
 
+def _obter_data_interacao_bot_existente(contexto_historico):
+    resposta_bot = (
+        contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
+    )
+    data_interacao = resposta_bot.get("received_data_hora")
+
+    if data_interacao is None:
+        raise ValueError(
+            "Resposta do bot existente sem received_data_hora persistido"
+        )
+
+    return data_interacao
+
+
 def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, cursor):
     id_conversa = contexto_historico["id_conversa"]
     id_etapa_resultante = contexto_envio.get("id_etapa_resultante")
     atualizar_conversa = contexto_envio.get("atualizar_conversa", True)
+    atualizar_last_from_bot = contexto_envio.get("atualizar_last_from_bot", True)
 
     if contexto_envio.get("resposta_ja_existia"):
+        data_interacao_bot = None
+        if atualizar_conversa or atualizar_last_from_bot:
+            data_interacao_bot = _obter_data_interacao_bot_existente(
+                contexto_historico
+            )
+
         if atualizar_conversa:
             atualizar_conversa_resposta_bot(
                 id_conversa,
                 id_etapa_resultante,
+                data_interacao_bot,
+                cursor,
+            )
+        elif atualizar_last_from_bot:
+            atualizar_conversa_resposta_bot_sem_avancar(
+                id_conversa,
+                data_interacao_bot,
                 cursor,
             )
 
         logger.info(
-            "resposta_bot_idempotente | motivo=resposta_ja_existia acao=atualizar_contexto id_conversa=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s",
+            "resposta_bot_idempotente | motivo=resposta_ja_existia acao=atualizar_contexto id_conversa=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s atualizar_last_from_bot=%s",
             id_conversa,
             id_etapa_resultante,
             contexto_envio.get("id_hash_msg_bot"),
             atualizar_conversa,
+            atualizar_last_from_bot,
         )
         return {
             "historico_bot_inserido": False,
@@ -218,6 +248,7 @@ def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, curso
             "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
             "id_etapa_resultante": id_etapa_resultante,
             "atualizar_conversa": atualizar_conversa,
+            "atualizar_last_from_bot": atualizar_last_from_bot,
         }
 
     if not contexto_envio.get("enviou"):
@@ -237,17 +268,25 @@ def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, curso
         atualizar_conversa_resposta_bot(
             id_conversa,
             id_etapa_resultante,
+            data_historico_bot,
+            cursor,
+        )
+    elif atualizar_last_from_bot:
+        atualizar_conversa_resposta_bot_sem_avancar(
+            id_conversa,
+            data_historico_bot,
             cursor,
         )
 
     logger.info(
-        "resposta_bot_persistida | acao=registrar_historico_e_contexto id_conversa=%s id_historico_bot=%s inserido=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s",
+        "resposta_bot_persistida | acao=registrar_historico_e_contexto id_conversa=%s id_historico_bot=%s inserido=%s etapa=%s id_hash_msg_bot=%s atualizar_conversa=%s atualizar_last_from_bot=%s",
         id_conversa,
         id_historico_bot,
         historico_inserido,
         id_etapa_resultante,
         contexto_envio.get("id_hash_msg_bot"),
         atualizar_conversa,
+        atualizar_last_from_bot,
     )
 
     return {
@@ -258,6 +297,7 @@ def atualizar_banco_com_contexto_final(contexto_historico, contexto_envio, curso
         "id_hash_msg_bot": contexto_envio.get("id_hash_msg_bot"),
         "id_etapa_resultante": id_etapa_resultante,
         "atualizar_conversa": atualizar_conversa,
+        "atualizar_last_from_bot": atualizar_last_from_bot,
     }
 
 

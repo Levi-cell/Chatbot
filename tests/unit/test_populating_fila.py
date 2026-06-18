@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from callback.webhook.services import populating_fila_mensagens as fila
-from tests.helpers import FakeConn, FakeCursor
+from tests.helpers import FakeCursor
 from tests.payloads import (
     payload_imagem_meta,
     payload_interactive_button_meta,
@@ -55,11 +55,18 @@ class PopulatingFilaTests(unittest.TestCase):
 
         self.assertEqual(dados["erro"], "evento_sem_mensagem")
 
+    def test_preparar_dados_fila_evento_sem_mensagem_retorna_ignored(self):
+        preparacao = fila.preparar_dados_fila(payload_sem_mensagem())
+
+        self.assertEqual(preparacao["status"], "ignored")
+        self.assertEqual(preparacao["reason"], "evento_sem_mensagem")
+        self.assertIsNone(preparacao["dados"])
+
     def test_turno_bloqueado_nao_insere(self):
         cursor = FakeCursor()
-        conn = FakeConn(cursor=cursor)
+        dados = fila.extrair_dados_whatsapp(payload_texto_meta())
 
-        with patch.object(fila, "get_conn", return_value=conn), patch.object(
+        with patch.object(
             fila,
             "avaliar_turno_cliente_para_fila",
             return_value={
@@ -67,58 +74,57 @@ class PopulatingFilaTests(unittest.TestCase):
                 "motivo": "fila_aberta_sem_resposta_bot",
             },
         ):
-            resultado = fila.inserir_dados_na_tabela_fila(
-                fila.extrair_dados_whatsapp(payload_texto_meta())
-            )
+            resultado = fila.inserir_dados_na_tabela_fila(dados, cursor)
 
         self.assertEqual(resultado["status"], "ignored")
         self.assertEqual(resultado["reason"], "fila_aberta_sem_resposta_bot")
-        self.assertEqual(conn.commits, 1)
-        self.assertTrue(conn.closed)
         self.assertFalse(
             any("INSERT INTO chatbot.fila_mensagens" in call[0] for call in cursor.calls)
         )
 
     def test_turno_liberado_insere(self):
         cursor = FakeCursor(rowcount=1)
-        conn = FakeConn(cursor=cursor)
+        dados = fila.extrair_dados_whatsapp(payload_texto_meta())
 
-        with patch.object(fila, "get_conn", return_value=conn), patch.object(
+        with patch.object(
             fila,
             "avaliar_turno_cliente_para_fila",
             return_value={"pode_enfileirar": True, "motivo": "sem_fila_aberta"},
         ):
-            resultado = fila.inserir_dados_na_tabela_fila(
-                fila.extrair_dados_whatsapp(payload_texto_meta())
-            )
+            resultado = fila.inserir_dados_na_tabela_fila(dados, cursor)
 
         self.assertEqual(resultado["status"], "inserted")
-        self.assertEqual(conn.commits, 1)
-        self.assertTrue(conn.closed)
         self.assertTrue(
             any("INSERT INTO chatbot.fila_mensagens" in call[0] for call in cursor.calls)
         )
 
-    def test_banco_falha_retorna_error_controlado(self):
+    def test_conflito_unico_retorna_ignored(self):
+        cursor = FakeCursor(rowcount=0)
+        dados = fila.extrair_dados_whatsapp(payload_texto_meta())
+
+        with patch.object(
+            fila,
+            "avaliar_turno_cliente_para_fila",
+            return_value={"pode_enfileirar": True, "motivo": "sem_fila_aberta"},
+        ):
+            resultado = fila.inserir_dados_na_tabela_fila(dados, cursor)
+
+        self.assertEqual(resultado["status"], "ignored")
+        self.assertEqual(resultado["reason"], "conflito_unico")
+
+    def test_falha_de_banco_propaga_para_orquestrador(self):
         cursor = FakeCursor()
-        conn = FakeConn(cursor=cursor)
+        dados = fila.extrair_dados_whatsapp(payload_texto_meta())
 
         def fake_turno(**_kwargs):
             raise RuntimeError("banco caiu")
 
-        with patch.object(fila, "get_conn", return_value=conn), patch.object(
+        with patch.object(
             fila,
             "avaliar_turno_cliente_para_fila",
             fake_turno,
-        ):
-            resultado = fila.inserir_dados_na_tabela_fila(
-                fila.extrair_dados_whatsapp(payload_texto_meta())
-            )
-
-        self.assertEqual(resultado["status"], "error")
-        self.assertEqual(resultado["reason"], "insert_exception")
-        self.assertEqual(conn.rollbacks, 1)
-        self.assertTrue(conn.closed)
+        ), self.assertRaisesRegex(RuntimeError, "banco caiu"):
+            fila.inserir_dados_na_tabela_fila(dados, cursor)
 
 
 if __name__ == "__main__":

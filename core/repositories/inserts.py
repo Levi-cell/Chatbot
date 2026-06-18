@@ -88,7 +88,7 @@ def inserir_historico_mensagem_cliente(
 ):
     cursor.execute("""
         WITH existente AS (
-            SELECT id_mensagem, received_data_hora
+            SELECT id_mensagem, received_data_hora, id_etapa
             FROM chatbot.historico_mensagens
             WHERE id_conversa = %s
               AND quem_enviou = 'cliente'
@@ -128,14 +128,14 @@ def inserir_historico_mensagem_cliente(
                 'cliente',
                 NULL
             WHERE NOT EXISTS (SELECT 1 FROM existente)
-            RETURNING id_mensagem, received_data_hora
+            RETURNING id_mensagem, received_data_hora, id_etapa
         )
-        SELECT id_mensagem, received_data_hora, TRUE AS inserido
+        SELECT id_mensagem, received_data_hora, id_etapa, TRUE AS inserido
         FROM inserido
 
         UNION ALL
 
-        SELECT id_mensagem, received_data_hora, FALSE AS inserido
+        SELECT id_mensagem, received_data_hora, id_etapa, FALSE AS inserido
         FROM existente
 
         LIMIT 1;
@@ -164,13 +164,14 @@ def inserir_historico_mensagem_cliente(
         )
 
     logger.debug(
-        "historico_cliente_insert_resultado | acao=registrar_cliente id_conversa=%s id_mensagem_fila=%s id_historico=%s inserido=%s",
+        "historico_cliente_insert_resultado | acao=registrar_cliente id_conversa=%s id_mensagem_fila=%s id_historico=%s etapa=%s inserido=%s",
         id_conversa,
         mensagem["id_mensagem"],
         resultado[0],
-        bool(resultado[2]),
+        resultado[2],
+        bool(resultado[3]),
     )
-    return resultado[0], resultado[1], bool(resultado[2])
+    return resultado[0], resultado[1], resultado[2], bool(resultado[3])
 
 
 def inserir_historico_mensagem_bot(contexto_historico, contexto_envio, cursor):

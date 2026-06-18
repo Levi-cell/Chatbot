@@ -89,6 +89,22 @@ class TurnoClienteTests(unittest.TestCase):
         self.assertIn("pg_advisory_xact_lock", sql)
         self.assertEqual(params, ("123456", "5571999999999"))
 
+    def test_consulta_turno_usa_historico_vinculado_sem_last_from(self):
+        cursor = FakeCursor(fetchone_result=(True, True, 1, None))
+
+        resultado = turno_cliente.avaliar_filas_abertas_turno(
+            cursor,
+            cliente_telefone="5571999999999",
+            id_phone_unidade="123456",
+        )
+
+        sql, params = cursor.calls[0]
+        self.assertNotIn("last_message_from", sql)
+        self.assertIn("h.id_mensagem_fila = f.id_mensagem", sql)
+        self.assertIn("h.id_hash_cliente_origem = f.id_hash_msg", sql)
+        self.assertEqual(params, ("5571999999999", "123456"))
+        self.assertTrue(resultado["todas_abertas_respondidas"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -36,6 +36,7 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
             "tratamento": True,
             "tipo_tratamento": contexto_validacao["tipo_tratamento"],
             "atualizar_conversa": False,
+            "atualizar_last_from_bot": True,
         }
 
     if retry_count > 1:

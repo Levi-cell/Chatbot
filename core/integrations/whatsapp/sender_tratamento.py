@@ -17,7 +17,7 @@ def sender_tratamento_tipo_nao_suportado(
     tipo_mensagem,
     mensagem_bot,
 ):
-    titulo_botao = "Retornar ao atendimento"
+    titulo_botao = "Continuar"
 
     try:
         id_hash_msg_bot = enviar_mensagem_texto_com_botao(
@@ -48,6 +48,7 @@ def sender_tratamento_tipo_nao_suportado(
             "tratamento": True,
             "tipo_tratamento": "tipo_mensagem_nao_suportado",
             "atualizar_conversa": False,
+            "atualizar_last_from_bot": True,
         }
 
     except Exception as erro:

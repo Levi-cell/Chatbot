@@ -38,29 +38,128 @@ def vincular_mensagem_fila_a_conversa(id_mensagem, id_conversa, cursor):
     return cursor.rowcount
 
 
-def atualizar_conversa_resposta_bot(id_conversa, id_etapa_resultante, cursor):
-    if id_etapa_resultante is None:
-        raise ValueError("id_etapa_resultante nao informado para atualizar conversa")
+def atualizar_conversa_mensagem_cliente(
+    id_conversa,
+    data_interacao,
+    cursor,
+):
+    if data_interacao is None:
+        raise ValueError(
+            "data_interacao nao informada para registrar mensagem do cliente"
+        )
 
     cursor.execute("""
         UPDATE chatbot.conversa
         SET
-            id_etapa_atual = %s,
-            last_message_from = 'bot',
-            last_interaction_at = NOW()
+            last_message_from = 'cliente',
+            last_interaction_at = %s
         WHERE id_conversa = %s;
-    """, (id_etapa_resultante, id_conversa))
+    """, (data_interacao, id_conversa))
 
     logger.debug(
-        "conversa_update | acao=registrar_resposta_bot id_conversa=%s etapa=%s linhas=%s",
+        "conversa_update | acao=registrar_mensagem_cliente id_conversa=%s data_interacao=%s linhas=%s",
         id_conversa,
-        id_etapa_resultante,
+        data_interacao,
         cursor.rowcount,
     )
 
     if cursor.rowcount != 1:
         raise ValueError(
-            "Conversa nao foi atualizada com resposta do bot "
+            "Conversa nao foi atualizada com mensagem do cliente "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
+def atualizar_conversa_resposta_bot(
+    id_conversa,
+    id_etapa_resultante,
+    data_interacao,
+    cursor,
+):
+    if id_etapa_resultante is None:
+        raise ValueError("id_etapa_resultante nao informado para atualizar conversa")
+
+    if data_interacao is None:
+        raise ValueError(
+            "data_interacao nao informada para registrar resposta do bot"
+        )
+
+    cursor.execute("""
+        UPDATE chatbot.conversa
+        SET
+            id_etapa_atual = CASE
+                WHEN id_etapa_atual IS NULL THEN %s
+                ELSE GREATEST(id_etapa_atual, %s)
+            END,
+            last_message_from = 'bot',
+            last_interaction_at = %s
+        WHERE id_conversa = %s
+          AND (
+              (id_etapa_atual IS NULL AND %s = 1)
+              OR
+              (
+                  id_etapa_atual IS NOT NULL
+                  AND %s <= id_etapa_atual + 1
+              )
+          );
+    """, (
+        id_etapa_resultante,
+        id_etapa_resultante,
+        data_interacao,
+        id_conversa,
+        id_etapa_resultante,
+        id_etapa_resultante,
+    ))
+
+    logger.debug(
+        "conversa_update | acao=registrar_resposta_bot id_conversa=%s etapa=%s data_interacao=%s linhas=%s",
+        id_conversa,
+        id_etapa_resultante,
+        data_interacao,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada com resposta do bot; conversa "
+            "inexistente ou transicao de etapa invalida "
+            f"(id_conversa={id_conversa}, etapa={id_etapa_resultante}, "
+            f"linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
+def atualizar_conversa_resposta_bot_sem_avancar(
+    id_conversa,
+    data_interacao,
+    cursor,
+):
+    if data_interacao is None:
+        raise ValueError(
+            "data_interacao nao informada para registrar resposta do bot"
+        )
+
+    cursor.execute("""
+        UPDATE chatbot.conversa
+        SET
+            last_message_from = 'bot',
+            last_interaction_at = %s
+        WHERE id_conversa = %s;
+    """, (data_interacao, id_conversa))
+
+    logger.debug(
+        "conversa_update | acao=registrar_resposta_bot_sem_avancar id_conversa=%s data_interacao=%s linhas=%s",
+        id_conversa,
+        data_interacao,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada com resposta do bot sem avancar etapa "
             f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
 

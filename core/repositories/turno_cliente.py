@@ -98,18 +98,13 @@ def avaliar_filas_abertas_turno(cursor, cliente_telefone, id_phone_unidade):
             SELECT
                 f.id_mensagem
             FROM filas_abertas f
-            LEFT JOIN chatbot.conversa c
-              ON c.id_conversa = f.id_conversa
             LEFT JOIN chatbot.historico_mensagens h
               ON h.id_conversa = f.id_conversa
              AND h.quem_enviou = 'bot'
              AND h.status_envio = 'sent'
              AND h.id_mensagem_fila = f.id_mensagem
              AND h.id_hash_cliente_origem = f.id_hash_msg
-            WHERE NOT (
-                c.last_message_from = 'bot'
-                AND h.id_mensagem IS NOT NULL
-            )
+            WHERE h.id_mensagem IS NULL
             ORDER BY f.received_data_hora, f.id_mensagem
             LIMIT 1
         )

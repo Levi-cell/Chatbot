@@ -34,7 +34,8 @@ class SenderTratamentoTests(unittest.TestCase):
 
         self.assertEqual(len(chamadas), 1)
         self.assertEqual(chamadas[0][0], "5571999999999")
-        self.assertEqual(chamadas[0][2], "Retornar ao atendimento")
+        self.assertEqual(chamadas[0][2], "Continuar")
+        self.assertLessEqual(len(chamadas[0][2]), 20)
         self.assertEqual(chamadas[0][3], "123456")
         self.assertEqual(chamadas[0][4], "retornar_atendimento")
         self.assertEqual(chamadas[0][1], "Recebi uma midia. Envie texto para continuarmos.")
