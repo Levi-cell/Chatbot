@@ -12,6 +12,7 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
     # Regra de negocio V1: esta versao nao trabalha com midias/anexos.
     # Midia recebida entra no historico, recebe tratamento e nao avanca etapa.
     id_conversa = contexto_historico["id_conversa"]
+    retry_count = contexto_historico["retry_count"]
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
     resposta_bot_atual = (
         contexto_historico["resposta_bot_para_mensagem_atual"] or {}
@@ -19,12 +20,13 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
 
     if resposta_bot_atual:
         logger.info(
-            "flow_treat_unsupported_type_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s id_resposta_bot=%s tratamento=%s",
+            "flow_treat_unsupported_type_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s id_resposta_bot=%s tratamento=%s retry=%s",
             id_conversa,
             mensagem_cliente_atual["id_mensagem_fila"],
             mensagem_cliente_atual["id_hash_msg"],
             resposta_bot_atual.get("id_mensagem"),
             contexto_validacao["tipo_tratamento"],
+            retry_count,
         )
         return {
             "enviou": False,
@@ -35,6 +37,16 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
             "tipo_tratamento": contexto_validacao["tipo_tratamento"],
             "atualizar_conversa": False,
         }
+
+    if retry_count > 1:
+        logger.info(
+            "flow_treat_unsupported_type_reprocessamento | motivo=retry_maior_que_um acao=continuar_sem_resposta_previa id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s retry=%s tratamento=%s",
+            id_conversa,
+            mensagem_cliente_atual["id_mensagem_fila"],
+            mensagem_cliente_atual["id_hash_msg"],
+            retry_count,
+            contexto_validacao["tipo_tratamento"],
+        )
 
     if contexto_validacao["tipo_tratamento"] == "tipo_mensagem_nao_suportado":
         mensagem_bot = _montar_mensagem_tipo_nao_suportado(contexto_historico)

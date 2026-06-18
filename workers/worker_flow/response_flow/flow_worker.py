@@ -12,9 +12,9 @@ from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
 from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
 from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta
 from workers.tratamento_erros_externos.unidade_nao_encontrada import handle_unidade_nao_encontrada
-from workers.worker_flow.response_flow.flow_sender import flow_sender
-from workers.worker_flow.response_flow.flow_treat_context import flow_treat_context
-from workers.worker_flow.response_flow.flow_treat_unsupported_type import flow_treat_unsupported_type
+from workers.worker_flow.response_flow.rotear_resposta_cliente import (
+    rotear_resposta_cliente,
+)
 from workers.worker_flow.suport_functions import (
     aguardar_fila_vazia,
     atualizar_banco_com_contexto_final,
@@ -34,11 +34,6 @@ from workers.worker_flow.suport_functions import (
 from workers.worker_flow.tratar_bloqueio import tratar_conversa_bloqueada
 from workers.worker_flow.valida_banco import validar_banco_mensagem
 from workers.worker_flow.valida_historico import valida_historico
-from workers.worker_flow.valida_resposta_cliente import (
-    RESULTADO_MENSAGEM_FORA_DE_CONTEXTO,
-    RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO,
-    validar_resposta_cliente,
-)
 
 logger = logging.getLogger("worker.response_flow")
 
@@ -150,23 +145,7 @@ def worker_flow():
                 contexto_historico["mensagem_cliente_inserida"],
             )
 
-            contexto_validacao = validar_resposta_cliente(contexto_historico)
-            resultado_validacao = contexto_validacao["resultado"]
-
-            if resultado_validacao == RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO:
-                contexto_envio = flow_treat_unsupported_type(
-                    contexto_historico,
-                    contexto_validacao,
-                )
-
-            elif resultado_validacao == RESULTADO_MENSAGEM_FORA_DE_CONTEXTO:
-                contexto_envio = flow_treat_context(
-                    contexto_historico,
-                    contexto_validacao,
-                )
-
-            else:
-                contexto_envio = flow_sender(contexto_historico)
+            contexto_envio = rotear_resposta_cliente(contexto_historico)
 
             try:
                 contexto_final = atualizar_banco_com_contexto_final(

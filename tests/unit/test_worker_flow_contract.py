@@ -5,16 +5,16 @@ from workers.worker_flow.response_flow import flow_worker
 
 
 class WorkerFlowContractTests(unittest.TestCase):
-    def test_sent_fica_depois_do_flow_sender_e_da_persistencia_final(self):
+    def test_sent_fica_depois_do_roteamento_e_da_persistencia_final(self):
         source = inspect.getsource(flow_worker.worker_flow)
 
         pos_valida_historico = source.index("contexto_historico = valida_historico")
-        pos_flow_sender = source.index("contexto_envio = flow_sender")
+        pos_rotear_resposta = source.index("contexto_envio = rotear_resposta_cliente")
         pos_atualizar_banco = source.index("contexto_final = atualizar_banco_com_contexto_final")
         pos_finalizar = source.index("finalizar_mensagem_processada")
 
-        self.assertLess(pos_valida_historico, pos_flow_sender)
-        self.assertLess(pos_flow_sender, pos_atualizar_banco)
+        self.assertLess(pos_valida_historico, pos_rotear_resposta)
+        self.assertLess(pos_rotear_resposta, pos_atualizar_banco)
         self.assertLess(pos_atualizar_banco, pos_finalizar)
 
     def test_erro_meta_nao_marca_sent(self):

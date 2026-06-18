@@ -7,6 +7,7 @@ from workers.worker_flow.response_flow import flow_treat_unsupported_type as flo
 def contexto_historico_base(resposta_bot=None, id_etapa_atual=1):
     return {
         "id_conversa": 10,
+        "retry_count": 1,
         "id_etapa_atual": id_etapa_atual,
         "id_etapa_cliente": 1,
         "mensagem_cliente_atual": {

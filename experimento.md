@@ -1,8 +1,10 @@
-# Plano last_from semantico
+# Experimento: last_message_from semantico
 
 ## Objetivo
 
-Este plano descreve como transformar `conversa.last_message_from` em um campo semanticamente literal durante toda a conversa:
+Este documento descreve um experimento controlado para transformar
+`conversa.last_message_from` em um campo semanticamente literal durante toda a
+conversa, sem remover as protecoes atuais de fila, lock, retry e idempotencia:
 
 ```text
 cliente envia mensagem
@@ -15,7 +17,21 @@ cliente responde
 ciclo se repete
 ```
 
-Hoje, na V1, `last_message_from` tende a ficar `bot` depois da primeira resposta do bot. Isso funciona, mas o nome da coluna deixa de representar a ultima mensagem fisica registrada no historico.
+Hoje, na V1, `last_message_from` tende a ficar `bot` depois da primeira resposta
+do bot. Isso funciona, mas o nome da coluna deixa de representar a ultima
+mensagem fisica registrada no historico.
+
+O experimento continua aceitando o risco raro ja conhecido:
+
+```text
+Meta confirma envio
+banco ou worker falha antes de registrar a resposta do bot
+retry pode enviar a resposta novamente
+```
+
+O objetivo deste documento nao e eliminar essa pequena janela de duplicidade.
+O objetivo e melhorar a semantica de `last_message_from` sem permitir que uma
+etapa seja pulada ou retrocedida.
 
 ## Ponto critico
 
@@ -23,7 +39,7 @@ Nao basta atualizar `last_message_from = cliente` quando a mensagem do cliente e
 
 Se fizer apenas isso, o `valida_historico` pode parar de avancar etapa, porque hoje ele usa `last_message_from == "bot"` para decidir se deve responder a proxima etapa.
 
-Portanto, este plano tambem muda a regra de calculo de etapa:
+Portanto, este experimento tambem muda a regra de calculo de etapa:
 
 ```python
 if id_etapa_atual is None:
@@ -32,7 +48,21 @@ else:
     id_etapa_resposta = min(id_etapa_atual + 1, 7)
 ```
 
-Ou seja: a etapa de resposta passa a depender da etapa atual da conversa, nao de `last_message_from`.
+Ou seja: a etapa de resposta passa a depender da etapa atual da conversa, nao
+de `last_message_from`.
+
+Em retry, a etapa nao pode ser reconstruida apenas com a etapa atual da
+conversa. A mensagem do cliente pode ter sido registrada em uma etapa anterior
+e a resposta do bot pode ja ter avancado a conversa. Por isso:
+
+```text
+id_etapa_cliente = etapa persistida no historico do cliente
+
+se resposta do bot ja existe:
+    id_etapa_resposta = etapa persistida na resposta do bot
+se resposta do bot ainda nao existe:
+    id_etapa_resposta = proxima etapa calculada pela conversa
+```
 
 ## Regra transacional desejada
 
@@ -60,12 +90,312 @@ Por isso:
 
 ```text
 se ja existe historico do bot vinculado a esta mensagem da fila:
-    nao muda last_message_from para cliente
+    usa as etapas persistidas no historico
+    garante last_message_from = bot
 se ainda nao existe resposta do bot:
     muda last_message_from para cliente
 ```
 
-## Passo 1 - Alterar `core/repositories/updates.py`
+## Garantias obrigatorias
+
+- `last_message_from` nao decide mais se a etapa deve avancar;
+- a etapa persistida no historico do cliente vence qualquer valor reconstruido;
+- resposta do bot ja existente vence qualquer novo calculo de etapa;
+- resposta normal pode manter ou avancar apenas uma etapa;
+- resposta normal nunca retrocede a conversa;
+- tratamento registra `bot` sem avancar etapa;
+- webhook libera novo turno somente por resposta do bot vinculada a mensagem
+  aberta, sem depender de `last_message_from`;
+- commits, rollbacks, locks, handlers e marcacao `sent` permanecem no
+  `flow_worker.py` exatamente na ordem atual;
+- o novo roteador `rotear_resposta_cliente.py` permanece inalterado.
+
+## Passo 1 - Alterar `core/repositories/inserts.py`
+
+Arquivo modificado.
+
+Motivo: quando a mensagem do cliente ja existe, a funcao precisa devolver a
+etapa realmente persistida. Isso impede que um retry reconstrua a mensagem
+antiga usando a etapa mais nova da conversa.
+
+Codigo completo:
+
+```python
+import logging
+
+from core.logging_config import short_value
+
+
+logger = logging.getLogger("db.inserts")
+
+
+def inserindo_em_cliente_caso_seja_novo(waid_telefone, cursor):
+    try:
+        cursor.execute("""
+            INSERT INTO chatbot.cliente (waid_telefone)
+            VALUES (%s)
+            ON CONFLICT (waid_telefone) DO NOTHING;
+        """, (waid_telefone,))
+
+        inserido = cursor.rowcount == 1
+
+        cursor.execute("""
+            SELECT id_cliente
+            FROM chatbot.cliente
+            WHERE waid_telefone = %s;
+        """, (waid_telefone,))
+        result = cursor.fetchone()
+
+        if result:
+            logger.debug(
+                "cliente_insert_resultado | acao=obter_cliente telefone=%s id_cliente=%s inserido=%s",
+                short_value(waid_telefone),
+                result[0],
+                inserido,
+            )
+            return result[0], inserido
+
+        raise ValueError(
+            f"Anomalia Critica: Cliente do telefone {waid_telefone} "
+            "desapareceu da base durante a verificacao!"
+        )
+
+    except Exception:
+        logger.exception(
+            "cliente_insert_erro | acao=rollback telefone=%s",
+            short_value(waid_telefone),
+        )
+        raise
+
+
+def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
+    try:
+        cursor.execute("""
+            INSERT INTO chatbot.conversa (
+                id_cliente,
+                id_unidade,
+                last_interaction_at,
+                last_message_from
+            )
+            VALUES (%s, %s, NOW(), 'cliente')
+            RETURNING id_conversa;
+        """, (id_cliente, id_unidade))
+
+        result = cursor.fetchone()
+
+        if result:
+            logger.debug(
+                "conversa_insert_resultado | acao=criar_conversa id_cliente=%s id_unidade=%s id_conversa=%s",
+                id_cliente,
+                id_unidade,
+                result[0],
+            )
+            return result[0]
+
+        raise ValueError(
+            f"Anomalia Critica: conversa do cliente {id_cliente} "
+            f"e unidade {id_unidade} nao foi criada!"
+        )
+
+    except Exception:
+        logger.exception(
+            "conversa_insert_erro | acao=rollback id_cliente=%s id_unidade=%s",
+            id_cliente,
+            id_unidade,
+        )
+        raise
+
+
+def inserir_historico_mensagem_cliente(
+    mensagem,
+    id_conversa,
+    id_etapa,
+    cursor,
+):
+    cursor.execute("""
+        WITH existente AS (
+            SELECT id_mensagem, received_data_hora, id_etapa
+            FROM chatbot.historico_mensagens
+            WHERE id_conversa = %s
+              AND quem_enviou = 'cliente'
+              AND id_mensagem_fila = %s
+              AND id_hash_msg = %s
+            ORDER BY received_data_hora DESC, id_mensagem DESC
+            LIMIT 1
+        ),
+        inserido AS (
+            INSERT INTO chatbot.historico_mensagens (
+                id_conversa,
+                id_etapa,
+                received_data_hora,
+                cliente_telefone,
+                conteudo_texto,
+                tipo_mensagem,
+                id_hash_msg,
+                id_mensagem_fila,
+                id_hash_cliente_origem,
+                id_phone_unidade,
+                unidade_telefone,
+                quem_enviou,
+                status_envio
+            )
+            SELECT
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                NULL,
+                %s,
+                %s,
+                'cliente',
+                NULL
+            WHERE NOT EXISTS (SELECT 1 FROM existente)
+            RETURNING id_mensagem, received_data_hora, id_etapa
+        )
+        SELECT id_mensagem, received_data_hora, id_etapa, TRUE AS inserido
+        FROM inserido
+
+        UNION ALL
+
+        SELECT id_mensagem, received_data_hora, id_etapa, FALSE AS inserido
+        FROM existente
+
+        LIMIT 1;
+    """, (
+        id_conversa,
+        mensagem["id_mensagem"],
+        mensagem["id_hash"],
+        id_conversa,
+        id_etapa,
+        mensagem["data_recebimento"],
+        mensagem["cliente_telefone"],
+        mensagem["conteudo_texto"],
+        mensagem["tipo_mensagem"],
+        mensagem["id_hash"],
+        mensagem["id_mensagem"],
+        mensagem["id_phone_unidade"],
+        mensagem["unidade_telefone"],
+    ))
+
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        raise ValueError(
+            "Historico do cliente nao foi inserido nem encontrado "
+            f"(id_conversa={id_conversa}, id_mensagem={mensagem['id_mensagem']})"
+        )
+
+    logger.debug(
+        "historico_cliente_insert_resultado | acao=registrar_cliente id_conversa=%s id_mensagem_fila=%s id_historico=%s etapa=%s inserido=%s",
+        id_conversa,
+        mensagem["id_mensagem"],
+        resultado[0],
+        resultado[2],
+        bool(resultado[3]),
+    )
+    return resultado[0], resultado[1], resultado[2], bool(resultado[3])
+
+
+def inserir_historico_mensagem_bot(contexto_historico, contexto_envio, cursor):
+    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
+    id_hash_msg_bot = contexto_envio.get("id_hash_msg_bot")
+
+    if not id_hash_msg_bot:
+        raise ValueError("id_hash_msg_bot nao informado para historico do bot")
+
+    cursor.execute("""
+        WITH existente AS (
+            SELECT id_mensagem, received_data_hora
+            FROM chatbot.historico_mensagens
+            WHERE id_conversa = %s
+              AND quem_enviou = 'bot'
+              AND id_mensagem_fila = %s
+              AND id_hash_cliente_origem = %s
+            ORDER BY received_data_hora DESC, id_mensagem DESC
+            LIMIT 1
+        ),
+        inserido AS (
+            INSERT INTO chatbot.historico_mensagens (
+                id_conversa,
+                id_etapa,
+                received_data_hora,
+                cliente_telefone,
+                conteudo_texto,
+                tipo_mensagem,
+                id_hash_msg,
+                id_mensagem_fila,
+                id_hash_cliente_origem,
+                id_phone_unidade,
+                unidade_telefone,
+                quem_enviou,
+                status_envio
+            )
+            SELECT
+                %s,
+                %s,
+                NOW(),
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                %s,
+                'bot',
+                'sent'
+            WHERE NOT EXISTS (SELECT 1 FROM existente)
+            RETURNING id_mensagem, received_data_hora
+        )
+        SELECT id_mensagem, received_data_hora, TRUE AS inserido
+        FROM inserido
+
+        UNION ALL
+
+        SELECT id_mensagem, received_data_hora, FALSE AS inserido
+        FROM existente
+
+        LIMIT 1;
+    """, (
+        contexto_historico["id_conversa"],
+        mensagem_cliente["id_mensagem_fila"],
+        mensagem_cliente["id_hash_msg"],
+        contexto_historico["id_conversa"],
+        contexto_envio["id_etapa_resultante"],
+        mensagem_cliente["cliente_telefone"],
+        contexto_envio["mensagem_bot"],
+        contexto_envio.get("tipo_mensagem", "text"),
+        id_hash_msg_bot,
+        mensagem_cliente["id_mensagem_fila"],
+        mensagem_cliente["id_hash_msg"],
+        mensagem_cliente["id_phone_unidade"],
+        mensagem_cliente["unidade_telefone"],
+    ))
+
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        raise ValueError(
+            "Historico do bot nao foi inserido nem encontrado "
+            f"(id_conversa={contexto_historico['id_conversa']}, "
+            f"id_mensagem_fila={mensagem_cliente['id_mensagem_fila']})"
+        )
+
+    logger.debug(
+        "historico_bot_insert_resultado | acao=registrar_bot id_conversa=%s id_mensagem_fila=%s id_historico=%s inserido=%s",
+        contexto_historico["id_conversa"],
+        mensagem_cliente["id_mensagem_fila"],
+        resultado[0],
+        bool(resultado[2]),
+    )
+    return resultado[0], resultado[1], bool(resultado[2])
+```
+
+## Passo 2 - Alterar `core/repositories/updates.py`
 
 Arquivo modificado.
 
@@ -143,11 +473,28 @@ def atualizar_conversa_resposta_bot(id_conversa, id_etapa_resultante, cursor):
     cursor.execute("""
         UPDATE chatbot.conversa
         SET
-            id_etapa_atual = %s,
+            id_etapa_atual = CASE
+                WHEN id_etapa_atual IS NULL THEN %s
+                ELSE GREATEST(id_etapa_atual, %s)
+            END,
             last_message_from = 'bot',
             last_interaction_at = NOW()
-        WHERE id_conversa = %s;
-    """, (id_etapa_resultante, id_conversa))
+        WHERE id_conversa = %s
+          AND (
+              (id_etapa_atual IS NULL AND %s = 1)
+              OR
+              (
+                  id_etapa_atual IS NOT NULL
+                  AND %s <= id_etapa_atual + 1
+              )
+          );
+    """, (
+        id_etapa_resultante,
+        id_etapa_resultante,
+        id_conversa,
+        id_etapa_resultante,
+        id_etapa_resultante,
+    ))
 
     logger.debug(
         "conversa_update | acao=registrar_resposta_bot id_conversa=%s etapa=%s linhas=%s",
@@ -158,8 +505,10 @@ def atualizar_conversa_resposta_bot(id_conversa, id_etapa_resultante, cursor):
 
     if cursor.rowcount != 1:
         raise ValueError(
-            "Conversa nao foi atualizada com resposta do bot "
-            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+            "Conversa nao foi atualizada com resposta do bot; conversa "
+            "inexistente ou transicao de etapa invalida "
+            f"(id_conversa={id_conversa}, etapa={id_etapa_resultante}, "
+            f"linhas={cursor.rowcount})"
         )
 
     return cursor.rowcount
@@ -228,7 +577,7 @@ def reagendar_mensagem(id_mensagem, erro, max_retry, cursor):
     return cursor.rowcount
 ```
 
-## Passo 2 - Alterar `workers/worker_flow/valida_historico.py`
+## Passo 3 - Alterar `workers/worker_flow/valida_historico.py`
 
 Arquivo modificado.
 
@@ -240,7 +589,10 @@ import logging
 from core.logging_config import short_value
 from core.repositories.inserts import inserir_historico_mensagem_cliente
 from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
-from core.repositories.updates import atualizar_conversa_mensagem_cliente
+from core.repositories.updates import (
+    atualizar_conversa_mensagem_cliente,
+    atualizar_conversa_resposta_bot_sem_avancar,
+)
 
 
 logger = logging.getLogger("worker.valida_historico")
@@ -255,17 +607,17 @@ def valida_historico(mensagem, contexto_banco, cursor):
 
     last_message_from_entrada = contexto_conversa.get("last_message_from")
 
-    id_etapa_cliente = _resolver_etapa_cliente(contexto_conversa)
-    id_etapa_resposta = _resolver_etapa_resposta(contexto_conversa)
+    id_etapa_para_insert = _resolver_etapa_cliente(contexto_conversa)
 
     (
         id_historico_cliente,
         data_historico_cliente,
+        id_etapa_cliente,
         cliente_inserido_no_historico,
     ) = inserir_historico_mensagem_cliente(
         mensagem=mensagem,
         id_conversa=id_conversa,
-        id_etapa=id_etapa_cliente,
+        id_etapa=id_etapa_para_insert,
         cursor=cursor,
     )
 
@@ -295,11 +647,17 @@ def valida_historico(mensagem, contexto_banco, cursor):
         )
     )
 
-    if not resposta_bot_para_mensagem_atual:
+    if resposta_bot_para_mensagem_atual:
+        id_etapa_resposta = resposta_bot_para_mensagem_atual["id_etapa"]
+
+        if last_message_from_entrada != "bot":
+            atualizar_conversa_resposta_bot_sem_avancar(id_conversa, cursor)
+
+        last_message_from_saida = "bot"
+    else:
+        id_etapa_resposta = _resolver_etapa_resposta(contexto_conversa)
         atualizar_conversa_mensagem_cliente(id_conversa, cursor)
         last_message_from_saida = "cliente"
-    else:
-        last_message_from_saida = last_message_from_entrada
 
     logger.info(
         "historico_validado | acao=registrar_cliente id_mensagem=%s id_historico=%s inserido=%s id_conversa=%s etapa_cliente=%s etapa_resposta=%s last_from_entrada=%s last_from_saida=%s retry=%s resposta_bot_existente=%s cliente=%s phone_number_id=%s",
@@ -397,7 +755,7 @@ def _normalizar_resposta_bot(registro):
     return _normalizar_linha_historico(registro)
 ```
 
-## Passo 3 - Alterar `workers/worker_flow/suport_functions.py`
+## Passo 4 - Alterar `workers/worker_flow/suport_functions.py`
 
 Arquivo modificado.
 
@@ -728,7 +1086,7 @@ def liberar_lock_conversa_se_necessario(cursor, estado_ciclo):
     return unlock_realizado
 ```
 
-## Passo 4 - Alterar `core/integrations/whatsapp/sender_tratamento.py`
+## Passo 5 - Alterar `core/integrations/whatsapp/sender_tratamento.py`
 
 Arquivo modificado.
 
@@ -805,7 +1163,7 @@ def sender_tratamento_tipo_nao_suportado(
         ) from erro
 ```
 
-## Passo 5 - Alterar `workers/worker_flow/response_flow/flow_treat_unsupported_type.py`
+## Passo 6 - Alterar `workers/worker_flow/response_flow/flow_treat_unsupported_type.py`
 
 Arquivo modificado.
 
@@ -826,6 +1184,7 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
     # Regra de negocio V1: esta versao nao trabalha com midias/anexos.
     # Midia recebida entra no historico, recebe tratamento e nao avanca etapa.
     id_conversa = contexto_historico["id_conversa"]
+    retry_count = contexto_historico["retry_count"]
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
     resposta_bot_atual = (
         contexto_historico["resposta_bot_para_mensagem_atual"] or {}
@@ -833,12 +1192,13 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
 
     if resposta_bot_atual:
         logger.info(
-            "flow_treat_unsupported_type_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s id_resposta_bot=%s tratamento=%s",
+            "flow_treat_unsupported_type_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s id_resposta_bot=%s tratamento=%s retry=%s",
             id_conversa,
             mensagem_cliente_atual["id_mensagem_fila"],
             mensagem_cliente_atual["id_hash_msg"],
             resposta_bot_atual.get("id_mensagem"),
             contexto_validacao["tipo_tratamento"],
+            retry_count,
         )
         return {
             "enviou": False,
@@ -850,6 +1210,16 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
             "atualizar_conversa": False,
             "atualizar_last_from_bot": True,
         }
+
+    if retry_count > 1:
+        logger.info(
+            "flow_treat_unsupported_type_reprocessamento | motivo=retry_maior_que_um acao=continuar_sem_resposta_previa id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s retry=%s tratamento=%s",
+            id_conversa,
+            mensagem_cliente_atual["id_mensagem_fila"],
+            mensagem_cliente_atual["id_hash_msg"],
+            retry_count,
+            contexto_validacao["tipo_tratamento"],
+        )
 
     if contexto_validacao["tipo_tratamento"] == "tipo_mensagem_nao_suportado":
         mensagem_bot = _montar_mensagem_tipo_nao_suportado(contexto_historico)
@@ -887,7 +1257,7 @@ def _montar_mensagem_tipo_nao_suportado(contexto_historico):
     )
 ```
 
-## Passo 6 - Alterar `workers/worker_flow/response_flow/flow_treat_context.py`
+## Passo 7 - Alterar `workers/worker_flow/response_flow/flow_treat_context.py`
 
 Arquivo modificado.
 
@@ -905,6 +1275,7 @@ def flow_treat_context(contexto_historico, contexto_validacao):
     # forem definidas. Tratamento de contexto deve usar id_etapa_cliente,
     # repetir a pergunta/opcoes da etapa atual e nao avancar a conversa.
     id_conversa = contexto_historico["id_conversa"]
+    retry_count = contexto_historico["retry_count"]
     id_etapa_cliente = contexto_historico["id_etapa_cliente"]
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
     resposta_bot_atual = (
@@ -913,12 +1284,14 @@ def flow_treat_context(contexto_historico, contexto_validacao):
 
     if resposta_bot_atual:
         logger.info(
-            "flow_treat_context_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s etapa_cliente=%s id_mensagem_fila=%s id_resposta_bot=%s resultado=%s",
+            "flow_treat_context_idempotencia_ok | motivo=resposta_bot_ja_registrada acao=nao_enviar id_conversa=%s id_mensagem_fila=%s id_hash_cliente=%s id_resposta_bot=%s etapa_cliente=%s tratamento=%s retry=%s",
             id_conversa,
-            id_etapa_cliente,
             mensagem_cliente_atual["id_mensagem_fila"],
+            mensagem_cliente_atual["id_hash_msg"],
             resposta_bot_atual.get("id_mensagem"),
-            contexto_validacao["resultado"],
+            id_etapa_cliente,
+            contexto_validacao["tipo_tratamento"],
+            retry_count,
         )
         return {
             "enviou": False,
@@ -932,18 +1305,19 @@ def flow_treat_context(contexto_historico, contexto_validacao):
         }
 
     logger.warning(
-        "flow_treat_context_nao_implementado | acao=erro id_conversa=%s etapa_cliente=%s id_mensagem_fila=%s resultado=%s",
+        "flow_treat_context_nao_implementado | acao=erro id_conversa=%s etapa_cliente=%s id_mensagem_fila=%s resultado=%s retry=%s",
         id_conversa,
         id_etapa_cliente,
         mensagem_cliente_atual["id_mensagem_fila"],
         contexto_validacao["resultado"],
+        retry_count,
     )
     raise NotImplementedError(
         "Tratamento de mensagem fora de contexto ainda nao implementado"
     )
 ```
 
-## Passo 7 - Alterar `core/repositories/turno_cliente.py`
+## Passo 8 - Alterar `core/repositories/turno_cliente.py`
 
 Arquivo modificado.
 
@@ -1101,7 +1475,122 @@ def fila_tem_mensagem_aberta_turno(cursor, cliente_telefone, id_phone_unidade):
     return turno["existe_fila_aberta"]
 ```
 
-## Passo 8 - Alterar `tests/unit/test_worker_support_finalizacao.py`
+## Passo 9 - Alterar `tests/unit/test_repositories.py`
+
+Arquivo modificado.
+
+Codigo completo:
+
+```python
+import unittest
+
+from core.repositories import inserts, updates
+from tests.helpers import FakeCursor
+
+
+class RepositoryTests(unittest.TestCase):
+    def test_atualizar_conversa_resposta_bot_exige_etapa(self):
+        with self.assertRaises(ValueError):
+            updates.atualizar_conversa_resposta_bot(10, None, FakeCursor())
+
+    def test_atualizar_conversa_resposta_bot_falha_se_nenhuma_linha(self):
+        with self.assertRaises(ValueError):
+            updates.atualizar_conversa_resposta_bot(10, 1, FakeCursor(rowcount=0))
+
+    def test_atualizar_conversa_resposta_bot_impede_salto_e_retrocesso(self):
+        cursor = FakeCursor(rowcount=1)
+
+        self.assertEqual(updates.atualizar_conversa_resposta_bot(10, 2, cursor), 1)
+        sql, params = cursor.calls[0]
+
+        self.assertIn("UPDATE chatbot.conversa", sql)
+        self.assertIn("GREATEST(id_etapa_atual", sql)
+        self.assertIn("id_etapa_atual + 1", sql)
+        self.assertEqual(params, (2, 2, 10, 2, 2))
+
+    def test_inserir_historico_cliente_retorna_etapa_persistida(self):
+        cursor = FakeCursor(
+            fetchone_result=(100, "2026-01-01T00:00:00", 1, False)
+        )
+        mensagem = {
+            "id_mensagem": 20,
+            "cliente_telefone": "5571999999999",
+            "conteudo_texto": "ola",
+            "tipo_mensagem": "text",
+            "id_phone_unidade": "123456",
+            "unidade_telefone": "5571000000000",
+            "data_recebimento": "2026-01-01T00:00:00",
+            "id_hash": "wamid.cliente",
+        }
+
+        resultado = inserts.inserir_historico_mensagem_cliente(
+            mensagem,
+            id_conversa=10,
+            id_etapa=2,
+            cursor=cursor,
+        )
+
+        self.assertEqual(
+            resultado,
+            (100, "2026-01-01T00:00:00", 1, False),
+        )
+        sql, _params = cursor.calls[0]
+        self.assertIn("SELECT id_mensagem, received_data_hora, id_etapa", sql)
+
+    def test_inserir_historico_mensagem_bot_exige_id_hash_bot(self):
+        with self.assertRaises(ValueError):
+            inserts.inserir_historico_mensagem_bot(
+                {
+                    "id_conversa": 10,
+                    "mensagem_cliente_atual": {
+                        "id_mensagem_fila": 20,
+                        "id_hash_msg": "wamid.cliente",
+                    },
+                },
+                {
+                    "id_etapa_resultante": 1,
+                    "mensagem_bot": "Ola!",
+                },
+                FakeCursor(),
+            )
+
+    def test_inserir_historico_mensagem_bot_sucesso(self):
+        cursor = FakeCursor(
+            fetchone_result=(300, "2026-01-01T00:00:00", True)
+        )
+
+        resultado = inserts.inserir_historico_mensagem_bot(
+            {
+                "id_conversa": 10,
+                "mensagem_cliente_atual": {
+                    "id_mensagem_fila": 20,
+                    "id_hash_msg": "wamid.cliente",
+                    "cliente_telefone": "5571999999999",
+                    "id_phone_unidade": "123456",
+                    "unidade_telefone": "5571000000000",
+                },
+            },
+            {
+                "id_etapa_resultante": 1,
+                "mensagem_bot": "Ola!",
+                "id_hash_msg_bot": "wamid.bot",
+                "tipo_mensagem": "interactive_button",
+            },
+            cursor,
+        )
+
+        self.assertEqual(resultado, (300, "2026-01-01T00:00:00", True))
+        sql, params = cursor.calls[0]
+
+        self.assertIn("INSERT INTO chatbot.historico_mensagens", sql)
+        self.assertEqual(params[0:3], (10, 20, "wamid.cliente"))
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+## Passo 10 - Alterar `tests/unit/test_worker_support_finalizacao.py`
 
 Arquivo modificado.
 
@@ -1397,7 +1886,126 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-## Passo 9 - Criar `tests/unit/test_lastfrom_semantico.py`
+## Passo 11 - Alterar `tests/unit/test_turno_cliente.py`
+
+Arquivo modificado.
+
+Codigo completo:
+
+```python
+import unittest
+from unittest.mock import patch
+
+from core.repositories import turno_cliente
+from tests.helpers import FakeCursor
+
+
+class TurnoClienteTests(unittest.TestCase):
+    def test_dados_invalidos_bloqueiam_turno(self):
+        resultado = turno_cliente.avaliar_turno_cliente_para_fila(
+            cursor=object(),
+            cliente_telefone="",
+            id_phone_unidade="123456",
+        )
+
+        self.assertFalse(resultado["pode_enfileirar"])
+        self.assertEqual(resultado["motivo"], "dados_invalidos")
+
+    def test_sem_fila_aberta_libera(self):
+        with patch.object(
+            turno_cliente,
+            "avaliar_filas_abertas_turno",
+            return_value={
+                "existe_fila_aberta": False,
+                "todas_abertas_respondidas": False,
+                "total_abertas": 0,
+                "id_mensagem_bloqueadora": None,
+            },
+        ):
+            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
+                cursor=object(),
+                cliente_telefone="5571999999999",
+                id_phone_unidade="123456",
+            )
+
+        self.assertTrue(resultado["pode_enfileirar"])
+        self.assertEqual(resultado["motivo"], "sem_fila_aberta")
+
+    def test_fila_aberta_sem_resposta_bloqueia(self):
+        with patch.object(
+            turno_cliente,
+            "avaliar_filas_abertas_turno",
+            return_value={
+                "existe_fila_aberta": True,
+                "todas_abertas_respondidas": False,
+                "total_abertas": 1,
+                "id_mensagem_bloqueadora": 20,
+            },
+        ):
+            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
+                cursor=object(),
+                cliente_telefone="5571999999999",
+                id_phone_unidade="123456",
+            )
+
+        self.assertFalse(resultado["pode_enfileirar"])
+        self.assertEqual(resultado["motivo"], "fila_aberta_sem_resposta_bot")
+
+    def test_fila_aberta_respondida_pelo_bot_libera_recuperacao(self):
+        with patch.object(
+            turno_cliente,
+            "avaliar_filas_abertas_turno",
+            return_value={
+                "existe_fila_aberta": True,
+                "todas_abertas_respondidas": True,
+                "total_abertas": 1,
+                "id_mensagem_bloqueadora": None,
+            },
+        ):
+            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
+                cursor=object(),
+                cliente_telefone="5571999999999",
+                id_phone_unidade="123456",
+            )
+
+        self.assertTrue(resultado["pode_enfileirar"])
+        self.assertEqual(resultado["motivo"], "fila_aberta_respondida_bot")
+
+    def test_advisory_lock_usa_phone_id_e_cliente_como_chaves(self):
+        cursor = FakeCursor()
+
+        turno_cliente.adquirir_lock_turno_cliente(
+            cursor,
+            cliente_telefone="5571999999999",
+            id_phone_unidade="123456",
+        )
+
+        sql, params = cursor.calls[0]
+        self.assertIn("pg_advisory_xact_lock", sql)
+        self.assertEqual(params, ("123456", "5571999999999"))
+
+    def test_consulta_turno_usa_historico_vinculado_sem_last_from(self):
+        cursor = FakeCursor(fetchone_result=(True, True, 1, None))
+
+        resultado = turno_cliente.avaliar_filas_abertas_turno(
+            cursor,
+            cliente_telefone="5571999999999",
+            id_phone_unidade="123456",
+        )
+
+        sql, params = cursor.calls[0]
+        self.assertNotIn("last_message_from", sql)
+        self.assertIn("h.id_mensagem_fila = f.id_mensagem", sql)
+        self.assertIn("h.id_hash_cliente_origem = f.id_hash_msg", sql)
+        self.assertEqual(params, ("5571999999999", "123456"))
+        self.assertTrue(resultado["todas_abertas_respondidas"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+## Passo 12 - Criar `tests/unit/test_lastfrom_semantico.py`
 
 Arquivo novo.
 
@@ -1436,12 +2044,62 @@ def contexto_banco_base(last_from="bot", etapa=1):
 
 
 class LastFromSemanticoTests(unittest.TestCase):
-    def test_conversa_em_andamento_avanca_etapa_mesmo_com_last_from_cliente(self):
+    def test_conversa_nova_registra_cliente_e_responde_etapa_um(self):
         chamadas = []
 
         def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
             chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
-            return 100, "2026-01-01T00:00:00", True
+            return 100, "2026-01-01T00:00:00", 1, True
+
+        def fake_buscar_resposta(**_kwargs):
+            return None
+
+        def fake_update_cliente(id_conversa, cursor):
+            chamadas.append(("update_cliente", id_conversa, cursor))
+            return 1
+
+        def fake_update_bot(*_args, **_kwargs):
+            raise AssertionError("conversa nova ainda nao tem resposta do bot")
+
+        cursor = object()
+
+        with patch.object(
+            valida_historico,
+            "inserir_historico_mensagem_cliente",
+            fake_inserir,
+        ), patch.object(
+            valida_historico,
+            "buscar_resposta_bot_por_mensagem_cliente",
+            fake_buscar_resposta,
+        ), patch.object(
+            valida_historico,
+            "atualizar_conversa_mensagem_cliente",
+            fake_update_cliente,
+        ), patch.object(
+            valida_historico,
+            "atualizar_conversa_resposta_bot_sem_avancar",
+            fake_update_bot,
+        ):
+            contexto = valida_historico.valida_historico(
+                mensagem_base(),
+                contexto_banco_base(last_from="cliente", etapa=None),
+                cursor,
+            )
+
+        self.assertEqual(contexto["id_etapa_cliente"], 1)
+        self.assertEqual(contexto["id_etapa_resposta"], 1)
+        self.assertEqual(contexto["last_message_from"], "cliente")
+        self.assertEqual(
+            [chamada[0] for chamada in chamadas],
+            ["insert_cliente", "update_cliente"],
+        )
+
+    def test_retry_antes_da_resposta_mantem_etapa_e_last_from_cliente(self):
+        chamadas = []
+
+        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
+            chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
+            return 100, "2026-01-01T00:00:00", 1, False
 
         def fake_buscar_resposta(**_kwargs):
             return None
@@ -1474,17 +2132,14 @@ class LastFromSemanticoTests(unittest.TestCase):
         self.assertEqual(contexto["id_etapa_cliente"], 1)
         self.assertEqual(contexto["id_etapa_resposta"], 2)
         self.assertEqual(contexto["last_message_from"], "cliente")
-        self.assertEqual(
-            [chamada[0] for chamada in chamadas],
-            ["insert_cliente", "update_cliente"],
-        )
+        self.assertFalse(contexto["mensagem_cliente_inserida"])
 
-    def test_resposta_bot_existente_nao_volta_last_from_para_cliente(self):
+    def test_retry_apos_resposta_usa_etapas_persistidas_sem_regredir(self):
         chamadas = []
 
         def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
             chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
-            return 100, "2026-01-01T00:00:00", False
+            return 100, "2026-01-01T00:00:00", 1, False
 
         def fake_buscar_resposta(**_kwargs):
             return (
@@ -1507,6 +2162,9 @@ class LastFromSemanticoTests(unittest.TestCase):
         def fake_update_cliente(*_args, **_kwargs):
             raise AssertionError("nao deve atualizar cliente quando resposta bot ja existe")
 
+        def fake_update_bot(*_args, **_kwargs):
+            raise AssertionError("last_from ja esta semanticamente como bot")
+
         cursor = object()
 
         with patch.object(
@@ -1521,24 +2179,86 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "atualizar_conversa_mensagem_cliente",
             fake_update_cliente,
+        ), patch.object(
+            valida_historico,
+            "atualizar_conversa_resposta_bot_sem_avancar",
+            fake_update_bot,
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(retry=2),
-                contexto_banco_base(last_from="bot", etapa=1),
+                contexto_banco_base(last_from="bot", etapa=2),
                 cursor,
             )
 
+        self.assertEqual(contexto["id_etapa_cliente"], 1)
         self.assertEqual(contexto["id_etapa_resposta"], 2)
         self.assertEqual(contexto["last_message_from"], "bot")
         self.assertTrue(contexto["resposta_bot_para_mensagem_atual"])
         self.assertEqual([chamada[0] for chamada in chamadas], ["insert_cliente"])
+
+    def test_retry_repara_last_from_cliente_quando_resposta_bot_ja_existe(self):
+        chamadas = []
+
+        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
+            return 100, "2026-01-01T00:00:00", 1, False
+
+        def fake_buscar_resposta(**_kwargs):
+            return (
+                200,
+                10,
+                2,
+                "2026-01-01T00:01:00",
+                "5571999999999",
+                "Ola",
+                "text",
+                "wamid.bot",
+                20,
+                "wamid.cliente",
+                "123456",
+                "5571000000000",
+                "bot",
+                "sent",
+            )
+
+        def fake_update_bot(id_conversa, cursor):
+            chamadas.append(("update_bot_sem_avancar", id_conversa, cursor))
+            return 1
+
+        cursor = object()
+
+        with patch.object(
+            valida_historico,
+            "inserir_historico_mensagem_cliente",
+            fake_inserir,
+        ), patch.object(
+            valida_historico,
+            "buscar_resposta_bot_por_mensagem_cliente",
+            fake_buscar_resposta,
+        ), patch.object(
+            valida_historico,
+            "atualizar_conversa_resposta_bot_sem_avancar",
+            fake_update_bot,
+        ):
+            contexto = valida_historico.valida_historico(
+                mensagem_base(retry=2),
+                contexto_banco_base(last_from="cliente", etapa=2),
+                cursor,
+            )
+
+        self.assertEqual(contexto["id_etapa_cliente"], 1)
+        self.assertEqual(contexto["id_etapa_resposta"], 2)
+        self.assertEqual(contexto["last_message_from"], "bot")
+        self.assertEqual(
+            chamadas,
+            [("update_bot_sem_avancar", 10, cursor)],
+        )
 
 
 if __name__ == "__main__":
     unittest.main()
 ```
 
-## Passo 10 - Validacao
+## Passo 13 - Validacao
 
 Rodar:
 
@@ -1563,8 +2283,14 @@ E o sistema ainda consegue lidar com retry:
 ```text
 worker cai depois de registrar cliente e last_from=cliente
 mensagem volta para fila
-proximo retry calcula id_etapa_resposta pela id_etapa_atual
+proximo retry reutiliza a etapa persistida do cliente
 bot responde a etapa correta
+
+worker cai depois de persistir resposta do bot e antes de marcar fila como sent
+mensagem volta para fila
+retry encontra cliente e bot vinculados a mesma mensagem da fila
+retry usa as etapas persistidas e nao envia novamente
+conversa nao retrocede nem pula etapa
 ```
 
 ## Consequencias
@@ -1590,8 +2316,27 @@ Isso e semanticamente correto, mas aumenta a responsabilidade do sistema em trat
 - webhook com fila aberta;
 - idempotencia por historico.
 
-## Recomendacao
+## Limite conhecido mantido pelo experimento
 
-Esta mudanca e boa conceitualmente, mas eu trataria como tarefa de V2 ou como refatoracao controlada depois que o fluxo principal da V1 estiver mais maduro.
+O experimento nao elimina a janela em que a Meta confirma o envio, mas o banco
+ou o worker falha antes de persistir o historico do bot. Sem um identificador
+idempotente aceito pela Meta ou uma arquitetura de outbox, o retry ainda pode
+enviar uma resposta duplicada nesse caso raro.
 
-Na V1 atual, manter `last_message_from` quase sempre como `bot` e menos bonito semanticamente, mas reduz estados intermediarios persistidos.
+Esse risco permanece explicitamente aceito. O experimento garante que os
+estados que ja chegaram ao banco sejam recuperados sem pular ou retroceder
+etapa.
+
+## Recomendacao de aplicacao
+
+Aplicar somente com banco e servidores de teste ativos, executar toda a suite e
+simular manualmente:
+
+- conversa nova;
+- conversa em andamento;
+- midia nao suportada;
+- retry antes da resposta do bot;
+- retry depois da resposta do bot persistida;
+- resposta do bot persistida com fila ainda `processing`;
+- falha da Meta;
+- falha do banco depois do envio da Meta.
