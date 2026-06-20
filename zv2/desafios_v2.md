@@ -554,37 +554,37 @@ nao criar estados intermediarios apenas em variaveis Python.
 estado intermediario que precisa sobreviver a queda deve estar no banco.
 ```
 
-## Desafio 5 - Worker como classe
+## Desafio 5 - Modelo de execução escalável do worker
 
-Na V1:
+Na V1, `worker_flow()` concentra o ciclo operacional e existe apenas uma
+instância ativa do worker:
 
 ```text
 worker_flow()
 ```
 
-Na V2, o worker deve virar classe.
+Na V2, o requisito é executar múltiplas instâncias sem perder as garantias já
+construídas na V1. Transformar o worker em classe é uma opção de implementação,
+mas não uma obrigação arquitetural.
 
-Exemplo conceitual:
+Independentemente da forma escolhida, cada instância deverá reutilizar:
 
-```python
-class WorkerChatbot:
-    def __init__(self, worker_id, config):
-        self.worker_id = worker_id
-        self.config = config
+- dequeue com `FOR UPDATE SKIP LOCKED`;
+- lock de conversa com `lock_version`;
+- ordenação de mensagens anteriores abertas;
+- timeout e retomada de `processing` abandonado;
+- idempotência por histórico vinculado à fila;
+- commits, rollbacks e fechamento da conexão por ciclo;
+- `sent` somente depois da resposta persistida.
 
-    def run_forever(self):
-        while True:
-            self.processar_ciclo()
-
-    def processar_ciclo(self):
-        ...
-```
-
-O corpo protegido contra race condition que hoje esta em `worker_flow()` deve virar o corpo operacional da classe.
+Essas proteções formam o contrato operacional do worker. A evolução da V2 deve
+envolver esse contrato com a estrutura de execução escolhida, e não reescrever o
+fluxo de forma que as proteções sejam contornadas.
 
 ### Tarefas para V2
 
-- criar `WorkerChatbot`;
+- definir a unidade de execução de cada worker;
+- escolher entre processos, containers, threads ou outra estratégia validada;
 - manter commits/rollbacks claros por ciclo;
 - manter `sent` como ultima operacao;
 - incluir `worker_id` nos logs;
@@ -595,7 +595,9 @@ O corpo protegido contra race condition que hoje esta em `worker_flow()` deve vi
 
 Na V1, um worker deve ser suficiente para poucas unidades.
 
-Na V2, quando houver mais unidades e mais volume, sera necessario um controlador.
+Na V2, quando houver mais unidades e mais volume, sera necessario um mecanismo
+de coordenação das instâncias. Ele poderá ser um controlador da aplicação, um
+orquestrador de containers ou outra solução operacional equivalente.
 
 ### Tarefas para V2
 
@@ -1090,9 +1092,9 @@ Mesmo evoluindo, a V2 deve preservar:
 
 Principais tarefas da V2:
 
-- transformar worker em classe;
-- criar controlador de workers;
-- suportar multiplas instancias;
+- definir a unidade de execução do worker sem impor uma classe;
+- criar um mecanismo de coordenação ou orquestração de workers;
+- suportar múltiplas instâncias;
 - avaliar pool de conexoes;
 - implementar outbox ou checkpoint para envio Meta;
 - reduzir risco Meta ok + banco falhou;

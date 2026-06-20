@@ -16,6 +16,7 @@ centrais e os mapas técnicos vivem nos READMEs de cada camada.
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
 | [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
+| [Evolução para a V2](zv2/desafios_v2.md) | Escala, múltiplos workers e desafios técnicos futuros. |
 
 ## Documentação técnica
 
@@ -135,6 +136,8 @@ política de mocks.
 - Redis acelera consultas e deve possuir fallback quando previsto;
 - o webhook apenas valida e enfileira;
 - o worker é dono do fluxo da conversa e das transações do ciclo;
+- a V1 opera com uma única instância de worker, já protegida por contratos que
+  deverão sustentar múltiplas instâncias na V2;
 - chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;
 - falha ao persistir uma mensagem válida na fila retorna HTTP 503;
 - descartes intencionais por regra de negócio permanecem respostas controladas;

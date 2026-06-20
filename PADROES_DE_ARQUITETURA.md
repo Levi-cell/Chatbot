@@ -28,6 +28,55 @@ documentada antes da implementação.
 7. Não criar abstrações apenas para movimentar código; cada pasta deve representar
    uma fronteira real.
 
+## Modelo de execução da V1 e evolução para a V2
+
+Na V1, a implantação deverá manter uma única instância ativa do worker. Essa
+escolha atende ao volume inicial esperado, simplifica a operação e reduz o custo
+de infraestrutura enquanto o sistema atende poucas unidades.
+
+"Uma única instância ativa na V1" não deve ser confundida com a regra "um worker
+por conversa". A primeira é uma decisão operacional desta versão; a segunda é
+uma proteção que continuará válida mesmo quando existirem vários workers no
+sistema: dois workers nunca poderão processar simultaneamente a mesma conversa.
+
+Processamento paralelo permitido:
+
+```text
+Worker 1 -> conversa do cliente A
+Worker 2 -> conversa do cliente B
+```
+
+Processamento que deverá continuar bloqueado:
+
+```text
+Worker 1 -> conversa do cliente A
+Worker 2 -> conversa do cliente A ao mesmo tempo
+```
+
+Assim, vários workers poderão atender clientes diferentes em paralelo, mas cada
+conversa ficará sob responsabilidade de apenas um worker por vez.
+
+Embora a V1 execute apenas uma instância, seu ciclo já deve preservar as
+proteções necessárias para concorrência e recuperação:
+
+- dequeue atômico com `FOR UPDATE SKIP LOCKED`;
+- exclusão mútua por conversa com `lock_version`;
+- ordenação de mensagens anteriores ainda abertas;
+- timeout e retomada de mensagens abandonadas em `processing`;
+- idempotência pelo histórico vinculado à mensagem da fila;
+- checkpoints, commits, rollbacks e fechamento da conexão por ciclo;
+- `sent` somente depois da persistência da resposta do bot.
+
+O objetivo arquitetural da V2 será permitir múltiplas instâncias de worker para
+atender maior volume sem descartar essas garantias. Cada instância deverá
+reutilizar os mesmos contratos de ordenação, lock, retry, idempotência e
+recuperação estabelecidos na V1.
+
+A forma de implementação da V2 permanece aberta. Classe, processos, containers,
+threads ou um controlador dedicado são opções técnicas, não requisitos por si
+só. A escolha deverá ser guiada por testes de concorrência, capacidade do banco,
+observabilidade, desligamento gracioso e demanda real de produção.
+
 ## Mapa de responsabilidades
 
 ```text
@@ -67,6 +116,8 @@ explica somente a responsabilidade e os contratos da sua camada:
 - [`core/integrations/README.md`](core/integrations/README.md): integrações externas;
 - [`core/integrations/whatsapp/README.md`](core/integrations/whatsapp/README.md):
   organização da integração Meta/PyWa.
+- [`zv2/desafios_v2.md`](zv2/desafios_v2.md): evolução de capacidade e desafios
+  técnicos previstos para a V2.
 
 READMEs locais não devem copiar regras completas. Eles apontam para
 `REGRAS_DE_NEGOCIO.md` quando uma decisão de produto precisa ser interpretada e
