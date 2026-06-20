@@ -1,5 +1,7 @@
 from core.database.connection_aws import get_conn
-from core.integrations.whatsapp.tools.conta import conta_wa
+from core.integrations.whatsapp.pywa_functions.usuarios import (
+    listar_usuarios_bloqueados_meta,
+)
 from core.repositories.bloqueio_meta import (
     listar_bloqueios_meta_banco_para_reconciliacao,
 )
@@ -21,9 +23,7 @@ def listar_bloqueados_de_cada_unidade(imprimir=True):
                     f"phone id ({phone_id_unidade}):"
                 )
 
-            wa_unidade = conta_wa(phone_id_unidade)
-
-            bloqueados = wa_unidade.get_blocked_users().all(sleep=0.2)
+            bloqueados = listar_usuarios_bloqueados_meta(phone_id_unidade)
             wa_ids_bloqueados = [
                 wa_id
                 for wa_id in (

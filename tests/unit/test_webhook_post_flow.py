@@ -176,7 +176,7 @@ class WebhookPostFlowTests(unittest.TestCase):
         self.assertTrue(conn.closed)
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_falha_na_insercao_faz_rollback_e_fecha(self):
+    def test_falha_na_insercao_faz_rollback_fecha_e_retorna_503(self):
         request = FakeRequest(payload_texto_meta())
         conn = FakeConn()
 
@@ -195,7 +195,14 @@ class WebhookPostFlowTests(unittest.TestCase):
         ):
             response = post_flow.responder_post_webhook(request)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json_response_payload(response),
+            {
+                "status": "unavailable",
+                "reason": "insert_exception",
+            },
+        )
         self.assertEqual(conn.commits, 0)
         self.assertEqual(conn.rollbacks, 1)
         self.assertTrue(conn.closed)

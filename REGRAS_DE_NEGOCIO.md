@@ -369,6 +369,40 @@ documentada.
 
 Desconsiderar o conteúdo da mídia para fins de avanço de etapa não é bug.
 
+### 11.1. Exceção para conversa iniciada com mídia
+
+Quando a primeira mensagem de uma conversa for uma mídia, ainda não existirá
+uma etapa atual persistida. Nesse caso:
+
+1. o bot enviará primeiro o aviso de tipo de mensagem não suportado;
+2. o aviso utilizará a ação genérica `Continuar`;
+3. o tratamento não avançará a conversa;
+4. a primeira interação válida após o aviso solicitará a mensagem normal da
+   etapa 1;
+5. somente uma interação válida posterior à etapa 1 poderá direcionar o fluxo
+   para a etapa 2.
+
+Esse retorno intermediário à etapa 1 é intencional somente quando
+`id_etapa_atual` ainda for `NULL`, isto é, quando a conversa tiver sido iniciada
+com mídia antes da apresentação de qualquer etapa. Ele permite informar a
+limitação antes de apresentar a saudação e a identificação do Assistente de
+Agendamento do Supera.
+
+Para qualquer etapa já apresentada, a regra geral será diferente. Se a conversa
+estiver na etapa N e o cliente enviar uma mídia:
+
+1. o bot enviará o tratamento de tipo de mensagem não suportado;
+2. o tratamento não alterará a etapa persistida;
+3. a interação seguinte por texto ou pelo botão `Continuar` será interpretada
+   como resposta da etapa N;
+4. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final;
+5. a mensagem normal da etapa N não será apresentada novamente.
+
+Portanto, o tratamento não avança a etapa por conta própria. Ele oferece a ação
+que permite à próxima interação válida dar continuidade ao fluxo. A única
+situação em que essa interação apresenta a etapa atual, em vez da próxima, é a
+conversa iniciada com mídia e ainda sem etapa persistida.
+
 ## 12. Flood, payload e assinatura
 
 - A regra atual de rajada curta considera 15 eventos em 5 segundos.
@@ -471,26 +505,26 @@ Não são bugs:
 - rejeitar payload grande ou assinatura inválida sem bloquear o número informado
   na Meta.
 
-## 17. Trade-off pendente: falha ao enfileirar
+## 17. Falha ao enfileirar e reentrega da Meta
 
-Comportamento atual:
+Quando uma mensagem válida chega à transação da fila, mas conexão, inserção ou
+commit falham:
 
-- se a transação de inserção na fila falhar, será executado rollback;
+- a transação será revertida com rollback;
 - o webhook registrará `insert_exception`;
-- mesmo assim, a resposta HTTP final para a Meta será 200;
-- portanto, a mensagem poderá não estar persistida, embora a Meta possa
-  considerá-la entregue.
+- a resposta será HTTP 503 com `status = 'unavailable'`;
+- a Meta poderá tratar a entrega como malsucedida e reenviar o evento;
+- a repetição continuará protegida pela unicidade de `id_hash_msg`.
 
-Existem alternativas técnicas, mas cada uma altera o contrato operacional:
+Esse HTTP 503 é exclusivo para falha de persistência. Mensagens descartadas
+intencionalmente por turno aberto, duplicidade, flood, unidade inativa, conversa
+bloqueada ou payload sem mensagem processável continuam seguindo seus contratos
+de `ignored` e não devem ser transformadas em indisponibilidade.
 
-- retornar HTTP 5xx para solicitar uma nova entrega da Meta;
-- persistir primeiro em uma inbox ou fila durável alternativa;
-- manter HTTP 200 e aceitar o risco atual.
-
-Essa decisão ainda não foi confirmada como regra definitiva da V1. O status HTTP
-e a infraestrutura não devem ser alterados sem uma decisão explícita. Como o
-objetivo declarado é não ignorar a primeira mensagem válida, este ponto deverá
-permanecer registrado como risco conhecido.
+O retry da Meta protege a chegada ao webhook e não substitui o retry interno do
+worker. Depois que a fila foi persistida e o webhook respondeu HTTP 200, qualquer
+falha de processamento ou envio da resposta pertence à política de tentativas do
+worker.
 
 ## 18. Cache, fallback e autocura
 
@@ -702,6 +736,7 @@ Implementação principal:
 | Flood acima da métrica | Implementada | Redis, banco e memória formam a cadeia de avaliação; flood pode bloquear na Meta. |
 | Payload grande | Implementada conforme a regra | Retorna HTTP 413 e não bloqueia a identidade informada no payload. |
 | Assinatura inválida | Implementada conforme a regra | Retorna HTTP 403 e não confia no payload nem bloqueia possível vítima informada nele. |
+| Falha ao persistir mensagem válida na fila | Implementada | Executa rollback e retorna HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
 | Cache Redis com fallback para banco | Implementada nos caches principais | Unidades, clientes e conversas bloqueadas possuem estratégias de fallback. |
 | Autocura Redis/banco | Implementada no contrato da V1 | Cobre falhas detectáveis e FK stale; edição direta no banco é proibida em produção. |
 | Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade e desbloqueio individual. |

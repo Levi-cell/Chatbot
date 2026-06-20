@@ -3,7 +3,11 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
-from core.integrations.whatsapp.messages.senders import (
+from core.integrations.whatsapp.messages.etapas import (
+    TITULO_BOTAO_ETAPA_1,
+    montar_mensagem_etapa_1,
+)
+from core.integrations.whatsapp.pywa_functions.envios import (
     enviar_mensagem_texto_com_botao,
 )
 from core.logging_config import short_value
@@ -16,8 +20,8 @@ FUSO_HORARIO_ATENDIMENTO = ZoneInfo("America/Sao_Paulo")
 
 def sender_etapa1(cliente_telefone, phone_id_unidade):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = f"Ola! {saudacao}."
-    titulo_botao = "Aperte em mim"
+    mensagem_bot = montar_mensagem_etapa_1(saudacao)
+    titulo_botao = TITULO_BOTAO_ETAPA_1
 
     try:
         id_hash_msg_bot = enviar_mensagem_texto_com_botao(

@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from core.integrations.whatsapp import sender as sender_module
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.pywa_functions import etapas as sender_module
 
 
 class SenderEtapa1Tests(unittest.TestCase):
@@ -32,11 +32,25 @@ class SenderEtapa1Tests(unittest.TestCase):
 
         self.assertEqual(
             chamadas,
-            [("5571999999999", "Ola! Boa tarde.", "Aperte em mim", "123456")],
+            [(
+                "5571999999999",
+                (
+                    "Olá! Boa tarde. Seja bem-vindo ao Assistente de "
+                    "Agendamento do Supera."
+                ),
+                "Aperte em mim",
+                "123456",
+            )],
         )
         self.assertTrue(resultado["enviou"])
         self.assertFalse(resultado["resposta_ja_existia"])
-        self.assertEqual(resultado["mensagem_bot"], "Ola! Boa tarde.")
+        self.assertEqual(
+            resultado["mensagem_bot"],
+            (
+                "Olá! Boa tarde. Seja bem-vindo ao Assistente de "
+                "Agendamento do Supera."
+            ),
+        )
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.1")
         self.assertEqual(resultado["id_etapa_resultante"], 1)
         self.assertEqual(resultado["tipo_mensagem"], "interactive_button")

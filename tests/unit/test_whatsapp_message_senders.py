@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.integrations.whatsapp.messages import senders as senders_module
+from core.integrations.whatsapp.pywa_functions import envios as senders_module
 
 
 class FakeClienteWa:

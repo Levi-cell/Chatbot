@@ -298,7 +298,18 @@ def worker_flow():
                     if unlock_realizado is not None:
                         conn_ciclo.commit()
 
-                    conn_ciclo.close()
-
                 except Exception as erro:
-                    logger.warning("finalizacao_ciclo_falhou | erro=%s", erro)
+                    logger.exception(
+                        "finalizacao_ciclo_falhou | acao=continuar_para_close erro=%s",
+                        erro,
+                    )
+
+                finally:
+                    try:
+                        conn_ciclo.close()
+
+                    except Exception as erro:
+                        logger.exception(
+                            "conexao_ciclo_close_falhou | acao=registrar_e_continuar erro=%s",
+                            erro,
+                        )

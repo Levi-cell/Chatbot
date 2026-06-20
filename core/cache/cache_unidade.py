@@ -336,7 +336,11 @@ def _cache_valido(r):
 
         return r.hlen(REDIS_KEY) == total_esperado
 
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "cache_validacao_erro | acao=considerar_invalido_e_usar_fallback erro=%s",
+            exc,
+        )
         return False
 
 

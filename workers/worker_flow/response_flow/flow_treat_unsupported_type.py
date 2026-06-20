@@ -1,6 +1,6 @@
 import logging
 
-from core.integrations.whatsapp.sender_tratamento import (
+from core.integrations.whatsapp.pywa_functions.tratamentos_type import (
     sender_tratamento_tipo_nao_suportado,
 )
 
@@ -50,14 +50,12 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
         )
 
     if contexto_validacao["tipo_tratamento"] == "tipo_mensagem_nao_suportado":
-        mensagem_bot = _montar_mensagem_tipo_nao_suportado(contexto_historico)
-
         return sender_tratamento_tipo_nao_suportado(
             cliente_telefone=mensagem_cliente_atual["cliente_telefone"],
             phone_id_unidade=mensagem_cliente_atual["id_phone_unidade"],
             id_etapa=contexto_historico["id_etapa_cliente"],
             tipo_mensagem=contexto_validacao.get("tipo_mensagem"),
-            mensagem_bot=mensagem_bot,
+            conversa_nova=contexto_historico.get("id_etapa_atual") is None,
         )
 
     logger.warning(
@@ -67,19 +65,4 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
     )
     raise NotImplementedError(
         f"Tratamento {contexto_validacao['tipo_tratamento']} ainda nao implementado"
-    )
-
-
-def _montar_mensagem_tipo_nao_suportado(contexto_historico):
-    if contexto_historico.get("id_etapa_atual") is None:
-        return (
-            "Ola! Vi que voce iniciou o atendimento com uma midia.\n\n"
-            "Por enquanto eu so consigo continuar por mensagem de texto ou botoes. "
-            "Envie uma mensagem de texto para comecarmos."
-        )
-
-    return (
-        "Recebi uma midia, mas nesta etapa eu preciso que voce responda por texto "
-        "ou use os botoes disponiveis.\n\n"
-        "Envie uma mensagem de texto para continuarmos."
     )

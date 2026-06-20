@@ -1,6 +1,6 @@
 import logging
 
-from core.integrations.whatsapp.tools.conta import conta_wa
+from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.logging_config import short_value
 
 
@@ -47,3 +47,8 @@ def desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade):
     )
 
     return resultado
+
+
+def listar_usuarios_bloqueados_meta(phone_id_unidade):
+    cliente_wa = conta_wa(phone_id_unidade)
+    return cliente_wa.get_blocked_users().all(sleep=0.2)

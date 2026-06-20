@@ -62,19 +62,19 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
             phone_id_unidade,
             id_etapa,
             tipo_mensagem,
-            mensagem_bot,
+            conversa_nova,
         ):
             chamadas.append((
                 cliente_telefone,
                 phone_id_unidade,
                 id_etapa,
                 tipo_mensagem,
-                mensagem_bot,
+                conversa_nova,
             ))
             return {
                 "enviou": True,
                 "resposta_ja_existia": False,
-                "mensagem_bot": mensagem_bot,
+                "mensagem_bot": "mensagem de tratamento",
                 "id_hash_msg_bot": "wamid.bot.tratamento",
                 "id_etapa_resultante": id_etapa,
                 "tipo_mensagem": "interactive_button",
@@ -93,8 +93,10 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
                 contexto_validacao_base(),
             )
 
-        self.assertEqual(chamadas[0][:4], ("5571999999999", "123456", 1, "image"))
-        self.assertIn("continuarmos", chamadas[0][4])
+        self.assertEqual(
+            chamadas,
+            [("5571999999999", "123456", 1, "image", False)],
+        )
         self.assertTrue(resultado["enviou"])
         self.assertTrue(resultado["tratamento"])
         self.assertFalse(resultado["atualizar_conversa"])
@@ -107,13 +109,13 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
             phone_id_unidade,
             id_etapa,
             tipo_mensagem,
-            mensagem_bot,
+            conversa_nova,
         ):
-            chamadas.append(mensagem_bot)
+            chamadas.append(conversa_nova)
             return {
                 "enviou": True,
                 "resposta_ja_existia": False,
-                "mensagem_bot": mensagem_bot,
+                "mensagem_bot": "mensagem inicial",
                 "id_hash_msg_bot": "wamid.bot.tratamento",
                 "id_etapa_resultante": id_etapa,
                 "tipo_mensagem": "interactive_button",
@@ -132,8 +134,7 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
                 contexto_validacao_base(),
             )
 
-        self.assertIn("iniciou o atendimento", chamadas[0])
-        self.assertIn("comecarmos", chamadas[0])
+        self.assertEqual(chamadas, [True])
         self.assertEqual(resultado["id_etapa_resultante"], 1)
 
 

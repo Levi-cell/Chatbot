@@ -13,7 +13,9 @@ from core.cache.cache_unidade import (
 )
 from core.integrations.whatsapp.tools.ativando_numero import registrar_numero_whatsapp
 from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
-from core.integrations.whatsapp.block import desbloquear_usuario_meta
+from core.integrations.whatsapp.pywa_functions.usuarios import (
+    desbloquear_usuario_meta,
+)
 from core.logging_config import short_value
 from core.repositories.cache_control import incrementar_versao_cache_unidades
 
@@ -545,7 +547,11 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
                 url,
                 obj.id_cliente.nome or obj.id_cliente.waid_telefone,
             )
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "admin_cliente_link_falhou | acao=retornar_texto_sem_link erro=%s",
+                exc,
+            )
             return obj.id_cliente.nome or obj.id_cliente.waid_telefone
 
     cliente_link.short_description = "Cliente"
@@ -822,7 +828,11 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
                 url,
                 obj.id_cliente.nome or obj.id_cliente.waid_telefone,
             )
-        except Exception:
+        except Exception as exc:
+            logger.exception(
+                "admin_cliente_link_falhou | acao=retornar_texto_sem_link erro=%s",
+                exc,
+            )
             return obj.id_cliente.nome or obj.id_cliente.waid_telefone
 
     cliente_link.short_description = "Cliente"

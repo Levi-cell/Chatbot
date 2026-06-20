@@ -40,10 +40,5 @@ def validar_resposta_cliente(contexto_historico):
         "tipo_tratamento": RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO,
         "motivo": RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO,
         "tipo_mensagem": tipo_mensagem,
-        "mensagem_bot": (
-            "Por enquanto consigo processar apenas mensagens de texto ou botoes. "
-            "Envie sua resposta novamente em texto ou clique no botao para retornar ao atendimento."
-        ),
-        "botao": "Continuar",
         "avancar_etapa": False,
     }

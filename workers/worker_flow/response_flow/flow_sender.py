@@ -1,6 +1,6 @@
 import logging
 
-from core.integrations.whatsapp.sender import sender_etapa1
+from core.integrations.whatsapp.pywa_functions.etapas import sender_etapa1
 
 
 logger = logging.getLogger("worker.sender")

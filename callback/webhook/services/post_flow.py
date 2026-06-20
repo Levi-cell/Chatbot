@@ -102,12 +102,16 @@ def responder_post_webhook(request):
             )
 
         else:
-            logger.warning(
-                "mensagem_ignorada | motivo=%s acao=fila_nao_inserida cliente=%s phone_number_id=%s",
+            logger.error(
+                "request_indisponivel | motivo=%s acao=retornar_503_para_reentrega cliente=%s phone_number_id=%s",
                 resultado_fila["reason"],
                 short_value(cliente_telefone),
                 short_value(phone_number_id),
             )
+            return JsonResponse({
+                "status": "unavailable",
+                "reason": resultado_fila["reason"],
+            }, status=503)
 
     except Exception:
         logger.exception(

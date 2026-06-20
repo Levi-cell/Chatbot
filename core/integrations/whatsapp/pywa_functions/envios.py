@@ -2,13 +2,11 @@ import logging
 
 from pywa.types import Button
 
-from core.integrations.whatsapp.tools.conta import conta_wa
+from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.logging_config import short_value
 
 
 logger = logging.getLogger("whatsapp.pywa")
-
-# URL dev webhook: https://gladys-tetrarchic-dovie.ngrok-free.dev/webhook
 
 
 def enviar_mensagem_texto(to, text, phone_id_unidade):
