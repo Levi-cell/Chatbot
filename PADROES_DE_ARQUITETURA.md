@@ -116,7 +116,7 @@ explica somente a responsabilidade e os contratos da sua camada:
 - [`core/integrations/README.md`](core/integrations/README.md): integrações externas;
 - [`core/integrations/whatsapp/README.md`](core/integrations/whatsapp/README.md):
   organização da integração Meta/PyWa.
-- [`zv2/desafios_v2.md`](_V2/desafios_v2.md): evolução de capacidade e desafios
+- [`_V2/desafios_v2.md`](_V2/desafios_v2.md): evolução de capacidade e desafios
   técnicos previstos para a V2.
 
 READMEs locais não devem copiar regras completas. Eles apontam para
@@ -135,6 +135,7 @@ Responsabilidades permitidas:
 - funções SQL de repositório;
 - cache e fallback;
 - integrações externas;
+- configuração por ambiente;
 - configuração de logging;
 - exceções compartilhadas.
 
@@ -380,16 +381,16 @@ Um `tool` não deve se tornar dependência do fluxo normal. Quando uma operaçã
 reutilizada em runtime, mova a implementação para a camada apropriada e faça o
 tool chamá-la.
 
-Exceção legada atual:
+Configuração operacional:
 
 ```text
 core/integrations/whatsapp/tools/config.py
 ```
 
-Esse arquivo ainda fornece configuração compartilhada para a integração. Ele não
-deve servir de exemplo para novas configurações. Uma futura migração de
-credenciais deve movê-las para configuração segura de ambiente sem ser misturada
-com outra refatoração.
+Esse arquivo fornece a configuração compartilhada da integração WhatsApp, mas os
+valores vêm de `core/config_env.py` e das variáveis de ambiente. Ele não deve
+armazenar token, WABA ID, phone number ID ou outro valor sensível diretamente no
+código.
 
 ## Cache
 
@@ -438,9 +439,12 @@ desenvolvimento já delimitadas.
 ## Configuração e segredos
 
 - não adicionar novos tokens ou credenciais diretamente no código;
-- preferir variáveis de ambiente ou configuração externa;
+- usar `core/config_env.py` para leitura e validação de variáveis de ambiente;
+- manter `.env.example` sem segredos reais;
+- manter `.env` fora do Git;
 - IDs públicos e limites podem ser constantes quando não forem segredos;
-- não misturar migração de credenciais com refatoração estrutural;
+- mudanças de configuração não devem alterar fluxo, fila, histórico ou regra de
+  negócio;
 - testes devem usar valores fictícios e nunca credenciais reais.
 
 ## Testes

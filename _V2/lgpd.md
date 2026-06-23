@@ -6,6 +6,8 @@ Registrar os pontos de LGPD que ficam fora da V1 básica. A V1 deve documentar o
 dados tratados e reduzir exposição desnecessária. A V2 deve transformar isso em
 processo, retenção e governança.
 
+Documento base da V1: [LGPD_V1.md](../LGPD_V1.md).
+
 ## Dados Pessoais Tratados pelo Sistema
 
 Na prática, o sistema pode tratar:

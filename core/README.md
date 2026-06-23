@@ -14,6 +14,7 @@ operacionais. `core` não conhece o fluxo completo de nenhum ponto de entrada.
 | `database/` | Conexão, DDL, funções PostgreSQL e setup | [database/README.md](database/README.md) |
 | `repositories/` | SQL de runtime usando cursor recebido | [repositories/README.md](repositories/README.md) |
 | `integrations/` | Comunicação com serviços externos | [integrations/README.md](integrations/README.md) |
+| `config_env.py` | Leitura de `.env`, variáveis de ambiente e validação de tipos | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#configuração-e-segredos) |
 | `logging_config.py` | Configuração comum de logs e redução de identificadores | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#logging-e-exceções) |
 
 ## Contrato

@@ -1,26 +1,30 @@
-import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+from core.config_env import env_bool, env_csv, env_int, env_optional, env_required
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://gladys-tetrarchic-dovie.ngrok-free.dev",
-]
+CSRF_TRUSTED_ORIGINS = env_csv("DJANGO_CSRF_TRUSTED_ORIGINS")
 
-SECRET_KEY = 'django-insecure-)m%ovcl#x6ks*d3h#!!+=ue988%v(d01j$b3@)^#ymae9clf*z'
+SECRET_KEY = env_required("DJANGO_SECRET_KEY")
 
-DEBUG = True
+DEBUG = env_bool("DJANGO_DEBUG", False)
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = env_csv("DJANGO_ALLOWED_HOSTS", ["localhost", "127.0.0.1"])
 
-WEBHOOK_MAX_BODY_BYTES = int(os.getenv("WEBHOOK_MAX_BODY_BYTES", 256 * 1024))
+WEBHOOK_MAX_BODY_BYTES = env_int("WEBHOOK_MAX_BODY_BYTES", 256 * 1024)
 
-META_APP_SECRET = os.getenv("META_APP_SECRET", "")
-META_WEBHOOK_SIGNATURE_REQUIRED = (
-    os.getenv("META_WEBHOOK_SIGNATURE_REQUIRED", "False").strip().lower()
-    in {"1", "true", "yes", "sim"}
+META_APP_SECRET = env_optional("META_APP_SECRET")
+META_WEBHOOK_SIGNATURE_REQUIRED = env_bool(
+    "META_WEBHOOK_SIGNATURE_REQUIRED",
+    False,
 )
+
+SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", False)
+SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", False)
+CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", False)
+SECURE_HSTS_SECONDS = env_int("DJANGO_SECURE_HSTS_SECONDS", 0)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -96,11 +100,11 @@ WSGI_APPLICATION = 'callback.wsgi.application'
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "db_chatbot",
-        "USER": "fushi",
-        "PASSWORD": "fushi998874_",
-        "HOST": "chatbotdb.chi8soygomha.sa-east-1.rds.amazonaws.com",
-        "PORT": "5432",
+        "NAME": env_required("DB_NAME"),
+        "USER": env_required("DB_USER"),
+        "PASSWORD": env_required("DB_PASSWORD"),
+        "HOST": env_required("DB_HOST"),
+        "PORT": env_int("DB_PORT", 5432),
         "OPTIONS": {
             "options": "-c search_path=chatbot"
         }

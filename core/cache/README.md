@@ -20,6 +20,19 @@ core/cache/
     └── cache_flood_redis.py
 ```
 
+`redis_client.py` lê a configuração por `core/config_env.py`:
+
+```text
+REDIS_HOST
+REDIS_PORT
+REDIS_USERNAME
+REDIS_PASSWORD
+REDIS_SSL
+```
+
+Esses valores devem vir de `.env` local, variáveis do ambiente de produção ou
+gerenciador de segredos. Não coloque credenciais Redis diretamente no código.
+
 ## Princípios
 
 - PostgreSQL continua sendo a fonte persistida da verdade;

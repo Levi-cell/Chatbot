@@ -505,7 +505,7 @@ Não são bugs:
 - rejeitar payload grande ou assinatura inválida sem bloquear o número informado
   na Meta.
 
-## 17. Falha ao enfileirar e reentrega da Meta
+## 17. Falhas operacionais do webhook e reentrega da Meta
 
 Quando uma mensagem válida chega à transação da fila, mas conexão, inserção ou
 commit falham:
@@ -516,7 +516,16 @@ commit falham:
 - a Meta poderá tratar a entrega como malsucedida e reenviar o evento;
 - a repetição continuará protegida pela unicidade de `id_hash_msg`.
 
-Esse HTTP 503 é exclusivo para falha de persistência. Mensagens descartadas
+Também é HTTP 503 quando o webhook não consegue validar a unidade porque Redis e
+banco estão indisponíveis no mesmo ponto do fluxo. Nesse caso:
+
+- o webhook registrará `unit_validation_unavailable`;
+- a mensagem não será tratada como unidade inativa;
+- a Meta poderá reenviar o evento quando o endpoint voltar a responder com
+  sucesso.
+
+Esse HTTP 503 é reservado para falhas operacionais que impedem o sistema de
+decidir ou persistir uma mensagem válida com segurança. Mensagens descartadas
 intencionalmente por turno aberto, duplicidade, flood, unidade inativa, conversa
 bloqueada ou payload sem mensagem processável continuam seguindo seus contratos
 de `ignored` e não devem ser transformadas em indisponibilidade.
@@ -736,7 +745,7 @@ Implementação principal:
 | Flood acima da métrica | Implementada | Redis, banco e memória formam a cadeia de avaliação; flood pode bloquear na Meta. |
 | Payload grande | Implementada conforme a regra | Retorna HTTP 413 e não bloqueia a identidade informada no payload. |
 | Assinatura inválida | Implementada conforme a regra | Retorna HTTP 403 e não confia no payload nem bloqueia possível vítima informada nele. |
-| Falha ao persistir mensagem válida na fila | Implementada | Executa rollback e retorna HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
+| Falha operacional do webhook com mensagem válida | Implementada | Inserção/commit da fila e validação de unidade indisponível retornam HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
 | Cache Redis com fallback para banco | Implementada nos caches principais | Unidades, clientes e conversas bloqueadas possuem estratégias de fallback. |
 | Autocura Redis/banco | Implementada no contrato da V1 | Cobre falhas detectáveis e FK stale; edição direta no banco é proibida em produção. |
 | Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade e desbloqueio individual. |

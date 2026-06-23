@@ -14,6 +14,7 @@ core/integrations/whatsapp/
 ├── exceptions.py
 ├── messages/
 │   ├── etapas.py
+│   ├── ferramentas.md
 │   └── tratamentos.py
 ├── pywa_functions/
 │   ├── cliente.py
@@ -85,9 +86,17 @@ Ferramentas administrativas ou relatórios executados conscientemente:
 `tools` não deve conter implementação duplicada usada pelo runtime. Uma operação
 compartilhada deve morar em `pywa_functions` e ser chamada pela ferramenta.
 
-`tools/config.py` é uma exceção legada de configuração. Não adicione novos
-segredos diretamente nele; a migração para configuração externa deve ocorrer de
-forma planejada.
+`tools/config.py` centraliza a configuração operacional da integração Meta, mas
+os valores são lidos por `core/config_env.py` a partir de variáveis de ambiente:
+
+```text
+META_ACCESS_TOKEN
+META_WABA_ID
+META_PHONE_NUMBER_ID_DEV
+```
+
+Não adicione token, WABA ID, phone number ID ou outro valor sensível diretamente
+nesse arquivo.
 
 ## Limites
 

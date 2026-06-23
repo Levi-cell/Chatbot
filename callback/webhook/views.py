@@ -3,12 +3,14 @@ import logging
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+from core.config_env import env_required
+
 from .services.post_flow import responder_post_webhook
 
 
 logger = logging.getLogger("webhook.request")
 
-VERIFY_TOKEN = "123456"
+VERIFY_TOKEN = env_required("META_WEBHOOK_VERIFY_TOKEN")
 
 
 @csrf_exempt

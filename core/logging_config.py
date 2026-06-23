@@ -20,11 +20,15 @@ def setup_logging(level=logging.INFO):
     )
 
 
-def short_value(value, head=14, tail=8):
+def short_value(value, head=4, tail=4):
     if value is None:
         return "-"
 
     text = str(value)
+
+    if text.isdigit() and len(text) >= 8:
+        return f"{text[:2]}...{text[-2:]}"
+
     limit = head + tail + 3
 
     if len(text) <= limit:

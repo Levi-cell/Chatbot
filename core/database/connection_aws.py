@@ -2,15 +2,17 @@ import logging
 
 import psycopg2
 
+from core.config_env import env_int, env_required
+
 
 logger = logging.getLogger("db.connection")
 
 setup = {
-    "host": "chatbotdb.chi8soygomha.sa-east-1.rds.amazonaws.com",
-    "database": "db_chatbot",
-    "user": "fushi",
-    "password": "fushi998874_",
-    "port": "5432"
+    "host": env_required("DB_HOST"),
+    "database": env_required("DB_NAME"),
+    "user": env_required("DB_USER"),
+    "password": env_required("DB_PASSWORD"),
+    "port": env_int("DB_PORT", 5432),
 }
 
 
@@ -30,5 +32,5 @@ def get_conn(application_name=None):
     )
     return conn
 
-## conn.close automaticamente fecha qualquer cursor associado a ela,
-# se fizer conn.close n precisa fazer cursor.close
+# conn.close automaticamente fecha qualquer cursor associado a ela.
+# Se fizer conn.close, nao precisa fazer cursor.close.

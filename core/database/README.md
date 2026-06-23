@@ -88,9 +88,21 @@ Mudanças nessas funções podem alterar ordenação, retry e exclusão mútua. 
 
 ## Segurança
 
-Novas credenciais não devem ser adicionadas ao código. Antes de produção,
-configurações legadas de banco e serviços devem ser externalizadas para ambiente
-ou gerenciador de segredos.
+Credenciais de banco são carregadas por `core/config_env.py` a partir de
+variáveis de ambiente:
+
+```text
+DB_HOST
+DB_NAME
+DB_USER
+DB_PASSWORD
+DB_PORT
+```
+
+Novas credenciais não devem ser adicionadas ao código, README, logs ou prints.
+Em desenvolvimento, use `.env` local baseado em `.env.example`. Em produção, use
+variáveis do serviço, arquivo de ambiente com permissão restrita ou gerenciador
+de segredos.
 
 ## Testes relacionados
 

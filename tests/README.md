@@ -10,7 +10,7 @@ Código de produção não deve importar `tests`.
 
 ```text
 tests/
-├── __init__.py       preparação de paths e Django
+├── __init__.py       preparação de paths, Django e variáveis falsas de teste
 ├── helpers.py        conexões, cursores e requests falsos
 ├── payloads.py       payloads Meta fictícios
 └── unit/
@@ -42,6 +42,10 @@ Execute com o ambiente virtual que contém as dependências de
 [`requirements.txt`](../requirements.txt). Testes unitários não devem depender de
 Meta, Redis ou AWS reais.
 
+`tests/__init__.py` define valores fictícios para as variáveis obrigatórias de
+configuração. Isso permite testar `core/config_env.py`, Django e integrações sem
+ler segredos reais do `.env` local.
+
 ## Estratégia
 
 Os testes cobrem comportamento e contratos arquiteturais:
@@ -54,12 +58,15 @@ Os testes cobrem comportamento e contratos arquiteturais:
 - status HTTP e transação do webhook;
 - fallback de cache e operações Meta-first;
 - estrutura de `messages`, `pywa_functions` e `tools`.
+- configuração por ambiente, mascaramento de identificadores e ausência de
+  dependência de segredos reais.
 
 ## Convenções
 
 - `unittest` é o runner atual;
 - `patch` e classes `Fake*` ficam somente em `tests`;
 - valores de telefone, IDs e tokens são fictícios;
+- `.env` real não deve ser necessário para a suíte unitária;
 - sucesso, falha e retry devem ser cobertos em fluxos críticos;
 - testes de contrato podem usar `inspect` quando a fronteira arquitetural é parte
   da garantia;
@@ -72,3 +79,11 @@ Os testes cobrem comportamento e contratos arquiteturais:
 3. Simule falhas externas; não faça chamadas reais.
 4. Confirme efeitos persistidos, status, commits e rollbacks relevantes.
 5. Rode o arquivo específico e depois a descoberta completa.
+
+## Testes de configuração e segurança
+
+O arquivo `tests/unit/test_security_config.py` cobre:
+
+- mascaramento de telefones e identificadores longos em logs;
+- rejeição de variável obrigatória ausente;
+- conversão de booleanos, inteiros e listas vindas do ambiente.

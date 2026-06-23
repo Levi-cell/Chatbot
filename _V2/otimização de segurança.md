@@ -30,34 +30,22 @@ Mesmo assim, existem melhorias importantes para produção.
 
 # Parte 1 - Segredos, tokens e variáveis sensíveis
 
-## Risco atual
+## Estado atual da V1
 
-O projeto ainda possui informações sensíveis hardcoded em alguns arquivos, como:
+A V1 já externalizou os principais segredos e configurações operacionais por
+meio de `core/config_env.py`, `.env.example` e variáveis de ambiente.
 
-- Host do banco.
-- Usuário do banco.
-- Senha do banco.
-- Redis host.
-- Redis password.
-- `SECRET_KEY` do Django.
-- Possíveis tokens Meta em arquivos utilitários.
-
-Isso é perigoso porque:
-
-- Se o GitHub vazar, o banco/token pode ser usado por terceiros.
-- Se alguém tiver acesso ao repositório, consegue acessar infraestrutura.
-- Trocar senha/token fica mais difícil.
-- Viola boas práticas de produção e pode gerar risco LGPD.
-
-## Tarefa futura
-
-Mover todos os segredos para variáveis de ambiente:
+Valores que não devem voltar para o código:
 
 ```text
 DJANGO_SECRET_KEY
 DJANGO_DEBUG
 DJANGO_ALLOWED_HOSTS
 DJANGO_CSRF_TRUSTED_ORIGINS
+DJANGO_SECURE_SSL_REDIRECT
+DJANGO_SESSION_COOKIE_SECURE
+DJANGO_CSRF_COOKIE_SECURE
+DJANGO_SECURE_HSTS_SECONDS
 DB_HOST
 DB_NAME
 DB_USER
@@ -67,22 +55,31 @@ REDIS_HOST
 REDIS_PORT
 REDIS_USERNAME
 REDIS_PASSWORD
-META_APP_SECRET
+REDIS_SSL
 META_ACCESS_TOKEN
 META_WEBHOOK_VERIFY_TOKEN
+META_APP_SECRET
+META_WEBHOOK_SIGNATURE_REQUIRED
+META_WABA_ID
+META_PHONE_NUMBER_ID_DEV
+WEBHOOK_MAX_BODY_BYTES
 ```
 
-## Proteção recomendada
+## Risco que permanece
 
-Na AWS, usar preferencialmente:
+Externalizar segredo não elimina todos os riscos. Ainda é necessário:
 
-```text
-AWS Secrets Manager
-ou
-AWS Systems Manager Parameter Store
-```
+- preencher `.env` local sem compartilhar;
+- manter `.env` fora do Git;
+- rotacionar tokens e senhas que já tenham aparecido em prints, histórico local
+  ou conversas;
+- usar `DEBUG=False` em produção;
+- configurar hosts, HTTPS e cookies seguros no domínio final;
+- restringir permissões de banco, Redis, Meta e AWS.
 
-Para V1 econômica, pode usar:
+## Proteção recomendada para produção
+
+Na V1 econômica, pode usar arquivo de ambiente fora do código:
 
 ```text
 /etc/chatbot.env
@@ -93,6 +90,14 @@ Mas esse arquivo precisa ter permissão restrita:
 ```bash
 sudo chown root:root /etc/chatbot.env
 sudo chmod 600 /etc/chatbot.env
+```
+
+Na V2 ou em uma produção mais madura, usar preferencialmente:
+
+```text
+AWS Secrets Manager
+ou
+AWS Systems Manager Parameter Store
 ```
 
 ## Rotação de tokens
@@ -721,7 +726,7 @@ Logs devem indicar falha
 
 ## Prioridade alta para produção V1
 
-1. Tirar senhas/tokens do código.
+1. Manter senhas/tokens fora do código e do Git.
 2. Usar `DEBUG=False`.
 3. Configurar `ALLOWED_HOSTS`.
 4. Configurar HTTPS real.
@@ -731,6 +736,7 @@ Logs devem indicar falha
 8. Security Groups corretos.
 9. Backup RDS.
 10. Alertas de custo.
+11. Rotacionar qualquer segredo que tenha sido exposto antes da segurança V1.
 
 ## Prioridade média
 

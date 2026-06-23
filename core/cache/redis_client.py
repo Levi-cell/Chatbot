@@ -4,11 +4,19 @@ import time
 
 import redis
 
+from core.config_env import env_bool, env_int, env_optional, env_required
+
 
 logger = logging.getLogger(__name__)
 
 _redis_client = None
 _lock = threading.Lock()
+
+REDIS_HOST = env_required("REDIS_HOST")
+REDIS_PORT = env_int("REDIS_PORT", 6379)
+REDIS_USERNAME = env_optional("REDIS_USERNAME") or None
+REDIS_PASSWORD = env_optional("REDIS_PASSWORD") or None
+REDIS_SSL = env_bool("REDIS_SSL", False)
 
 
 def get_redis():
@@ -33,11 +41,12 @@ def _create_client():
 
     try:
         client = redis.Redis(
-            host="redis-14738.crce216.sa-east-1-2.ec2.cloud.redislabs.com",
-            port=14738,
+            host=REDIS_HOST,
+            port=REDIS_PORT,
             decode_responses=True,
-            username="default",
-            password="CE3qT6jtGcErfsdkl4vQT9tnxz5QcHce",
+            username=REDIS_USERNAME,
+            password=REDIS_PASSWORD,
+            ssl=REDIS_SSL,
             socket_connect_timeout=5,
             socket_timeout=5,
             health_check_interval=30,

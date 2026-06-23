@@ -16,12 +16,15 @@ workers/
 │   ├── valida_banco.py
 │   ├── valida_historico.py
 │   ├── valida_resposta_cliente.py
+│   ├── tratar_bloqueio.py
 │   ├── suport_functions.py
 │   └── response_flow/
-└── tratamento_erros_externos/
+├── tratamento_erros_externos/
+└── challenge_template.py
 ```
 
-`worker_follow_up/` ainda não participa do fluxo ativo da V1.
+`challenge_template.py` é apoio operacional e não participa do ciclo principal
+do worker.
 
 ## Ciclo principal
 
@@ -97,4 +100,7 @@ Textos e chamadas PyWa não pertencem a essa pasta. Use
 - `tests/unit/test_worker_support_finalizacao.py`;
 - `tests/unit/test_retry_lock_lifecycle.py`;
 - `tests/unit/test_lastfrom_semantico.py`;
+- `tests/unit/test_flow_sender.py`;
+- `tests/unit/test_flow_treat_context.py`;
+- `tests/unit/test_flow_treat_unsupported_type.py`;
 - `tests/unit/test_repositories.py`.

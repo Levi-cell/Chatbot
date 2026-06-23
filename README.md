@@ -12,6 +12,7 @@ centrais e os mapas técnicos vivem nos READMEs de cada camada.
 |---|---|
 | [Regras de negócio](REGRAS_DE_NEGOCIO.md) | Fonte de verdade sobre turno, fila, etapas, retries, bloqueios e comportamentos esperados. |
 | [Padrões de arquitetura](PADROES_DE_ARQUITETURA.md) | Fronteiras, dependências permitidas e local correto para novas funções. |
+| [LGPD mínima da V1](LGPD_V1.md) | Registro prático dos dados tratados, finalidades e limites de LGPD para a primeira produção. |
 | [Webhook](callback/README.md) | Entrada HTTP, validações, anti-flood e persistência na fila. |
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
@@ -27,6 +28,9 @@ centrais e os mapas técnicos vivem nos READMEs de cada camada.
 | SQL de runtime | [core/repositories/README.md](core/repositories/README.md) |
 | Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
 | WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
+| Segurança avançada futura | [_V2/seguranca-avancada.md](_V2/seguranca-avancada.md) |
+| Infraestrutura futura | [_V2/infraestrutura.md](_V2/infraestrutura.md) |
+| Concorrência futura | [_V2/concorrencia-workers.md](_V2/concorrencia-workers.md) |
 
 ## Visão geral
 
@@ -57,10 +61,13 @@ tests             testes, fakes, mocks e contratos
 - PostgreSQL acessível;
 - Redis acessível;
 - credenciais Meta/PyWa para envios reais;
+- arquivo `.env` local baseado em [`.env.example`](.env.example);
 - dependências de [`requirements.txt`](requirements.txt).
 
-Não adicione novos segredos ao código. Configurações de produção devem utilizar
-variáveis de ambiente ou um gerenciador de segredos.
+Não adicione segredos ao código. A configuração atual é carregada por
+`core/config_env.py` a partir de variáveis de ambiente e do arquivo `.env` local.
+Em produção, o `.env` pode ser substituído por variáveis do serviço ou por um
+gerenciador de segredos.
 
 ## Preparação local
 
@@ -68,20 +75,41 @@ variáveis de ambiente ou um gerenciador de segredos.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-Configure as dependências externas antes de iniciar. Variáveis relacionadas ao
-webhook incluem:
+Depois de copiar o arquivo, preencha `.env` com os valores reais do ambiente. O
+arquivo `.env` é ignorado pelo Git e não deve ser enviado para repositório,
+print, documentação ou conversa.
+
+Variáveis principais:
 
 ```text
+DJANGO_SECRET_KEY
+DJANGO_DEBUG
+DJANGO_ALLOWED_HOSTS
+DJANGO_CSRF_TRUSTED_ORIGINS
+DB_HOST
+DB_NAME
+DB_USER
+DB_PASSWORD
+DB_PORT
+REDIS_HOST
+REDIS_PORT
+REDIS_USERNAME
+REDIS_PASSWORD
+REDIS_SSL
+META_ACCESS_TOKEN
+META_WEBHOOK_VERIFY_TOKEN
 META_APP_SECRET
 META_WEBHOOK_SIGNATURE_REQUIRED
+META_WABA_ID
+META_PHONE_NUMBER_ID_DEV
 WEBHOOK_MAX_BODY_BYTES
 ```
 
-O projeto ainda possui configurações legadas que devem ser externalizadas antes
-de produção. Nunca registre valores reais de tokens, senhas ou payloads completos
-na documentação.
+Nunca registre valores reais de tokens, senhas ou payloads completos na
+documentação.
 
 ## Banco de desenvolvimento
 
@@ -140,6 +168,8 @@ política de mocks.
   deverão sustentar múltiplas instâncias na V2;
 - chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;
 - falha ao persistir uma mensagem válida na fila retorna HTTP 503;
+- falha ao validar unidade por indisponibilidade de Redis e banco retorna HTTP
+  503 para permitir reentrega pela Meta;
 - descartes intencionais por regra de negócio permanecem respostas controladas;
 - erros devem ser registrados sem derrubar o processo principal.
 

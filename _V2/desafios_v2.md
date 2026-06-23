@@ -12,7 +12,6 @@ Este documento deve ser lido com uma separacao clara:
 
 ```text
 V1 ja aplicada no codigo
-V1 em fechamento pelo plano atual
 V2 futura
 ```
 
@@ -24,19 +23,22 @@ Ja esta aplicado no codigo da V1:
 - `valida_historico` registrando a mensagem do cliente;
 - `valida_historico` buscando resposta do bot ja vinculada a mensagem atual;
 - `reagendar_se_houver_mensagem_anterior` como segunda camada de ordem no worker;
-- commits, rollbacks e close concentrados em `worker_flow.py`;
-- worker ainda como funcao, com apenas uma instancia prevista para a V1.
-
-Ainda esta em fechamento pelo plano atual da V1:
-
-- chamada real do `flow_sender` dentro do `worker_flow`;
+- `flow_sender` chamado pelo `worker_flow`;
 - sender da etapa 1 usando Meta/PyWa;
+- tratamentos de tipo nao suportado usando o mesmo contrato de envio;
 - `ErroEnvioMeta`;
 - `BancoFalhouAposEnvioMeta`;
 - `atualizar_banco_com_contexto_final`;
-- registro da resposta do bot no historico apos envio real da Meta.
+- registro da resposta do bot no historico apos envio real da Meta;
+- `last_message_from` semantico, ficando `cliente` apos mensagem do cliente e
+  `bot` apos resposta do bot persistida;
+- configuracao por ambiente via `core/config_env.py`, `.env.example` e `.env`
+  local ignorado pelo Git;
+- commits, rollbacks e close concentrados em `worker_flow.py`;
+- worker ainda como funcao, com apenas uma instancia prevista para a V1.
 
-Portanto, quando este documento fala sobre `ErroEnvioMeta`, `BancoFalhouAposEnvioMeta` e `atualizar_banco_com_contexto_final`, ele esta considerando a V1 completa apos o plano atual ser aplicado. A V2 deve partir dessa V1 completa, nao do estado parcial anterior ao envio real do bot.
+Portanto, a V2 deve partir da V1 atual, ja com envio real, historico do bot,
+last_from semantico, retries e seguranca basica por ambiente aplicados.
 
 ### Principio central
 
@@ -160,9 +162,9 @@ Mesmo assim, o corpo do worker ja foi escrito pensando em race condition:
 
 Isso permite que a V1 use um worker unico, mas com corpo preparado para evoluir para multiplas instancias na V2.
 
-### Flow sender planejado para fechar a V1
+### Fluxo de envio real na V1
 
-O desenho esperado para fechar a V1 com envio real pela Meta e:
+O desenho atual da V1 com envio real pela Meta e:
 
 ```text
 1. valida_historico registra a mensagem do cliente
@@ -774,16 +776,25 @@ Na AWS:
 
 ## Desafio 13 - Segredos e criptografia
 
-Na V1, alguns segredos ainda podem estar em arquivo de configuracao.
+Na V1, os principais segredos ja foram removidos do codigo e carregados por
+variaveis de ambiente via `core/config_env.py`. O `.env.example` fica sem
+segredos reais e o `.env` local deve permanecer fora do Git.
+
+Isso resolve a seguranca basica, mas nao substitui gestao profissional de
+segredos para uma operacao maior.
 
 ### Tarefas para V2
 
-- mover token da Meta para variavel de ambiente ou secret manager;
-- mover App Secret para variavel de ambiente ou secret manager;
-- mover credenciais de banco para ambiente seguro;
 - avaliar AWS Secrets Manager;
+- avaliar AWS Systems Manager Parameter Store;
+- avaliar AWS KMS;
+- separar permissoes IAM por servico;
+- criar rotina de rotacao de segredos;
+- registrar data da ultima rotacao;
+- separar segredos de desenvolvimento e producao;
+- revogar credenciais expostas antes da seguranca V1;
 - revisar logs para garantir que token nunca aparece;
-- documentar rotacao de token.
+- documentar processo de resposta a vazamento de segredo.
 
 ## Desafio 14 - Interface operacional
 
@@ -826,7 +837,7 @@ Mesmo com IA, o estado oficial da conversa deve continuar no banco.
 
 ## Desafio 16 - Tratamento de respostas invalidas
 
-Na V1, o plano atual deixa uma base simples:
+Na V1, o projeto deixa uma base simples:
 
 - `flow_treat_unsupported_type` para tipos nao suportados, como midia, audio, documento e figurinha;
 - `flow_treat_context` como esqueleto para respostas fora do contexto esperado;
@@ -972,27 +983,45 @@ Na V2, quando o numero de unidades crescer, revisar:
 
 ## Desafio 21 - Reavaliar `last_message_from`
 
-Na V1, a coluna `conversa.last_message_from` deixou de representar literalmente a ultima mensagem fisica no historico.
+Na V1 atual, a coluna `conversa.last_message_from` voltou a ter semantica clara
+de turno:
 
 O comportamento real da V1 e:
 
-- conversa nova nasce com `last_message_from = cliente`;
-- depois que o bot responde pela primeira vez, o fluxo tende a manter `last_message_from = bot`;
-- novas mensagens do cliente sao inseridas no historico, mas a conversa continua com `last_message_from = bot`;
-- ao fim de cada resposta valida do bot, o sistema atualiza novamente `last_message_from = bot`;
-- em tratamentos de midia/contexto, a mensagem do cliente e a resposta de tratamento entram no historico, mas a conversa nao avanca etapa.
+- quando a mensagem do cliente e persistida no historico, a conversa fica com
+  `last_message_from = cliente`;
+- quando a resposta do bot ou tratamento e persistido, a conversa fica com
+  `last_message_from = bot`;
+- tratamentos de midia/contexto podem registrar mensagem do cliente e resposta
+  do bot sem avancar a etapa oficial;
+- o valor da coluna ajuda o worker a interpretar o estado atual, mas nao e a
+  unica prova usada pelo webhook.
 
-Isso significa que, na pratica, `last_message_from` virou mais um marcador de estado oficial do turno do que uma descricao da ultima linha do historico.
+A recuperacao do webhook para fila aberta respondida depende principalmente do
+historico especifico do bot vinculado a mensagem da fila:
+
+```text
+historico.id_mensagem_fila = fila.id_mensagem
+historico.id_hash_cliente_origem = fila.id_hash_msg
+historico.quem_enviou = bot
+historico.status_envio = sent
+```
+
+Assim, `last_message_from = bot` sozinho nao libera uma sequencia ilimitada de
+mensagens. Cada fila aberta precisa ter sua propria resposta do bot registrada.
 
 ### Por Que Nao Remover na V1
 
-Remover apenas esta linha do update atual seria perigoso:
+Remover apenas os updates atuais seria perigoso:
 
 ```sql
+last_message_from = 'cliente'
 last_message_from = 'bot'
 ```
 
-Sem adaptar o restante do fluxo, a conversa poderia ficar presa com `last_message_from = cliente`, e o `valida_historico` poderia deixar de avancar corretamente para a proxima etapa.
+Sem adaptar o restante do fluxo, o worker poderia perder a leitura semantica do
+turno atual, e o webhook ficaria dependente apenas do historico especifico para
+todas as interpretacoes.
 
 Remover a coluna inteira tambem exige mexer em pontos sensiveis:
 
@@ -1011,7 +1040,8 @@ Como a coluna nao gera custo relevante na V1, a decisao atual e manter.
 
 ### Direcao Para V2
 
-Na V2, avaliar remover `last_message_from` ou trocar por uma coluna mais honesta semanticamente.
+Na V2, avaliar se `last_message_from` continua suficiente ou se deve ser
+substituida por uma coluna mais explicita de turno.
 
 Possiveis nomes:
 
@@ -1050,7 +1080,9 @@ else:
 
 Tratamentos continuariam usando a etapa atual do cliente, sem avancar conversa.
 
-Para a excecao do webhook em que existe fila aberta ja respondida pelo bot, a prova principal deve ser o historico do bot vinculado a mensagem da fila:
+Para a excecao do webhook em que existe fila aberta ja respondida pelo bot, a
+prova principal deve continuar sendo o historico do bot vinculado a mensagem da
+fila:
 
 ```text
 historico.id_mensagem_fila = fila.id_mensagem
@@ -1059,7 +1091,8 @@ historico.quem_enviou = bot
 historico.status_envio = sent
 ```
 
-Assim, o webhook nao dependeria de `last_message_from = bot` para liberar a recuperacao.
+Assim, a V2 pode reduzir dependencia de `last_message_from` sem perder o fluxo
+A/B/C atual.
 
 ### Tarefa Futura
 
@@ -1103,7 +1136,7 @@ Principais tarefas da V2:
 - criar metricas operacionais;
 - revisar fallback local em arquitetura multi-processo;
 - amadurecer infraestrutura AWS/Meta;
-- mover segredos para ambiente seguro;
+- evoluir gestao de segredos para Secrets Manager, KMS, IAM e rotacao;
 - estudar interface operacional;
 - decidir uso de IA;
 - implementar tratamento de respostas invalidas;
