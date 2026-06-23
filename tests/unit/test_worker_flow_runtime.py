@@ -68,6 +68,43 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
+    def test_fila_vazia_fecha_conexao_antes_de_aguardar(self):
+        conn = FakeConn(FakeCursor())
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("builtins.print"))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=None,
+            ))
+            close = stack.enter_context(patch.object(
+                conn,
+                "close",
+                wraps=conn.close,
+            ))
+
+            def verificar_conexao_fechada():
+                self.assertTrue(conn.closed)
+
+            stack.enter_context(patch.object(
+                flow_worker,
+                "aguardar_fila_vazia",
+                side_effect=verificar_conexao_fechada,
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        close.assert_called_once_with()
+        self.assertEqual(conn.commits, 1)
+        self.assertEqual(conn.rollbacks, 0)
+
     def _patch_fluxo_base(self, stack, conn, eventos):
         stack.enter_context(patch("builtins.print"))
         stack.enter_context(patch.object(

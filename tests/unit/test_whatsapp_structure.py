@@ -26,6 +26,9 @@ RAIZES_PRODUCAO = (
 
 METODOS_PYWA = {
     "send_message",
+    "send_image",
+    "send_video",
+    "send_document",
     "block_users",
     "unblock_users",
     "get_blocked_users",

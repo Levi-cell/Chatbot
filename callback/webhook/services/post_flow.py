@@ -5,7 +5,10 @@ from django.conf import settings
 from django.http import JsonResponse
 
 from core.cache.runtime.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
-from core.cache.cache_unidade import unidade_esta_ativa
+from core.cache.cache_unidade import (
+    ValidacaoUnidadeIndisponivel,
+    unidade_esta_ativa,
+)
 from core.database.connection_aws import get_conn
 from core.logging_config import short_value
 from .flood_guard import responder_se_flood
@@ -112,6 +115,18 @@ def responder_post_webhook(request):
                 "status": "unavailable",
                 "reason": resultado_fila["reason"],
             }, status=503)
+
+    except ValidacaoUnidadeIndisponivel as exc:
+        logger.error(
+            "request_indisponivel | motivo=validacao_unidade_indisponivel acao=retornar_503_para_reentrega cliente=%s phone_number_id=%s erro=%s",
+            short_value(cliente_telefone),
+            short_value(phone_number_id),
+            exc,
+        )
+        return JsonResponse({
+            "status": "unavailable",
+            "reason": "unit_validation_unavailable",
+        }, status=503)
 
     except Exception:
         logger.exception(

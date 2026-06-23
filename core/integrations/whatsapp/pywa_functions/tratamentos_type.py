@@ -7,7 +7,7 @@ from core.integrations.whatsapp.messages.tratamentos import (
     montar_mensagem_tipo_nao_suportado,
 )
 from core.integrations.whatsapp.pywa_functions.envios import (
-    enviar_mensagem_texto_com_botao,
+    enviar_mensagem_texto,
 )
 from core.logging_config import short_value
 
@@ -25,12 +25,16 @@ def sender_tratamento_tipo_nao_suportado(
     mensagem_bot = montar_mensagem_tipo_nao_suportado(conversa_nova)
 
     try:
-        id_hash_msg_bot = enviar_mensagem_texto_com_botao(
+        id_hash_msg_bot = enviar_mensagem_texto(
             to=cliente_telefone,
             text=mensagem_bot,
-            titulo_botao=TITULO_BOTAO_CONTINUAR,
             phone_id_unidade=phone_id_unidade,
-            callback_data=CALLBACK_RETORNAR_ATENDIMENTO,
+            botoes=[
+                {
+                    "titulo": TITULO_BOTAO_CONTINUAR,
+                    "callback_data": CALLBACK_RETORNAR_ATENDIMENTO,
+                }
+            ],
         )
 
         logger.info(

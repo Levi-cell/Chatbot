@@ -8,7 +8,7 @@ from core.integrations.whatsapp.messages.etapas import (
     montar_mensagem_etapa_1,
 )
 from core.integrations.whatsapp.pywa_functions.envios import (
-    enviar_mensagem_texto_com_botao,
+    enviar_mensagem_texto,
 )
 from core.logging_config import short_value
 
@@ -24,11 +24,16 @@ def sender_etapa1(cliente_telefone, phone_id_unidade):
     titulo_botao = TITULO_BOTAO_ETAPA_1
 
     try:
-        id_hash_msg_bot = enviar_mensagem_texto_com_botao(
+        id_hash_msg_bot = enviar_mensagem_texto(
             to=cliente_telefone,
             text=mensagem_bot,
-            titulo_botao=titulo_botao,
             phone_id_unidade=phone_id_unidade,
+            botoes=[
+                {
+                    "titulo": titulo_botao,
+                    "callback_data": titulo_botao,
+                }
+            ],
         )
 
         logger.info(

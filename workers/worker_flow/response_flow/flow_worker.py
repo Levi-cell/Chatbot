@@ -63,6 +63,9 @@ def worker_flow():
             conn_ciclo.commit()
 
             if not registro:
+                conn_ciclo.close()
+                conn_ciclo = None
+                cursor_ciclo = None
                 aguardar_fila_vazia()
                 continue
 

@@ -16,7 +16,7 @@ centrais e os mapas técnicos vivem nos READMEs de cada camada.
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
 | [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
-| [Evolução para a V2](zv2/desafios_v2.md) | Escala, múltiplos workers e desafios técnicos futuros. |
+| [Evolução para a V2](_V2/desafios_v2.md) | Escala, múltiplos workers e desafios técnicos futuros. |
 
 ## Documentação técnica
 

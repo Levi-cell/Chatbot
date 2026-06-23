@@ -59,6 +59,19 @@ class CacheAndAdminTests(unittest.TestCase):
 
         self.assertEqual(chamadas, ["123456"])
 
+    def test_cache_unidade_redis_e_banco_falham_sinaliza_indisponibilidade(self):
+        with patch.object(
+            cache_unidade,
+            "get_redis_safe",
+            side_effect=ConnectionError("redis caiu"),
+        ), patch.object(
+            cache_unidade,
+            "get_conn",
+            side_effect=ConnectionError("banco caiu"),
+        ):
+            with self.assertRaises(cache_unidade.ValidacaoUnidadeIndisponivel):
+                cache_unidade.unidade_esta_ativa("123456")
+
     def test_cache_conversa_bloqueada_redis_falha_usa_banco(self):
         chamadas = []
 

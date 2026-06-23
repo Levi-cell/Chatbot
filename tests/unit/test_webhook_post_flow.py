@@ -100,6 +100,35 @@ class WebhookPostFlowTests(unittest.TestCase):
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
+    def test_validacao_unidade_indisponivel_retorna_503_sem_abrir_fila(self):
+        request = FakeRequest(payload_texto_meta())
+
+        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
+            post_flow,
+            "responder_se_flood",
+            return_value=None,
+        ), patch.object(
+            post_flow,
+            "unidade_esta_ativa",
+            side_effect=post_flow.ValidacaoUnidadeIndisponivel("infraestrutura caiu"),
+        ), patch.object(post_flow, "povoando_fila") as fila, patch.object(
+            post_flow,
+            "get_conn",
+        ) as get_conn:
+            response = post_flow.responder_post_webhook(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json_response_payload(response),
+            {
+                "status": "unavailable",
+                "reason": "unit_validation_unavailable",
+            },
+        )
+        fila.assert_not_called()
+        get_conn.assert_not_called()
+
+    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
     def test_evento_sem_mensagem_nao_abre_transacao(self):
         request = FakeRequest(payload_sem_mensagem())
 

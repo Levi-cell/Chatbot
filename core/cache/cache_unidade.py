@@ -30,6 +30,10 @@ class CacheUnidadesIndisponivel(Exception):
     pass
 
 
+class ValidacaoUnidadeIndisponivel(Exception):
+    pass
+
+
 def carregar_unidades_redis_primeira_vez():
     conn = None
 
@@ -232,11 +236,13 @@ def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
 
     except Exception as exc:
         logger.exception(
-            "fallback_banco_unidade_falhou | origem=webhook acao=retornar_false phone_number_id=%s erro=%s",
+            "fallback_banco_unidade_falhou | origem=webhook acao=levantar_indisponibilidade phone_number_id=%s erro=%s",
             short_value(phone_key),
             exc,
         )
-        return False
+        raise ValidacaoUnidadeIndisponivel(
+            "Nao foi possivel validar a unidade no Redis nem no banco"
+        ) from exc
 
     finally:
         if conn:

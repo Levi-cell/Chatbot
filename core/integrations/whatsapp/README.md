@@ -58,11 +58,18 @@ mensagem não deve mover a responsabilidade de envio para `messages`.
 Único local permitido para importação e chamada direta da PyWa.
 
 - `cliente.py`: normaliza `phone_id` e cria `WhatsApp`;
-- `envios.py`: primitivas de texto, botão e extração de ID;
+- `envios.py`: primitivas separadas para texto, imagem, vídeo e documento, todas
+  com botões opcionais e retorno de um único ID;
 - `etapas.py`: contexto de envio das etapas implementadas;
 - `tratamentos_type.py`: orientação para tipo não suportado;
 - `tratamentos_context.py`: reservado ao tratamento de contexto;
 - `usuarios.py`: bloquear, desbloquear e listar usuários na Meta.
+
+Cada sender escolhe conteúdo, legenda e lista de botões. `envios.py` converte os
+dados para PyWa, realiza uma chamada externa e devolve um único ID da Meta.
+
+Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
+futuro capaz de persistir vários IDs e tratar sucesso parcial.
 
 Os senders devolvem contexto simples para o worker. Falhas são encadeadas com
 `ErroEnvioMeta`, permitindo rollback e retry sem esconder a causa original.

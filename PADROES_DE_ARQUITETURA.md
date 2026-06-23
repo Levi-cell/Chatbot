@@ -116,7 +116,7 @@ explica somente a responsabilidade e os contratos da sua camada:
 - [`core/integrations/README.md`](core/integrations/README.md): integrações externas;
 - [`core/integrations/whatsapp/README.md`](core/integrations/whatsapp/README.md):
   organização da integração Meta/PyWa.
-- [`zv2/desafios_v2.md`](zv2/desafios_v2.md): evolução de capacidade e desafios
+- [`zv2/desafios_v2.md`](_V2/desafios_v2.md): evolução de capacidade e desafios
   técnicos previstos para a V2.
 
 READMEs locais não devem copiar regras completas. Eles apontam para
