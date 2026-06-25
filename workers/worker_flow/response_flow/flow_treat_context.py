@@ -1,13 +1,18 @@
 import logging
 
+from core.integrations.whatsapp.pywa_functions.tratamentos_context import (
+    sender_tratamento_contexto_nome_invalido,
+)
+from workers.worker_flow.valida_resposta_cliente import (
+    TIPO_TRATAMENTO_NOME_INVALIDO,
+)
+
 
 logger = logging.getLogger("worker.treat_context")
 
 
 def flow_treat_context(contexto_historico, contexto_validacao):
-    # Esqueleto reservado para a V1 quando as regras de contexto por etapa
-    # forem definidas. Tratamento de contexto deve usar id_etapa_cliente,
-    # repetir a pergunta/opcoes da etapa atual e nao avancar a conversa.
+    # Tratamento de contexto repete a etapa atual sem avancar a conversa.
     id_conversa = contexto_historico["id_conversa"]
     retry_count = contexto_historico["retry_count"]
     id_etapa_cliente = contexto_historico["id_etapa_cliente"]
@@ -34,9 +39,16 @@ def flow_treat_context(contexto_historico, contexto_validacao):
             "id_etapa_resultante": resposta_bot_atual.get("id_etapa"),
             "tratamento": True,
             "tipo_tratamento": contexto_validacao["tipo_tratamento"],
-            "atualizar_conversa": False,
+            "atualizar_conversa": True,
             "atualizar_last_from_bot": True,
         }
+
+    if contexto_validacao["tipo_tratamento"] == TIPO_TRATAMENTO_NOME_INVALIDO:
+        return sender_tratamento_contexto_nome_invalido(
+            cliente_telefone=mensagem_cliente_atual["cliente_telefone"],
+            phone_id_unidade=mensagem_cliente_atual["id_phone_unidade"],
+            id_etapa=id_etapa_cliente,
+        )
 
     logger.warning(
         "flow_treat_context_nao_implementado | acao=erro id_conversa=%s etapa_cliente=%s id_mensagem_fila=%s resultado=%s retry=%s",

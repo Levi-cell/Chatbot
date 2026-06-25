@@ -26,6 +26,9 @@ Ja esta aplicado no codigo da V1:
 - `flow_sender` chamado pelo `worker_flow`;
 - sender da etapa 1 usando Meta/PyWa;
 - tratamentos de tipo nao suportado usando o mesmo contrato de envio;
+- tratamento financeiro separado para perguntas sobre valor, custo ou
+  investimento;
+- tratamento de contexto separado para nome invalido na etapa 1;
 - `ErroEnvioMeta`;
 - `BancoFalhouAposEnvioMeta`;
 - `atualizar_banco_com_contexto_final`;
@@ -78,13 +81,8 @@ cliente: ola
 bot: mensagem da etapa 1
 ```
 
-No futuro, a mensagem da etapa 1 pode ter botao, por exemplo:
-
-```text
-Estou pronto para agendar uma aula demonstrativa
-```
-
-O cliente clicando ou respondendo abre o proximo turno, e ai o fluxo segue para a etapa 2.
+A mensagem atual da etapa 1 pede o nome do cliente. A proxima resposta de texto
+abre o proximo turno e direciona o fluxo para a etapa 2.
 
 ### Webhook na V1
 
@@ -840,9 +838,12 @@ Mesmo com IA, o estado oficial da conversa deve continuar no banco.
 Na V1, o projeto deixa uma base simples:
 
 - `flow_treat_unsupported_type` para tipos nao suportados, como midia, audio, documento e figurinha;
-- `flow_treat_context` como esqueleto para respostas fora do contexto esperado;
+- `flow_treat_financial` para perguntas sobre valor, custo ou investimento;
+- `flow_treat_context` para resposta fora do contexto, com nome invalido
+  implementado na etapa 1;
+- outros tratamentos de contexto ainda pendentes por etapa;
 - tratamentos registrando historico e usando o mesmo contrato transacional do `flow_sender`;
-- tratamento sem avancar etapa oficial.
+- tratamento sem avancar indevidamente a etapa oficial.
 
 Na V2, ainda sera preciso implementar tratamentos por etapa com mais detalhe.
 
@@ -992,8 +993,8 @@ O comportamento real da V1 e:
   `last_message_from = cliente`;
 - quando a resposta do bot ou tratamento e persistido, a conversa fica com
   `last_message_from = bot`;
-- tratamentos de midia/contexto podem registrar mensagem do cliente e resposta
-  do bot sem avancar a etapa oficial;
+- tratamentos de midia, financeiro e contexto podem registrar mensagem do
+  cliente e resposta do bot sem avancar a etapa oficial;
 - o valor da coluna ajuda o worker a interpretar o estado atual, mas nao e a
   unica prova usada pelo webhook.
 
@@ -1104,7 +1105,8 @@ Criar um plano especifico para:
 - simplificar `valida_historico`;
 - revisar `turno_cliente`;
 - manter idempotencia por historico + `id_hash_cliente_origem`;
-- criar testes de regressao para avanço de etapa, tratamento de midia/contexto e recuperacao de fila aberta respondida.
+- criar testes de regressao para avanço de etapa, tratamento de midia,
+  financeiro, contexto e recuperacao de fila aberta respondida.
 
 ## O Que a V2 Deve Preservar da V1
 

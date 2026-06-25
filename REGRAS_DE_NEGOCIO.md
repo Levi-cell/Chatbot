@@ -360,48 +360,138 @@ documentada.
 
 ## 11. Tipos de mensagem na V1
 
-- `text` e `interactive` seguem o fluxo normal de validação.
+- `text` e `interactive` são tipos suportados pelo fluxo normal de validação.
 - Mídias e anexos não são respostas suportadas pelo fluxo normal da V1.
 - Uma mídia recebida deverá ser registrada no histórico.
-- O bot enviará uma orientação para o cliente continuar por texto ou botão.
+- O bot enviará uma orientação para o cliente continuar por texto.
 - Essa orientação não avançará a etapa, mas alterará `last_message_from` para
   `bot` depois de ser persistida.
+- Texto com intenção de preço, custo, mensalidade ou investimento recebe
+  tratamento próprio e não deve ser interpretado como resposta comum da etapa.
+- Depois que a etapa 1 já foi apresentada, respostas de nome com números,
+  caracteres inválidos, repetição artificial ou termos pejorativos recebem
+  tratamento de contexto e não avançam a conversa.
 
 Desconsiderar o conteúdo da mídia para fins de avanço de etapa não é bug.
 
-### 11.1. Exceção para conversa iniciada com mídia
+### 11.1. Conversa iniciada por texto
+
+Quando a conversa ainda não possui etapa atual persistida, qualquer mensagem de
+texto comum poderá iniciar o atendimento e receber a saudação normal da etapa 1.
+
+Essa regra vale mesmo que o texto inicial seja estranho, curto, tenha símbolos ou
+pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar a Su e
+pedir o nome do cliente.
+
+A exceção é texto com intenção financeira. Nesse caso, o sistema já responde a
+dúvida sobre valores e, na mesma mensagem, apresenta a etapa 1.
+
+### 11.2. Exceção para conversa iniciada com mídia
 
 Quando a primeira mensagem de uma conversa for uma mídia, ainda não existirá
 uma etapa atual persistida. Nesse caso:
 
-1. o bot enviará primeiro o aviso de tipo de mensagem não suportado;
-2. o aviso utilizará a ação genérica `Continuar`;
-3. o tratamento não avançará a conversa;
-4. a primeira interação válida após o aviso solicitará a mensagem normal da
-   etapa 1;
-5. somente uma interação válida posterior à etapa 1 poderá direcionar o fluxo
-   para a etapa 2.
+1. o bot enviará saudação da etapa 1 junto com o aviso de mídia não suportada;
+2. a mensagem solicitará o nome do cliente por texto;
+3. o tratamento registrará a etapa 1 como apresentada;
+4. a próxima interação válida será interpretada como resposta da etapa 1 e
+   poderá direcionar o fluxo para a etapa 2.
 
-Esse retorno intermediário à etapa 1 é intencional somente quando
-`id_etapa_atual` ainda for `NULL`, isto é, quando a conversa tiver sido iniciada
-com mídia antes da apresentação de qualquer etapa. Ele permite informar a
-limitação antes de apresentar a saudação e a identificação do Assistente de
-Agendamento do Supera.
+Mensagem esperada:
+
+```text
+Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Olha não reconhecemos ainda mensagem com mídia, apenas texto.
+Me diz, qual o seu nome?
+```
 
 Para qualquer etapa já apresentada, a regra geral será diferente. Se a conversa
 estiver na etapa N e o cliente enviar uma mídia:
 
 1. o bot enviará o tratamento de tipo de mensagem não suportado;
-2. o tratamento não alterará a etapa persistida;
-3. a interação seguinte por texto ou pelo botão `Continuar` será interpretada
-   como resposta da etapa N;
-4. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final;
-5. a mensagem normal da etapa N não será apresentada novamente.
+2. o tratamento poderá repetir a pergunta da etapa atual quando essa
+   reapresentação estiver implementada;
+3. o tratamento não alterará a etapa persistida;
+4. a interação seguinte por texto será interpretada como resposta da etapa N;
+5. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final;
+6. a mensagem normal da etapa N não precisará ser enviada de novo em separado.
 
-Portanto, o tratamento não avança a etapa por conta própria. Ele oferece a ação
-que permite à próxima interação válida dar continuidade ao fluxo. A única
-situação em que essa interação apresenta a etapa atual, em vez da próxima, é a
-conversa iniciada com mídia e ainda sem etapa persistida.
+Na etapa 1 já apresentada, a resposta esperada para mídia será:
+
+```text
+Olha não reconhecemos ainda mensagem com mídia, apenas texto.
+Me diz, qual o seu nome?
+```
+
+Para etapas ainda sem tratamento específico, a mensagem poderá ser mais genérica:
+
+```text
+Recebi uma mídia, mas nesta etapa eu preciso que você responda por texto ou use os botões disponíveis.
+
+Envie uma mensagem de texto para continuarmos.
+```
+
+Em ambos os casos:
+
+1. o tratamento não avança etapa;
+2. a interação seguinte por texto será interpretada como resposta da etapa N;
+3. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final.
+
+Portanto, o tratamento de mídia não avança etapa já apresentada. A exceção é
+somente a conversa iniciada com mídia, porque a própria mensagem de tratamento
+também apresenta a etapa 1.
+
+### 11.3. Tratamento financeiro
+
+Quando o cliente enviar texto perguntando sobre valor, custo, preço,
+mensalidade, investimento ou termo equivalente:
+
+1. a mensagem do cliente será registrada no histórico;
+2. o bot responderá que valores são apresentados no atendimento presencial após
+   a aula gratuita;
+3. a mensagem também reapresentará a pergunta da etapa atual;
+4. a conversa não avançará por causa da pergunta de valor;
+5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
+
+Se a conversa iniciar com pergunta de valor, a resposta esperada será:
+
+```text
+Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
+Me diz, qual o seu nome?
+```
+
+Nesse caso, a etapa 1 fica registrada como apresentada, e a próxima resposta em
+texto será interpretada como resposta da etapa 1.
+
+Se a etapa 1 já tiver sido apresentada e o cliente responder perguntando sobre
+valor, a mensagem esperada será:
+
+```text
+Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
+Me diz, qual o seu nome?
+```
+
+Esse tratamento é financeiro, não tratamento de contexto. Ele possui fluxo e
+sender próprios para evitar misturar dúvida comercial com resposta fora do
+contexto da etapa.
+
+### 11.4. Tratamento de contexto para nome inválido
+
+Depois que a etapa 1 já foi apresentada, a resposta esperada do cliente é o nome.
+Se o cliente responder com texto que pareça fora do contexto de nome, como
+caracteres inválidos, números, repetição artificial ou termo pejorativo, o bot
+deverá tratar sem avançar a conversa.
+
+Mensagem esperada:
+
+```text
+Olha sua mensagem parece estar fora do contexto e também não aceitamos nomes e apelidos pejorativos.
+Me diz, qual o seu nome?
+```
+
+Esse tratamento é diferente do financeiro e do tipo não suportado. Ele existe
+para preservar a etapa atual e pedir novamente um nome utilizável.
 
 ## 12. Flood, payload e assinatura
 
@@ -498,7 +588,11 @@ Não são bugs:
   unidade ainda estiver aberta e sem resposta própria do bot;
 - ignorar a repetição do mesmo webhook ou `id_hash_msg`;
 - reutilizar histórico existente durante um retry;
-- responder a uma mídia com orientação sem avançar a etapa;
+- responder a uma mídia com orientação sem avançar etapa já apresentada;
+- apresentar a etapa 1 junto com o aviso quando a conversa for iniciada com
+  mídia;
+- responder pergunta sobre valor sem tratar esse texto como nome ou avanço de
+  etapa;
 - excluir a mensagem ao atingir a terceira tentativa;
 - aguardar os timeouts da fila ou do lock antes de um novo processamento;
 - uma duplicidade extremamente rara na janela entre Meta e commit do bot;

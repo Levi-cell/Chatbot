@@ -57,9 +57,11 @@ Os testes cobrem comportamento e contratos arquiteturais:
 - falha do banco depois do envio Meta;
 - status HTTP e transação do webhook;
 - fallback de cache e operações Meta-first;
-- estrutura de `messages`, `pywa_functions` e `tools`.
+- estrutura de `messages`, `pywa_functions` e `tools`;
 - configuração por ambiente, mascaramento de identificadores e ausência de
-  dependência de segredos reais.
+  dependência de segredos reais;
+- tratamento de mídia inicial, pergunta financeira e nome inválido sem avanço
+  indevido de etapa.
 
 ## Convenções
 

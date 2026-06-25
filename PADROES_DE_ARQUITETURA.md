@@ -369,7 +369,11 @@ Separação interna recomendada:
 - `cliente.py`: criação e normalização do cliente;
 - `envios.py`: primitivas genéricas de envio;
 - `etapas.py`: envios específicos de etapas;
-- `tratamentos.py`: envios específicos de tratamentos;
+- `tratamentos_type.py`: envios de tratamento para mídia ou tipo não suportado;
+- `tratamentos_context.py`: envios de tratamento para resposta fora do contexto
+  da etapa;
+- `tratamentos_financeiros.py`: envios de tratamento para dúvidas sobre valor,
+  custo ou investimento;
 - `usuarios.py`: bloqueio, desbloqueio e consulta de usuários.
 
 ### `tools`

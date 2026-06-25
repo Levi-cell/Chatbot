@@ -86,7 +86,9 @@ fila sem duplicar o envio.
 
 - `rotear_resposta_cliente.py`: escolhe fluxo normal ou tratamento;
 - `flow_sender.py`: seleciona o sender da etapa;
-- `flow_treat_context.py`: tratamento de resposta fora do contexto;
+- `flow_treat_context.py`: tratamento de resposta fora do contexto da etapa;
+- `flow_treat_financial.py`: tratamento de pergunta sobre valor, custo ou
+  investimento;
 - `flow_treat_unsupported_type.py`: tratamento de mídia ou tipo não suportado;
 - `flow_worker.py`: transação, checkpoints e handlers.
 
@@ -102,5 +104,6 @@ Textos e chamadas PyWa não pertencem a essa pasta. Use
 - `tests/unit/test_lastfrom_semantico.py`;
 - `tests/unit/test_flow_sender.py`;
 - `tests/unit/test_flow_treat_context.py`;
+- `tests/unit/test_flow_treat_financial.py`;
 - `tests/unit/test_flow_treat_unsupported_type.py`;
 - `tests/unit/test_repositories.py`.

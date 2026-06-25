@@ -51,7 +51,7 @@ class FlowSenderTests(unittest.TestCase):
                 "mensagem_bot": "Ola!",
                 "id_hash_msg_bot": "wamid.bot",
                 "id_etapa_resultante": 1,
-                "tipo_mensagem": "interactive_button",
+                "tipo_mensagem": "text",
             }
 
         with patch.object(flow_sender_module, "sender_etapa1", fake_sender_etapa1):
@@ -60,7 +60,7 @@ class FlowSenderTests(unittest.TestCase):
         self.assertEqual(chamadas, [("5571999999999", "123456")])
         self.assertTrue(resultado["enviou"])
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot")
-        self.assertEqual(resultado["tipo_mensagem"], "interactive_button")
+        self.assertEqual(resultado["tipo_mensagem"], "text")
 
     def test_etapa_nao_implementada_nao_finge_sucesso(self):
         with self.assertRaises(NotImplementedError):

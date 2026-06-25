@@ -2,12 +2,13 @@ import logging
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.tratamentos import (
-    CALLBACK_RETORNAR_ATENDIMENTO,
-    TITULO_BOTAO_CONTINUAR,
     montar_mensagem_tipo_nao_suportado,
 )
 from core.integrations.whatsapp.pywa_functions.envios import (
     enviar_mensagem_texto,
+)
+from core.integrations.whatsapp.pywa_functions.saudacao import (
+    obter_saudacao_por_horario,
 )
 from core.logging_config import short_value
 
@@ -22,19 +23,18 @@ def sender_tratamento_tipo_nao_suportado(
     tipo_mensagem,
     conversa_nova,
 ):
-    mensagem_bot = montar_mensagem_tipo_nao_suportado(conversa_nova)
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_tipo_nao_suportado(
+        id_etapa,
+        conversa_nova,
+        saudacao,
+    )
 
     try:
         id_hash_msg_bot = enviar_mensagem_texto(
             to=cliente_telefone,
             text=mensagem_bot,
             phone_id_unidade=phone_id_unidade,
-            botoes=[
-                {
-                    "titulo": TITULO_BOTAO_CONTINUAR,
-                    "callback_data": CALLBACK_RETORNAR_ATENDIMENTO,
-                }
-            ],
         )
 
         logger.info(
@@ -52,11 +52,11 @@ def sender_tratamento_tipo_nao_suportado(
             "mensagem_bot": mensagem_bot,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": id_etapa,
-            "tipo_mensagem": "interactive_button",
+            "tipo_mensagem": "text",
             "canal": "meta_whatsapp",
             "tratamento": True,
             "tipo_tratamento": "tipo_mensagem_nao_suportado",
-            "atualizar_conversa": False,
+            "atualizar_conversa": conversa_nova,
             "atualizar_last_from_bot": True,
         }
 

@@ -4,8 +4,10 @@ from unittest.mock import patch
 import workers.worker_flow.response_flow.rotear_resposta_cliente as roteador_module
 from workers.worker_flow.valida_resposta_cliente import (
     RESULTADO_MENSAGEM_FORA_DE_CONTEXTO,
+    RESULTADO_PERGUNTA_FINANCEIRA,
     RESULTADO_RESPOSTA_VALIDA,
     RESULTADO_TIPO_MENSAGEM_NAO_SUPORTADO,
+    TIPO_TRATAMENTO_FINANCEIRO,
 )
 
 
@@ -87,6 +89,30 @@ class RotearRespostaClienteTests(unittest.TestCase):
 
         self.assertEqual(resultado, {"origem": "context"})
         flow_treat_context.assert_called_once_with(
+            contexto,
+            contexto_validacao,
+        )
+
+    def test_pergunta_financeira_vai_para_tratamento_financeiro(self):
+        contexto = contexto_historico_base()
+        contexto_validacao = {
+            "resultado": RESULTADO_PERGUNTA_FINANCEIRA,
+            "tipo_tratamento": TIPO_TRATAMENTO_FINANCEIRO,
+        }
+
+        with patch.object(
+            roteador_module,
+            "validar_resposta_cliente",
+            return_value=contexto_validacao,
+        ), patch.object(
+            roteador_module,
+            "flow_treat_financial",
+            return_value={"origem": "financeiro"},
+        ) as flow_treat_financial:
+            resultado = roteador_module.rotear_resposta_cliente(contexto)
+
+        self.assertEqual(resultado, {"origem": "financeiro"})
+        flow_treat_financial.assert_called_once_with(
             contexto,
             contexto_validacao,
         )

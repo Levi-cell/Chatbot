@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.tratamentos import (
-    MENSAGEM_MIDIA_ETAPA,
+    MENSAGEM_MIDIA_ETAPA_1,
     MENSAGEM_MIDIA_INICIO,
 )
 from core.integrations.whatsapp.pywa_functions import (
@@ -35,21 +35,14 @@ class SenderTratamentoTests(unittest.TestCase):
         self.assertEqual(len(chamadas), 1)
         self.assertEqual(chamadas[0]["to"], "5571999999999")
         self.assertEqual(chamadas[0]["phone_id_unidade"], "123456")
-        self.assertEqual(chamadas[0]["text"], MENSAGEM_MIDIA_ETAPA)
-        self.assertEqual(
-            chamadas[0]["botoes"],
-            [
-                {
-                    "titulo": "Continuar",
-                    "callback_data": "retornar_atendimento",
-                }
-            ],
-        )
+        self.assertEqual(chamadas[0]["text"], MENSAGEM_MIDIA_ETAPA_1)
+        self.assertIsNone(chamadas[0].get("botoes"))
         self.assertTrue(resultado["enviou"])
         self.assertTrue(resultado["tratamento"])
         self.assertFalse(resultado["atualizar_conversa"])
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.tratamento")
         self.assertEqual(resultado["id_etapa_resultante"], 1)
+        self.assertEqual(resultado["tipo_mensagem"], "text")
 
     def test_sender_tipo_nao_suportado_em_conversa_nova_usa_mensagem_inicial(self):
         chamadas = []
@@ -62,6 +55,10 @@ class SenderTratamentoTests(unittest.TestCase):
             sender_tratamento_module,
             "enviar_mensagem_texto",
             fake_enviar,
+        ), patch.object(
+            sender_tratamento_module,
+            "obter_saudacao_por_horario",
+            return_value="Boa noite",
         ):
             resultado = sender_tratamento_module.sender_tratamento_tipo_nao_suportado(
                 cliente_telefone="5571999999999",
@@ -71,8 +68,11 @@ class SenderTratamentoTests(unittest.TestCase):
                 conversa_nova=True,
             )
 
-        self.assertEqual(chamadas, [MENSAGEM_MIDIA_INICIO])
-        self.assertEqual(resultado["mensagem_bot"], MENSAGEM_MIDIA_INICIO)
+        mensagem_esperada = MENSAGEM_MIDIA_INICIO.format(saudacao="Boa noite")
+
+        self.assertEqual(chamadas, [mensagem_esperada])
+        self.assertEqual(resultado["mensagem_bot"], mensagem_esperada)
+        self.assertTrue(resultado["atualizar_conversa"])
 
     def test_sender_tipo_nao_suportado_falha_meta_levanta_exception_controlada(self):
         def fake_falha(**_kwargs):

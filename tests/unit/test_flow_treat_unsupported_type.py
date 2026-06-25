@@ -77,10 +77,10 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
                 "mensagem_bot": "mensagem de tratamento",
                 "id_hash_msg_bot": "wamid.bot.tratamento",
                 "id_etapa_resultante": id_etapa,
-                "tipo_mensagem": "interactive_button",
+                "tipo_mensagem": "text",
                 "tratamento": True,
                 "tipo_tratamento": "tipo_mensagem_nao_suportado",
-                "atualizar_conversa": False,
+                "atualizar_conversa": conversa_nova,
             }
 
         with patch.object(
@@ -118,10 +118,10 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
                 "mensagem_bot": "mensagem inicial",
                 "id_hash_msg_bot": "wamid.bot.tratamento",
                 "id_etapa_resultante": id_etapa,
-                "tipo_mensagem": "interactive_button",
+                "tipo_mensagem": "text",
                 "tratamento": True,
                 "tipo_tratamento": "tipo_mensagem_nao_suportado",
-                "atualizar_conversa": False,
+                "atualizar_conversa": conversa_nova,
             }
 
         with patch.object(
@@ -136,6 +136,7 @@ class FlowTreatUnsupportedTypeTests(unittest.TestCase):
 
         self.assertEqual(chamadas, [True])
         self.assertEqual(resultado["id_etapa_resultante"], 1)
+        self.assertTrue(resultado["atualizar_conversa"])
 
 
 if __name__ == "__main__":

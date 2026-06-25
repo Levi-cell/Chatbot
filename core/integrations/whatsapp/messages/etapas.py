@@ -1,7 +1,7 @@
 MENSAGEM_ETAPA_1 = (
-    "Olá! {saudacao}. Seja bem-vindo ao Assistente de Agendamento do Supera."
+    "{saudacao}! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️\n"
+    "Como você se chama?"
 )
-TITULO_BOTAO_ETAPA_1 = "Aperte em mim"
 
 
 def montar_mensagem_etapa_1(saudacao):

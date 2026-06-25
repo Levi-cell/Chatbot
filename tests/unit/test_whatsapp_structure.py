@@ -4,13 +4,16 @@ from pathlib import Path
 
 from core.integrations.whatsapp.messages.etapas import (
     MENSAGEM_ETAPA_1,
-    TITULO_BOTAO_ETAPA_1,
 )
 from core.integrations.whatsapp.messages.tratamentos import (
-    CALLBACK_RETORNAR_ATENDIMENTO,
-    MENSAGEM_MIDIA_ETAPA,
+    MENSAGEM_CONTEXTO_GENERICA,
+    MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA_1,
+    MENSAGEM_FINANCEIRO_ETAPA_1,
+    MENSAGEM_FINANCEIRO_ETAPA_GENERICA,
+    MENSAGEM_FINANCEIRO_INICIO,
+    MENSAGEM_MIDIA_ETAPA_1,
+    MENSAGEM_MIDIA_ETAPA_GENERICA,
     MENSAGEM_MIDIA_INICIO,
-    TITULO_BOTAO_CONTINUAR,
 )
 
 
@@ -36,11 +39,14 @@ METODOS_PYWA = {
 
 CONTEUDOS_WHATSAPP = (
     MENSAGEM_ETAPA_1,
-    TITULO_BOTAO_ETAPA_1,
     MENSAGEM_MIDIA_INICIO,
-    MENSAGEM_MIDIA_ETAPA,
-    TITULO_BOTAO_CONTINUAR,
-    CALLBACK_RETORNAR_ATENDIMENTO,
+    MENSAGEM_MIDIA_ETAPA_1,
+    MENSAGEM_MIDIA_ETAPA_GENERICA,
+    MENSAGEM_FINANCEIRO_INICIO,
+    MENSAGEM_FINANCEIRO_ETAPA_1,
+    MENSAGEM_FINANCEIRO_ETAPA_GENERICA,
+    MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA_1,
+    MENSAGEM_CONTEXTO_GENERICA,
 )
 
 
@@ -101,13 +107,6 @@ class WhatsappStructureTests(unittest.TestCase):
                     violacoes.append(f"{arquivo}: {conteudo_whatsapp}")
 
         self.assertEqual(violacoes, [])
-
-    def test_titulos_de_botao_respeitam_limite_da_meta(self):
-        for titulo in (TITULO_BOTAO_ETAPA_1, TITULO_BOTAO_CONTINUAR):
-            with self.subTest(titulo=titulo):
-                self.assertGreaterEqual(len(titulo), 1)
-                self.assertLessEqual(len(titulo), 20)
-
 
 if __name__ == "__main__":
     unittest.main()

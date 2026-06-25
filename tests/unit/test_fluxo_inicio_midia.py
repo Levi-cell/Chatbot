@@ -4,7 +4,7 @@ from workers.worker_flow.valida_historico import _resolver_etapa_resposta
 
 
 class FluxoInicioMidiaTests(unittest.TestCase):
-    def test_interacao_apos_midia_inicial_solicita_etapa_um(self):
+    def test_conversa_nova_sem_etapa_persistida_solicita_etapa_um(self):
         contexto_conversa = {
             "id_etapa_atual": None,
         }
@@ -12,6 +12,15 @@ class FluxoInicioMidiaTests(unittest.TestCase):
         etapa_resposta = _resolver_etapa_resposta(contexto_conversa)
 
         self.assertEqual(etapa_resposta, 1)
+
+    def test_interacao_apos_midia_inicial_com_etapa_um_persistida_solicita_etapa_dois(self):
+        contexto_conversa = {
+            "id_etapa_atual": 1,
+        }
+
+        etapa_resposta = _resolver_etapa_resposta(contexto_conversa)
+
+        self.assertEqual(etapa_resposta, 2)
 
     def test_interacao_apos_midia_em_etapa_persistida_solicita_proxima(self):
         for etapa_atual in range(1, 7):

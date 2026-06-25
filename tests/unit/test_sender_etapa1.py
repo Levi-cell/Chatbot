@@ -1,5 +1,4 @@
 import unittest
-from datetime import datetime
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
@@ -8,7 +7,7 @@ from core.integrations.whatsapp.pywa_functions import etapas as sender_module
 
 
 class SenderEtapa1Tests(unittest.TestCase):
-    def test_retorna_contexto_quando_meta_envia_botao_com_saudacao_por_horario(self):
+    def test_retorna_contexto_quando_meta_envia_texto_de_saudacao(self):
         chamadas = []
 
         def fake_enviar_mensagem_texto(**kwargs):
@@ -32,35 +31,13 @@ class SenderEtapa1Tests(unittest.TestCase):
         self.assertEqual(chamadas[0]["to"], "5571999999999")
         self.assertEqual(chamadas[0]["phone_id_unidade"], "123456")
         self.assertEqual(chamadas[0]["text"], mensagem_esperada)
-        self.assertEqual(
-            chamadas[0]["botoes"],
-            [
-                {
-                    "titulo": "Aperte em mim",
-                    "callback_data": "Aperte em mim",
-                }
-            ],
-        )
+        self.assertIsNone(chamadas[0].get("botoes"))
         self.assertTrue(resultado["enviou"])
         self.assertFalse(resultado["resposta_ja_existia"])
         self.assertEqual(resultado["mensagem_bot"], mensagem_esperada)
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.1")
         self.assertEqual(resultado["id_etapa_resultante"], 1)
-        self.assertEqual(resultado["tipo_mensagem"], "interactive_button")
-
-    def test_saudacao_por_horario(self):
-        self.assertEqual(
-            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 8)),
-            "Bom dia",
-        )
-        self.assertEqual(
-            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 14)),
-            "Boa tarde",
-        )
-        self.assertEqual(
-            sender_module.obter_saudacao_por_horario(datetime(2026, 1, 1, 22)),
-            "Boa noite",
-        )
+        self.assertEqual(resultado["tipo_mensagem"], "text")
 
     def test_meta_falhou_levanta_exception_controlada(self):
         def fake_falha(**_kwargs):

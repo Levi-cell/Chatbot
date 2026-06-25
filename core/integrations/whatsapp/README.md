@@ -21,7 +21,9 @@ core/integrations/whatsapp/
 │   ├── envios.py
 │   ├── etapas.py
 │   ├── tratamentos_context.py
+│   ├── tratamentos_financeiros.py
 │   ├── tratamentos_type.py
+│   ├── saudacao.py
 │   └── usuarios.py
 └── tools/
     ├── ativando_numero.py
@@ -61,9 +63,13 @@ mensagem não deve mover a responsabilidade de envio para `messages`.
 - `cliente.py`: normaliza `phone_id` e cria `WhatsApp`;
 - `envios.py`: primitivas separadas para texto, imagem, vídeo e documento, todas
   com botões opcionais e retorno de um único ID;
+- `saudacao.py`: seleção de bom dia, boa tarde ou boa noite pelo horário do
+  atendimento;
 - `etapas.py`: contexto de envio das etapas implementadas;
 - `tratamentos_type.py`: orientação para tipo não suportado;
-- `tratamentos_context.py`: reservado ao tratamento de contexto;
+- `tratamentos_context.py`: tratamentos de resposta fora do contexto da etapa;
+- `tratamentos_financeiros.py`: tratamentos de dúvidas sobre valor, custo ou
+  investimento;
 - `usuarios.py`: bloquear, desbloquear e listar usuários na Meta.
 
 Cada sender escolhe conteúdo, legenda e lista de botões. `envios.py` converte os
@@ -113,6 +119,9 @@ Esta integração não deve:
 
 - `tests/unit/test_sender_etapa1.py`;
 - `tests/unit/test_sender_tratamento.py`;
+- `tests/unit/test_sender_tratamento_context.py`;
+- `tests/unit/test_sender_tratamento_financeiro.py`;
+- `tests/unit/test_saudacao.py`;
 - `tests/unit/test_whatsapp_message_senders.py`;
 - `tests/unit/test_whatsapp_usuarios.py`;
 - `tests/unit/test_whatsapp_structure.py`.

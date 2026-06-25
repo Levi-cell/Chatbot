@@ -10,7 +10,8 @@ logger = logging.getLogger("worker.treat_unsupported_type")
 
 def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
     # Regra de negocio V1: esta versao nao trabalha com midias/anexos.
-    # Midia recebida entra no historico, recebe tratamento e nao avanca etapa.
+    # Midia recebida entra no historico e recebe tratamento. Quando a conversa
+    # comeca com midia, o proprio tratamento apresenta a etapa 1.
     id_conversa = contexto_historico["id_conversa"]
     retry_count = contexto_historico["retry_count"]
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
@@ -35,7 +36,7 @@ def flow_treat_unsupported_type(contexto_historico, contexto_validacao):
             "id_etapa_resultante": resposta_bot_atual.get("id_etapa"),
             "tratamento": True,
             "tipo_tratamento": contexto_validacao["tipo_tratamento"],
-            "atualizar_conversa": False,
+            "atualizar_conversa": contexto_historico.get("id_etapa_atual") is None,
             "atualizar_last_from_bot": True,
         }
 
