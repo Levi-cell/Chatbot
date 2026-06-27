@@ -175,11 +175,18 @@ O webhook já deve manter esta ordem lógica:
 2. Validar tamanho máximo do body
 3. Validar assinatura Meta
 4. Parse JSON
-5. Anti-flood
-6. Unidade ativa
-7. Conversa bloqueada
-8. Regra de turno/fila
+5. Classificar messages, statuses ou evento desconhecido
+6. Statuses: registrar resumo e retornar HTTP 200
+7. Messages: executar anti-flood
+8. Unidade ativa
+9. Conversa bloqueada
+10. Barreira cronológica
+11. Regra de turno/fila
 ```
+
+Na V1 atual, `statuses` não consulta Redis, PostgreSQL nem fila. O filtro existe
+para reduzir custo e impedir que eventos de confirmação percorram regras de
+negócio destinadas a mensagens de clientes.
 
 ## Melhorias futuras
 
@@ -243,6 +250,51 @@ Não enfileirar.
 ```
 
 Isso é correto porque payload sem assinatura confiável pode nem ser da Meta.
+
+## Comparativo V1 x V2 para abuso de `statuses`
+
+### O que a V1 já possui em código
+
+```text
+Content-Type obrigatório
+limite de tamanho do body
+validação HMAC SHA-256 disponível
+parse JSON protegido
+classificação antecipada de messages/statuses
+HTTP 200 imediato para statuses
+nenhuma consulta Redis ou PostgreSQL para statuses
+```
+
+A validação HMAC só fica efetivamente obrigatória quando o ambiente possuir:
+
+```text
+META_APP_SECRET=<segredo real do aplicativo Meta>
+META_WEBHOOK_SIGNATURE_REQUIRED=True
+```
+
+O código compara o header `X-Hub-Signature-256` com o HMAC SHA-256 calculado
+sobre o body original. Requisição ausente, malformada ou incompatível recebe
+HTTP 403 antes de chegar às regras de negócio.
+
+Não se deve reutilizar o anti-flood de clientes para `statuses`. Os campos
+`recipient_id`, `contacts[].wa_id`, `phone_number_id` e `statuses[].id`
+identificam o cliente destinatário, a unidade e a mensagem do bot. Eles não
+identificam a pessoa que enviou uma requisição HTTP falsa. Bloquear por esses
+campos poderia punir um cliente legítimo.
+
+### O que fica para a V2 fora do código Python
+
+```text
+rate limit por IP/origem no proxy
+AWS WAF com regras baseadas em volume
+limites globais antes do Django
+alertas de pico de requisições
+observabilidade de assinaturas inválidas
+```
+
+Um rate limit implementado dentro do Django ainda receberia, validaria e
+classificaria cada POST individualmente. Por isso ele não interrompe o volume
+na entrada e oferece pouco ganho para `statuses`, que a V1 já encerra cedo.
 
 ---
 

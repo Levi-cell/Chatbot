@@ -1,0 +1,414 @@
+ARQUIVO DE REFERENCIA DA V2.
+
+Esta foi a implementacao da V1 baseada em names-dataset. Ela foi retirada do
+codigo ativo devido ao consumo aproximado de 3,2 GB de RAM, mas foi preservada
+integralmente para uma eventual revisao da estrategia de nomes na V2.
+
+---
+
+import logging
+import re
+import unicodedata
+from dataclasses import dataclass
+from functools import lru_cache
+
+from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
+    normalizar_texto,
+)
+
+
+logger = logging.getLogger("worker.detector_nome")
+
+TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
+
+MOTIVO_VAZIO = "vazio"
+MOTIVO_NUMERO = "numero"
+MOTIVO_CARACTERE_INVALIDO = "caractere_invalido"
+MOTIVO_REPETICAO_CARACTERE = "repeticao_caractere"
+MOTIVO_TERMO_PEJORATIVO = "termo_pejorativo"
+MOTIVO_DATASET_NAO_ENCONTROU = "dataset_nao_encontrou_nome"
+MOTIVO_DATASET_INDISPONIVEL = "dataset_indisponivel"
+
+PADRAO_REPETICAO_CARACTERE = re.compile(r"([a-z])\1{3,}")
+PADRAO_DIGITO = re.compile(r"\d")
+
+PONTUACOES_PERMITIDAS = {",", ".", "~", "´"}
+
+PALAVRAS_IGNORADAS_FRASE = {
+    "a",
+    "ai",
+    "ainda",
+    "ao",
+    "aos",
+    "apelido",
+    "as",
+    "ate",
+    "boa",
+    "bom",
+    "chamada",
+    "chamado",
+    "chamam",
+    "chamo",
+    "chamar",
+    "com",
+    "como",
+    "da",
+    "das",
+    "de",
+    "dela",
+    "delas",
+    "dele",
+    "deles",
+    "dia",
+    "do",
+    "dos",
+    "e",
+    "eh",
+    "ela",
+    "elas",
+    "ele",
+    "eles",
+    "em",
+    "entao",
+    "era",
+    "essa",
+    "esse",
+    "esta",
+    "estou",
+    "eu",
+    "fala",
+    "falar",
+    "falo",
+    "favor",
+    "me",
+    "mim",
+    "meu",
+    "meus",
+    "minha",
+    "minhas",
+    "na",
+    "nas",
+    "no",
+    "nome",
+    "noite",
+    "nos",
+    "o",
+    "obrigada",
+    "obrigado",
+    "oi",
+    "ola",
+    "os",
+    "para",
+    "pode",
+    "podem",
+    "por",
+    "pra",
+    "qual",
+    "que",
+    "quem",
+    "senhor",
+    "senhora",
+    "sou",
+    "tambem",
+    "tarde",
+    "tenho",
+    "teu",
+    "tua",
+    "um",
+    "uma",
+    "vai",
+    "voce",
+    "voces",
+}
+
+PALAVRAS_NOME_PEJORATIVAS = {
+    "abestalhada",
+    "abestalhado",
+    "arrombada",
+    "arrombado",
+    "babaca",
+    "babacas",
+    "baitola",
+    "besta",
+    "bestalhao",
+    "biscate",
+    "boceta",
+    "boiola",
+    "bosta",
+    "buceta",
+    "burra",
+    "burro",
+    "carai",
+    "caralho",
+    "canalha",
+    "cretina",
+    "cretino",
+    "cu",
+    "cuzinho",
+    "debil",
+    "desgracada",
+    "desgracado",
+    "doente",
+    "egua",
+    "escrota",
+    "escroto",
+    "estupida",
+    "estupido",
+    "fdp",
+    "filhaodaputa",
+    "filhodaputa",
+    "foda",
+    "fodase",
+    "fudida",
+    "fudido",
+    "gozada",
+    "gozado",
+    "idiota",
+    "idiotas",
+    "imbecil",
+    "imbecis",
+    "inutil",
+    "kenga",
+    "lazarenta",
+    "lazarento",
+    "lerda",
+    "lerdo",
+    "lixo",
+    "maldita",
+    "maldito",
+    "merda",
+    "merdinha",
+    "meretriz",
+    "miseravel",
+    "nojenta",
+    "nojento",
+    "otaria",
+    "otario",
+    "palhaca",
+    "palhaco",
+    "panaca",
+    "pateta",
+    "pau",
+    "penis",
+    "piranha",
+    "piroca",
+    "podre",
+    "pomba",
+    "porra",
+    "prostituta",
+    "puta",
+    "putao",
+    "putassa",
+    "putaria",
+    "puteiro",
+    "putinha",
+    "puto",
+    "rapariga",
+    "retardada",
+    "retardado",
+    "ridicula",
+    "ridiculo",
+    "rola",
+    "sacanagem",
+    "safada",
+    "safado",
+    "siririca",
+    "tapada",
+    "tapado",
+    "tarada",
+    "tarado",
+    "tesao",
+    "tonta",
+    "tonto",
+    "traste",
+    "vaca",
+    "vagabunda",
+    "vagabundo",
+    "vadia",
+    "viado",
+    "xana",
+    "xavasca",
+    "xereca",
+    "xibiu",
+    "xota",
+}
+
+
+@dataclass(frozen=True)
+class ResultadoValidacaoNome:
+    valido: bool
+    primeiro_nome: str | None = None
+    motivo: str | None = None
+
+
+def validar_nome_cliente(texto):
+    texto_normalizado = normalizar_texto(texto or "").strip()
+
+    if not texto_normalizado:
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_VAZIO)
+
+    if PADRAO_DIGITO.search(texto_normalizado):
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_NUMERO)
+
+    if _tem_caractere_invalido(texto_normalizado):
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_CARACTERE_INVALIDO)
+
+    if _tem_quatro_letras_repetidas(texto_normalizado):
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_REPETICAO_CARACTERE)
+
+    tokens = _extrair_tokens(texto_normalizado)
+
+    if not tokens:
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_VAZIO)
+
+    if _tem_palavra_pejorativa(tokens):
+        return ResultadoValidacaoNome(False, motivo=MOTIVO_TERMO_PEJORATIVO)
+
+    if len(tokens) == 1:
+        return ResultadoValidacaoNome(
+            True,
+            primeiro_nome=_formatar_primeiro_nome(tokens[0]),
+        )
+
+    nome_dataset, motivo = _buscar_primeiro_nome_no_dataset(tokens)
+
+    if nome_dataset:
+        return ResultadoValidacaoNome(
+            True,
+            primeiro_nome=_formatar_primeiro_nome(nome_dataset),
+        )
+
+    return ResultadoValidacaoNome(False, motivo=motivo)
+
+
+def detecta_nome_invalido(texto):
+    return not validar_nome_cliente(texto).valido
+
+
+def extrair_primeiro_nome_cliente(texto):
+    return validar_nome_cliente(texto).primeiro_nome
+
+
+def _tem_caractere_invalido(texto):
+    for caractere in texto:
+        if caractere.isspace():
+            continue
+
+        if caractere in PONTUACOES_PERMITIDAS:
+            continue
+
+        categoria = unicodedata.category(caractere)
+
+        if categoria.startswith("L") or categoria.startswith("M"):
+            continue
+
+        return True
+
+    return False
+
+
+def _tem_quatro_letras_repetidas(texto):
+    texto_base = _remover_acentos(texto).lower()
+    letras = "".join(caractere for caractere in texto_base if caractere.isalpha())
+    return bool(PADRAO_REPETICAO_CARACTERE.search(letras))
+
+
+def _extrair_tokens(texto):
+    texto_limpo = texto
+
+    for pontuacao in PONTUACOES_PERMITIDAS:
+        texto_limpo = texto_limpo.replace(pontuacao, " ")
+
+    return [
+        token
+        for token in texto_limpo.split()
+        if token
+    ]
+
+
+def _tem_palavra_pejorativa(tokens):
+    palavras = {
+        _remover_acentos(token).lower()
+        for token in tokens
+    }
+
+    return bool(palavras & PALAVRAS_NOME_PEJORATIVAS)
+
+
+def _buscar_primeiro_nome_no_dataset(tokens):
+    try:
+        for token in tokens:
+            token_normalizado = _remover_acentos(token).lower()
+
+            if len(token_normalizado) < 2:
+                continue
+
+            if token_normalizado in PALAVRAS_IGNORADAS_FRASE:
+                continue
+
+            if _nome_existe_no_dataset(token):
+                return token, None
+
+        return None, MOTIVO_DATASET_NAO_ENCONTROU
+
+    except (ImportError, MemoryError) as erro:
+        logger.exception(
+            "detector_nome_dataset_indisponivel | acao=invalidar_sem_quebrar erro=%s",
+            erro,
+        )
+        return None, MOTIVO_DATASET_INDISPONIVEL
+
+    except Exception as erro:
+        logger.exception(
+            "detector_nome_dataset_erro | acao=invalidar_sem_quebrar erro=%s",
+            erro,
+        )
+        return None, MOTIVO_DATASET_INDISPONIVEL
+
+
+def _nome_existe_no_dataset(token):
+    dataset = _get_name_dataset()
+    candidatos = [token]
+    token_sem_acento = _remover_acentos(token)
+
+    if token_sem_acento != token:
+        candidatos.append(token_sem_acento)
+
+    for candidato in candidatos:
+        resultado = dataset.search(_formatar_primeiro_nome(candidato))
+
+        if not isinstance(resultado, dict):
+            continue
+
+        first_name = resultado.get("first_name")
+
+        if isinstance(first_name, dict) and first_name:
+            return True
+
+    return False
+
+
+@lru_cache(maxsize=1)
+def _get_name_dataset():
+    from names_dataset import NameDataset
+
+    return NameDataset()
+
+
+def _formatar_primeiro_nome(token):
+    token_limpo = token.strip(" .,~´")
+
+    if not token_limpo:
+        return token_limpo
+
+    return token_limpo[:1].upper() + token_limpo[1:].lower()
+
+
+def _remover_acentos(texto):
+    texto_decomposto = unicodedata.normalize("NFD", texto)
+
+    return "".join(
+        caractere
+        for caractere in texto_decomposto
+        if unicodedata.category(caractere) != "Mn"
+    )

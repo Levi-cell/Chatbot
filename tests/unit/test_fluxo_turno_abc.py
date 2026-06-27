@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from core.repositories import turno_cliente
-from workers.worker_flow import suport_functions as support
 from workers.worker_flow.response_flow import flow_sender
+from workers.worker_flow.transacoes import finalizacao_fila, ordem_turno
 
 
 CLIENTE = "5571999999999"
@@ -115,8 +115,12 @@ def contexto_historico(estado, id_mensagem, resposta_bot=None, retry=1):
     fila = estado.filas[id_mensagem]
     return {
         "id_conversa": ID_CONVERSA,
+        "id_etapa_atual": None,
+        "id_etapa_cliente": 1,
         "id_etapa_resposta": 1,
         "retry_count": retry,
+        "texto_cliente_atual": "Ola",
+        "tipo_mensagem_atual": "text",
         "mensagem_cliente_atual": {
             "id_mensagem_fila": id_mensagem,
             "id_hash_msg": fila["id_hash_msg"],
@@ -182,15 +186,15 @@ class FluxoTurnoABCTests(unittest.TestCase):
             estado.filas[2]["status"] = "processing"
 
             with patch.object(
-                support,
+                ordem_turno,
                 "existe_mensagem_anterior_aberta_conversa",
                 side_effect=estado.existe_anterior,
             ), patch.object(
-                support,
+                ordem_turno,
                 "reagendar_mensagem_sem_erro",
                 side_effect=estado.reagendar_sem_erro,
             ):
-                b_reagendada = support.reagendar_se_houver_mensagem_anterior(
+                b_reagendada = ordem_turno.reagendar_se_houver_mensagem_anterior(
                     mensagem_worker(estado, 2),
                     contexto_banco(),
                     lock_version=4,
@@ -209,7 +213,7 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 flow_sender,
-                "sender_etapa1",
+                "resolve_primeira_etapa",
                 side_effect=AssertionError("A nao pode ser enviada novamente"),
             ):
                 resultado_retry_a = flow_sender.flow_sender(
@@ -225,11 +229,11 @@ class FluxoTurnoABCTests(unittest.TestCase):
             self.assertTrue(resultado_retry_a["resposta_ja_existia"])
 
             with patch.object(
-                support,
+                finalizacao_fila,
                 "marcar_mensagem_como_enviada",
                 side_effect=estado.marcar_sent,
             ):
-                support.finalizar_mensagem_processada(
+                finalizacao_fila.finalizar_mensagem_processada(
                     mensagem_worker(estado, 1),
                     contexto_banco(),
                     lock_version=4,
@@ -239,12 +243,12 @@ class FluxoTurnoABCTests(unittest.TestCase):
             self.assertEqual(estado.filas[1]["status"], "sent")
 
             with patch.object(
-                support,
+                ordem_turno,
                 "existe_mensagem_anterior_aberta_conversa",
                 side_effect=estado.existe_anterior,
             ):
                 b_ainda_tem_anterior = (
-                    support.reagendar_se_houver_mensagem_anterior(
+                    ordem_turno.reagendar_se_houver_mensagem_anterior(
                         mensagem_worker(estado, 2),
                         contexto_banco(),
                         lock_version=5,
@@ -257,14 +261,14 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 flow_sender,
-                "sender_etapa1",
+                "resolve_primeira_etapa",
                 return_value={
                     "enviou": True,
                     "resposta_ja_existia": False,
                     "mensagem_bot": "Ola! Boa tarde.",
                     "id_hash_msg_bot": "wamid.bot.B",
                     "id_etapa_resultante": 1,
-                    "tipo_mensagem": "interactive_button",
+                    "tipo_mensagem": "text",
                     "canal": "meta_whatsapp",
                 },
             ):

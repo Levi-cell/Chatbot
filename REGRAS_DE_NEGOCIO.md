@@ -749,9 +749,9 @@ eventos de flood e controle de cache utilizam administração somente leitura:
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
 - Exclusão em massa de unidades é proibida.
 
-### 19.4. Papel de `status_ativo`
+### 19.4. Papel de `status_pagamento`
 
-`status_ativo` não representa vinculação ou desvinculação do número no WABA.
+`status_pagamento` não representa vinculação ou desvinculação do número no WABA.
 
 - O campo está reservado ao controle comercial da unidade.
 - Futuramente, ele poderá desativar o atendimento de unidades com pagamento
@@ -760,10 +760,10 @@ eventos de flood e controle de cache utilizam administração somente leitura:
   parte da V1.
 - Na V1, pagamentos e contratos poderão ser controlados manualmente, contrato por
   contrato.
-- Alterar `status_ativo` deverá atualizar banco e cache de unidades, mas não
+- Alterar `status_pagamento` deverá atualizar banco e cache de unidades, mas não
   deverá registrar ou remover o número na Meta.
 
-O fato de uma edição de `status_ativo` não chamar a Meta é comportamento esperado,
+O fato de uma edição de `status_pagamento` não chamar a Meta é comportamento esperado,
 e não uma lacuna.
 
 ### 19.5. Desvinculação definitiva de uma unidade
@@ -845,7 +845,7 @@ Implementação principal:
 | Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade e desbloqueio individual. |
 | Admin somente desbloqueia clientes | Implementada | Meta primeiro; falha preserva o registro no banco. |
 | Unidade Meta-first na criação e exclusão | Implementada | Falha da Meta impede a alteração do banco. |
-| `status_ativo` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
+| `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `main_worker.py` reinicia `worker_flow()` depois de uma exceção. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |

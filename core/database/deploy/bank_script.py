@@ -243,7 +243,7 @@ def criar_tabelas():
             telefone VARCHAR(20) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
-            status_ativo BOOLEAN DEFAULT TRUE
+            status_pagamento BOOLEAN DEFAULT TRUE
         );
 
         -- ETAPA

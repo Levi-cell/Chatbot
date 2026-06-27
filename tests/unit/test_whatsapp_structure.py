@@ -2,17 +2,12 @@ import ast
 import unittest
 from pathlib import Path
 
-from core.integrations.whatsapp.messages.etapas import (
-    MENSAGEM_ETAPA_1,
-)
-from core.integrations.whatsapp.messages.tratamentos import (
-    MENSAGEM_CONTEXTO_GENERICA,
+from core.integrations.whatsapp.messages.primeira_etapa_messages import (
     MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA_1,
+    MENSAGEM_ETAPA_1,
     MENSAGEM_FINANCEIRO_ETAPA_1,
-    MENSAGEM_FINANCEIRO_ETAPA_GENERICA,
     MENSAGEM_FINANCEIRO_INICIO,
     MENSAGEM_MIDIA_ETAPA_1,
-    MENSAGEM_MIDIA_ETAPA_GENERICA,
     MENSAGEM_MIDIA_INICIO,
 )
 
@@ -20,6 +15,7 @@ from core.integrations.whatsapp.messages.tratamentos import (
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 RAIZ_WHATSAPP = RAIZ_PROJETO / "core" / "integrations" / "whatsapp"
 RAIZ_PYWA = RAIZ_WHATSAPP / "pywa_functions"
+RAIZ_TOOLS = RAIZ_WHATSAPP / "tools"
 
 RAIZES_PRODUCAO = (
     RAIZ_PROJETO / "core",
@@ -41,12 +37,9 @@ CONTEUDOS_WHATSAPP = (
     MENSAGEM_ETAPA_1,
     MENSAGEM_MIDIA_INICIO,
     MENSAGEM_MIDIA_ETAPA_1,
-    MENSAGEM_MIDIA_ETAPA_GENERICA,
     MENSAGEM_FINANCEIRO_INICIO,
     MENSAGEM_FINANCEIRO_ETAPA_1,
-    MENSAGEM_FINANCEIRO_ETAPA_GENERICA,
     MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA_1,
-    MENSAGEM_CONTEXTO_GENERICA,
 )
 
 
@@ -55,20 +48,23 @@ def arquivos_python_producao():
         yield from raiz.rglob("*.py")
 
 
-def esta_em_pywa_functions(arquivo):
-    try:
-        arquivo.relative_to(RAIZ_PYWA)
-        return True
-    except ValueError:
-        return False
+def esta_em_integracao_whatsapp_autorizada(arquivo):
+    for raiz in (RAIZ_PYWA, RAIZ_TOOLS):
+        try:
+            arquivo.relative_to(raiz)
+            return True
+        except ValueError:
+            continue
+
+    return False
 
 
 class WhatsappStructureTests(unittest.TestCase):
-    def test_imports_e_chamadas_pywa_ficam_em_pywa_functions(self):
+    def test_imports_e_chamadas_pywa_ficam_em_integrations_whatsapp(self):
         violacoes = []
 
         for arquivo in arquivos_python_producao():
-            if esta_em_pywa_functions(arquivo):
+            if esta_em_integracao_whatsapp_autorizada(arquivo):
                 continue
 
             arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
@@ -107,6 +103,7 @@ class WhatsappStructureTests(unittest.TestCase):
                     violacoes.append(f"{arquivo}: {conteudo_whatsapp}")
 
         self.assertEqual(violacoes, [])
+
 
 if __name__ == "__main__":
     unittest.main()

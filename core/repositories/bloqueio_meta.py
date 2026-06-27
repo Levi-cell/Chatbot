@@ -94,7 +94,7 @@ def buscar_unidade_bloqueio_por_phone_id(phone_id_unidade, cursor):
         SELECT id_unidade, phone_number_id
         FROM chatbot.unidade
         WHERE phone_number_id = %s
-          AND status_ativo = TRUE
+          AND status_pagamento = TRUE
         LIMIT 1;
     """, (phone_id_unidade,))
 

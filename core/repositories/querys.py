@@ -11,7 +11,7 @@ def pegar_unidades(cursor):
     cursor.execute("""
         SELECT phone_number_id, id_unidade
         FROM chatbot.unidade
-        WHERE status_ativo = TRUE
+        WHERE status_pagamento = TRUE
     """)
 
     resultado = {row[0]: row[1] for row in cursor.fetchall()}
@@ -46,7 +46,7 @@ def buscar_id_unidade_por_phone_id(phone_number_id, cursor):
         SELECT id_unidade
         FROM chatbot.unidade
         WHERE phone_number_id = %s
-          AND status_ativo = TRUE
+          AND status_pagamento = TRUE
     """, (phone_number_id,))
 
     result = cursor.fetchone()
@@ -231,7 +231,7 @@ def buscar_conversa_bloqueada_por_cliente_unidade(
         JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
         WHERE cl.waid_telefone = %s
           AND u.phone_number_id = %s
-          AND u.status_ativo = TRUE
+          AND u.status_pagamento = TRUE
           AND c.status_ativa = FALSE
           AND c.id_etapa_atual = 7
           AND c.finalizou_em > NOW() - INTERVAL '30 days'

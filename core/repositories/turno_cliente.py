@@ -10,6 +10,7 @@ def avaliar_turno_cliente_para_fila(
     cursor,
     cliente_telefone,
     id_phone_unidade,
+    received_data_hora=None,
     usar_lock=False,
 ):
     if not cliente_telefone or not id_phone_unidade:
@@ -25,6 +26,27 @@ def avaliar_turno_cliente_para_fila(
 
     if usar_lock:
         adquirir_lock_turno_cliente(cursor, cliente_telefone, id_phone_unidade)
+
+    if received_data_hora is not None:
+        interacao_posterior = buscar_interacao_posterior_a_mensagem(
+            cursor,
+            cliente_telefone,
+            id_phone_unidade,
+            received_data_hora,
+        )
+
+        if interacao_posterior is not None:
+            logger.info(
+                "turno_cliente_bloqueado | motivo=mensagem_reentregue_fora_de_ordem acao=nao_enfileirar cliente=%s phone_number_id=%s mensagem_em=%s ultima_interacao=%s",
+                short_value(cliente_telefone),
+                short_value(id_phone_unidade),
+                received_data_hora,
+                interacao_posterior,
+            )
+            return {
+                "pode_enfileirar": False,
+                "motivo": "mensagem_reentregue_fora_de_ordem",
+            }
 
     turno = avaliar_filas_abertas_turno(
         cursor,
@@ -78,6 +100,35 @@ def adquirir_lock_turno_cliente(cursor, cliente_telefone, id_phone_unidade):
         short_value(cliente_telefone),
         short_value(id_phone_unidade),
     )
+
+
+def buscar_interacao_posterior_a_mensagem(
+    cursor,
+    cliente_telefone,
+    id_phone_unidade,
+    received_data_hora,
+):
+    cursor.execute("""
+        SELECT c.last_interaction_at
+        FROM chatbot.conversa c
+        INNER JOIN chatbot.cliente cl
+            ON cl.id_cliente = c.id_cliente
+        INNER JOIN chatbot.unidade u
+            ON u.id_unidade = c.id_unidade
+        WHERE cl.waid_telefone = %s
+          AND u.phone_number_id = %s
+          AND c.last_interaction_at IS NOT NULL
+          AND %s < c.last_interaction_at
+        ORDER BY c.last_interaction_at DESC, c.id_conversa DESC
+        LIMIT 1;
+    """, (
+        cliente_telefone,
+        id_phone_unidade,
+        received_data_hora,
+    ))
+
+    resultado = cursor.fetchone()
+    return resultado[0] if resultado else None
 
 
 def avaliar_filas_abertas_turno(cursor, cliente_telefone, id_phone_unidade):

@@ -1,7 +1,6 @@
 import logging
 
 import psycopg2
-
 from core.cache.cache_unidade import UnidadeNaoEncontrada
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
@@ -12,24 +11,32 @@ from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
 from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
 from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta
 from workers.tratamento_erros_externos.unidade_nao_encontrada import handle_unidade_nao_encontrada
-from workers.worker_flow.response_flow.rotear_resposta_cliente import (
-    rotear_resposta_cliente,
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+from workers.worker_flow.suporte.cache_repair import (
+    confirmar_cache_cliente_se_pendente,
+    reparar_cache_cliente_stale_se_fk_invalida,
+    reparar_cache_unidade_stale_se_fk_invalida,
 )
-from workers.worker_flow.suport_functions import (
+from workers.worker_flow.suporte.estado_ciclo import (
     aguardar_fila_vazia,
-    atualizar_banco_com_contexto_final,
     atualizar_estado_com_contexto,
     atualizar_estado_com_mensagem,
     atualizar_estado_lock,
-    confirmar_cache_cliente_se_pendente,
     criar_estado_ciclo,
-    finalizar_mensagem_processada,
-    liberar_lock_conversa_se_necessario,
-    logar_lock_recusado,
     montar_mensagem_fila,
+)
+from workers.worker_flow.transacoes.finalizacao_fila import (
+    finalizar_mensagem_processada,
+)
+from workers.worker_flow.transacoes.lock_conversa import (
+    liberar_lock_conversa_se_necessario,
+)
+from workers.worker_flow.transacoes.ordem_turno import (
+    logar_lock_recusado,
     reagendar_se_houver_mensagem_anterior,
-    reparar_cache_cliente_stale_se_fk_invalida,
-    reparar_cache_unidade_stale_se_fk_invalida,
+)
+from workers.worker_flow.transacoes.persistencia_resposta import (
+    atualizar_banco_com_contexto_final,
 )
 from workers.worker_flow.tratar_bloqueio import tratar_conversa_bloqueada
 from workers.worker_flow.valida_banco import validar_banco_mensagem
@@ -148,7 +155,7 @@ def worker_flow():
                 contexto_historico["mensagem_cliente_inserida"],
             )
 
-            contexto_envio = rotear_resposta_cliente(contexto_historico)
+            contexto_envio = flow_sender(contexto_historico)
 
             try:
                 contexto_final = atualizar_banco_com_contexto_final(

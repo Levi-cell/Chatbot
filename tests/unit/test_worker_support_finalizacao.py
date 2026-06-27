@@ -1,16 +1,25 @@
 import unittest
 from unittest.mock import patch
 
-from workers.worker_flow import suport_functions as support
+from workers.worker_flow.suporte import cache_repair
+from workers.worker_flow.transacoes import ordem_turno
+from workers.worker_flow.transacoes import persistencia_resposta as persistencia
 
 
 DATA_BOT = "2026-01-01T00:00:00"
 
 
-def contexto_historico_base(resposta_bot=None):
+def contexto_historico_base(
+    resposta_bot=None,
+    *,
+    id_etapa_atual=None,
+    texto_cliente="Ola",
+):
     return {
         "resposta_bot_para_mensagem_atual": resposta_bot,
         "id_conversa": 10,
+        "id_etapa_atual": id_etapa_atual,
+        "texto_cliente_atual": texto_cliente,
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
             "id_hash_msg": "wamid.cliente",
@@ -60,19 +69,19 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         }
 
         with patch.object(
-            support,
+            persistencia,
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot",
             fake_atualizar_conversa,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
-            resultado = support.atualizar_banco_com_contexto_final(
+            resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(),
                 contexto_envio,
                 cursor,
@@ -124,19 +133,19 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            support,
+            persistencia,
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot",
             fake_atualizar_conversa,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
-            resultado = support.atualizar_banco_com_contexto_final(
+            resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(),
                 contexto_envio,
                 cursor,
@@ -178,19 +187,19 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            support,
+            persistencia,
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot",
             fake_atualizar_conversa,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
-            resultado = support.atualizar_banco_com_contexto_final(
+            resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(
                     {"received_data_hora": DATA_BOT}
                 ),
@@ -236,19 +245,19 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            support,
+            persistencia,
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot",
             fake_atualizar_conversa,
         ), patch.object(
-            support,
+            persistencia,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
-            resultado = support.atualizar_banco_com_contexto_final(
+            resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(
                     {"received_data_hora": DATA_BOT}
                 ),
@@ -272,9 +281,115 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         self.assertFalse(resultado["atualizar_conversa"])
         self.assertTrue(resultado["atualizar_last_from_bot"])
 
+    def test_atualizar_banco_conforme_transicao_de_etapa_salva_nome_quando_etapa_um_avanca_para_dois(self):
+        chamadas = []
+        cursor = object()
+
+        def fake_atualizar_nome(telefone, nome, cursor_recebido):
+            chamadas.append((telefone, nome, cursor_recebido))
+            return 1
+
+        with patch.object(
+            persistencia,
+            "atualizar_nome_cliente_por_telefone",
+            fake_atualizar_nome,
+        ):
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=1,
+                    texto_cliente="Maria",
+                ),
+                {
+                    "id_etapa_resultante": 2,
+                    "primeiro_nome_cliente": "Maria",
+                },
+                cursor,
+            )
+
+        self.assertEqual(chamadas, [("5571999999999", "Maria", cursor)])
+        self.assertEqual(
+            resultado,
+            {
+                "cliente_nome_atualizado": True,
+                "primeiro_nome_cliente": "Maria",
+            },
+        )
+
+    def test_atualizar_banco_conforme_transicao_de_etapa_reconstroi_nome_em_reparo_idempotente(self):
+        chamadas = []
+        cursor = object()
+
+        def fake_atualizar_nome(telefone, nome, cursor_recebido):
+            chamadas.append((telefone, nome, cursor_recebido))
+            return 1
+
+        with patch.object(
+            persistencia,
+            "atualizar_nome_cliente_por_telefone",
+            fake_atualizar_nome,
+        ):
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=1,
+                    texto_cliente="Maria",
+                ),
+                {
+                    "resposta_ja_existia": True,
+                    "id_etapa_resultante": 2,
+                },
+                cursor,
+            )
+
+        self.assertEqual(chamadas, [("5571999999999", "Maria", cursor)])
+        self.assertEqual(resultado["primeiro_nome_cliente"], "Maria")
+
+    def test_atualizar_banco_conforme_transicao_de_etapa_nao_salva_nome_em_tratamento(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "atualizar_nome_cliente_por_telefone",
+        ) as atualizar_nome:
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=1,
+                    texto_cliente="Maria",
+                ),
+                {
+                    "id_etapa_resultante": 2,
+                    "primeiro_nome_cliente": "Maria",
+                    "tratamento": True,
+                },
+                cursor,
+            )
+
+        self.assertIsNone(resultado)
+        atualizar_nome.assert_not_called()
+
+    def test_atualizar_banco_conforme_transicao_de_etapa_falha_se_nome_nao_for_resolvido(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "atualizar_nome_cliente_por_telefone",
+        ) as atualizar_nome:
+            with self.assertRaises(ValueError):
+                persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                    contexto_historico_base(
+                        id_etapa_atual=1,
+                        texto_cliente="99",
+                    ),
+                    {
+                        "id_etapa_resultante": 2,
+                    },
+                    cursor,
+                )
+
+        atualizar_nome.assert_not_called()
+
     def test_resposta_existente_sem_data_persistida_falha(self):
         with self.assertRaises(ValueError):
-            support.atualizar_banco_com_contexto_final(
+            persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base({}),
                 {
                     "enviou": False,
@@ -287,7 +402,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
 
     def test_contexto_sem_envio_e_sem_resposta_existente_falha(self):
         with self.assertRaises(ValueError):
-            support.atualizar_banco_com_contexto_final(
+            persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(),
                 {
                     "enviou": False,
@@ -314,15 +429,15 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            support,
+            ordem_turno,
             "existe_mensagem_anterior_aberta_conversa",
             return_value=True,
         ), patch.object(
-            support,
+            ordem_turno,
             "reagendar_mensagem_sem_erro",
             fake_reagendar,
         ):
-            resultado = support.reagendar_se_houver_mensagem_anterior(
+            resultado = ordem_turno.reagendar_se_houver_mensagem_anterior(
                 mensagem,
                 contexto_banco,
                 lock_version=7,
@@ -335,18 +450,18 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
     def test_reparar_cache_cliente_stale_so_age_com_fk_cliente(self):
         estado = {"cliente_telefone": "5571999999999", "id_mensagem": 1}
 
-        with patch.object(support, "remover_cliente_cache", return_value=True) as remover:
+        with patch.object(cache_repair, "remover_cliente_cache", return_value=True) as remover:
             self.assertTrue(
-                support.reparar_cache_cliente_stale_se_fk_invalida(
+                cache_repair.reparar_cache_cliente_stale_se_fk_invalida(
                     RuntimeError("violates foreign key constraint conversa_id_cliente_fkey"),
                     estado,
                 )
             )
             remover.assert_called_once_with("5571999999999")
 
-        with patch.object(support, "remover_cliente_cache", return_value=True) as remover:
+        with patch.object(cache_repair, "remover_cliente_cache", return_value=True) as remover:
             self.assertFalse(
-                support.reparar_cache_cliente_stale_se_fk_invalida(
+                cache_repair.reparar_cache_cliente_stale_se_fk_invalida(
                     RuntimeError("erro qualquer"),
                     estado,
                 )

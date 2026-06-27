@@ -1,5 +1,5 @@
 from core.database.connection_aws import get_conn
-from core.integrations.whatsapp.pywa_functions.usuarios import (
+from core.integrations.whatsapp.tools.usuarios import (
     listar_usuarios_bloqueados_meta,
 )
 from core.repositories.bloqueio_meta import (
@@ -55,7 +55,7 @@ def listar_bloqueados_de_cada_unidade(imprimir=True):
         conn.close()
 
 
-def job_reconciliacao_bloqueios_meta():
+def job_reconciliacao_bloqueios_cliente_unidades_meta():
     bloqueios_meta = listar_bloqueados_de_cada_unidade(
         imprimir=False,
     )

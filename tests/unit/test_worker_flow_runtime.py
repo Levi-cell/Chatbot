@@ -43,9 +43,18 @@ def contexto_banco():
 def contexto_historico():
     return {
         "id_conversa": 10,
+        "id_etapa_atual": None,
         "id_etapa_cliente": 1,
         "id_etapa_resposta": 1,
         "mensagem_cliente_inserida": True,
+        "mensagem_cliente_atual": {
+            "id_mensagem_fila": 7,
+            "id_hash_msg": "wamid.cliente.7",
+            "cliente_telefone": "5571999999999",
+            "id_phone_unidade": "123456",
+        },
+        "resposta_bot_para_mensagem_atual": None,
+        "retry_count": 1,
     }
 
 
@@ -55,7 +64,7 @@ def contexto_envio():
         "resposta_ja_existia": False,
         "id_hash_msg_bot": "wamid.bot.7",
         "id_etapa_resultante": 1,
-        "tipo_mensagem": "interactive_button",
+        "tipo_mensagem": "text",
     }
 
 
@@ -149,7 +158,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         ))
         stack.enter_context(patch.object(
             flow_worker,
-            "rotear_resposta_cliente",
+            "flow_sender",
             side_effect=lambda *_args: eventos.append("enviar_meta") or contexto_envio(),
         ))
         stack.enter_context(patch.object(

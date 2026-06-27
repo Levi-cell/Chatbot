@@ -1,5 +1,7 @@
 import logging
 
+from core.logging_config import short_value
+
 
 logger = logging.getLogger("db.updates")
 
@@ -161,6 +163,34 @@ def atualizar_conversa_resposta_bot_sem_avancar(
         raise ValueError(
             "Conversa nao foi atualizada com resposta do bot sem avancar etapa "
             f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
+def atualizar_nome_cliente_por_telefone(waid_telefone, nome, cursor):
+    if not waid_telefone:
+        raise ValueError("waid_telefone nao informado para atualizar nome do cliente")
+
+    if not nome:
+        raise ValueError("nome nao informado para atualizar cliente")
+
+    cursor.execute("""
+        UPDATE chatbot.cliente
+        SET nome = %s
+        WHERE waid_telefone = %s;
+    """, (nome, waid_telefone))
+
+    logger.debug(
+        "cliente_update | acao=atualizar_nome telefone=%s linhas=%s",
+        short_value(waid_telefone),
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Cliente nao foi atualizado com nome "
+            f"(telefone={short_value(waid_telefone)}, linhas={cursor.rowcount})"
         )
 
     return cursor.rowcount

@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.integrations.whatsapp.pywa_functions import usuarios
+from core.integrations.whatsapp.tools import usuarios
 
 
 class FakePaginadorBloqueios:

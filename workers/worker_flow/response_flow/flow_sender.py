@@ -1,6 +1,8 @@
 import logging
 
-from core.integrations.whatsapp.pywa_functions.etapas import sender_etapa1
+from workers.worker_flow.response_flow.etapas.primeira_etapa import (
+    resolve_primeira_etapa,
+)
 
 
 logger = logging.getLogger("worker.sender")
@@ -8,14 +10,13 @@ logger = logging.getLogger("worker.sender")
 
 def flow_sender(contexto_historico):
     id_conversa = contexto_historico["id_conversa"]
-    id_etapa_resposta = contexto_historico["id_etapa_resposta"]
+    id_etapa_proxima = contexto_historico["id_etapa_resposta"]
+    id_etapa_atual = contexto_historico.get("id_etapa_atual")
     retry_count = contexto_historico["retry_count"]
 
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
     cliente_atual_id_mensagem_fila = mensagem_cliente_atual["id_mensagem_fila"]
     cliente_atual_id_hash_msg = mensagem_cliente_atual["id_hash_msg"]
-    cliente_telefone = mensagem_cliente_atual["cliente_telefone"]
-    phone_id_unidade = mensagem_cliente_atual["id_phone_unidade"]
 
     resposta_bot_atual = (
         contexto_historico["resposta_bot_para_mensagem_atual"] or {}
@@ -47,17 +48,15 @@ def flow_sender(contexto_historico):
             retry_count,
         )
 
-    if id_etapa_resposta == 1:
-        return sender_etapa1(
-            cliente_telefone=cliente_telefone,
-            phone_id_unidade=phone_id_unidade,
-        )
+    if id_etapa_atual is None or id_etapa_atual == 1:
+        contexto_resposta = resolve_primeira_etapa(contexto_historico)
+        return contexto_resposta
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",
         id_conversa,
-        id_etapa_resposta,
+        id_etapa_proxima,
     )
     raise NotImplementedError(
-        f"Sender da etapa {id_etapa_resposta} ainda nao implementado"
+        f"Sender da etapa {id_etapa_proxima} ainda nao implementado"
     )

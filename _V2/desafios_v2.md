@@ -837,10 +837,15 @@ Mesmo com IA, o estado oficial da conversa deve continuar no banco.
 
 Na V1, o projeto deixa uma base simples:
 
-- `flow_treat_unsupported_type` para tipos nao suportados, como midia, audio, documento e figurinha;
-- `flow_treat_financial` para perguntas sobre valor, custo ou investimento;
-- `flow_treat_context` para resposta fora do contexto, com nome invalido
-  implementado na etapa 1;
+- `flow_sender.py` como ponto unico de decisao antes do envio;
+- `response_flow/etapas/primeira_etapa.py` concentrando a validacao da etapa 1,
+  seus tratamentos e a ponte para a etapa 2;
+- `detector_etapas/detector_midia.py` para tipos nao suportados, como midia,
+  audio, documento e figurinha;
+- `detector_etapas/detector_financeiro.py` para perguntas sobre valor, custo ou
+  investimento;
+- `detector_etapas/detector_nome.py` para resposta fora do contexto na captura
+  de nome;
 - outros tratamentos de contexto ainda pendentes por etapa;
 - tratamentos registrando historico e usando o mesmo contrato transacional do `flow_sender`;
 - tratamento sem avancar indevidamente a etapa oficial.
@@ -872,7 +877,7 @@ Essa decisao deve ser feita com cuidado, porque pode afetar:
 - entendimento de contexto;
 - simplicidade do historico.
 
-Tambem sera necessario decidir se `flow_treat_context` deve:
+Tambem sera necessario decidir se os tratamentos por etapa devem:
 
 - repetir a pergunta exata da etapa atual;
 - enviar botoes/listas da etapa atual novamente;

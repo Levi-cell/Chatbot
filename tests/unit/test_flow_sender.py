@@ -4,11 +4,20 @@ from unittest.mock import patch
 import workers.worker_flow.response_flow.flow_sender as flow_sender_module
 
 
-def contexto_historico_base(resposta_bot=None, etapa=1, retry=1):
+def contexto_historico_base(
+    resposta_bot=None,
+    etapa_atual=None,
+    etapa_resposta=1,
+    retry=1,
+):
     return {
         "id_conversa": 10,
-        "id_etapa_resposta": etapa,
+        "id_etapa_atual": etapa_atual,
+        "id_etapa_cliente": 1,
+        "id_etapa_resposta": etapa_resposta,
         "retry_count": retry,
+        "texto_cliente_atual": "Ola",
+        "tipo_mensagem_atual": "text",
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
             "id_hash_msg": "wamid.cliente",
@@ -20,11 +29,15 @@ def contexto_historico_base(resposta_bot=None, etapa=1, retry=1):
 
 
 class FlowSenderTests(unittest.TestCase):
-    def test_idempotente_nao_envia_meta_quando_resposta_ja_existe(self):
+    def test_idempotente_nao_chama_primeira_etapa_quando_resposta_ja_existe(self):
         def falhar_se_chamar(*_args, **_kwargs):
-            raise AssertionError("sender_etapa1 nao deveria ser chamado")
+            raise AssertionError("primeira etapa nao deveria ser chamada")
 
-        with patch.object(flow_sender_module, "sender_etapa1", falhar_se_chamar):
+        with patch.object(
+            flow_sender_module,
+            "resolve_primeira_etapa",
+            falhar_se_chamar,
+        ):
             resultado = flow_sender_module.flow_sender(
                 contexto_historico_base(
                     resposta_bot={
@@ -40,31 +53,51 @@ class FlowSenderTests(unittest.TestCase):
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.existente")
         self.assertEqual(resultado["id_etapa_resultante"], 1)
 
-    def test_etapa_1_repassa_retorno_do_sender_etapa1(self):
-        chamadas = []
+    def test_conversa_sem_etapa_vai_para_primeira_etapa(self):
+        esperado = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.bot",
+            "id_etapa_resultante": 1,
+        }
 
-        def fake_sender_etapa1(cliente_telefone, phone_id_unidade):
-            chamadas.append((cliente_telefone, phone_id_unidade))
-            return {
-                "enviou": True,
-                "resposta_ja_existia": False,
-                "mensagem_bot": "Ola!",
-                "id_hash_msg_bot": "wamid.bot",
-                "id_etapa_resultante": 1,
-                "tipo_mensagem": "text",
-            }
+        with patch.object(
+            flow_sender_module,
+            "resolve_primeira_etapa",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(etapa_atual=None)
+            )
 
-        with patch.object(flow_sender_module, "sender_etapa1", fake_sender_etapa1):
-            resultado = flow_sender_module.flow_sender(contexto_historico_base())
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
 
-        self.assertEqual(chamadas, [("5571999999999", "123456")])
-        self.assertTrue(resultado["enviou"])
-        self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot")
-        self.assertEqual(resultado["tipo_mensagem"], "text")
+    def test_etapa_um_vai_para_primeira_etapa(self):
+        esperado = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.bot",
+            "id_etapa_resultante": 1,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_primeira_etapa",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(etapa_atual=1, etapa_resposta=2)
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
 
     def test_etapa_nao_implementada_nao_finge_sucesso(self):
         with self.assertRaises(NotImplementedError):
-            flow_sender_module.flow_sender(contexto_historico_base(etapa=2))
+            flow_sender_module.flow_sender(
+                contexto_historico_base(etapa_atual=2, etapa_resposta=3)
+            )
 
 
 if __name__ == "__main__":

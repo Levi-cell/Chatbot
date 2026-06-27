@@ -4,7 +4,8 @@ from unittest.mock import patch
 from core.repositories import deletes, querys, updates
 from tests.helpers import FakeCursor
 from workers.tratamento_erros_externos import expection_process
-from workers.worker_flow import suport_functions as support
+from workers.worker_flow.suporte import estado_ciclo
+from workers.worker_flow.transacoes import finalizacao_fila, lock_conversa
 
 
 class RetryLockLifecycleTests(unittest.TestCase):
@@ -168,8 +169,8 @@ class RetryLockLifecycleTests(unittest.TestCase):
         }
         cursor = object()
 
-        with patch.object(support, "marcar_mensagem_como_enviada") as marcar:
-            support.finalizar_mensagem_processada(
+        with patch.object(finalizacao_fila, "marcar_mensagem_como_enviada") as marcar:
+            finalizacao_fila.finalizar_mensagem_processada(
                 mensagem,
                 contexto_banco,
                 lock_version=4,
@@ -180,10 +181,10 @@ class RetryLockLifecycleTests(unittest.TestCase):
 
     def test_unlock_so_ocorre_com_lock_completo(self):
         cursor = object()
-        estado_incompleto = support.criar_estado_ciclo()
+        estado_incompleto = estado_ciclo.criar_estado_ciclo()
 
-        with patch.object(support, "unlock_conversa") as unlock:
-            resultado = support.liberar_lock_conversa_se_necessario(
+        with patch.object(lock_conversa, "unlock_conversa") as unlock:
+            resultado = lock_conversa.liberar_lock_conversa_se_necessario(
                 cursor,
                 estado_incompleto,
             )
@@ -193,7 +194,7 @@ class RetryLockLifecycleTests(unittest.TestCase):
 
     def test_unlock_usa_mesma_conversa_e_versao_adquirida(self):
         cursor = object()
-        estado = support.criar_estado_ciclo()
+        estado = estado_ciclo.criar_estado_ciclo()
         estado.update({
             "lock_ok": True,
             "id_conversa": 10,
@@ -201,11 +202,11 @@ class RetryLockLifecycleTests(unittest.TestCase):
         })
 
         with patch.object(
-            support,
+            lock_conversa,
             "unlock_conversa",
             return_value=True,
         ) as unlock:
-            resultado = support.liberar_lock_conversa_se_necessario(
+            resultado = lock_conversa.liberar_lock_conversa_se_necessario(
                 cursor,
                 estado,
             )
