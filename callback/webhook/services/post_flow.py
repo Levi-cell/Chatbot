@@ -19,6 +19,10 @@ from .populating_fila_mensagens import preparar_dados_fila, povoando_fila
 logger = logging.getLogger("webhook.post_flow")
 fila_logger = logging.getLogger("webhook.fila")
 
+TIPO_EVENTO_MENSAGEM = "messages"
+TIPO_EVENTO_STATUS = "statuses"
+TIPO_EVENTO_DESCONHECIDO = "unknown"
+
 
 def responder_post_webhook(request):
     print("\n\n\n-----------------------------------------------------------------NOVO EVENTO-----------------------------------------------------------------\n\n\n")
@@ -48,6 +52,17 @@ def responder_post_webhook(request):
             "status": "ignored",
             "reason": "invalid_json",
         })
+
+    tipo_evento = _classificar_evento_meta(data)
+
+    if tipo_evento == TIPO_EVENTO_STATUS:
+        return _responder_status_meta_sem_processar(data)
+
+    if tipo_evento != TIPO_EVENTO_MENSAGEM:
+        logger.info(
+            "evento_meta_ignorado | motivo=evento_sem_messages_ou_statuses acao=retornar_200",
+        )
+        return JsonResponse({"status": "ok"})
 
     try:
         phone_number_id = _extrair_phone_number_id(data)
@@ -138,6 +153,38 @@ def responder_post_webhook(request):
     return JsonResponse({"status": "ok"})
 
 
+def _classificar_evento_meta(data):
+    value = _extrair_value(data)
+    possui_mensagens = bool(value.get("messages"))
+    possui_statuses = bool(value.get("statuses"))
+
+    if possui_mensagens and not possui_statuses:
+        return TIPO_EVENTO_MENSAGEM
+
+    if possui_statuses and not possui_mensagens:
+        return TIPO_EVENTO_STATUS
+
+    return TIPO_EVENTO_DESCONHECIDO
+
+
+def _responder_status_meta_sem_processar(data):
+    statuses = _extrair_value(data).get("statuses") or []
+    nomes_status = sorted({
+        status.get("status")
+        for status in statuses
+        if status.get("status")
+    })
+    primeiro_status = statuses[0] if statuses else {}
+
+    logger.info(
+        "status_meta_recebido | acao=ignorar_na_v1 total=%s statuses=%s id_hash_msg_bot=%s",
+        len(statuses),
+        ",".join(nomes_status) or None,
+        short_value(primeiro_status.get("id")),
+    )
+    return JsonResponse({"status": "ok"})
+
+
 def _executar_transacao_fila(dados):
     conn_webhook = None
 
@@ -225,13 +272,19 @@ def _validar_tamanho_body(request):
     return None
 
 
+def _extrair_value(data):
+    return (
+        data.get("entry", [{}])[0]
+        .get("changes", [{}])[0]
+        .get("value", {})
+    )
+
+
 def _extrair_phone_number_id(data):
-    value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
-    metadata = value.get("metadata", {})
+    metadata = _extrair_value(data).get("metadata", {})
     return metadata.get("phone_number_id")
 
 
 def _extrair_cliente_telefone(data):
-    value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
-    contacts = value.get("contacts", [{}])
+    contacts = _extrair_value(data).get("contacts", [{}])
     return contacts[0].get("wa_id") if contacts else None

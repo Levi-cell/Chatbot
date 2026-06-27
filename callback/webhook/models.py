@@ -218,7 +218,7 @@ class Unidade(models.Model):
     telefone = models.CharField(unique=True, max_length=20)
     phone_number_id = models.CharField(unique=True, max_length=100)
     link_agendamento = models.CharField(unique=True, max_length=400)
-    status_ativo = models.BooleanField(blank=True, null=True, default=True)
+    status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
     def __str__(self):
         return self.nome

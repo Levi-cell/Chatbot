@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from core.cache.runtime.cache_flood_redis import avaliar_flood_redis
 from core.cache.cache_flood_memoria import avaliar_flood_memoria
 from core.database.connection_aws import get_conn
-from core.integrations.whatsapp.pywa_functions.usuarios import (
+from core.integrations.whatsapp.tools.usuarios import (
     bloquear_usuario_meta,
 )
 from core.logging_config import short_value

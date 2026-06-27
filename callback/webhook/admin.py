@@ -13,7 +13,7 @@ from core.cache.cache_unidade import (
 )
 from core.integrations.whatsapp.tools.ativando_numero import registrar_numero_whatsapp
 from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
-from core.integrations.whatsapp.pywa_functions.usuarios import (
+from core.integrations.whatsapp.tools.usuarios import (
     desbloquear_usuario_meta,
 )
 from core.logging_config import short_value
@@ -60,7 +60,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "telefone",
         "email_responsavel",
         "link_agendamento_clickable",
-        "status_ativo",
+        "status_pagamento",
     )
 
     search_fields = (
@@ -71,7 +71,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_agendamento",
     )
 
-    list_filter = ("status_ativo",)
+    list_filter = ("status_pagamento",)
     ordering = ("nome",)
 
     list_per_page = 50

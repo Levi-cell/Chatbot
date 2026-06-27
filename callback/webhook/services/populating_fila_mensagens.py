@@ -20,6 +20,7 @@ def inserir_dados_na_tabela_fila(dados, cursor):
         cursor=cursor,
         cliente_telefone=dados["cliente_telefone"],
         id_phone_unidade=dados["id_phone_unidade"],
+        received_data_hora=dados["received_data_hora"],
         usar_lock=True,
     )
 
@@ -29,6 +30,13 @@ def inserir_dados_na_tabela_fila(dados, cursor):
                 "mensagem_ignorada | motivo=fila_aberta_pending_processing acao=nao_enfileirar cliente=%s phone_number_id=%s detalhe=ja_existe_mensagem_pending_ou_processing",
                 short_value(dados["cliente_telefone"]),
                 short_value(dados["id_phone_unidade"]),
+            )
+        elif turno["motivo"] == "mensagem_reentregue_fora_de_ordem":
+            logger.info(
+                "mensagem_ignorada | motivo=mensagem_reentregue_fora_de_ordem acao=nao_enfileirar cliente=%s phone_number_id=%s received_data_hora=%s",
+                short_value(dados["cliente_telefone"]),
+                short_value(dados["id_phone_unidade"]),
+                dados["received_data_hora"],
             )
         else:
             logger.info(
