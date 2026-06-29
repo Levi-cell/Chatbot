@@ -137,6 +137,69 @@ class PrimeiraEtapaTests(unittest.TestCase):
         self.assertEqual(resultado["id_etapa_resultante"], 2)
         self.assertEqual(resultado["primeiro_nome_cliente"], "Maria")
 
+    def test_etapa_um_com_nome_composto_envia_segunda_etapa_sem_ponto(self):
+        with patch.object(
+            etapa_module,
+            "enviar_segunda_etapa",
+            return_value=retorno("etapa_2", id_etapa_resultante=2),
+        ) as sender:
+            resultado = etapa_module.resolve_primeira_etapa(
+                contexto_historico(
+                    etapa_atual=1,
+                    etapa_resposta=2,
+                    texto="Maria Julia.",
+                )
+            )
+
+        sender.assert_called_once_with(
+            "5571999999999",
+            "123456",
+            nome="Maria Julia",
+        )
+        self.assertEqual(resultado["primeiro_nome_cliente"], "Maria Julia")
+
+    def test_etapa_um_preserva_til_ao_enviar_segunda_etapa(self):
+        with patch.object(
+            etapa_module,
+            "enviar_segunda_etapa",
+            return_value=retorno("etapa_2", id_etapa_resultante=2),
+        ) as sender:
+            resultado = etapa_module.resolve_primeira_etapa(
+                contexto_historico(
+                    etapa_atual=1,
+                    etapa_resposta=2,
+                    texto="he joao",
+                )
+            )
+
+        sender.assert_called_once_with(
+            "5571999999999",
+            "123456",
+            nome="João",
+        )
+        self.assertEqual(resultado["primeiro_nome_cliente"], "João")
+
+    def test_etapa_um_remove_sobrenome_antes_de_enviar_segunda_etapa(self):
+        with patch.object(
+            etapa_module,
+            "enviar_segunda_etapa",
+            return_value=retorno("etapa_2", id_etapa_resultante=2),
+        ) as sender:
+            resultado = etapa_module.resolve_primeira_etapa(
+                contexto_historico(
+                    etapa_atual=1,
+                    etapa_resposta=2,
+                    texto="Carlos Silva",
+                )
+            )
+
+        sender.assert_called_once_with(
+            "5571999999999",
+            "123456",
+            nome="Carlos",
+        )
+        self.assertEqual(resultado["primeiro_nome_cliente"], "Carlos")
+
 
 if __name__ == "__main__":
     unittest.main()
