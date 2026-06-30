@@ -941,12 +941,12 @@ Durante desenvolvimento, `False` preserva exatamente o comportamento atual.
 
 ---
 
-## Passo 10 - Integrar ao `detector_nome.py`
+## Passo 10 - Integrar ao `validador_nome.py`
 
 Arquivo:
 
 ```text
-workers/worker_flow/response_flow/etapas/detector_etapas/detector_nome.py
+workers/worker_flow/response_flow/etapas/validadores_universais/validador_nome.py
 ```
 
 Essa integracao deve ser cirurgica. Nao reescrever as listas, regex ou regras
@@ -1187,8 +1187,8 @@ if __name__ == "__main__":
 
 ### Testes adicionais obrigatorios no detector
 
-Atualizar `tests/unit/test_detector_nome.py` e
-`tests/unit/test_detector_nome_v1.py` para cobrir:
+Atualizar `tests/unit/test_validador_nome.py` e
+`tests/unit/test_validador_nome_v1.py` para cobrir:
 
 ```text
 SQLite desligado -> todos os testes atuais continuam iguais

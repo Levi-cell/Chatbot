@@ -1,9 +1,9 @@
 import unittest
 
-from workers.worker_flow.response_flow.etapas.detector_etapas import detector_nome
+from workers.worker_flow.response_flow.etapas.validadores_universais import validador_nome
 
 
-class DetectorNomeTests(unittest.TestCase):
+class ValidadorNomeTests(unittest.TestCase):
     def test_aceita_nome_simples_ou_composto_com_ponto_final_opcional(self):
         casos = [
             ("Pedro.", "Pedro"),
@@ -15,7 +15,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, primeiro_nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, primeiro_nome)
@@ -35,10 +35,10 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
-                self.assertEqual(resultado.motivo, detector_nome.MOTIVO_NUMERO)
+                self.assertEqual(resultado.motivo, validador_nome.MOTIVO_NUMERO)
 
     def test_bloqueia_caractere_exceto_um_ponto_final(self):
         casos = [
@@ -64,12 +64,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_CARACTERE_INVALIDO,
+                    validador_nome.MOTIVO_CARACTERE_INVALIDO,
                 )
 
     def test_aceita_pontuacao_natural_hifen_e_apostrofo(self):
@@ -94,7 +94,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -112,11 +112,11 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, primeiro_nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, primeiro_nome)
-                self.assertFalse(detector_nome.detecta_nome_invalido(texto))
+                self.assertFalse(validador_nome.detecta_nome_invalido(texto))
 
     def test_preserva_acentos_e_til_na_resposta(self):
         nomes = [
@@ -145,7 +145,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for nome in nomes:
             with self.subTest(nome=nome):
-                resultado = detector_nome.validar_nome_cliente(nome)
+                resultado = validador_nome.validar_nome_cliente(nome)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -174,7 +174,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -197,13 +197,13 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
 
     def test_nao_aplica_acento_fora_do_mapa_curado(self):
-        resultado = detector_nome.validar_nome_cliente("Luan")
+        resultado = validador_nome.validar_nome_cliente("Luan")
 
         self.assertTrue(resultado.valido)
         self.assertEqual(resultado.primeiro_nome, "Luan")
@@ -224,7 +224,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -246,22 +246,22 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
 
     def test_nao_extrai_nome_de_frase_generica_ou_cauda_invalida(self):
         casos = [
-            ("Eu sou escolhido da favela", detector_nome.MOTIVO_FORA_CONTEXTO),
-            ("Sou escolhido", detector_nome.MOTIVO_FORA_CONTEXTO),
-            ("Meu nome é João Pedro Puta", detector_nome.MOTIVO_TERMO_PEJORATIVO),
-            ("Meu nome é João Pedro teste", detector_nome.MOTIVO_FORA_CONTEXTO),
+            ("Eu sou escolhido da favela", validador_nome.MOTIVO_FORA_CONTEXTO),
+            ("Sou escolhido", validador_nome.MOTIVO_FORA_CONTEXTO),
+            ("Meu nome é João Pedro Puta", validador_nome.MOTIVO_TERMO_PEJORATIVO),
+            ("Meu nome é João Pedro teste", validador_nome.MOTIVO_FORA_CONTEXTO),
         ]
 
         for texto, motivo in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(resultado.motivo, motivo)
@@ -311,7 +311,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertIsNotNone(resultado.primeiro_nome)
@@ -325,21 +325,21 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertIsNone(resultado.primeiro_nome)
 
     def test_bloqueia_frase_generica_com_tres_palavras_ou_mais(self):
         casos = [
-            ("Quero saber valores", detector_nome.MOTIVO_MULTIPLAS_PALAVRAS),
-            ("Hoje quero conversar", detector_nome.MOTIVO_FORA_CONTEXTO),
-            ("Banana Feliz Agora", detector_nome.MOTIVO_FORA_CONTEXTO),
+            ("Quero saber valores", validador_nome.MOTIVO_MULTIPLAS_PALAVRAS),
+            ("Hoje quero conversar", validador_nome.MOTIVO_FORA_CONTEXTO),
+            ("Banana Feliz Agora", validador_nome.MOTIVO_FORA_CONTEXTO),
         ]
 
         for texto, motivo in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(resultado.motivo, motivo)
@@ -354,12 +354,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_REPETICAO_CARACTERE,
+                    validador_nome.MOTIVO_REPETICAO_CARACTERE,
                 )
 
     def test_bloqueia_termos_pejorativos_mesmo_disfarcados(self):
@@ -388,12 +388,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_TERMO_PEJORATIVO,
+                    validador_nome.MOTIVO_TERMO_PEJORATIVO,
                 )
 
     def test_bloqueia_respostas_obvias_fora_do_contexto(self):
@@ -452,12 +452,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_FORA_CONTEXTO,
+                    validador_nome.MOTIVO_FORA_CONTEXTO,
                 )
 
     def test_bloqueia_falsos_positivos_conhecidos(self):
@@ -484,23 +484,23 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_FORA_CONTEXTO,
+                    validador_nome.MOTIVO_FORA_CONTEXTO,
                 )
 
     def test_bloqueia_tipo_invalido(self):
         for texto in (None, 123, True, ["Pedro"]):
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_TIPO_INVALIDO,
+                    validador_nome.MOTIVO_TIPO_INVALIDO,
                 )
 
     def test_bloqueia_nome_com_comprimento_fora_do_limite(self):
@@ -511,12 +511,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_COMPRIMENTO_INVALIDO,
+                    validador_nome.MOTIVO_COMPRIMENTO_INVALIDO,
                 )
 
     def test_bloqueia_estrutura_sem_vogal_ou_com_consoantes_improvaveis(self):
@@ -527,44 +527,44 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_ESTRUTURA_IMPROVAVEL,
+                    validador_nome.MOTIVO_ESTRUTURA_IMPROVAVEL,
                 )
 
     def test_resultado_preserva_contrato_e_adiciona_status_e_confianca(self):
-        valido = detector_nome.validar_nome_cliente("João Pedro")
-        invalido = detector_nome.validar_nome_cliente("João99")
-        ambiguo = detector_nome.validar_nome_cliente("bcdfgh")
+        valido = validador_nome.validar_nome_cliente("João Pedro")
+        invalido = validador_nome.validar_nome_cliente("João99")
+        ambiguo = validador_nome.validar_nome_cliente("bcdfgh")
 
         self.assertTrue(valido.valido)
-        self.assertEqual(valido.status, detector_nome.STATUS_VALIDO)
+        self.assertEqual(valido.status, validador_nome.STATUS_VALIDO)
         self.assertGreaterEqual(valido.confianca, 0.90)
         self.assertLessEqual(valido.confianca, 1.0)
 
         self.assertFalse(invalido.valido)
-        self.assertEqual(invalido.status, detector_nome.STATUS_INVALIDO)
+        self.assertEqual(invalido.status, validador_nome.STATUS_INVALIDO)
         self.assertEqual(invalido.primeiro_nome, None)
 
         self.assertFalse(ambiguo.valido)
-        self.assertEqual(ambiguo.status, detector_nome.STATUS_AMBIGUO)
+        self.assertEqual(ambiguo.status, validador_nome.STATUS_AMBIGUO)
         self.assertEqual(
             ambiguo.motivo,
-            detector_nome.MOTIVO_ESTRUTURA_IMPROVAVEL,
+            validador_nome.MOTIVO_ESTRUTURA_IMPROVAVEL,
         )
 
     def test_resultado_valido_nunca_pode_conter_nome_vazio(self):
         with self.assertRaises(ValueError):
-            detector_nome.ResultadoValidacaoNome(
+            validador_nome.ResultadoValidacaoNome(
                 True,
-                status=detector_nome.STATUS_VALIDO,
+                status=validador_nome.STATUS_VALIDO,
             )
 
         with self.assertRaises(ValueError):
-            detector_nome.ResultadoValidacaoNome(False)
+            validador_nome.ResultadoValidacaoNome(False)
 
     def test_normaliza_unicode_compativel_e_separadores_tipograficos(self):
         casos = [
@@ -577,7 +577,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -595,12 +595,12 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_CARACTERE_INVALIDO,
+                    validador_nome.MOTIVO_CARACTERE_INVALIDO,
                 )
 
     def test_aceita_saudacao_antes_de_apresentacao_explicita(self):
@@ -614,7 +614,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -629,7 +629,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -645,7 +645,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -663,7 +663,7 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto, nome in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
@@ -686,28 +686,28 @@ class DetectorNomeTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertFalse(resultado.valido)
                 self.assertEqual(
                     resultado.motivo,
-                    detector_nome.MOTIVO_FORA_CONTEXTO,
+                    validador_nome.MOTIVO_FORA_CONTEXTO,
                 )
 
-        repeticao = detector_nome.validar_nome_cliente("Kkkk")
+        repeticao = validador_nome.validar_nome_cliente("Kkkk")
         self.assertFalse(repeticao.valido)
         self.assertEqual(
             repeticao.motivo,
-            detector_nome.MOTIVO_REPETICAO_CARACTERE,
+            validador_nome.MOTIVO_REPETICAO_CARACTERE,
         )
 
     def test_helpers_reaproveitam_a_mesma_validacao(self):
         self.assertEqual(
-            detector_nome.extrair_primeiro_nome_cliente("Maria Julia."),
+            validador_nome.extrair_primeiro_nome_cliente("Maria Julia."),
             "Maria Julia",
         )
         self.assertEqual(
-            detector_nome.extrair_primeiro_nome_cliente("Meu nome é Pedro"),
+            validador_nome.extrair_primeiro_nome_cliente("Meu nome é Pedro"),
             "Pedro",
         )
 

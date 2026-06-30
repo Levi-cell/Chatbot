@@ -5,12 +5,12 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_segunda_etapa_midia,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
-    detecta_pergunta_financeira,
+    validar_pergunta_financeira,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_midia import (
-    detecta_midia,
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
+    validar_midia,
 )
 
 
@@ -41,7 +41,7 @@ def resolve_segunda_etapa(contexto_historico):
 
     ## CAMPOS QUE VALIDAM MIDIA NA ETAPA 2
 
-    if detecta_midia(tipo_mensagem):
+    if validar_midia(tipo_mensagem):
         _logar_tipo_nao_suportado(contexto_historico)
 
         return enviar_segunda_etapa_midia(
@@ -51,7 +51,7 @@ def resolve_segunda_etapa(contexto_historico):
 
     ## CAMPOS QUE VALIDAM FINANCEIRO NA ETAPA 2
 
-    if detecta_pergunta_financeira(texto_cliente):
+    if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,

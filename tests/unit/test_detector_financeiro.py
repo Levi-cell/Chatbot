@@ -1,7 +1,7 @@
 import unittest
 
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
-    detecta_pergunta_financeira,
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
+    validar_pergunta_financeira,
 )
 
 
@@ -26,7 +26,7 @@ class DetectorFinanceiroTests(unittest.TestCase):
 
         for frase in frases:
             with self.subTest(frase=frase):
-                self.assertTrue(detecta_pergunta_financeira(frase))
+                self.assertTrue(validar_pergunta_financeira(frase))
 
     def test_nao_detecta_texto_sem_relacao_com_valor(self):
         frases = [
@@ -38,7 +38,7 @@ class DetectorFinanceiroTests(unittest.TestCase):
 
         for frase in frases:
             with self.subTest(frase=frase):
-                self.assertFalse(detecta_pergunta_financeira(frase))
+                self.assertFalse(validar_pergunta_financeira(frase))
 
 
 if __name__ == "__main__":

@@ -840,11 +840,11 @@ Na V1, o projeto deixa uma base simples:
 - `flow_sender.py` como ponto unico de decisao antes do envio;
 - `response_flow/etapas/primeira_etapa.py` concentrando a validacao da etapa 1,
   seus tratamentos e a ponte para a etapa 2;
-- `detector_etapas/detector_midia.py` para tipos nao suportados, como midia,
+- `validadores_universais/validador_midia.py` para tipos nao suportados, como midia,
   audio, documento e figurinha;
-- `detector_etapas/detector_financeiro.py` para perguntas sobre valor, custo ou
+- `validadores_universais/validador_financeiro.py` para perguntas sobre valor, custo ou
   investimento;
-- `detector_etapas/detector_nome.py` para resposta fora do contexto na captura
+- `validadores_universais/validador_nome.py` para resposta fora do contexto na captura
   de nome;
 - outros tratamentos de contexto ainda pendentes por etapa;
 - tratamentos registrando historico e usando o mesmo contrato transacional do `flow_sender`;

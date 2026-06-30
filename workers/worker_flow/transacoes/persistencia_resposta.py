@@ -7,7 +7,7 @@ from core.repositories.updates import (
     atualizar_conversa_resposta_bot_sem_avancar,
     atualizar_nome_cliente_por_telefone,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_nome import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
 )
 

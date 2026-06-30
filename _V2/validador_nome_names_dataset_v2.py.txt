@@ -12,12 +12,12 @@ import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
 
 
-logger = logging.getLogger("worker.detector_nome")
+logger = logging.getLogger("worker.validador_nome")
 
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
@@ -353,14 +353,14 @@ def _buscar_primeiro_nome_no_dataset(tokens):
 
     except (ImportError, MemoryError) as erro:
         logger.exception(
-            "detector_nome_dataset_indisponivel | acao=invalidar_sem_quebrar erro=%s",
+            "validador_nome_dataset_indisponivel | acao=invalidar_sem_quebrar erro=%s",
             erro,
         )
         return None, MOTIVO_DATASET_INDISPONIVEL
 
     except Exception as erro:
         logger.exception(
-            "detector_nome_dataset_erro | acao=invalidar_sem_quebrar erro=%s",
+            "validador_nome_dataset_erro | acao=invalidar_sem_quebrar erro=%s",
             erro,
         )
         return None, MOTIVO_DATASET_INDISPONIVEL

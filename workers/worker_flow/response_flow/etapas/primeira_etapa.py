@@ -12,15 +12,15 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_segunda_etapa,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
-    detecta_pergunta_financeira,
+    validar_pergunta_financeira,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_midia import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
-    detecta_midia,
+    validar_midia,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_nome import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     TIPO_TRATAMENTO_NOME_INVALIDO,
     validar_nome_cliente,
 )
@@ -58,7 +58,7 @@ def resolve_primeira_etapa(contexto_historico):
 
     ## CAMPOS QUE VALIDAM MIDIA SEJA EM INICIO DE CONVERSA OU APOS NOME
 
-    if detecta_midia(tipo_mensagem):
+    if validar_midia(tipo_mensagem):
         _logar_tipo_nao_suportado(contexto_historico)
 
         if conversa_sem_etapa:
@@ -74,7 +74,7 @@ def resolve_primeira_etapa(contexto_historico):
 
     ## CAMPOS QUE VALIDAM FINANCEIRO SEJA EM INICIO DE CONVERSA OU APOS NOME
 
-    if detecta_pergunta_financeira(texto_cliente):
+    if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,

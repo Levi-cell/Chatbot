@@ -1,7 +1,7 @@
 import re
 import unicodedata
 
-from workers.worker_flow.response_flow.etapas.detector_etapas.nome.lexicos import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.nome.lexicos import (
     CAUDAS_NOMES_TRADICIONAIS,
     PALAVRAS_AMBIGUAS_COMO_NOME,
     PALAVRAS_CAUDAS_NOMES_TRADICIONAIS,
@@ -10,33 +10,29 @@ from workers.worker_flow.response_flow.etapas.detector_etapas.nome.lexicos impor
     SAUDACOES_ANTES_DA_APRESENTACAO,
     SOBRENOMES_COMPLEMENTARES,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.nome.modelos import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.nome.modelos import (
     STATUS_AMBIGUO,
     STATUS_INVALIDO,
     STATUS_VALIDO,
     ResultadoValidacaoNome,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.nome.seguranca import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.nome.seguranca import (
     MOTIVO_ALFABETO_NAO_SUPORTADO,
     MOTIVO_TEXTO_CORROMPIDO,
     MOTIVO_UNICODE_INSEGURO,
     normalizar_entrada_nome,
 )
-from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeiro import (
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
 
 """
-detector_nome.py funciona como um validador de contexto mas não entra na pasta
+validador_nome.py funciona como um validador de contexto mas não entra na pasta
 de contexto por que ele será usado para valida nomes no geral ao decorrer do projeto 
 em mais de uma etapa, o que muda será a função sender que será chamada após passar
 por esse validador de nome, para demais validações de contexto como botões, acesse
 a pasta de contexto.
 """
-
-
-
-
 
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 

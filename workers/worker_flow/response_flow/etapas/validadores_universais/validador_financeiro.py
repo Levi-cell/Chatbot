@@ -53,7 +53,7 @@ PADRAO_PERGUNTA_FINANCEIRA = re.compile(
 )
 
 
-def detecta_pergunta_financeira(texto):
+def validar_pergunta_financeira(texto):
     texto_normalizado = normalizar_texto(texto or "")
     return bool(PADRAO_PERGUNTA_FINANCEIRA.search(texto_normalizado))
 

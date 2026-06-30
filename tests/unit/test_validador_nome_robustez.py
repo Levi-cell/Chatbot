@@ -2,20 +2,20 @@ import random
 import string
 import unittest
 
-from workers.worker_flow.response_flow.etapas.detector_etapas import detector_nome
-from workers.worker_flow.response_flow.etapas.detector_etapas.nome.lexicos import (
+from workers.worker_flow.response_flow.etapas.validadores_universais import validador_nome
+from workers.worker_flow.response_flow.etapas.validadores_universais.nome.lexicos import (
     PRIMEIROS_NOMES_COMPOSTOS,
     SOBRENOMES_COMPLEMENTARES,
 )
 
 
-class DetectorNomeRobustezTests(unittest.TestCase):
+class ValidadorNomeRobustezTests(unittest.TestCase):
     def test_todos_compostos_curados_sao_aceitos(self):
         for primeiro, segundo in PRIMEIROS_NOMES_COMPOSTOS:
             texto = f"{primeiro.title()} {segundo.title()}"
 
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(
@@ -28,7 +28,7 @@ class DetectorNomeRobustezTests(unittest.TestCase):
             texto = f"Meu nome é Carlos {sobrenome.title()}"
 
             with self.subTest(texto=texto):
-                resultado = detector_nome.validar_nome_cliente(texto)
+                resultado = validador_nome.validar_nome_cliente(texto)
 
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, "Carlos")
@@ -49,8 +49,8 @@ class DetectorNomeRobustezTests(unittest.TestCase):
                 gerador.choice(alfabeto)
                 for _ in range(tamanho)
             )
-            primeiro = detector_nome.validar_nome_cliente(texto)
-            segundo = detector_nome.validar_nome_cliente(texto)
+            primeiro = validador_nome.validar_nome_cliente(texto)
+            segundo = validador_nome.validar_nome_cliente(texto)
 
             self.assertEqual(primeiro, segundo)
             self.assertGreaterEqual(primeiro.confianca, 0.0)
@@ -61,7 +61,7 @@ class DetectorNomeRobustezTests(unittest.TestCase):
                 self.assertIsNone(primeiro.motivo)
                 self.assertEqual(
                     primeiro.status,
-                    detector_nome.STATUS_VALIDO,
+                    validador_nome.STATUS_VALIDO,
                 )
                 self.assertLessEqual(
                     len(primeiro.primeiro_nome.split()),
@@ -73,8 +73,8 @@ class DetectorNomeRobustezTests(unittest.TestCase):
                 self.assertIn(
                     primeiro.status,
                     {
-                        detector_nome.STATUS_INVALIDO,
-                        detector_nome.STATUS_AMBIGUO,
+                        validador_nome.STATUS_INVALIDO,
+                        validador_nome.STATUS_AMBIGUO,
                     },
                 )
 

@@ -42,12 +42,12 @@ com primeiro nome vazio.
 Os componentes especializados ficam em:
 
 ```text
-detector_etapas/nome/modelos.py
-detector_etapas/nome/seguranca.py
-detector_etapas/nome/lexicos.py
+validadores_universais/nome/modelos.py
+validadores_universais/nome/seguranca.py
+validadores_universais/nome/lexicos.py
 ```
 
-O `detector_nome.py` permanece como contrato publico e orquestrador.
+O `validador_nome.py` permanece como contrato publico e orquestrador.
 
 ## Formatos aceitos
 
@@ -300,7 +300,7 @@ pacote informa consumo aproximado de 3,2 GB de RAM ao carregar a base completa.
 O codigo antigo foi preservado somente como referencia em:
 
 ```text
-_V2/detector_nome_names_dataset_v2.py.txt
+_V2/validador_nome_names_dataset_v2.py.txt
 ```
 
 Esse arquivo nao faz parte do codigo executavel.
