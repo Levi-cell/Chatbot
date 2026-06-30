@@ -561,6 +561,7 @@ class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "nome",
         "waid_telefone",
         "email",
+        "idade",
     )
 
     search_fields = (
@@ -580,9 +581,11 @@ class DependenteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     list_display = (
         "id_dependente",
         "id_cliente",
+        "id_conversa",
         "nome_dependente",
         "telefone_dependente",
         "email_dependente",
+        "idade",
     )
 
     search_fields = (
@@ -598,7 +601,10 @@ class DependenteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     empty_value_display = "-"
 
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related("id_cliente")
+        return super().get_queryset(request).select_related(
+            "id_cliente",
+            "id_conversa",
+        )
 
 
 @admin.register(Etapa)

@@ -196,6 +196,33 @@ def atualizar_nome_cliente_por_telefone(waid_telefone, nome, cursor):
     return cursor.rowcount
 
 
+def atualizar_status_dependente_conversa(
+    id_conversa,
+    status_dependente,
+    cursor,
+):
+    cursor.execute("""
+        UPDATE chatbot.conversa
+        SET status_dependente = %s
+        WHERE id_conversa = %s;
+    """, (bool(status_dependente), id_conversa))
+
+    logger.debug(
+        "conversa_update | acao=atualizar_status_dependente id_conversa=%s status_dependente=%s linhas=%s",
+        id_conversa,
+        bool(status_dependente),
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada com status_dependente "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
 def reagendar_mensagem_sem_erro(id_mensagem, cursor, delay_seconds=30):
     cursor.execute("""
         UPDATE chatbot.fila_mensagens

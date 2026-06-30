@@ -166,7 +166,13 @@ def worker_flow():
                 conn_ciclo.commit()
 
             except Exception as erro:
-                if contexto_envio.get("enviou"):
+                # TEMPORARIO: envio_simulado existe apenas enquanto a etapa 3
+                # nao possui sender Meta. Remover esta excecao junto com a
+                # simulacao quando o sender real da etapa 3 for implementado.
+                if (
+                    contexto_envio.get("enviou")
+                    and not contexto_envio.get("envio_simulado")
+                ):
                     raise BancoFalhouAposEnvioMeta(
                         "Banco falhou depois da Meta confirmar envio",
                         id_mensagem=mensagem["id_mensagem"],

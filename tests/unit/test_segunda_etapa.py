@@ -89,14 +89,45 @@ class SegundaEtapaTests(unittest.TestCase):
         sender_midia.assert_called_once_with("5571999999999", "123456")
         sender_financeiro.assert_not_called()
 
-    def test_contexto_da_etapa_dois_permanece_pendente(self):
-        with self.assertRaisesRegex(
-            NotImplementedError,
-            "Validacao das opcoes da etapa 2",
-        ):
-            etapa_module.resolve_segunda_etapa(
-                contexto_historico(texto="Para mim")
+    def test_opcao_para_mim_simula_etapa_tres_sem_dependente(self):
+        resultado = etapa_module.resolve_segunda_etapa(
+            contexto_historico(texto="Para mim")
+        )
+
+        self.assertTrue(resultado["enviou"])
+        self.assertTrue(resultado["envio_simulado"])
+        self.assertEqual(resultado["id_etapa_resultante"], 3)
+        self.assertEqual(resultado["opcao_atendimento"], "para_mim")
+        self.assertFalse(resultado["status_dependente"])
+
+    def test_opcao_para_outra_pessoa_interativa_simula_etapa_tres(self):
+        resultado = etapa_module.resolve_segunda_etapa(
+            contexto_historico(
+                tipo_mensagem="interactive",
+                texto="Para outra pessoa",
             )
+        )
+
+        self.assertTrue(resultado["envio_simulado"])
+        self.assertEqual(
+            resultado["opcao_atendimento"],
+            "para_outra_pessoa",
+        )
+        self.assertTrue(resultado["status_dependente"])
+
+    def test_opcao_invalida_reenvia_etapa_dois_com_tratamento(self):
+        with patch.object(
+            etapa_module,
+            "enviar_segunda_etapa_contexto_opcao_invalida",
+            return_value=retorno("contexto_etapa_2"),
+        ) as sender:
+            resultado = etapa_module.resolve_segunda_etapa(
+                contexto_historico(texto="eu quero para meu primo")
+            )
+
+        sender.assert_called_once_with("5571999999999", "123456")
+        self.assertEqual(resultado["nome"], "contexto_etapa_2")
+        self.assertEqual(resultado["id_etapa_resultante"], 2)
 
 
 if __name__ == "__main__":

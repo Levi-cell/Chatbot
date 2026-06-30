@@ -1,6 +1,7 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
+    enviar_segunda_etapa_contexto_opcao_invalida,
     enviar_segunda_etapa_financeiro,
     enviar_segunda_etapa_midia,
 )
@@ -11,6 +12,11 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_segunda_etapa import (
+    OPCAO_PARA_OUTRA_PESSOA,
+    TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
+    validar_segunda_etapa,
 )
 
 
@@ -29,8 +35,9 @@ def resolve_segunda_etapa(contexto_historico):
     """
     Midia e pergunta financeira recebem tratamento sem avancar a conversa.
 
-    A validacao das opcoes "Para mim" e "Para outra pessoa", assim como a
-    ponte para a etapa 3, sera implementada no proximo passo.
+    As duas opcoes de contexto avancam para a etapa 3. Enquanto o sender da
+    etapa 3 nao existe, o envio e representado por um contexto simulado e
+    persistido, preservando a idempotencia do worker.
     """
     id_conversa = contexto_historico["id_conversa"]
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
@@ -62,20 +69,69 @@ def resolve_segunda_etapa(contexto_historico):
             phone_id_unidade,
         )
 
-    ## PROXIMO PASSO
-    # Validar se o cliente escolheu "Para mim" ou "Para outra pessoa".
-    # Se a opcao for valida, chamar o sender da etapa 3 e avancar a conversa.
-    # Se a opcao for invalida, reenviar a etapa 2 com tratamento de contexto.
+    ## VALIDACAO DE CONTEXTO ESPECIFICA DA ETAPA 2
 
-    logger.warning(
-        "segunda_etapa_contexto_pendente | acao=nao_enviar id_conversa=%s etapa_atual=%s etapa_resposta=%s",
+    opcao_atendimento = validar_segunda_etapa(texto_cliente)
+
+    if opcao_atendimento is None:
+        _logar_tratamento_texto(
+            contexto_historico,
+            TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
+        )
+
+        return enviar_segunda_etapa_contexto_opcao_invalida(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    ## PONTE ENTRE A ETAPA 2 E A FUTURA ETAPA 3
+    # TEMPORARIO: substituir este log e o contexto simulado pela chamada ao
+    # sender real da etapa 3 quando ele existir. Depois disso, remover tambem
+    # _montar_contexto_etapa_3_simulada().
+
+    status_dependente = (
+        opcao_atendimento == OPCAO_PARA_OUTRA_PESSOA
+    )
+
+    logger.info(
+        "nesse momento a futura etapa 3 foi enviada | acao=simular_envio_etapa_3 id_conversa=%s id_mensagem_fila=%s opcao_atendimento=%s status_dependente=%s",
         id_conversa,
-        contexto_historico.get("id_etapa_atual"),
-        contexto_historico.get("id_etapa_resposta"),
+        mensagem_cliente_atual["id_mensagem_fila"],
+        opcao_atendimento,
+        status_dependente,
     )
-    raise NotImplementedError(
-        "Validacao das opcoes da etapa 2 ainda nao implementada"
+
+    return _montar_contexto_etapa_3_simulada(
+        contexto_historico,
+        opcao_atendimento,
+        status_dependente,
     )
+
+
+def _montar_contexto_etapa_3_simulada(
+    contexto_historico,
+    opcao_atendimento,
+    status_dependente,
+):
+    # TEMPORARIO: este contexto existe somente para testar a transicao 2 -> 3
+    # antes da implementacao do sender da etapa 3. Nao representa envio Meta.
+    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
+    id_mensagem_fila = mensagem_cliente["id_mensagem_fila"]
+
+    return {
+        "enviou": True,
+        "envio_simulado": True,
+        "resposta_ja_existia": False,
+        "mensagem_bot": "Nesse momento a futura etapa 3 foi enviada.",
+        "id_hash_msg_bot": f"simulacao.etapa3.fila.{id_mensagem_fila}",
+        "id_etapa_resultante": 3,
+        "tipo_mensagem": "simulacao",
+        "canal": "simulacao_worker",
+        "atualizar_conversa": True,
+        "atualizar_last_from_bot": True,
+        "opcao_atendimento": opcao_atendimento,
+        "status_dependente": status_dependente,
+    }
 
 
 def _logar_tipo_nao_suportado(contexto_historico):

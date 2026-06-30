@@ -1,11 +1,20 @@
 import logging
 
 from core.logging_config import short_value
-from core.repositories.inserts import inserir_historico_mensagem_bot
+from core.repositories.inserts import (
+    inserir_dependente_para_conversa,
+    inserir_historico_mensagem_bot,
+)
 from core.repositories.updates import (
     atualizar_conversa_resposta_bot,
     atualizar_conversa_resposta_bot_sem_avancar,
     atualizar_nome_cliente_por_telefone,
+    atualizar_status_dependente_conversa,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_segunda_etapa import (
+    OPCAO_PARA_MIM,
+    OPCAO_PARA_OUTRA_PESSOA,
+    validar_segunda_etapa,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
@@ -16,6 +25,7 @@ logger = logging.getLogger("worker.support")
 
 ETAPA_1_CAPTURA_NOME = 1
 ETAPA_2_DESTINO_ATENDIMENTO = 2
+ETAPA_3_DADOS_ALUNO = 3
 
 
 def _obter_data_interacao_bot_existente(contexto_historico):
@@ -159,6 +169,17 @@ def atualizar_banco_conforme_transicao_de_etapa(
             cursor,
         )
 
+    if _esta_na_ponte_etapa_2_para_etapa_3(
+        etapa_origem,
+        etapa_destino,
+        contexto_envio,
+    ):
+        return _persistir_destino_atendimento_da_etapa_2(
+            contexto_historico,
+            contexto_envio,
+            cursor,
+        )
+
     return None
 
 
@@ -220,6 +241,95 @@ def _persistir_nome_cliente_capturado_na_etapa_1(
         "cliente_nome_atualizado": True,
         "primeiro_nome_cliente": primeiro_nome,
     }
+
+
+def _esta_na_ponte_etapa_2_para_etapa_3(
+    etapa_origem,
+    etapa_destino,
+    contexto_envio,
+):
+    return (
+        etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO
+        and etapa_destino == ETAPA_3_DADOS_ALUNO
+        and not contexto_envio.get("tratamento")
+    )
+
+
+def _persistir_destino_atendimento_da_etapa_2(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    opcao_atendimento = _resolver_opcao_atendimento(
+        contexto_historico,
+        contexto_envio,
+    )
+
+    if opcao_atendimento not in {
+        OPCAO_PARA_MIM,
+        OPCAO_PARA_OUTRA_PESSOA,
+    }:
+        logger.critical(
+            "destino_atendimento_anomalia_critica | motivo=opcao_invalida_na_transicao_2_3 acao=rollback_e_retry id_conversa=%s etapa_atual=%s etapa_resultante=%s",
+            contexto_historico["id_conversa"],
+            contexto_historico.get("id_etapa_atual"),
+            contexto_envio.get("id_etapa_resultante"),
+        )
+        raise ValueError(
+            "Opcao de atendimento nao foi resolvida na transicao 2 -> 3"
+        )
+
+    id_conversa = contexto_historico["id_conversa"]
+    status_dependente = (
+        opcao_atendimento == OPCAO_PARA_OUTRA_PESSOA
+    )
+
+    atualizar_status_dependente_conversa(
+        id_conversa,
+        status_dependente,
+        cursor,
+    )
+
+    contexto_persistido = {
+        "status_dependente_atualizado": True,
+        "status_dependente": status_dependente,
+        "opcao_atendimento": opcao_atendimento,
+        "dependente_criado": False,
+    }
+
+    if status_dependente:
+        dependente = inserir_dependente_para_conversa(
+            id_conversa,
+            cursor,
+        )
+        contexto_persistido.update({
+            "dependente_criado": dependente["inserido"],
+            "id_dependente": dependente["id_dependente"],
+            "id_cliente_dependente": dependente["id_cliente"],
+        })
+
+    logger.info(
+        "destino_atendimento_persistido | acao=salvar_transicao etapa_origem=%s etapa_resultante=%s id_conversa=%s opcao_atendimento=%s status_dependente=%s dependente_criado=%s",
+        contexto_historico.get("id_etapa_atual"),
+        contexto_envio.get("id_etapa_resultante"),
+        id_conversa,
+        opcao_atendimento,
+        status_dependente,
+        contexto_persistido["dependente_criado"],
+    )
+
+    return contexto_persistido
+
+
+def _resolver_opcao_atendimento(contexto_historico, contexto_envio):
+    opcao_atendimento = contexto_envio.get("opcao_atendimento")
+
+    if opcao_atendimento:
+        return opcao_atendimento
+
+    return validar_segunda_etapa(
+        contexto_historico.get("texto_cliente_atual") or ""
+    )
 
 
 def _resolver_primeiro_nome_cliente(contexto_historico, contexto_envio):

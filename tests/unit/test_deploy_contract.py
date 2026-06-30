@@ -24,6 +24,14 @@ class DeployContractTests(unittest.TestCase):
         self.assertIn("UNIQUE (id_conversa, id_etapa)", source)
         self.assertIn("id_historico_mensagem_cliente INT NULL", source)
 
+    def test_cliente_e_dependente_possuem_idade_e_conversa_vinculada(self):
+        source = inspect.getsource(bank_script.criar_tabelas)
+
+        self.assertIn("ADD COLUMN IF NOT EXISTS idade INTEGER", source)
+        self.assertIn("ADD COLUMN IF NOT EXISTS id_conversa INT", source)
+        self.assertIn("dependente_id_conversa_fkey", source)
+        self.assertIn("uq_dependente_conversa", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -387,6 +387,123 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
 
         atualizar_nome.assert_not_called()
 
+    def test_transicao_dois_para_tres_para_mim_atualiza_status_sem_dependente(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "atualizar_status_dependente_conversa",
+            return_value=1,
+        ) as atualizar_status, patch.object(
+            persistencia,
+            "inserir_dependente_para_conversa",
+        ) as inserir_dependente:
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=2,
+                    texto_cliente="Para mim",
+                ),
+                {
+                    "id_etapa_resultante": 3,
+                    "opcao_atendimento": "para_mim",
+                },
+                cursor,
+            )
+
+        atualizar_status.assert_called_once_with(10, False, cursor)
+        inserir_dependente.assert_not_called()
+        self.assertFalse(resultado["status_dependente"])
+        self.assertFalse(resultado["dependente_criado"])
+
+    def test_transicao_dois_para_tres_cria_dependente_vinculado(self):
+        cursor = object()
+        dependente = {
+            "id_dependente": 30,
+            "id_cliente": 5,
+            "id_conversa": 10,
+            "inserido": True,
+        }
+
+        with patch.object(
+            persistencia,
+            "atualizar_status_dependente_conversa",
+            return_value=1,
+        ) as atualizar_status, patch.object(
+            persistencia,
+            "inserir_dependente_para_conversa",
+            return_value=dependente,
+        ) as inserir_dependente:
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=2,
+                    texto_cliente="Para outra pessoa",
+                ),
+                {
+                    "id_etapa_resultante": 3,
+                    "opcao_atendimento": "para_outra_pessoa",
+                },
+                cursor,
+            )
+
+        atualizar_status.assert_called_once_with(10, True, cursor)
+        inserir_dependente.assert_called_once_with(10, cursor)
+        self.assertTrue(resultado["status_dependente"])
+        self.assertTrue(resultado["dependente_criado"])
+        self.assertEqual(resultado["id_dependente"], 30)
+
+    def test_transicao_dois_para_tres_reconstroi_opcao_no_retry(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "atualizar_status_dependente_conversa",
+            return_value=1,
+        ) as atualizar_status, patch.object(
+            persistencia,
+            "inserir_dependente_para_conversa",
+        ) as inserir_dependente:
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=2,
+                    texto_cliente="Para mim",
+                ),
+                {
+                    "resposta_ja_existia": True,
+                    "id_etapa_resultante": 3,
+                },
+                cursor,
+            )
+
+        atualizar_status.assert_called_once_with(10, False, cursor)
+        inserir_dependente.assert_not_called()
+        self.assertEqual(resultado["opcao_atendimento"], "para_mim")
+
+    def test_tratamento_na_etapa_dois_nao_atualiza_status_dependente(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "atualizar_status_dependente_conversa",
+        ) as atualizar_status, patch.object(
+            persistencia,
+            "inserir_dependente_para_conversa",
+        ) as inserir_dependente:
+            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=2,
+                    texto_cliente="quanto custa",
+                ),
+                {
+                    "id_etapa_resultante": 2,
+                    "tratamento": True,
+                },
+                cursor,
+            )
+
+        self.assertIsNone(resultado)
+        atualizar_status.assert_not_called()
+        inserir_dependente.assert_not_called()
+
     def test_resposta_existente_sem_data_persistida_falha(self):
         with self.assertRaises(ValueError):
             persistencia.atualizar_banco_com_contexto_final(

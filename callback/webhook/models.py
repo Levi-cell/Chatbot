@@ -6,6 +6,7 @@ class Cliente(models.Model):
     nome = models.CharField(max_length=200, blank=True, null=True)
     waid_telefone = models.CharField(unique=True, max_length=50)
     email = models.CharField(unique=True, max_length=200, blank=True, null=True)
+    idade = models.IntegerField(blank=True, null=True)
 
     def __str__(self):
         return self.nome or self.waid_telefone
@@ -23,6 +24,14 @@ class Dependente(models.Model):
         db_column='id_cliente',
         related_name='dependentes',
     )
+    id_conversa = models.ForeignKey(
+        'Conversa',
+        models.CASCADE,
+        db_column='id_conversa',
+        related_name='dependentes_atendidos',
+        blank=True,
+        null=True,
+    )
     nome_dependente = models.CharField(max_length=200, blank=True, null=True)
     telefone_dependente = models.CharField(
         unique=True,
@@ -36,6 +45,7 @@ class Dependente(models.Model):
         blank=True,
         null=True,
     )
+    idade = models.IntegerField(blank=True, null=True)
 
     def __str__(self):
         return self.nome_dependente or self.telefone_dependente or str(self.id_dependente)

@@ -215,16 +215,19 @@ def criar_tabelas():
             id_cliente SERIAL PRIMARY KEY,
             nome VARCHAR(200),
             waid_telefone VARCHAR(50) UNIQUE NOT NULL,
-            email VARCHAR(200) UNIQUE
+            email VARCHAR(200) UNIQUE,
+            idade INTEGER
         );
 
         -- DEPENDENTE
         CREATE TABLE IF NOT EXISTS chatbot.dependente (
             id_dependente SERIAL PRIMARY KEY,
             id_cliente INT NOT NULL,
+            id_conversa INT,
             nome_dependente VARCHAR(200),
             telefone_dependente VARCHAR(50) UNIQUE,
             email_dependente VARCHAR(200) UNIQUE,
+            idade INTEGER,
 
             FOREIGN KEY (id_cliente)
                 REFERENCES chatbot.cliente(id_cliente)
@@ -306,6 +309,41 @@ def criar_tabelas():
         ON chatbot.conversa (id_cliente, id_unidade, finalizou_em DESC)
         INCLUDE (id_conversa, id_etapa_atual)
         WHERE status_ativa = FALSE;
+
+        -- CAMPOS DA TRANSICAO ENTRE AS ETAPAS 2 E 3.
+        -- Os ALTERs mantem o setup idempotente tambem em bancos ja existentes.
+        ALTER TABLE chatbot.cliente
+        ADD COLUMN IF NOT EXISTS idade INTEGER;
+
+        ALTER TABLE chatbot.dependente
+        ADD COLUMN IF NOT EXISTS id_conversa INT;
+
+        ALTER TABLE chatbot.dependente
+        ADD COLUMN IF NOT EXISTS idade INTEGER;
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'dependente_id_conversa_fkey'
+                  AND conrelid = 'chatbot.dependente'::regclass
+            ) THEN
+                ALTER TABLE chatbot.dependente
+                ADD CONSTRAINT dependente_id_conversa_fkey
+                FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE CASCADE;
+            END IF;
+        END
+        $$;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_dependente_conversa
+        ON chatbot.dependente (id_conversa)
+        WHERE id_conversa IS NOT NULL;
+
+        CREATE INDEX IF NOT EXISTS idx_dependente_conversa
+        ON chatbot.dependente (id_conversa);
 
         -- HISTORICO
         CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens (

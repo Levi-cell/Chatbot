@@ -61,6 +61,52 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn("NOW()", sql)
         self.assertEqual(params, (DATA_BOT, 10))
 
+    def test_atualizar_status_dependente_conversa(self):
+        cursor = FakeCursor(rowcount=1)
+
+        resultado = updates.atualizar_status_dependente_conversa(
+            10,
+            True,
+            cursor,
+        )
+
+        self.assertEqual(resultado, 1)
+        sql, params = cursor.calls[0]
+        self.assertIn("SET status_dependente = %s", sql)
+        self.assertEqual(params, (True, 10))
+
+    def test_atualizar_status_dependente_exige_conversa_existente(self):
+        with self.assertRaises(ValueError):
+            updates.atualizar_status_dependente_conversa(
+                10,
+                False,
+                FakeCursor(rowcount=0),
+            )
+
+    def test_inserir_dependente_para_conversa_e_idempotente(self):
+        cursor = FakeCursor(
+            fetchone_result=(30, 5, 10, False),
+        )
+
+        resultado = inserts.inserir_dependente_para_conversa(
+            10,
+            cursor,
+        )
+
+        self.assertEqual(
+            resultado,
+            {
+                "id_dependente": 30,
+                "id_cliente": 5,
+                "id_conversa": 10,
+                "inserido": False,
+            },
+        )
+        sql, params = cursor.calls[0]
+        self.assertIn("INSERT INTO chatbot.dependente", sql)
+        self.assertIn("WHERE NOT EXISTS", sql)
+        self.assertEqual(params, (10, 10, 10))
+
     def test_inserir_historico_cliente_retorna_etapa_persistida(self):
         cursor = FakeCursor(
             fetchone_result=(100, "2026-01-01T00:00:00", 1, False)
