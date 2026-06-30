@@ -1,4 +1,11 @@
+import requests
+
 from core.database.connection_aws import get_conn
+from core.integrations.whatsapp.tools.config import (
+    get_meta_http_timeout,
+    get_token_usuario_meta,
+    get_waba_id,
+)
 from core.integrations.whatsapp.tools.usuarios import (
     listar_usuarios_bloqueados_meta,
 )
@@ -118,6 +125,164 @@ def job_reconciliacao_bloqueios_cliente_unidades_meta():
     }
 
 
+def job_reconciliacao_register__waba_unidades_meta():
+    unidades_banco = _listar_unidades_banco()
+    numeros_waba_meta = _listar_numeros_waba_meta()
+
+    banco_por_phone_id = {
+        unidade["phone_id_unidade"]: unidade
+        for unidade in unidades_banco
+    }
+    meta_por_phone_id = {
+        numero["phone_id_unidade"]: numero
+        for numero in numeros_waba_meta
+        if numero["registrado_cloud_api"]
+    }
+
+    phone_ids_banco = set(banco_por_phone_id)
+    phone_ids_meta = set(meta_por_phone_id)
+
+    sincronizados = sorted(phone_ids_banco & phone_ids_meta)
+    somente_meta = sorted(phone_ids_meta - phone_ids_banco)
+    somente_banco = sorted(phone_ids_banco - phone_ids_meta)
+
+    print("===== RECONCILIACAO REGISTER WABA META X BANCO =====")
+    print(f"unidades_sincronizadas: {len(sincronizados)}")
+    print(f"somente_na_meta: {len(somente_meta)}")
+    print(f"somente_no_banco: {len(somente_banco)}")
+    print()
+
+    if sincronizados:
+        print("SINCRONIZADAS:")
+        for phone_id_unidade in sincronizados:
+            unidade = banco_por_phone_id[phone_id_unidade]
+            numero_meta = meta_por_phone_id[phone_id_unidade]
+            print(
+                f"   - unidade {unidade['id_unidade']} "
+                f"{unidade['nome_unidade']} | phone id "
+                f"({phone_id_unidade}) | Meta status "
+                f"{numero_meta['status']}"
+            )
+        print()
+
+    if somente_meta:
+        print("SOMENTE NA META:")
+        for phone_id_unidade in somente_meta:
+            numero_meta = meta_por_phone_id[phone_id_unidade]
+            print(
+                f"   - phone id ({phone_id_unidade}) registrado "
+                f"como Cloud API na Meta, mas ausente no banco | "
+                f"numero {numero_meta['display_phone_number']} | "
+                f"nome {numero_meta['verified_name']} | "
+                f"status {numero_meta['status']}"
+            )
+        print()
+
+    if somente_banco:
+        print("SOMENTE NO BANCO:")
+        for phone_id_unidade in somente_banco:
+            unidade = banco_por_phone_id[phone_id_unidade]
+            print(
+                f"   - unidade {unidade['id_unidade']} "
+                f"{unidade['nome_unidade']} | phone id "
+                f"({phone_id_unidade}) existe no banco, mas nao "
+                "aparece registrado como Cloud API na Meta"
+            )
+        print()
+
+    if not somente_meta and not somente_banco:
+        print(
+            "OK: unidades do banco e registros Cloud API da Meta "
+            "estao sincronizados."
+        )
+
+    return {
+        "unidades_banco": unidades_banco,
+        "numeros_waba_meta": numeros_waba_meta,
+        "sincronizados": sincronizados,
+        "somente_meta": somente_meta,
+        "somente_banco": somente_banco,
+    }
+
+
+def _listar_unidades_banco():
+    conn = get_conn(application_name="script_chatbot")
+    cursor = conn.cursor()
+
+    try:
+        unidades = buscar_unidades_para_listagem_bloqueios(cursor)
+
+    finally:
+        conn.close()
+
+    return [
+        {
+            "id_unidade": id_unidade,
+            "nome_unidade": nome_unidade,
+            "phone_id_unidade": str(phone_id_unidade),
+        }
+        for (
+            id_unidade,
+            nome_unidade,
+            phone_id_unidade,
+        ) in unidades
+    ]
+
+
+def _listar_numeros_waba_meta():
+    url = (
+        f"https://graph.facebook.com/v25.0/"
+        f"{get_waba_id()}/phone_numbers"
+    )
+    headers = {
+        "Authorization": f"Bearer {get_token_usuario_meta()}",
+    }
+    params = {
+        "fields": (
+            "id,display_phone_number,verified_name,"
+            "quality_rating,code_verification_status,"
+            "platform_type,name_status,status"
+        ),
+        "limit": 100,
+    }
+    numeros = []
+
+    while url:
+        response = requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=get_meta_http_timeout(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+        for numero in payload.get("data", []):
+            platform_type = numero.get("platform_type")
+            numeros.append({
+                "phone_id_unidade": str(numero["id"]),
+                "display_phone_number": numero.get(
+                    "display_phone_number"
+                ),
+                "verified_name": numero.get("verified_name"),
+                "quality_rating": numero.get("quality_rating"),
+                "code_verification_status": numero.get(
+                    "code_verification_status"
+                ),
+                "platform_type": platform_type,
+                "name_status": numero.get("name_status"),
+                "status": numero.get("status"),
+                "registrado_cloud_api": (
+                    platform_type == "CLOUD_API"
+                ),
+            })
+
+        url = payload.get("paging", {}).get("next")
+        params = None
+
+    return numeros
+
+
 def _listar_bloqueios_banco():
     conn = get_conn(application_name="script_chatbot")
     cursor = conn.cursor()
@@ -156,5 +321,6 @@ def _extrair_wa_id_bloqueado(usuario):
     return wa_id or None
 
 
-"""FUNCAO FINAL"""
-#job_reconciliacao_bloqueios_meta()
+"""FUNCOES MANUAIS"""
+# job_reconciliacao_bloqueios_cliente_unidades_meta()
+# job_reconciliacao_register__waba_unidades_meta()

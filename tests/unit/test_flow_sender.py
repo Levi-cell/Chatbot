@@ -93,10 +93,30 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
+    def test_etapa_dois_vai_para_segunda_etapa(self):
+        esperado = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.bot",
+            "id_etapa_resultante": 2,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_segunda_etapa",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(etapa_atual=2, etapa_resposta=3)
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
     def test_etapa_nao_implementada_nao_finge_sucesso(self):
         with self.assertRaises(NotImplementedError):
             flow_sender_module.flow_sender(
-                contexto_historico_base(etapa_atual=2, etapa_resposta=3)
+                contexto_historico_base(etapa_atual=3, etapa_resposta=4)
             )
 
 

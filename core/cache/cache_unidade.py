@@ -203,12 +203,25 @@ def unidade_esta_ativa(phone_number_id):
         _sincronizar_cache_unidades_por_versao(r, origem="webhook")
 
         if _cache_valido(r):
-            return bool(r.hexists(REDIS_KEY, phone_key))
+            if r.hexists(REDIS_KEY, phone_key):
+                return True
+
+            logger.info(
+                "cache_unidade_miss | acao=confirmar_no_banco origem=webhook phone_number_id=%s",
+                short_value(phone_key),
+            )
+            return _unidade_esta_ativa_banco_e_repara_cache(
+                phone_key,
+                reparar_cache_se_ausente=False,
+            )
 
         logger.warning(
             "cache_invalido | acao=fallback_banco origem=webhook phone_number_id=%s",
             short_value(phone_key),
         )
+
+    except ValidacaoUnidadeIndisponivel:
+        raise
 
     except Exception as exc:
         _marcar_redis_falhou()
@@ -218,10 +231,16 @@ def unidade_esta_ativa(phone_number_id):
             exc,
         )
 
-    return _unidade_esta_ativa_banco_e_repara_cache(phone_key)
+    return _unidade_esta_ativa_banco_e_repara_cache(
+        phone_key,
+        reparar_cache_se_ausente=True,
+    )
 
 
-def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
+def _unidade_esta_ativa_banco_e_repara_cache(
+    phone_key,
+    reparar_cache_se_ausente=True,
+):
     conn = None
 
     try:
@@ -229,10 +248,12 @@ def _unidade_esta_ativa_banco_e_repara_cache(phone_key):
         cursor = conn.cursor()
 
         id_unidade = buscar_id_unidade_por_phone_id(phone_key, cursor)
+        unidade_encontrada = _id_unidade_valido(id_unidade)
 
-        _tentar_recarregar_cache(cursor, origem="webhook")
+        if unidade_encontrada or reparar_cache_se_ausente:
+            _tentar_recarregar_cache(cursor, origem="webhook")
 
-        return _id_unidade_valido(id_unidade)
+        return unidade_encontrada
 
     except Exception as exc:
         logger.exception(

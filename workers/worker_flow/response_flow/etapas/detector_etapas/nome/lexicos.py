@@ -212,6 +212,7 @@ SOBRENOMES_COMPLEMENTARES = {
     "yamamoto",
     "yoshida",
     "zamboni",
+    "riccio",
 }
 
 SAUDACOES_ANTES_DA_APRESENTACAO = (

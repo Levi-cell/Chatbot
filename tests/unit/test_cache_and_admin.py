@@ -23,6 +23,14 @@ class FakeRedis:
         return [f"{match}:1", f"{match}:2"]
 
 
+class FakeRedisUnidade:
+    def __init__(self, presente):
+        self.presente = presente
+
+    def hexists(self, _key, _field):
+        return self.presente
+
+
 class FakeRequest:
     user = "tester"
 
@@ -53,11 +61,73 @@ class CacheAndAdminTests(unittest.TestCase):
         ), patch.object(
             cache_unidade,
             "_unidade_esta_ativa_banco_e_repara_cache",
-            lambda phone: chamadas.append(phone) or True,
+            lambda phone, **_kwargs: chamadas.append(phone) or True,
         ):
             self.assertTrue(cache_unidade.unidade_esta_ativa("123456"))
 
         self.assertEqual(chamadas, ["123456"])
+
+    def test_cache_unidade_miss_confirma_no_banco(self):
+        redis_fake = FakeRedisUnidade(presente=False)
+        chamadas = []
+
+        with patch.object(
+            cache_unidade,
+            "get_redis_safe",
+            return_value=redis_fake,
+        ), patch.object(
+            cache_unidade,
+            "_sincronizar_cache_unidades_por_versao",
+        ), patch.object(
+            cache_unidade,
+            "_cache_valido",
+            return_value=True,
+        ), patch.object(
+            cache_unidade,
+            "_unidade_esta_ativa_banco_e_repara_cache",
+            lambda phone, **kwargs: (
+                chamadas.append((phone, kwargs)) or True
+            ),
+        ):
+            resultado = cache_unidade.unidade_esta_ativa(
+                "123456"
+            )
+
+        self.assertTrue(resultado)
+        self.assertEqual(
+            chamadas,
+            [
+                (
+                    "123456",
+                    {"reparar_cache_se_ausente": False},
+                )
+            ],
+        )
+
+    def test_cache_unidade_hit_nao_consulta_banco(self):
+        redis_fake = FakeRedisUnidade(presente=True)
+
+        with patch.object(
+            cache_unidade,
+            "get_redis_safe",
+            return_value=redis_fake,
+        ), patch.object(
+            cache_unidade,
+            "_sincronizar_cache_unidades_por_versao",
+        ), patch.object(
+            cache_unidade,
+            "_cache_valido",
+            return_value=True,
+        ), patch.object(
+            cache_unidade,
+            "_unidade_esta_ativa_banco_e_repara_cache",
+        ) as fallback_banco:
+            resultado = cache_unidade.unidade_esta_ativa(
+                "123456"
+            )
+
+        self.assertTrue(resultado)
+        fallback_banco.assert_not_called()
 
     def test_cache_unidade_redis_e_banco_falham_sinaliza_indisponibilidade(self):
         with patch.object(
@@ -133,7 +203,10 @@ class CacheAndAdminTests(unittest.TestCase):
         self.assertFalse(resultado)
         self.assertEqual(request.messages[0][1], messages.ERROR)
         self.assertIn("Redis falhou", request.messages[0][0])
-        self.assertIn("Nenhuma alteracao foi feita no banco", request.messages[0][0])
+        self.assertIn(
+            "não foi salva no banco",
+            request.messages[0][0],
+        )
 
 
 if __name__ == "__main__":

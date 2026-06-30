@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib import admin as django_admin
+from django.urls import NoReverseMatch
 
 from core.cache import cache_unidade
 from core.repositories import inserts
@@ -57,7 +58,7 @@ class TryExceptContractTests(unittest.TestCase):
         self.assertFalse(resultado)
         warning.assert_called_once()
 
-    def test_links_admin_mantem_fallback_e_sinaliza_erro(self):
+    def test_links_admin_fazem_fallback_apenas_para_rota_ausente(self):
         cliente = SimpleNamespace(
             id_cliente=10,
             nome="Cliente Teste",
@@ -77,10 +78,33 @@ class TryExceptContractTests(unittest.TestCase):
             with self.subTest(admin=model_admin.__class__.__name__), patch.object(
                 webhook_admin,
                 "reverse",
-                side_effect=RuntimeError("falha inesperada"),
+                side_effect=NoReverseMatch("rota ausente"),
             ), patch.object(webhook_admin.logger, "exception") as logger_exception:
                 self.assertEqual(model_admin.cliente_link(obj), "Cliente Teste")
                 logger_exception.assert_called_once()
+
+    def test_links_admin_propagam_erro_inesperado(self):
+        cliente = SimpleNamespace(
+            id_cliente=10,
+            nome="Cliente Teste",
+            waid_telefone="5571999999999",
+        )
+        obj = SimpleNamespace(id_cliente=cliente)
+        model_admin = webhook_admin.ConversaAdmin(
+            Conversa,
+            django_admin.site,
+        )
+
+        with patch.object(
+            webhook_admin,
+            "reverse",
+            side_effect=RuntimeError("falha inesperada"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "falha inesperada",
+            ):
+                model_admin.cliente_link(obj)
 
     def test_worker_preserva_barreira_generica_e_retry(self):
         source = inspect.getsource(flow_worker.worker_flow)

@@ -3,6 +3,9 @@ import logging
 from workers.worker_flow.response_flow.etapas.primeira_etapa import (
     resolve_primeira_etapa,
 )
+from workers.worker_flow.response_flow.etapas.segunda_etapa import (
+    resolve_segunda_etapa,
+)
 
 
 logger = logging.getLogger("worker.sender")
@@ -50,6 +53,10 @@ def flow_sender(contexto_historico):
 
     if id_etapa_atual is None or id_etapa_atual == 1:
         contexto_resposta = resolve_primeira_etapa(contexto_historico)
+        return contexto_resposta
+
+    if id_etapa_atual == 2:
+        contexto_resposta = resolve_segunda_etapa(contexto_historico)
         return contexto_resposta
 
     logger.warning(

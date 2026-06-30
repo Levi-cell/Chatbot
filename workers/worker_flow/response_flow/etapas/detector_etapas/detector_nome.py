@@ -26,6 +26,17 @@ from workers.worker_flow.response_flow.etapas.detector_etapas.detector_financeir
     normalizar_texto,
 )
 
+"""
+detector_nome.py funciona como um validador de contexto mas não entra na pasta
+de contexto por que ele será usado para valida nomes no geral ao decorrer do projeto 
+em mais de uma etapa, o que muda será a função sender que será chamada após passar
+por esse validador de nome, para demais validações de contexto como botões, acesse
+a pasta de contexto.
+"""
+
+
+
+
 
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 

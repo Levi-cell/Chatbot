@@ -1,9 +1,9 @@
 import logging
 
 from django.contrib import admin, messages
-from django.db import connection
+from django.db import DatabaseError, connection
 from django.http import HttpResponseRedirect
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html
 
 from core.cache.cache_unidade import (
@@ -87,21 +87,32 @@ class UnidadeAdmin(admin.ModelAdmin):
             )
 
         except CacheUnidadesIndisponivel as exc:
+            if self._falha_cache_originada_no_banco(exc):
+                return self._responder_falha_banco(
+                    request,
+                    object_id,
+                    exc,
+                )
+
             logger.exception(
-                "admin_unidade_cache_falhou | acao=rollback_admin object_id=%s erro=%s",
+                "admin_unidade_cache_falhou | acao=rollback_admin object_id=%s meta_ok=%s erro=%s",
                 object_id,
+                self._meta_sucesso_nesta_requisicao(request),
                 exc,
             )
             self.message_user(
                 request,
-                (
-                    "O Redis falhou ao atualizar o cache de unidades. "
-                    "Nenhuma alteracao foi feita no banco. "
-                    "Se a Meta ja tiver sido chamada, ela respondeu com sucesso; tente novamente."
-                ),
+                self._mensagem_falha_redis(request),
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(request.path)
+
+        except DatabaseError as exc:
+            return self._responder_falha_banco(
+                request,
+                object_id,
+                exc,
+            )
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         base_form = super().get_form(request, obj, change=change, **kwargs)
@@ -212,17 +223,22 @@ class UnidadeAdmin(admin.ModelAdmin):
             return super().delete_view(request, object_id, extra_context)
 
         except CacheUnidadesIndisponivel as exc:
+            if self._falha_cache_originada_no_banco(exc):
+                return self._responder_falha_banco_delete(
+                    request,
+                    object_id,
+                    exc,
+                )
+
             logger.exception(
-                "admin_unidade_cache_delete_falhou | acao=rollback_admin object_id=%s erro=%s",
+                "admin_unidade_cache_delete_falhou | acao=rollback_admin object_id=%s meta_ok=%s erro=%s",
                 object_id,
+                self._meta_sucesso_nesta_requisicao(request),
                 exc,
             )
             self.message_user(
                 request,
-                (
-                    "A Meta respondeu com sucesso, mas o Redis falhou. "
-                    "A unidade foi mantida no banco. Tente novamente."
-                ),
+                self._mensagem_falha_redis(request),
                 level=messages.ERROR,
             )
             return HttpResponseRedirect(
@@ -230,6 +246,13 @@ class UnidadeAdmin(admin.ModelAdmin):
                     "admin:webhook_unidade_change",
                     args=[object_id],
                 )
+            )
+
+        except DatabaseError as exc:
+            return self._responder_falha_banco_delete(
+                request,
+                object_id,
+                exc,
             )
 
     def _registrar_alteracao_cache_unidades(self):
@@ -271,15 +294,15 @@ class UnidadeAdmin(admin.ModelAdmin):
                 )
                 return False
 
+            self._marcar_meta_sucesso(
+                request,
+                acao="registrar",
+                phone_number_id=phone_number_id,
+            )
             logger.info(
                 "whatsapp_numero_registrado | acao=permitir_save phone_number_id=%s status=%s",
                 short_value(phone_number_id),
                 status,
-            )
-            self.message_user(
-                request,
-                "Numero registrado com sucesso no WhatsApp. Unidade salva no banco.",
-                level=messages.SUCCESS,
             )
             return True
 
@@ -314,15 +337,15 @@ class UnidadeAdmin(admin.ModelAdmin):
                 )
                 return False
 
+            self._marcar_meta_sucesso(
+                request,
+                acao="desregistrar",
+                phone_number_id=obj.phone_number_id,
+            )
             logger.warning(
                 "whatsapp_numero_desregistrado | acao=permitir_delete phone_number_id=%s status=%s",
                 short_value(obj.phone_number_id),
                 status,
-            )
-            self.message_user(
-                request,
-                "Registro do numero removido na Meta. Unidade removida do banco.",
-                level=messages.SUCCESS,
             )
             return True
 
@@ -338,6 +361,27 @@ class UnidadeAdmin(admin.ModelAdmin):
                 level=messages.ERROR,
             )
             return False
+
+    def _marcar_meta_sucesso(
+        self,
+        request,
+        acao,
+        phone_number_id,
+    ):
+        request._unidade_meta_sucesso = {
+            "acao": acao,
+            "phone_number_id": str(phone_number_id),
+        }
+
+    @staticmethod
+    def _meta_sucesso_nesta_requisicao(request):
+        return bool(
+            getattr(
+                request,
+                "_unidade_meta_sucesso",
+                None,
+            )
+        )
 
     def _marcar_meta_desregistrada_na_requisicao(self, request, obj):
         ids = getattr(request, "_unidades_meta_desregistradas", set())
@@ -400,18 +444,103 @@ class UnidadeAdmin(admin.ModelAdmin):
 
             return False
 
-    @staticmethod
-    def _mensagem_cache_unidades_falhou(meta_validada):
-        if meta_validada:
+    def _responder_falha_banco(
+        self,
+        request,
+        object_id,
+        exc,
+    ):
+        logger.exception(
+            "admin_unidade_banco_falhou | acao=rollback_sem_compensacao object_id=%s meta_ok=%s erro=%s",
+            object_id,
+            self._meta_sucesso_nesta_requisicao(request),
+            exc,
+        )
+        self.message_user(
+            request,
+            self._mensagem_falha_banco(request),
+            level=messages.ERROR,
+        )
+        return HttpResponseRedirect(request.path)
+
+    def _responder_falha_banco_delete(
+        self,
+        request,
+        object_id,
+        exc,
+    ):
+        logger.exception(
+            "admin_unidade_banco_delete_falhou | acao=rollback_sem_compensacao object_id=%s meta_ok=%s erro=%s",
+            object_id,
+            self._meta_sucesso_nesta_requisicao(request),
+            exc,
+        )
+        self.message_user(
+            request,
+            self._mensagem_falha_banco(request),
+            level=messages.ERROR,
+        )
+        return HttpResponseRedirect(
+            reverse(
+                "admin:webhook_unidade_change",
+                args=[object_id],
+            )
+        )
+
+    def _mensagem_falha_banco(self, request):
+        if self._meta_sucesso_nesta_requisicao(request):
             return (
-                "A Meta respondeu com sucesso, mas o Redis falhou. "
-                "Nenhuma alteracao foi feita no banco. Tente novamente."
+                "A Meta concluiu a operação com sucesso, mas o banco "
+                "falhou. A alteração da Meta foi mantida; banco e "
+                "cache local não foram confirmados. Faça uma "
+                "conferência manual."
+            )
+
+        return (
+            "O banco falhou e nenhuma alteração local foi "
+            "confirmada. Nenhuma operação Meta foi concluída nesta "
+            "requisição."
+        )
+
+    def _mensagem_falha_redis(self, request):
+        if self._meta_sucesso_nesta_requisicao(request):
+            return (
+                "A Meta concluiu a operação com sucesso, mas o Redis "
+                "falhou. A alteração da Meta foi mantida; nenhuma "
+                "alteração foi confirmada no banco ou no cache. Faça "
+                "uma conferência manual."
             )
 
         return (
             "O Redis falhou ao atualizar o cache de unidades. "
-            "Nenhuma alteracao foi feita no banco. Tente novamente."
+            "Nenhuma alteração foi confirmada no banco."
         )
+
+    @staticmethod
+    def _mensagem_cache_unidades_falhou(meta_validada):
+        if meta_validada:
+            return (
+                "A Meta concluiu a operação com sucesso, mas o Redis "
+                "falhou. A alteração da Meta foi mantida e a unidade "
+                "não foi salva no banco. Faça uma conferência manual."
+            )
+
+        return (
+            "O Redis falhou ao atualizar o cache de unidades. "
+            "Nenhuma alteração foi feita no banco."
+        )
+
+    @staticmethod
+    def _falha_cache_originada_no_banco(exc):
+        causa = exc.__cause__
+
+        while causa is not None:
+            if isinstance(causa, DatabaseError):
+                return True
+
+            causa = causa.__cause__
+
+        return False
 
     @staticmethod
     def _meta_resposta_sucesso(status, resposta):
@@ -547,7 +676,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
                 url,
                 obj.id_cliente.nome or obj.id_cliente.waid_telefone,
             )
-        except Exception as exc:
+        except NoReverseMatch as exc:
             logger.exception(
                 "admin_cliente_link_falhou | acao=retornar_texto_sem_link erro=%s",
                 exc,
@@ -828,7 +957,7 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
                 url,
                 obj.id_cliente.nome or obj.id_cliente.waid_telefone,
             )
-        except Exception as exc:
+        except NoReverseMatch as exc:
             logger.exception(
                 "admin_cliente_link_falhou | acao=retornar_texto_sem_link erro=%s",
                 exc,
