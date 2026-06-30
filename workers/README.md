@@ -6,6 +6,7 @@ persistido, enviar respostas e concluir o processamento.
 - [Portal do projeto](../README.md)
 - [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
 - [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md)
+- [Rotina de implementação de etapas](../ROTINA_IMPLEMENTACAO_ETAPAS.md)
 
 ## Estrutura
 
@@ -15,10 +16,22 @@ workers/
 │   ├── main_worker.py
 │   ├── valida_banco.py
 │   ├── valida_historico.py
-│   ├── valida_resposta_cliente.py
 │   ├── tratar_bloqueio.py
-│   ├── suport_functions.py
-│   └── response_flow/
+│   ├── response_flow/
+│   │   ├── flow_worker.py
+│   │   ├── flow_sender.py
+│   │   ├── etapas/
+│   │   │   ├── validadores_universais/
+│   │   │   └── validadores_contexto/
+│   │   └── transicoes/
+│   ├── transacoes/
+│   │   ├── persistencia_resposta.py
+│   │   ├── finalizacao_fila.py
+│   │   ├── lock_conversa.py
+│   │   └── ordem_turno.py
+│   └── suporte/
+│       ├── cache_repair.py
+│       └── estado_ciclo.py
 ├── tratamento_erros_externos/
 └── challenge_template.py
 ```
@@ -84,16 +97,37 @@ fila sem duplicar o envio.
 
 ## Response flow
 
-- `rotear_resposta_cliente.py`: escolhe fluxo normal ou tratamento;
-- `flow_sender.py`: seleciona o sender da etapa;
-- `flow_treat_context.py`: tratamento de resposta fora do contexto da etapa;
-- `flow_treat_financial.py`: tratamento de pergunta sobre valor, custo ou
-  investimento;
-- `flow_treat_unsupported_type.py`: tratamento de mídia ou tipo não suportado;
 - `flow_worker.py`: transação, checkpoints e handlers.
+- `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
+  etapa atual;
+- `etapas/<etapa>.py`: valida a resposta, aplica tratamentos e encaminha para o
+  destino autorizado;
+- `etapas/validadores_universais/`: mídia, financeiro, nome e outras validações
+  reutilizáveis;
+- `etapas/validadores_contexto/`: respostas específicas de cada pergunta;
+- `transicoes/`: eventos e decisão de `origem + evento -> destino`.
 
 Textos e chamadas PyWa não pertencem a essa pasta. Use
-`core/integrations/whatsapp/messages` e `pywa_functions`.
+`core/integrations/whatsapp/messages` e
+`core/integrations/whatsapp/pywa_functions/pywa_senders`.
+
+Tratamentos não produzem evento e permanecem na etapa atual. Respostas válidas
+utilizam a tabela `chatbot.etapa_transicao`; o destino não é calculado com
+`id_etapa + 1`.
+
+## Persistência de transições
+
+`transacoes/persistencia_resposta.py` coordena:
+
+```text
+histórico do bot
+-> confirmação da aresta no PostgreSQL
+-> atualização da conversa
+-> efeitos específicos da transição
+```
+
+O `flow_worker.py` continua dono do commit e rollback. Os repositórios recebem o
+cursor e não controlam a transação.
 
 ## Testes relacionados
 
@@ -103,7 +137,7 @@ Textos e chamadas PyWa não pertencem a essa pasta. Use
 - `tests/unit/test_retry_lock_lifecycle.py`;
 - `tests/unit/test_lastfrom_semantico.py`;
 - `tests/unit/test_flow_sender.py`;
-- `tests/unit/test_flow_treat_context.py`;
-- `tests/unit/test_flow_treat_financial.py`;
-- `tests/unit/test_flow_treat_unsupported_type.py`;
+- `tests/unit/test_primeira_etapa.py`;
+- `tests/unit/test_segunda_etapa.py`;
+- `tests/unit/test_transicoes_etapa.py`;
 - `tests/unit/test_repositories.py`.

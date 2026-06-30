@@ -59,6 +59,7 @@ def flow_sender(contexto_historico):
         contexto_resposta = resolve_segunda_etapa(contexto_historico)
         return contexto_resposta
 
+
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",
         id_conversa,

@@ -272,7 +272,8 @@ Implementação principal:
 - `core/database/deploy/bank_script.py`, funções `lock_conversa()` e
   `unlock_conversa()`
 - `core/repositories/querys.py`
-- `workers/worker_flow/suport_functions.py`
+- `workers/worker_flow/transacoes/lock_conversa.py`
+- `workers/worker_flow/transacoes/ordem_turno.py`
 
 ## 6. Conversa ativa e bloqueio por 30 dias
 
@@ -329,9 +330,8 @@ Implementação principal:
 
 - `workers/worker_flow/valida_historico.py`
 - `workers/worker_flow/response_flow/flow_sender.py`
-- `workers/worker_flow/response_flow/flow_treat_context.py`
-- `workers/worker_flow/response_flow/flow_treat_unsupported_type.py`
-- `workers/worker_flow/suport_functions.py`
+- `workers/worker_flow/response_flow/etapas/`
+- `workers/worker_flow/transacoes/persistencia_resposta.py`
 
 ## 9. Semântica de `last_message_from`
 
@@ -344,19 +344,25 @@ Implementação principal:
 
 ## 10. Etapas da conversa
 
-- Uma resposta normal do bot poderá manter a etapa ou avançar no máximo uma
-  etapa.
+- `chatbot.etapa` representa os estados existentes da conversa.
+- `chatbot.etapa_transicao` representa as arestas permitidas entre esses
+  estados.
+- Uma resposta válida produz um evento e somente poderá seguir para o destino
+  cadastrado para a combinação `origem + evento`.
+- Uma etapa poderá possuir mais de um destino, desde que cada evento identifique
+  uma única transição.
 - A etapa nunca poderá retroceder.
-- A etapa nunca poderá saltar mais de uma posição.
-- A atualização utilizará o estado persistido e será protegida no `UPDATE` da
-  conversa.
+- Saltos numéricos são permitidos somente quando existir uma aresta explícita,
+  como `2 + para_mim -> 5`.
+- A atualização utilizará a origem persistida no histórico da mensagem e será
+  revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do
-  bot.
+  bot e reconstruirá o evento pela origem e pelo destino.
 - Tratamentos que apenas orientam o cliente poderão responder sem avançar a
-  etapa.
+  etapa e não produzirão evento de transição.
 
-Retrocesso ou salto de etapa é bug, salvo se uma nova regra de produto for
-documentada.
+Retrocesso ou transição sem aresta cadastrada é bug. A ordem numérica dos IDs
+serve para organização e não define navegação.
 
 ## 11. Tipos de mensagem na V1
 
@@ -413,7 +419,7 @@ estiver na etapa N e o cliente enviar uma mídia:
    reapresentação estiver implementada;
 3. o tratamento não alterará a etapa persistida;
 4. a interação seguinte por texto será interpretada como resposta da etapa N;
-5. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final;
+5. uma resposta válida produzirá o evento que aponta para o destino cadastrado;
 6. a mensagem normal da etapa N não precisará ser enviada de novo em separado.
 
 Na etapa 1 já apresentada, a resposta esperada para mídia será:
@@ -435,7 +441,7 @@ Em ambos os casos:
 
 1. o tratamento não avança etapa;
 2. a interação seguinte por texto será interpretada como resposta da etapa N;
-3. o fluxo solicitará a etapa N+1, respeitando o limite da etapa final.
+3. uma resposta válida seguirá a transição cadastrada para a etapa N.
 
 Portanto, o tratamento de mídia não avança etapa já apresentada. A exceção é
 somente a conversa iniciada com mídia, porque a própria mensagem de tratamento
@@ -706,7 +712,7 @@ Implementação principal:
 - `core/cache/runtime/cache_cliente.py`
 - `core/cache/runtime/cache_conversas_bloqueadas.py`
 - `core/repositories/cache_control.py`
-- `workers/worker_flow/suport_functions.py`
+- `workers/worker_flow/suporte/cache_repair.py`
 
 ## 19. Regras do Django Admin
 

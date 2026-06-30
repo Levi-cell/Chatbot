@@ -17,6 +17,7 @@ core/database/
     ├── setup_database.py
     ├── bank_script.py
     ├── cache_control_script.py
+    ├── etapa_transicao_script.py
     ├── floodscript.py
     ├── turno_cliente_script.py
     └── povoar_etapas.py
@@ -51,8 +52,14 @@ healthcheck
 -> funções de lock
 -> timeouts do role
 -> seed de etapas
+-> whitelist de transições de etapas
 -> reset de cache de desenvolvimento
 ```
+
+`povoar_etapas.py` mantém o catálogo de estados com IDs estáveis.
+`etapa_transicao_script.py` mantém a whitelist executável de
+`origem + evento -> destino`. Uma aresta só deve entrar no seed quando resolver,
+sender, efeitos transacionais e testes estiverem prontos.
 
 Cada função controla sua conexão e transação. Funções concluídas anteriormente
 podem ter commit próprio; uma falha posterior não desfaz commits de funções

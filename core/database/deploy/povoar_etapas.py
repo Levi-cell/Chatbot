@@ -14,10 +14,12 @@ def insere_etapa_once():
         conn = get_conn(application_name="script_chatbot")
         cursor = conn.cursor()
 
-        etapa_1 = "Saudação e introdução ao supera"
+        etapa_1 = "Saudação como você se chama"
         etapa_2 = "Para quem é"
-        etapa_3 = "Qual o motivo"
-        etapa_4 = "O nome "
+        etapa_3 = "Qual o nome da pessoa"
+        etapa_4 = "Qual a idade da pessoa"
+        etapa_5 = "Oferta"
+        etapa_4 = "O nome"
         etapa_5 = "O telefone"
         etapa_6 = "Email"
         etapa_7 = "Link de agendamento, aviso no funil"

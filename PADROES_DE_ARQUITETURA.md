@@ -277,12 +277,22 @@ Responsabilidades:
 Contém orquestração de respostas:
 
 - `flow_worker.py`: ciclo e transações;
-- `rotear_resposta_cliente.py`: seleção do fluxo;
-- `flow_sender.py`: seleção da etapa de envio;
-- `flow_treat_*.py`: seleção de tratamentos.
+- `flow_sender.py`: preservação da idempotência e seleção do resolver da etapa
+  atual;
+- `etapas/<etapa>.py`: validação da etapa atual e encaminhamento para o destino
+  autorizado;
+- `etapas/validadores_universais/`: validações reutilizáveis entre etapas;
+- `etapas/validadores_contexto/`: validações específicas da pergunta atual;
+- `transicoes/`: eventos e resolução de `origem + evento -> destino`.
 
 Esses arquivos podem escolher qual integração chamar, mas não devem criar cliente
 PyWa, montar `Button` ou manter textos de saída.
+
+A navegação não utiliza `id_etapa + 1`. O worker identifica o evento, consulta
+as transições permitidas para a origem e transporta a decisão no contexto. A
+persistência final revalida a mesma aresta no PostgreSQL antes do commit.
+
+Tratamentos não produzem evento de transição e permanecem na etapa atual.
 
 ### Tratamento de erros
 

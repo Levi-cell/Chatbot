@@ -1073,18 +1073,20 @@ A ideia e separar melhor:
 - estado de conversa: etapa atual, bloqueio, status do funil;
 - estado de turno: se o turno esta aberto, fechado, em tratamento ou em recuperacao.
 
-### Possivel Simplificacao Sem `last_message_from`
+### Navegacao Sem Dependencia De `last_message_from`
 
-Se a V2 remover `last_message_from`, o calculo da etapa pode ficar mais direto:
+Se a V2 remover `last_message_from`, a navegacao continuara independente desse
+campo. A etapa de destino nao sera calculada por soma:
 
-```python
-if id_etapa_atual is None:
-    id_etapa_resposta = 1
-else:
-    id_etapa_resposta = min(id_etapa_atual + 1, 7)
+```text
+origem persistida no historico
++ evento validado
+-> destino cadastrado em etapa_transicao
 ```
 
-Tratamentos continuariam usando a etapa atual do cliente, sem avancar conversa.
+Tratamentos continuarao usando a etapa atual do cliente, sem evento e sem
+avancar conversa. A V2 devera preservar a revalidacao da aresta no PostgreSQL,
+mesmo que o contexto do ciclo passe a ser representado por classes.
 
 Para a excecao do webhook em que existe fila aberta ja respondida pelo bot, a
 prova principal deve continuar sendo o historico do bot vinculado a mensagem da
@@ -1107,7 +1109,7 @@ Criar um plano especifico para:
 - remover ou substituir `last_message_from`;
 - revisar o modelo de turno;
 - atualizar DDL, models e admin;
-- simplificar `valida_historico`;
+- estruturar `valida_historico` sem perder origem e transicoes permitidas;
 - revisar `turno_cliente`;
 - manter idempotencia por historico + `id_hash_cliente_origem`;
 - criar testes de regressao para avanço de etapa, tratamento de midia,

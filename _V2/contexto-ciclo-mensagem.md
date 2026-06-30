@@ -94,7 +94,8 @@ class ConversaContexto:
 @dataclass
 class HistoricoContexto:
     id_etapa_cliente: int
-    id_etapa_resposta: int
+    id_etapa_origem_transicao: int
+    transicoes_permitidas: dict[str, int]
     mensagem_cliente_inserida: bool
     resposta_bot_para_mensagem_atual: dict | None
 
@@ -103,6 +104,8 @@ class HistoricoContexto:
 class EnvioContexto:
     enviou: bool
     resposta_ja_existia: bool
+    id_etapa_origem_transicao: int | None
+    evento_transicao: str | None
     id_etapa_resultante: int
     id_hash_msg_bot: str | None
     tratamento: bool = False

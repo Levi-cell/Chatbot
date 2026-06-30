@@ -8,6 +8,9 @@ centrais e os mapas técnicos vivem nos READMEs de cada camada.
 
 ## Comece por aqui
 
+Para desenvolver novas etapas, siga a
+[rotina de implementação de etapas](ROTINA_IMPLEMENTACAO_ETAPAS.md).
+
 | Documento | Papel |
 |---|---|
 | [Regras de negócio](REGRAS_DE_NEGOCIO.md) | Fonte de verdade sobre turno, fila, etapas, retries, bloqueios e comportamentos esperados. |

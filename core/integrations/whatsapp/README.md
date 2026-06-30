@@ -13,24 +13,22 @@ Comunicação com a Meta WhatsApp Cloud API por meio da biblioteca PyWa.
 core/integrations/whatsapp/
 ├── exceptions.py
 ├── messages/
-│   ├── etapas.py
-│   ├── ferramentas.md
-│   └── tratamentos.py
+│   ├── primeira_etapa_messages.py
+│   └── segunda_etapa_messages.py
 ├── pywa_functions/
 │   ├── cliente.py
-│   ├── envios.py
-│   ├── etapas.py
-│   ├── tratamentos_context.py
-│   ├── tratamentos_financeiros.py
-│   ├── tratamentos_type.py
 │   ├── saudacao.py
-│   └── usuarios.py
+│   ├── ferramentas.md
+│   └── pywa_senders/
+│       ├── etapa1.py
+│       └── etapa2.py
 └── tools/
     ├── ativando_numero.py
     ├── ativando_waba_id.py
     ├── block_report.py
     ├── config.py
-    └── desativando_numero.py
+    ├── desativando_numero.py
+    └── usuarios.py
 ```
 
 ## Direção das dependências
@@ -41,8 +39,8 @@ worker -> pywa_functions -> messages
                       `--> Meta
 ```
 
-`messages` não importa PyWa. `pywa_functions` pode importar `messages`, cliente e
-exceções da integração. Nenhum deles controla banco, fila ou retry.
+`messages` não importa PyWa. `pywa_senders` pode importar `messages`, cliente e
+exceções da integração. Nenhum deles controla banco, fila, transição ou retry.
 
 ## Messages
 
@@ -56,24 +54,22 @@ Catálogo de conteúdo enviado:
 Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
 mensagem não deve mover a responsabilidade de envio para `messages`.
 
+Cada etapa mantém seu próprio arquivo, como
+`primeira_etapa_messages.py` e `segunda_etapa_messages.py`.
+
 ## PyWa functions
 
 Único local permitido para importação e chamada direta da PyWa.
 
 - `cliente.py`: normaliza `phone_id` e cria `WhatsApp`;
-- `envios.py`: primitivas separadas para texto, imagem, vídeo e documento, todas
-  com botões opcionais e retorno de um único ID;
 - `saudacao.py`: seleção de bom dia, boa tarde ou boa noite pelo horário do
   atendimento;
-- `etapas.py`: contexto de envio das etapas implementadas;
-- `tratamentos_type.py`: orientação para tipo não suportado;
-- `tratamentos_context.py`: tratamentos de resposta fora do contexto da etapa;
-- `tratamentos_financeiros.py`: tratamentos de dúvidas sobre valor, custo ou
-  investimento;
-- `usuarios.py`: bloquear, desbloquear e listar usuários na Meta.
+- `pywa_senders/etapaN.py`: mensagens normais e tratamentos específicos da
+  etapa N.
 
-Cada sender escolhe conteúdo, legenda e lista de botões. `envios.py` converte os
-dados para PyWa, realiza uma chamada externa e devolve um único ID da Meta.
+Cada sender escolhe conteúdo, legenda e lista de botões, realiza a chamada PyWa
+e devolve um contexto técnico com o ID da Meta e a etapa da mensagem enviada.
+O sender não escolhe origem, evento ou destino da transição.
 
 Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
 futuro capaz de persistir vários IDs e tratar sucesso parcial.
@@ -88,6 +84,7 @@ Ferramentas administrativas ou relatórios executados conscientemente:
 - registrar/desregistrar número;
 - ativar inscrição WABA;
 - comparar bloqueios Meta e banco.
+- bloquear, desbloquear e listar usuários na Meta.
 
 `tools` não deve conter implementação duplicada usada pelo runtime. Uma operação
 compartilhada deve morar em `pywa_functions` e ser chamada pela ferramenta.
@@ -117,11 +114,8 @@ Esta integração não deve:
 
 ## Testes relacionados
 
-- `tests/unit/test_sender_etapa1.py`;
-- `tests/unit/test_sender_tratamento.py`;
-- `tests/unit/test_sender_tratamento_context.py`;
-- `tests/unit/test_sender_tratamento_financeiro.py`;
+- `tests/unit/test_pywa_sender_etapa1.py`;
+- `tests/unit/test_pywa_sender_etapa2.py`;
 - `tests/unit/test_saudacao.py`;
-- `tests/unit/test_whatsapp_message_senders.py`;
 - `tests/unit/test_whatsapp_usuarios.py`;
 - `tests/unit/test_whatsapp_structure.py`.

@@ -62,7 +62,11 @@ simultâneas no mesmo turno.
 - `id_hash_msg` evita duplicidade na fila;
 - históricos reutilizam vínculo com mensagem da fila e hash de origem;
 - resposta do bot é procurada pela mensagem específica;
-- updates de etapa impedem retrocesso e salto superior a um.
+- `transicoes_etapa.py` carrega somente as arestas permitidas para a origem;
+- updates de conversa exigem a combinação exata de origem, evento e destino;
+- tratamentos atualizam a interação do bot sem alterar a etapa;
+- reaplicação idempotente aceita somente a origem ou o destino exato e nunca
+  regride a conversa.
 
 ## Ao criar um repositório
 
