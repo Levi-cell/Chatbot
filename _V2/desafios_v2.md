@@ -838,7 +838,7 @@ Mesmo com IA, o estado oficial da conversa deve continuar no banco.
 Na V1, o projeto deixa uma base simples:
 
 - `flow_sender.py` como ponto unico de decisao antes do envio;
-- `response_flow/etapas/primeira_etapa.py` concentrando a validacao da etapa 1,
+- `response_flow/etapas/etapa1.py` concentrando a validacao da etapa 1,
   seus tratamentos e a ponte para a etapa 2;
 - `validadores_universais/validador_midia.py` para tipos nao suportados, como midia,
   audio, documento e figurinha;

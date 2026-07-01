@@ -7,7 +7,7 @@ explícito, persistido e protegido de transições:
 
 ```text
 etapa 1 + nome_cliente_valido       -> etapa 2
-etapa 2 + para_mim                  -> etapa 5
+etapa 2 + para_mim                  -> etapa 4
 etapa 2 + para_outra_pessoa         -> etapa 3
 ```
 
@@ -84,12 +84,12 @@ já estar no destino:
 
 ```text
 mensagem do cliente: id_etapa = 2
-resposta existente: id_etapa = 5
-conversa atual: id_etapa_atual = 5
+resposta existente: id_etapa = 4
+conversa atual: id_etapa_atual = 4
 ```
 
 Nesse caso, o `flow_sender` não envia novamente. Ele reconstrói o evento
-`para_mim` pelo mapa `2 -> 5`, reaplica somente efeitos idempotentes e não
+`para_mim` pelo mapa `2 -> 4`, reaplica somente efeitos idempotentes e não
 retrocede a conversa.
 
 ## Passo 1 - Sincronizar o catálogo de etapas por ID
@@ -110,7 +110,7 @@ ETAPAS = (
     (1, "Saudação e nome do cliente"),
     (2, "Destino do atendimento"),
     (3, "Nome do dependente"),
-    (4, "Idade do dependente"),
+    (4, "Idade do aluno"),
     (5, "Oferta de aula experimental e avaliação cognitiva"),
     (6, "Email"),
     (7, "Link de agendamento e entrada no funil"),
@@ -188,7 +188,7 @@ logger = logging.getLogger("db.etapa_transicao")
 
 TRANSICOES_INICIAIS = (
     (1, "nome_cliente_valido", 2),
-    (2, "para_mim", 5),
+    (2, "para_mim", 4),
     (2, "para_outra_pessoa", 3),
 )
 
@@ -274,7 +274,7 @@ resolver, sender, efeitos transacionais e testes estejam prontos:
 
 ```text
 3 + nome_dependente_valido -> 4
-4 + idade_dependente_valida -> 5
+4 + idade_aluno_valida -> 5
 ```
 
 O código do deploy não manterá linhas comentadas para o futuro. A intenção fica
@@ -415,7 +415,7 @@ Novo arquivo completo:
 ETAPA_NOME_CLIENTE = 1
 ETAPA_DESTINO_ATENDIMENTO = 2
 ETAPA_NOME_DEPENDENTE = 3
-ETAPA_OFERTA = 5
+ETAPA_IDADE_ALUNO = 4
 
 EVENTO_NOME_CLIENTE_VALIDO = "nome_cliente_valido"
 EVENTO_PARA_MIM = "para_mim"
@@ -553,7 +553,7 @@ Responsabilidades:
 ## Passo 6 - Fazer o validador da etapa 2 devolver eventos compartilhados
 
 Arquivo completo:
-`workers/worker_flow/response_flow/etapas/validadores_contexto/valida_segunda_etapa.py`
+`workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa2.py`
 
 ```python
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -573,7 +573,7 @@ _OPCOES_ACEITAS = {
 }
 
 
-def validar_segunda_etapa(conteudo_texto):
+def validar_etapa2(conteudo_texto):
     """
     Aceita somente os dois textos exibidos nos botoes da etapa 2.
 
@@ -800,21 +800,21 @@ continua correta em retries nos quais a conversa já chegou ao destino.
 ## Passo 8 - Autorizar a transição 1 -> 2 antes do sender
 
 Arquivo completo:
-`workers/worker_flow/response_flow/etapas/primeira_etapa.py`
+`workers/worker_flow/response_flow/etapas/etapa1.py`
 
 ```python
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa1 import (
-    enviar_primeira_etapa,
-    enviar_primeira_etapa_contexto_nome_invalido,
-    enviar_primeira_etapa_financeiro,
-    enviar_primeira_etapa_financeiro_inicio,
-    enviar_primeira_etapa_midia,
-    enviar_primeira_etapa_midia_inicio,
+    enviar_etapa1,
+    enviar_etapa1_contexto_nome_invalido,
+    enviar_etapa1_financeiro,
+    enviar_etapa1_financeiro_inicio,
+    enviar_etapa1_midia,
+    enviar_etapa1_midia_inicio,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
-    enviar_segunda_etapa,
+    enviar_etapa2,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
@@ -847,10 +847,10 @@ ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 """
 
 
-logger = logging.getLogger("worker.primeira_etapa")
+logger = logging.getLogger("worker.etapa1")
 
 
-def resolve_primeira_etapa(contexto_historico):
+def resolve_etapa1(contexto_historico):
     """
     id_etapa_atual is None não é uma etapa separada.
     É apenas o primeiro contato antes da etapa 1 ser persistida.
@@ -873,12 +873,12 @@ def resolve_primeira_etapa(contexto_historico):
         _logar_tipo_nao_suportado(contexto_historico)
 
         if conversa_sem_etapa:
-            return enviar_primeira_etapa_midia_inicio(
+            return enviar_etapa1_midia_inicio(
                 cliente_telefone,
                 phone_id_unidade,
             )
 
-        return enviar_primeira_etapa_midia(
+        return enviar_etapa1_midia(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -891,19 +891,19 @@ def resolve_primeira_etapa(contexto_historico):
         )
 
         if conversa_sem_etapa:
-            return enviar_primeira_etapa_financeiro_inicio(
+            return enviar_etapa1_financeiro_inicio(
                 cliente_telefone,
                 phone_id_unidade,
             )
 
-        return enviar_primeira_etapa_financeiro(
+        return enviar_etapa1_financeiro(
             cliente_telefone,
             phone_id_unidade,
         )
 
     # Primeiro contato normal: inicializa a conversa na etapa 1.
     if conversa_sem_etapa:
-        return enviar_primeira_etapa(
+        return enviar_etapa1(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -917,7 +917,7 @@ def resolve_primeira_etapa(contexto_historico):
             motivo_detalhado=resultado_nome.motivo,
         )
 
-        return enviar_primeira_etapa_contexto_nome_invalido(
+        return enviar_etapa1_contexto_nome_invalido(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -931,14 +931,14 @@ def resolve_primeira_etapa(contexto_historico):
     )
 
     logger.debug(
-        "primeira_etapa_nome_validado | acao=enviar_etapa_destino id_conversa=%s evento=%s etapa_destino=%s primeiro_nome=%s",
+        "etapa1_nome_validado | acao=enviar_etapa_destino id_conversa=%s evento=%s etapa_destino=%s primeiro_nome=%s",
         id_conversa,
         EVENTO_NOME_CLIENTE_VALIDO,
         etapa_destino,
         short_value(resultado_nome.primeiro_nome),
     )
 
-    contexto_envio = enviar_segunda_etapa(
+    contexto_envio = enviar_etapa2(
         cliente_telefone,
         phone_id_unidade,
         nome=resultado_nome.primeiro_nome,
@@ -987,25 +987,25 @@ def _logar_tratamento_texto(
     )
 ```
 
-## Passo 9 - Fazer a etapa 2 escolher 3 ou 5 pelo mapa
+## Passo 9 - Fazer a etapa 2 escolher 3 ou 4 pelo mapa
 
 Arquivo completo:
-`workers/worker_flow/response_flow/etapas/segunda_etapa.py`
+`workers/worker_flow/response_flow/etapas/etapa2.py`
 
 ```python
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
-    enviar_segunda_etapa_contexto_opcao_invalida,
-    enviar_segunda_etapa_financeiro,
-    enviar_segunda_etapa_midia,
+    enviar_etapa2_contexto_opcao_invalida,
+    enviar_etapa2_financeiro,
+    enviar_etapa2_midia,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_segunda_etapa import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
     OPCAO_PARA_MIM,
     OPCAO_PARA_OUTRA_PESSOA,
     TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
-    validar_segunda_etapa,
+    validar_etapa2,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -1015,14 +1015,13 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_IDADE_ALUNO,
     ETAPA_NOME_DEPENDENTE,
-    ETAPA_OFERTA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
     resolver_destino_transicao,
 )
-
 
 """
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
@@ -1031,18 +1030,17 @@ ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 - ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA
 """
 
+logger = logging.getLogger("worker.etapa2")
 
-logger = logging.getLogger("worker.segunda_etapa")
 
-
-def resolve_segunda_etapa(contexto_historico):
+def resolve_etapa2(contexto_historico):
     """
     Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
 
-    para_mim resolve 2 -> 5.
+    para_mim resolve 2 -> 4.
     para_outra_pessoa resolve 2 -> 3.
 
-    Enquanto os senders reais das etapas 3 e 5 não existem, a resposta
+    Enquanto os senders reais das etapas 3 e 4 não existem, a resposta
     continua simulada. A simulação não altera a autorização da transição.
     """
     id_conversa = contexto_historico["id_conversa"]
@@ -1055,7 +1053,7 @@ def resolve_segunda_etapa(contexto_historico):
     if validar_midia(tipo_mensagem):
         _logar_tipo_nao_suportado(contexto_historico)
 
-        return enviar_segunda_etapa_midia(
+        return enviar_etapa2_midia(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -1066,12 +1064,12 @@ def resolve_segunda_etapa(contexto_historico):
             TIPO_TRATAMENTO_FINANCEIRO,
         )
 
-        return enviar_segunda_etapa_financeiro(
+        return enviar_etapa2_financeiro(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    evento_transicao = validar_segunda_etapa(texto_cliente)
+    evento_transicao = validar_etapa2(texto_cliente)
 
     if evento_transicao is None:
         _logar_tratamento_texto(
@@ -1079,7 +1077,7 @@ def resolve_segunda_etapa(contexto_historico):
             TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
         )
 
-        return enviar_segunda_etapa_contexto_opcao_invalida(
+        return enviar_etapa2_contexto_opcao_invalida(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -1091,7 +1089,7 @@ def resolve_segunda_etapa(contexto_historico):
         destinos_esperados=destinos_esperados,
     )
     status_dependente = (
-        evento_transicao == OPCAO_PARA_OUTRA_PESSOA
+            evento_transicao == OPCAO_PARA_OUTRA_PESSOA
     )
 
     # TEMPORÁRIO: substituir a simulação pelo sender da etapa retornada.
@@ -1122,7 +1120,7 @@ def resolve_segunda_etapa(contexto_historico):
 
 def _destinos_esperados_por_evento(evento_transicao):
     if evento_transicao == OPCAO_PARA_MIM:
-        return {ETAPA_OFERTA}
+        return {ETAPA_IDADE_ALUNO}
 
     if evento_transicao == OPCAO_PARA_OUTRA_PESSOA:
         return {ETAPA_NOME_DEPENDENTE}
@@ -1131,13 +1129,13 @@ def _destinos_esperados_por_evento(evento_transicao):
 
 
 def _montar_contexto_etapa_simulada(
-    contexto_historico,
-    etapa_destino,
-    evento_transicao,
-    status_dependente,
+        contexto_historico,
+        etapa_destino,
+        evento_transicao,
+        status_dependente,
 ):
     # TEMPORÁRIO: representa somente o ponto em que o sender real será
-    # chamado. Remover envio_simulado quando as etapas 3 e 5 existirem.
+    # chamado. Remover envio_simulado quando as etapas 3 e 4 existirem.
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     id_mensagem_fila = mensagem_cliente["id_mensagem_fila"]
 
@@ -1198,16 +1196,15 @@ Arquivo completo:
 ```python
 import logging
 
-from workers.worker_flow.response_flow.etapas.primeira_etapa import (
-    resolve_primeira_etapa,
+from workers.worker_flow.response_flow.etapas.etapa1_worker import (
+    resolve_etapa1,
 )
-from workers.worker_flow.response_flow.etapas.segunda_etapa import (
-    resolve_segunda_etapa,
+from workers.worker_flow.response_flow.etapas.etapa2_worker import (
+    resolve_etapa2,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
-
 
 logger = logging.getLogger("worker.sender")
 
@@ -1222,7 +1219,7 @@ def flow_sender(contexto_historico):
     cliente_atual_id_hash_msg = mensagem_cliente_atual["id_hash_msg"]
 
     resposta_bot_atual = (
-        contexto_historico["resposta_bot_para_mensagem_atual"] or {}
+            contexto_historico["resposta_bot_para_mensagem_atual"] or {}
     )
 
     # Esta barreira continua antes de qualquer resolver ou sender.
@@ -1269,10 +1266,10 @@ def flow_sender(contexto_historico):
         )
 
     if id_etapa_atual is None or id_etapa_atual == 1:
-        return resolve_primeira_etapa(contexto_historico)
+        return resolve_etapa1(contexto_historico)
 
     if id_etapa_atual == 2:
-        return resolve_segunda_etapa(contexto_historico)
+        return resolve_etapa2(contexto_historico)
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa_atual=%s",
@@ -1288,7 +1285,7 @@ O fluxo continua parando no histórico existente. A novidade é que o evento
 também é reconstruído para os efeitos idempotentes:
 
 ```text
-origem 2 + resposta existente na etapa 5
+origem 2 + resposta existente na etapa 4
 -> evento para_mim
 -> nenhum novo envio
 -> efeitos da transição podem ser reaplicados com segurança
@@ -1699,9 +1696,9 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_DESTINO_ATENDIMENTO,
+    ETAPA_IDADE_ALUNO,
     ETAPA_NOME_CLIENTE,
     ETAPA_NOME_DEPENDENTE,
-    ETAPA_OFERTA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
@@ -1935,7 +1932,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
             ETAPA_DESTINO_ATENDIMENTO,
             evento_transicao,
         )
-        return _persistir_nome_cliente_capturado_na_etapa_1(
+        return _persistir_nome_cliente_capturado_na_etapa1(
             contexto_historico,
             contexto_envio,
             cursor,
@@ -1946,7 +1943,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
         EVENTO_PARA_OUTRA_PESSOA,
     }:
         destino_esperado = (
-            ETAPA_OFERTA
+            ETAPA_IDADE_ALUNO
             if evento_transicao == EVENTO_PARA_MIM
             else ETAPA_NOME_DEPENDENTE
         )
@@ -1957,7 +1954,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
             destino_esperado,
             evento_transicao,
         )
-        return _persistir_destino_atendimento_da_etapa_2(
+        return _persistir_destino_atendimento_da_etapa2(
             contexto_historico,
             evento_transicao,
             cursor,
@@ -1987,7 +1984,7 @@ def _exigir_aresta(
         )
 
 
-def _persistir_nome_cliente_capturado_na_etapa_1(
+def _persistir_nome_cliente_capturado_na_etapa1(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -2038,7 +2035,7 @@ def _persistir_nome_cliente_capturado_na_etapa_1(
     }
 
 
-def _persistir_destino_atendimento_da_etapa_2(
+def _persistir_destino_atendimento_da_etapa2(
     contexto_historico,
     evento_transicao,
     cursor,
@@ -2081,7 +2078,7 @@ def _persistir_destino_atendimento_da_etapa_2(
         (
             ETAPA_NOME_DEPENDENTE
             if status_dependente
-            else ETAPA_OFERTA
+            else ETAPA_IDADE_ALUNO
         ),
         id_conversa,
         status_dependente,
@@ -2132,7 +2129,7 @@ nome_cliente_valido
 -> efeito: salvar cliente.nome
 
 para_mim
--> navegação 2 -> 5 pela tabela
+-> navegação 2 -> 4 pela tabela
 -> efeito: status_dependente=False
 
 para_outra_pessoa
@@ -2154,8 +2151,8 @@ import unittest
 from core.repositories import transicoes_etapa
 from tests.helpers import FakeCursor
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_IDADE_ALUNO,
     ETAPA_NOME_DEPENDENTE,
-    ETAPA_OFERTA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
 )
@@ -2171,7 +2168,7 @@ def contexto_transicoes():
     return {
         "id_etapa_origem_transicao": 2,
         "transicoes_permitidas": {
-            EVENTO_PARA_MIM: ETAPA_OFERTA,
+            EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
             EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
         },
     }
@@ -2181,7 +2178,7 @@ class TransicoesEtapaTests(unittest.TestCase):
     def test_repositorio_carrega_eventos_e_destinos(self):
         cursor = FakeCursor(
             fetchall_result=[
-                (EVENTO_PARA_MIM, ETAPA_OFERTA),
+                (EVENTO_PARA_MIM, ETAPA_IDADE_ALUNO),
                 (
                     EVENTO_PARA_OUTRA_PESSOA,
                     ETAPA_NOME_DEPENDENTE,
@@ -2197,7 +2194,7 @@ class TransicoesEtapaTests(unittest.TestCase):
         self.assertEqual(
             resultado,
             {
-                EVENTO_PARA_MIM: ETAPA_OFERTA,
+                EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
                 EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
             },
         )
@@ -2206,16 +2203,16 @@ class TransicoesEtapaTests(unittest.TestCase):
         self.assertIn("WHERE id_etapa_origem = %s", sql)
         self.assertEqual(params, (2,))
 
-    def test_para_mim_resolve_etapa_cinco(self):
+    def test_para_mim_resolve_etapa4(self):
         destino = resolver_destino_transicao(
             contexto_transicoes(),
             EVENTO_PARA_MIM,
-            destinos_esperados={ETAPA_OFERTA},
+            destinos_esperados={ETAPA_IDADE_ALUNO},
         )
 
-        self.assertEqual(destino, ETAPA_OFERTA)
+        self.assertEqual(destino, ETAPA_IDADE_ALUNO)
 
-    def test_para_outra_pessoa_resolve_etapa_tres(self):
+    def test_para_outra_pessoa_resolve_etapa3(self):
         destino = resolver_destino_transicao(
             contexto_transicoes(),
             EVENTO_PARA_OUTRA_PESSOA,
@@ -2239,7 +2236,7 @@ class TransicoesEtapaTests(unittest.TestCase):
             resolver_destino_transicao(
                 contexto,
                 EVENTO_PARA_MIM,
-                destinos_esperados={ETAPA_OFERTA},
+                destinos_esperados={ETAPA_IDADE_ALUNO},
             )
 
     def test_sender_nao_pode_retornar_destino_diferente(self):
@@ -2251,7 +2248,7 @@ class TransicoesEtapaTests(unittest.TestCase):
                     "enviou": True,
                 },
                 EVENTO_PARA_MIM,
-                ETAPA_OFERTA,
+                ETAPA_IDADE_ALUNO,
             )
 
     def test_tratamento_nao_pode_carregar_evento(self):
@@ -2259,18 +2256,18 @@ class TransicoesEtapaTests(unittest.TestCase):
             anexar_transicao_ao_contexto_envio(
                 contexto_transicoes(),
                 {
-                    "id_etapa_resultante": ETAPA_OFERTA,
+                    "id_etapa_resultante": ETAPA_IDADE_ALUNO,
                     "enviou": True,
                     "tratamento": True,
                 },
                 EVENTO_PARA_MIM,
-                ETAPA_OFERTA,
+                ETAPA_IDADE_ALUNO,
             )
 
     def test_retry_reconstroi_evento_pelo_destino(self):
         evento = identificar_evento_por_destino(
             contexto_transicoes(),
-            ETAPA_OFERTA,
+            ETAPA_IDADE_ALUNO,
         )
 
         self.assertEqual(evento, EVENTO_PARA_MIM)
@@ -2315,10 +2312,10 @@ transicoes/
 Depois runtime:
 
 ```text
-valida_segunda_etapa.py
+valida_etapa2.py
 valida_historico.py
-primeira_etapa.py
-segunda_etapa.py
+etapa1.py
+etapa2.py
 flow_sender.py
 updates.py
 persistencia_resposta.py
@@ -2343,8 +2340,8 @@ fluxo de etapas e permanecem válidos.
 
 ```powershell
 python -m unittest tests.unit.test_transicoes_etapa -v
-python -m unittest tests.unit.test_primeira_etapa -v
-python -m unittest tests.unit.test_segunda_etapa -v
+python -m unittest tests.unit.test_etapa1 -v
+python -m unittest tests.unit.test_etapa2 -v
 python -m unittest tests.unit.test_flow_sender -v
 python -m unittest tests.unit.test_lastfrom_semantico -v
 python -m unittest tests.unit.test_repositories -v
@@ -2369,11 +2366,11 @@ Isso é importante porque o código atual já gravou simulações antigas em que
 `para_mim` também resultava na etapa 3. O novo mapa passa a considerar:
 
 ```text
-para_mim -> 5
+para_mim -> 4
 para_outra_pessoa -> 3
 ```
 
-Como a V1 ainda está em desenvolvimento e as etapas 3 e 5 são simulações, os
+Como a V1 ainda está em desenvolvimento e as etapas 3 e 4 são simulações, os
 dados de conversas de teste podem ser encerrados ou recriados antes do rollout.
 Nenhuma migração automática deve tentar adivinhar o significado de um histórico
 antigo.
@@ -2400,7 +2397,7 @@ Resultado esperado:
 
 ```text
 1 nome_cliente_valido    2
-2 para_mim               5
+2 para_mim               4
 2 para_outra_pessoa      3
 ```
 
@@ -2440,10 +2437,10 @@ resposta de tratamento
 
 ```text
 evento para_mim
--> tabela autoriza 2 -> 5
+-> tabela autoriza 2 -> 4
 -> status_dependente=False
 -> nenhum dependente
--> id_etapa_atual=5
+-> id_etapa_atual=4
 ```
 
 #### Para outra pessoa
@@ -2588,7 +2585,7 @@ Ele não conhece nenhuma aresta específica.
 
 ## Aval final
 
-A tabela de transições é mais forte que uma exceção hardcoded para `2 -> 5`
+A tabela de transições é mais forte que uma exceção hardcoded para `2 -> 4`
 porque:
 
 - torna todos os caminhos permitidos auditáveis no banco;
@@ -2599,7 +2596,7 @@ porque:
 - mantém efeitos de negócio transacionais;
 - preserva o modelo atual de idempotência e concorrência.
 
-A implementação deve ocorrer agora, antes dos senders reais das etapas 3 e 5.
+A implementação deve ocorrer agora, antes dos senders reais das etapas 3 e 4.
 Neste momento o custo de migração é menor, pois somente as etapas 1 e 2 possuem
 resolvers completos.
 
@@ -2677,7 +2674,7 @@ def contexto_envio_base(
 
 
 class WorkerSupportFinalizacaoTests(unittest.TestCase):
-    def test_primeira_resposta_inicializa_conversa_na_etapa_um(self):
+    def test_primeira_resposta_inicializa_conversa_na_etapa1(self):
         chamadas = []
 
         def fake_inserir(*_args, **_kwargs):
@@ -2794,7 +2791,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
                         id_etapa_atual=2,
                         etapa_origem=2,
                     ),
-                    contexto_envio_base(destino=5),
+                    contexto_envio_base(destino=4),
                     object(),
                 )
 
@@ -2852,7 +2849,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
                     etapa_origem=2,
                 ),
                 contexto_envio_base(
-                    destino=5,
+                    destino=4,
                     evento=EVENTO_PARA_MIM,
                 ),
                 cursor,
@@ -2912,11 +2909,11 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(
                     {"received_data_hora": DATA_BOT},
-                    id_etapa_atual=5,
+                    id_etapa_atual=4,
                     etapa_origem=2,
                 ),
                 contexto_envio_base(
-                    destino=5,
+                    destino=4,
                     evento=EVENTO_PARA_MIM,
                     resposta_ja_existia=True,
                 ),
@@ -3011,7 +3008,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
 
         atualizar_nome.assert_not_called()
 
-    def test_para_mim_vai_para_cinco_sem_criar_dependente(self):
+    def test_para_mim_vai_para_quatro_sem_criar_dependente(self):
         cursor = object()
 
         with (
@@ -3033,7 +3030,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
                         texto_cliente="Para mim",
                     ),
                     {
-                        "id_etapa_resultante": 5,
+                        "id_etapa_resultante": 4,
                         "evento_transicao": EVENTO_PARA_MIM,
                     },
                     cursor,
@@ -3241,7 +3238,7 @@ suíte completa passar
 -> diff check passar
 -> tabela etapa_transicao possuir somente a whitelist prevista
 -> tratamentos permanecerem na etapa atual
--> para_mim produzir 2 -> 5
+-> para_mim produzir 2 -> 4
 -> para_outra_pessoa produzir 2 -> 3
 -> retry com resposta existente não reenviar
 -> testes A/B/C e lock continuarem verdes
@@ -3291,7 +3288,7 @@ def contexto_banco_base(last_from="bot", etapa=1):
     }
 
 
-def transicoes_etapa_um(_id_etapa, _cursor):
+def transicoes_etapa1(_id_etapa, _cursor):
     return {EVENTO_NOME_CLIENTE_VALIDO: 2}
 
 
@@ -3323,7 +3320,7 @@ class LastFromSemanticoTests(unittest.TestCase):
             patch.object(
                 valida_historico,
                 "listar_transicoes_permitidas",
-                transicoes_etapa_um,
+                transicoes_etapa1,
             ),
             patch.object(
                 valida_historico,
@@ -3367,7 +3364,7 @@ class LastFromSemanticoTests(unittest.TestCase):
             patch.object(
                 valida_historico,
                 "listar_transicoes_permitidas",
-                transicoes_etapa_um,
+                transicoes_etapa1,
             ),
             patch.object(
                 valida_historico,
@@ -3426,7 +3423,7 @@ class LastFromSemanticoTests(unittest.TestCase):
             patch.object(
                 valida_historico,
                 "listar_transicoes_permitidas",
-                transicoes_etapa_um,
+                transicoes_etapa1,
             ),
         ):
             contexto = valida_historico.valida_historico(
@@ -3483,7 +3480,7 @@ class LastFromSemanticoTests(unittest.TestCase):
             patch.object(
                 valida_historico,
                 "listar_transicoes_permitidas",
-                transicoes_etapa_um,
+                transicoes_etapa1,
             ),
             patch.object(
                 valida_historico,
@@ -3512,14 +3509,14 @@ if __name__ == "__main__":
 ## Passo 16 - Atualizar os testes da primeira etapa
 
 Arquivo completo:
-`tests/unit/test_primeira_etapa.py`
+`tests/unit/test_etapa1.py`
 
 ```python
 import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    primeira_etapa as etapa_module,
+    etapa1_worker as etapa_module,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_NOME_CLIENTE_VALIDO,
@@ -3527,10 +3524,10 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 
 
 def contexto_historico(
-    *,
-    etapa_atual=None,
-    tipo_mensagem="text",
-    texto="Ola",
+        *,
+        etapa_atual=None,
+        tipo_mensagem="text",
+        texto="Ola",
 ):
     return {
         "id_conversa": 10,
@@ -3566,14 +3563,14 @@ def retorno(nome, *, id_etapa_resultante=1, tratamento=False):
     return resultado
 
 
-class PrimeiraEtapaTests(unittest.TestCase):
+class Etapa1WorkerTests(unittest.TestCase):
     def test_conversa_nova_com_midia_usa_tratamento_de_inicio(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa_midia_inicio",
-            return_value=retorno("midia_inicio", tratamento=True),
+                etapa_module,
+                "enviar_etapa1_midia_inicio",
+                return_value=retorno("midia_inicio", tratamento=True),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(tipo_mensagem="image")
             )
 
@@ -3583,11 +3580,11 @@ class PrimeiraEtapaTests(unittest.TestCase):
 
     def test_conversa_nova_com_financeiro_usa_tratamento_de_inicio(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa_financeiro_inicio",
-            return_value=retorno("financeiro_inicio", tratamento=True),
+                etapa_module,
+                "enviar_etapa1_financeiro_inicio",
+                return_value=retorno("financeiro_inicio", tratamento=True),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(texto="qual o valor?")
             )
 
@@ -3595,27 +3592,27 @@ class PrimeiraEtapaTests(unittest.TestCase):
         self.assertEqual(resultado["nome"], "financeiro_inicio")
         self.assertNotIn("evento_transicao", resultado)
 
-    def test_conversa_nova_normal_envia_primeira_etapa(self):
+    def test_conversa_nova_normal_envia_etapa1(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa",
-            return_value=retorno("etapa_1"),
+                etapa_module,
+                "enviar_etapa1",
+                return_value=retorno("etapa1"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(texto="ola")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "etapa_1")
+        self.assertEqual(resultado["nome"], "etapa1")
         self.assertNotIn("evento_transicao", resultado)
 
-    def test_etapa_um_com_midia_trata_sem_transicao(self):
+    def test_etapa1_com_midia_trata_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa_midia",
-            return_value=retorno("midia_etapa_1", tratamento=True),
+                etapa_module,
+                "enviar_etapa1_midia",
+                return_value=retorno("midia_etapa1", tratamento=True),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     tipo_mensagem="video",
@@ -3626,16 +3623,16 @@ class PrimeiraEtapaTests(unittest.TestCase):
         self.assertEqual(resultado["id_etapa_resultante"], 1)
         self.assertNotIn("evento_transicao", resultado)
 
-    def test_etapa_um_com_financeiro_trata_sem_transicao(self):
+    def test_etapa1_com_financeiro_trata_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa_financeiro",
-            return_value=retorno(
-                "financeiro_etapa_1",
-                tratamento=True,
-            ),
+                etapa_module,
+                "enviar_etapa1_financeiro",
+                return_value=retorno(
+                    "financeiro_etapa1",
+                    tratamento=True,
+                ),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     texto="quanto custa?",
@@ -3647,11 +3644,11 @@ class PrimeiraEtapaTests(unittest.TestCase):
 
     def test_nome_invalido_trata_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_primeira_etapa_contexto_nome_invalido",
-            return_value=retorno("nome_invalido", tratamento=True),
+                etapa_module,
+                "enviar_etapa1_contexto_nome_invalido",
+                return_value=retorno("nome_invalido", tratamento=True),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     texto="pppppp",
@@ -3661,16 +3658,16 @@ class PrimeiraEtapaTests(unittest.TestCase):
         sender.assert_called_once_with("5571999999999", "123456")
         self.assertNotIn("evento_transicao", resultado)
 
-    def test_nome_valido_envia_etapa_dois_com_evento(self):
+    def test_nome_valido_envia_etapa2_com_evento(self):
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno(
-                "etapa_2",
-                id_etapa_resultante=2,
-            ),
+                etapa_module,
+                "enviar_etapa2",
+                return_value=retorno(
+                    "etapa2",
+                    id_etapa_resultante=2,
+                ),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     texto="Maria",
@@ -3692,14 +3689,14 @@ class PrimeiraEtapaTests(unittest.TestCase):
 
     def test_nome_composto_e_normalizado_antes_do_sender(self):
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno(
-                "etapa_2",
-                id_etapa_resultante=2,
-            ),
+                etapa_module,
+                "enviar_etapa2",
+                return_value=retorno(
+                    "etapa2",
+                    id_etapa_resultante=2,
+                ),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     texto="Maria Julia.",
@@ -3724,11 +3721,11 @@ class PrimeiraEtapaTests(unittest.TestCase):
         contexto["transicoes_permitidas"] = {}
 
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa",
+                etapa_module,
+                "enviar_etapa2",
         ) as sender:
             with self.assertRaises(ValueError):
-                etapa_module.resolve_primeira_etapa(contexto)
+                etapa_module.resolve_etapa1(contexto)
 
         sender.assert_not_called()
 
@@ -3740,14 +3737,14 @@ if __name__ == "__main__":
 ## Passo 17 - Atualizar os testes da segunda etapa
 
 Arquivo completo:
-`tests/unit/test_segunda_etapa.py`
+`tests/unit/test_etapa2.py`
 
 ```python
 import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    segunda_etapa as etapa_module,
+    etapa2_worker as etapa_module,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_PARA_MIM,
@@ -3756,9 +3753,9 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 
 
 def contexto_historico(
-    *,
-    tipo_mensagem="text",
-    texto="Para mim",
+        *,
+        tipo_mensagem="text",
+        texto="Para mim",
 ):
     return {
         "id_conversa": 10,
@@ -3766,7 +3763,7 @@ def contexto_historico(
         "id_etapa_cliente": 2,
         "id_etapa_origem_transicao": 2,
         "transicoes_permitidas": {
-            EVENTO_PARA_MIM: 5,
+            EVENTO_PARA_MIM: 4,
             EVENTO_PARA_OUTRA_PESSOA: 3,
         },
         "tipo_mensagem_atual": tipo_mensagem,
@@ -3791,14 +3788,14 @@ def retorno_tratamento(nome):
     }
 
 
-class SegundaEtapaTests(unittest.TestCase):
+class Etapa2WorkerTests(unittest.TestCase):
     def test_midia_reenvia_etapa_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa_midia",
-            return_value=retorno_tratamento("midia_etapa_2"),
+                etapa_module,
+                "enviar_etapa2_midia",
+                return_value=retorno_tratamento("midia_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(tipo_mensagem="image", texto="")
             )
 
@@ -3808,11 +3805,11 @@ class SegundaEtapaTests(unittest.TestCase):
 
     def test_financeiro_reenvia_etapa_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa_financeiro",
-            return_value=retorno_tratamento("financeiro_etapa_2"),
+                etapa_module,
+                "enviar_etapa2_financeiro",
+                return_value=retorno_tratamento("financeiro_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(texto="quanto custa?")
             )
 
@@ -3823,15 +3820,15 @@ class SegundaEtapaTests(unittest.TestCase):
         with (
             patch.object(
                 etapa_module,
-                "enviar_segunda_etapa_midia",
-                return_value=retorno_tratamento("midia_etapa_2"),
+                "enviar_etapa2_midia",
+                return_value=retorno_tratamento("midia_etapa2"),
             ) as sender_midia,
             patch.object(
                 etapa_module,
-                "enviar_segunda_etapa_financeiro",
+                "enviar_etapa2_financeiro",
             ) as sender_financeiro,
         ):
-            etapa_module.resolve_segunda_etapa(
+            etapa_module.resolve_etapa2(
                 contexto_historico(
                     tipo_mensagem="image",
                     texto="quanto custa?",
@@ -3844,22 +3841,22 @@ class SegundaEtapaTests(unittest.TestCase):
         )
         sender_financeiro.assert_not_called()
 
-    def test_para_mim_pula_da_etapa_dois_para_cinco(self):
-        resultado = etapa_module.resolve_segunda_etapa(
+    def test_para_mim_pula_da_etapa2_para_quatro(self):
+        resultado = etapa_module.resolve_etapa2(
             contexto_historico(texto="Para mim")
         )
 
         self.assertTrue(resultado["enviou"])
         self.assertTrue(resultado["envio_simulado"])
-        self.assertEqual(resultado["id_etapa_resultante"], 5)
+        self.assertEqual(resultado["id_etapa_resultante"], 4)
         self.assertEqual(
             resultado["evento_transicao"],
             EVENTO_PARA_MIM,
         )
         self.assertFalse(resultado["status_dependente"])
 
-    def test_para_outra_pessoa_vai_da_etapa_dois_para_tres(self):
-        resultado = etapa_module.resolve_segunda_etapa(
+    def test_para_outra_pessoa_vai_da_etapa2_para_tres(self):
+        resultado = etapa_module.resolve_etapa2(
             contexto_historico(
                 tipo_mensagem="interactive",
                 texto="Para outra pessoa",
@@ -3876,11 +3873,11 @@ class SegundaEtapaTests(unittest.TestCase):
 
     def test_opcao_invalida_reenvia_etapa_sem_transicao(self):
         with patch.object(
-            etapa_module,
-            "enviar_segunda_etapa_contexto_opcao_invalida",
-            return_value=retorno_tratamento("contexto_etapa_2"),
+                etapa_module,
+                "enviar_etapa2_contexto_opcao_invalida",
+                return_value=retorno_tratamento("contexto_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(
                     texto="eu quero para meu primo"
                 )
@@ -3895,7 +3892,7 @@ class SegundaEtapaTests(unittest.TestCase):
         contexto["transicoes_permitidas"][EVENTO_PARA_MIM] = 3
 
         with self.assertRaises(ValueError):
-            etapa_module.resolve_segunda_etapa(contexto)
+            etapa_module.resolve_etapa2(contexto)
 
 
 if __name__ == "__main__":
@@ -3958,7 +3955,7 @@ class FlowSenderTests(unittest.TestCase):
 
         with patch.object(
             flow_sender_module,
-            "resolve_primeira_etapa",
+            "resolve_etapa1",
             falhar_se_chamar,
         ):
             resultado = flow_sender_module.flow_sender(
@@ -3980,19 +3977,19 @@ class FlowSenderTests(unittest.TestCase):
             EVENTO_NOME_CLIENTE_VALIDO,
         )
 
-    def test_retry_de_para_mim_reconstroi_evento_dois_para_cinco(self):
+    def test_retry_de_para_mim_reconstroi_evento_dois_para_quatro(self):
         resultado = flow_sender_module.flow_sender(
             contexto_historico_base(
                 resposta_bot={
                     "id_mensagem": 100,
-                    "id_hash_msg": "wamid.bot.oferta",
-                    "id_etapa": 5,
+                    "id_hash_msg": "wamid.bot.idade",
+                    "id_etapa": 4,
                 },
-                etapa_atual=5,
+                etapa_atual=4,
                 etapa_cliente=2,
                 retry=2,
                 transicoes={
-                    EVENTO_PARA_MIM: 5,
+                    EVENTO_PARA_MIM: 4,
                     EVENTO_PARA_OUTRA_PESSOA: 3,
                 },
             )
@@ -4003,9 +4000,9 @@ class FlowSenderTests(unittest.TestCase):
             resultado["evento_transicao"],
             EVENTO_PARA_MIM,
         )
-        self.assertEqual(resultado["id_etapa_resultante"], 5)
+        self.assertEqual(resultado["id_etapa_resultante"], 4)
 
-    def test_conversa_sem_etapa_vai_para_primeira_etapa(self):
+    def test_conversa_sem_etapa_vai_para_etapa1(self):
         esperado = {
             "enviou": True,
             "resposta_ja_existia": False,
@@ -4015,7 +4012,7 @@ class FlowSenderTests(unittest.TestCase):
 
         with patch.object(
             flow_sender_module,
-            "resolve_primeira_etapa",
+            "resolve_etapa1",
             return_value=esperado,
         ) as resolver:
             resultado = flow_sender_module.flow_sender(
@@ -4025,7 +4022,7 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
-    def test_etapa_um_vai_para_resolver_da_primeira_etapa(self):
+    def test_etapa1_vai_para_resolver_da_etapa1(self):
         esperado = {
             "enviou": True,
             "resposta_ja_existia": False,
@@ -4035,7 +4032,7 @@ class FlowSenderTests(unittest.TestCase):
 
         with patch.object(
             flow_sender_module,
-            "resolve_primeira_etapa",
+            "resolve_etapa1",
             return_value=esperado,
         ) as resolver:
             resultado = flow_sender_module.flow_sender(
@@ -4045,17 +4042,17 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
-    def test_etapa_dois_vai_para_resolver_da_segunda_etapa(self):
+    def test_etapa2_vai_para_resolver_da_etapa2(self):
         esperado = {
             "enviou": True,
             "resposta_ja_existia": False,
             "id_hash_msg_bot": "simulacao",
-            "id_etapa_resultante": 5,
+            "id_etapa_resultante": 4,
         }
 
         with patch.object(
             flow_sender_module,
-            "resolve_segunda_etapa",
+            "resolve_etapa2",
             return_value=esperado,
         ) as resolver:
             resultado = flow_sender_module.flow_sender(
@@ -4063,7 +4060,7 @@ class FlowSenderTests(unittest.TestCase):
                     etapa_atual=2,
                     etapa_cliente=2,
                     transicoes={
-                        EVENTO_PARA_MIM: 5,
+                        EVENTO_PARA_MIM: 4,
                         EVENTO_PARA_OUTRA_PESSOA: 3,
                     },
                 )
@@ -4163,7 +4160,7 @@ class DeployContractTests(unittest.TestCase):
             etapa_transicao_script.TRANSICOES_INICIAIS,
             (
                 (1, EVENTO_NOME_CLIENTE_VALIDO, 2),
-                (2, EVENTO_PARA_MIM, 5),
+                (2, EVENTO_PARA_MIM, 4),
                 (2, EVENTO_PARA_OUTRA_PESSOA, 3),
             ),
         )
@@ -4190,7 +4187,7 @@ DATA_BOT = "2026-01-01T00:01:00"
 
 
 class RepositoryTests(unittest.TestCase):
-    def test_inicializar_conversa_exige_etapa_um(self):
+    def test_inicializar_conversa_exige_etapa1(self):
         with self.assertRaises(ValueError):
             updates.inicializar_conversa_resposta_bot(
                 10,
@@ -4238,7 +4235,7 @@ class RepositoryTests(unittest.TestCase):
             10,
             2,
             "para_mim",
-            5,
+            4,
             DATA_BOT,
             cursor,
         )
@@ -4253,7 +4250,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertNotIn("GREATEST(id_etapa_atual", sql)
         self.assertEqual(
             params,
-            (2, 5, DATA_BOT, 10, 2, "para_mim", 5, 2, False, 5),
+            (2, 4, DATA_BOT, 10, 2, "para_mim", 4, 2, False, 4),
         )
 
     def test_transicao_idempotente_nao_regride_etapa(self):
@@ -4263,7 +4260,7 @@ class RepositoryTests(unittest.TestCase):
             10,
             2,
             "para_mim",
-            5,
+            4,
             DATA_BOT,
             cursor,
             permitir_reaplicacao=True,

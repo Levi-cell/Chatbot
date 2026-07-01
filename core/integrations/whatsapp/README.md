@@ -13,8 +13,8 @@ Comunicação com a Meta WhatsApp Cloud API por meio da biblioteca PyWa.
 core/integrations/whatsapp/
 ├── exceptions.py
 ├── messages/
-│   ├── primeira_etapa_messages.py
-│   └── segunda_etapa_messages.py
+│   ├── etapa1_messages.py
+│   └── etapa2_messages.py
 ├── pywa_functions/
 │   ├── cliente.py
 │   ├── saudacao.py
@@ -55,7 +55,7 @@ Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
 mensagem não deve mover a responsabilidade de envio para `messages`.
 
 Cada etapa mantém seu próprio arquivo, como
-`primeira_etapa_messages.py` e `segunda_etapa_messages.py`.
+`etapa1_messages.py` e `etapa2_messages.py`.
 
 ## PyWa functions
 

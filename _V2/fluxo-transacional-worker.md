@@ -19,8 +19,8 @@ cliente no banco.
 O `plano_implementacao_ponte_etapa2.md` foi aplicado na V1. No estado atual:
 
 ```text
-primeira_etapa.py ja valida nome e envia a etapa 2
-primeira_etapa.py ja coloca primeiro_nome_cliente no contexto_envio
+etapa1.py ja valida nome e envia a etapa 2
+etapa1.py ja coloca primeiro_nome_cliente no contexto_envio
 persistencia_resposta.py salva cliente.nome na transicao 1 -> 2
 ```
 
@@ -83,9 +83,9 @@ Quando o cliente respondeu `Maria`:
 
 ```text
 flow_sender
--> primeira_etapa.py
+-> etapa1.py
 -> valida nome
--> chama enviar_segunda_etapa(...)
+-> chama enviar_etapa2(...)
 -> Meta responde OK
 -> contexto_envio volta com:
    id_etapa_resultante = 2

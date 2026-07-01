@@ -3,12 +3,12 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
-from core.integrations.whatsapp.messages.segunda_etapa_messages import (
-    BOTAO_ETAPA_2_OUTRA_PESSOA,
-    BOTAO_ETAPA_2_PARA_MIM,
-    montar_mensagem_etapa_2,
-    montar_mensagem_financeiro_etapa_2,
-    montar_mensagem_midia_etapa_2,
+from core.integrations.whatsapp.messages.etapa2_messages import (
+    BOTAO_ETAPA2_OUTRA_PESSOA,
+    BOTAO_ETAPA2_PARA_MIM,
+    montar_mensagem_etapa2,
+    montar_mensagem_financeiro_etapa2,
+    montar_mensagem_midia_etapa2,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders import (
     etapa2 as sender_module,
@@ -33,7 +33,7 @@ def titulos_botoes(call):
 
 
 class PywaSenderEtapa2Tests(unittest.TestCase):
-    def test_enviar_segunda_etapa_usa_nome_e_botoes(self):
+    def test_enviar_etapa2_usa_nome_e_botoes(self):
         cliente_wa = FakeClienteWa()
 
         with patch.object(
@@ -41,19 +41,19 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
             "conta_wa",
             return_value=cliente_wa,
         ):
-            resultado = sender_module.enviar_segunda_etapa(
+            resultado = sender_module.enviar_etapa2(
                 "5571999999999",
                 "123456",
                 nome="Edcarlos",
             )
 
-        mensagem_esperada = montar_mensagem_etapa_2("Edcarlos")
+        mensagem_esperada = montar_mensagem_etapa2("Edcarlos")
 
         self.assertEqual(cliente_wa.calls[0]["to"], "5571999999999")
         self.assertEqual(cliente_wa.calls[0]["text"], mensagem_esperada)
         self.assertEqual(
             titulos_botoes(cliente_wa.calls[0]),
-            [BOTAO_ETAPA_2_PARA_MIM, BOTAO_ETAPA_2_OUTRA_PESSOA],
+            [BOTAO_ETAPA2_PARA_MIM, BOTAO_ETAPA2_OUTRA_PESSOA],
         )
         self.assertTrue(resultado["enviou"])
         self.assertFalse(resultado["resposta_ja_existia"])
@@ -63,7 +63,7 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
         self.assertEqual(resultado["tipo_mensagem"], "interactive_button")
         self.assertNotIn("tratamento", resultado)
 
-    def test_midia_etapa_dois_marca_tratamento_e_mantem_botoes(self):
+    def test_midia_etapa2_marca_tratamento_e_mantem_botoes(self):
         cliente_wa = FakeClienteWa()
 
         with patch.object(
@@ -71,18 +71,18 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
             "conta_wa",
             return_value=cliente_wa,
         ):
-            resultado = sender_module.enviar_segunda_etapa_midia(
+            resultado = sender_module.enviar_etapa2_midia(
                 "5571999999999",
                 "123456",
             )
 
         self.assertEqual(
             cliente_wa.calls[0]["text"],
-            montar_mensagem_midia_etapa_2(),
+            montar_mensagem_midia_etapa2(),
         )
         self.assertEqual(
             titulos_botoes(cliente_wa.calls[0]),
-            [BOTAO_ETAPA_2_PARA_MIM, BOTAO_ETAPA_2_OUTRA_PESSOA],
+            [BOTAO_ETAPA2_PARA_MIM, BOTAO_ETAPA2_OUTRA_PESSOA],
         )
         self.assertTrue(resultado["tratamento"])
         self.assertEqual(
@@ -91,7 +91,7 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 2)
 
-    def test_financeiro_etapa_dois_marca_tratamento(self):
+    def test_financeiro_etapa2_marca_tratamento(self):
         cliente_wa = FakeClienteWa()
 
         with patch.object(
@@ -99,14 +99,14 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
             "conta_wa",
             return_value=cliente_wa,
         ):
-            resultado = sender_module.enviar_segunda_etapa_financeiro(
+            resultado = sender_module.enviar_etapa2_financeiro(
                 "5571999999999",
                 "123456",
             )
 
         self.assertEqual(
             cliente_wa.calls[0]["text"],
-            montar_mensagem_financeiro_etapa_2(),
+            montar_mensagem_financeiro_etapa2(),
         )
         self.assertTrue(resultado["tratamento"])
         self.assertEqual(
@@ -124,7 +124,7 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
             return_value=cliente_wa,
         ):
             with self.assertRaises(ErroEnvioMeta) as ctx:
-                sender_module.enviar_segunda_etapa(
+                sender_module.enviar_etapa2(
                     "5571999999999",
                     "123456",
                     nome="Edcarlos",

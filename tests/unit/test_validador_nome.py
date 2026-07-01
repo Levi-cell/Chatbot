@@ -179,6 +179,107 @@ class ValidadorNomeTests(unittest.TestCase):
                 self.assertTrue(resultado.valido)
                 self.assertEqual(resultado.primeiro_nome, nome)
 
+    def test_extrai_nome_de_apresentacao_de_terceiro(self):
+        casos = [
+            ("Nome dele é Edcarlos", "Edcarlos"),
+            ("O nome dele é Edcarlos Pereira", "Edcarlos"),
+            ("O nome dele é Edcarlos Pereira Filho", "Edcarlos"),
+            ("Nome dela é Maria Clara", "Maria Clara"),
+            ("É o meu filho, se chama Edcarlos", "Edcarlos"),
+            ("Meu filho se chama Edcarlos", "Edcarlos"),
+            ("Meu pai se chama Carlos", "Carlos"),
+            ("Minha filha se chama João Pedro", "João Pedro"),
+            ("Meu avô se chama Antônio", "Antônio"),
+            ("Minha avó se chama Conceição", "Conceição"),
+            ("Meu tio se chama Lucas", "Lucas"),
+            ("Minha tia se chama Alice", "Alice"),
+            ("Meu primo se chama Pedro", "Pedro"),
+            ("Minha prima se chama Vitória", "Vitória"),
+            ("Meu noivo se chama Rafael", "Rafael"),
+            ("Minha noiva se chama Beatriz", "Beatriz"),
+            ("Meu guri se chama Lucas", "Lucas"),
+            ("Meu moleque se chama Pedro", "Pedro"),
+            ("Minha princesa se chama Alice", "Alice"),
+            ("Minha criança se chama Miguel", "Miguel"),
+            ("Meu pequeno se chama Davi", "Davi"),
+            ("Minha pequena se chama Sofia", "Sofia"),
+            ("Meu velho se chama Antônio", "Antônio"),
+            ("Minha velha se chama Maria", "Maria"),
+            ("Meu coroa se chama Carlos", "Carlos"),
+            ("Minha coroa se chama Alice", "Alice"),
+            ("Painho se chama José", "José"),
+            ("Mainha se chama Conceição", "Conceição"),
+            ("O nome de painho é José", "José"),
+            ("O nome de mainha é Maria", "Maria"),
+            ("O nome do meu filho é Lucas", "Lucas"),
+            ("Nome do meu guri é Pedro", "Pedro"),
+            ("O nome do meu velho é Antônio", "Antônio"),
+            ("O nome do meu coroa é Carlos", "Carlos"),
+            ("O nome do meu pequeno é Davi", "Davi"),
+            ("O nome do meu moleque é Miguel", "Miguel"),
+            ("O nome da minha filha é Alice", "Alice"),
+            ("Nome da minha velha é Maria", "Maria"),
+            ("O nome da minha coroa é Beatriz", "Beatriz"),
+            ("O nome da minha pequena é Sofia", "Sofia"),
+            ("O nome da minha princesa é Vitória", "Vitória"),
+            ("O nome da minha criança é Helena", "Helena"),
+            ("Meu neto se chama Gabriel", "Gabriel"),
+            ("Minha sobrinha se chama Laura", "Laura"),
+            ("Meu enteado é Matheus", "Matheus"),
+            ("Minha afilhada é Lívia", "Lívia"),
+            ("O nome do meu sogro é Roberto", "Roberto"),
+            ("O nome da minha cunhada é Camila", "Camila"),
+            ("Meu namorado se chama André", "André"),
+            ("Minha parceira se chama Renata", "Renata"),
+            ("Meu amigo se chama Bruno", "Bruno"),
+            ("Minha colega se chama Patrícia", "Patrícia"),
+            ("Meu menino se chama Arthur", "Arthur"),
+            ("Minha garota se chama Isabela", "Isabela"),
+            ("Meu bebê se chama Theo", "Theo"),
+            ("Minha vovó se chama Tereza", "Tereza"),
+            ("O nome do meu bisavô é Joaquim", "Joaquim"),
+            ("Se chama Henrique", "Henrique"),
+            ("Chama-se Elisa", "Elisa"),
+            ("O nome da pessoa é Guilherme", "Guilherme"),
+            ("Ele se chama Carlos Silva", "Carlos"),
+            ("Ela se chama Maria Clara Santos", "Maria Clara"),
+        ]
+
+        for texto, nome in casos:
+            with self.subTest(texto=texto):
+                resultado = validador_nome.validar_nome_cliente(texto)
+
+                self.assertTrue(resultado.valido)
+                self.assertEqual(resultado.primeiro_nome, nome)
+
+    def test_apresentacao_de_terceiro_preserva_bloqueios_objetivos(self):
+        casos = [
+            ("Nome dele é Edcarlos99", validador_nome.MOTIVO_NUMERO),
+            (
+                "Nome dele é Ed#carlos",
+                validador_nome.MOTIVO_CARACTERE_INVALIDO,
+            ),
+            (
+                "Nome dele é Ed.car los",
+                validador_nome.MOTIVO_CARACTERE_INVALIDO,
+            ),
+            (
+                "Meu filho se chama Puta",
+                validador_nome.MOTIVO_TERMO_PEJORATIVO,
+            ),
+            (
+                "Meu pai se chama Carrrlos",
+                validador_nome.MOTIVO_REPETICAO_CARACTERE,
+            ),
+        ]
+
+        for texto, motivo in casos:
+            with self.subTest(texto=texto):
+                resultado = validador_nome.validar_nome_cliente(texto)
+
+                self.assertFalse(resultado.valido)
+                self.assertEqual(resultado.motivo, motivo)
+
     def test_corrige_nomes_conhecidos_quando_til_foi_omitido(self):
         casos = [
             ("joao", "João"),

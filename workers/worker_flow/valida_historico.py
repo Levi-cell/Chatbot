@@ -3,16 +3,20 @@ import logging
 from core.logging_config import short_value
 from core.repositories.inserts import inserir_historico_mensagem_cliente
 from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
+from core.repositories.transicoes_etapa import listar_transicoes_permitidas
 from core.repositories.updates import (
     atualizar_conversa_mensagem_cliente,
     atualizar_conversa_resposta_bot_sem_avancar,
+)
+from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
+    montar_contexto_transicao,
+    prever_etapa_resposta,
 )
 
 
 logger = logging.getLogger("worker.valida_historico")
 
 ETAPA_INICIAL = 1
-ETAPA_FINAL = 7
 
 
 def valida_historico(mensagem, contexto_banco, cursor):
@@ -60,6 +64,15 @@ def valida_historico(mensagem, contexto_banco, cursor):
         )
     )
 
+    transicoes_permitidas = listar_transicoes_permitidas(
+        id_etapa_cliente,
+        cursor,
+    )
+    contexto_transicao = montar_contexto_transicao(
+        id_etapa_cliente,
+        transicoes_permitidas,
+    )
+
     if resposta_bot_para_mensagem_atual:
         id_etapa_resposta = resposta_bot_para_mensagem_atual["id_etapa"]
 
@@ -72,7 +85,11 @@ def valida_historico(mensagem, contexto_banco, cursor):
 
         last_message_from_saida = "bot"
     else:
-        id_etapa_resposta = _resolver_etapa_resposta(contexto_conversa)
+        id_etapa_resposta = prever_etapa_resposta(
+            contexto_conversa.get("id_etapa_atual"),
+            contexto_transicao["transicoes_permitidas"],
+            etapa_inicial=ETAPA_INICIAL,
+        )
         atualizar_conversa_mensagem_cliente(
             id_conversa,
             data_historico_cliente,
@@ -81,13 +98,14 @@ def valida_historico(mensagem, contexto_banco, cursor):
         last_message_from_saida = "cliente"
 
     logger.info(
-        "historico_validado | acao=registrar_cliente id_mensagem=%s id_historico=%s inserido=%s id_conversa=%s etapa_cliente=%s etapa_resposta=%s last_from_entrada=%s last_from_saida=%s retry=%s resposta_bot_existente=%s cliente=%s phone_number_id=%s",
+        "historico_validado | acao=registrar_cliente id_mensagem=%s id_historico=%s inserido=%s id_conversa=%s etapa_cliente=%s etapa_resposta_previa=%s eventos_transicao=%s last_from_entrada=%s last_from_saida=%s retry=%s resposta_bot_existente=%s cliente=%s phone_number_id=%s",
         mensagem["id_mensagem"],
         id_historico_cliente,
         cliente_inserido_no_historico,
         id_conversa,
         id_etapa_cliente,
         id_etapa_resposta,
+        sorted(transicoes_permitidas),
         last_message_from_entrada,
         last_message_from_saida,
         mensagem["retry_count"],
@@ -100,7 +118,15 @@ def valida_historico(mensagem, contexto_banco, cursor):
         "id_conversa": id_conversa,
         "id_etapa_atual": contexto_conversa.get("id_etapa_atual"),
         "id_etapa_cliente": id_etapa_cliente,
+        # Compatibilidade apenas para logs existentes. Este campo nunca decide
+        # uma transição e pode ser None quando há mais de um destino.
         "id_etapa_resposta": id_etapa_resposta,
+        "id_etapa_origem_transicao": contexto_transicao[
+            "id_etapa_origem_transicao"
+        ],
+        "transicoes_permitidas": contexto_transicao[
+            "transicoes_permitidas"
+        ],
         "status_dependente": contexto_conversa.get("status_dependente"),
         "last_message_from": last_message_from_saida,
         "last_message_from_entrada": last_message_from_entrada,
@@ -122,15 +148,6 @@ def _resolver_etapa_cliente(contexto_conversa):
         return ETAPA_INICIAL
 
     return id_etapa_atual
-
-
-def _resolver_etapa_resposta(contexto_conversa):
-    id_etapa_atual = contexto_conversa.get("id_etapa_atual")
-
-    if id_etapa_atual is None:
-        return ETAPA_INICIAL
-
-    return min(id_etapa_atual + 1, ETAPA_FINAL)
 
 
 def _normalizar_linha_historico(registro):

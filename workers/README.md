@@ -24,8 +24,13 @@ workers/
 │   │   │   ├── validadores_universais/
 │   │   │   └── validadores_contexto/
 │   │   └── transicoes/
+│   │       ├── contexto_transicao.py
+│   │       ├── eventos.py
+│   │       └── resolver_transicao.py
 │   ├── transacoes/
+│   │   ├── efeitos_transicao.py
 │   │   ├── persistencia_resposta.py
+│   │   ├── movimento_conversa.py
 │   │   ├── finalizacao_fila.py
 │   │   ├── lock_conversa.py
 │   │   └── ordem_turno.py
@@ -100,12 +105,14 @@ fila sem duplicar o envio.
 - `flow_worker.py`: transação, checkpoints e handlers.
 - `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
   etapa atual;
-- `etapas/<etapa>.py`: valida a resposta, aplica tratamentos e encaminha para o
-  destino autorizado;
+- `etapas/etapa<n>_worker.py`: valida a resposta, aplica tratamentos e
+  encaminha para o destino autorizado;
 - `etapas/validadores_universais/`: mídia, financeiro, nome e outras validações
   reutilizáveis;
 - `etapas/validadores_contexto/`: respostas específicas de cada pergunta;
-- `transicoes/`: eventos e decisão de `origem + evento -> destino`.
+- `transicoes/contexto_transicao.py`: transforma o resultado da consulta em
+  origem e mapa explícitos no contexto histórico;
+- `transicoes/resolver_transicao.py`: decide `origem + evento -> destino`.
 
 Textos e chamadas PyWa não pertencem a essa pasta. Use
 `core/integrations/whatsapp/messages` e
@@ -117,12 +124,19 @@ utilizam a tabela `chatbot.etapa_transicao`; o destino não é calculado com
 
 ## Persistência de transições
 
-`transacoes/persistencia_resposta.py` coordena:
+As responsabilidades estão divididas assim:
+
+- `transacoes/persistencia_resposta.py`: orquestra a persistência final;
+- `transacoes/movimento_conversa.py`: classifica e persiste inicialização,
+  transição ou permanência;
+- `transacoes/efeitos_transicao.py`: exibe cada ponte como
+  `origem + evento -> destino` e grava seus efeitos específicos.
+
+Fluxo:
 
 ```text
 histórico do bot
--> confirmação da aresta no PostgreSQL
--> atualização da conversa
+-> movimento da conversa e confirmação da aresta no PostgreSQL
 -> efeitos específicos da transição
 ```
 
@@ -137,7 +151,7 @@ cursor e não controlam a transação.
 - `tests/unit/test_retry_lock_lifecycle.py`;
 - `tests/unit/test_lastfrom_semantico.py`;
 - `tests/unit/test_flow_sender.py`;
-- `tests/unit/test_primeira_etapa.py`;
-- `tests/unit/test_segunda_etapa.py`;
+- `tests/unit/test_etapa1.py`;
+- `tests/unit/test_etapa2.py`;
 - `tests/unit/test_transicoes_etapa.py`;
 - `tests/unit/test_repositories.py`.

@@ -34,6 +34,7 @@ Para desenvolver novas etapas, siga a
 | Segurança avançada futura | [_V2/seguranca-avancada.md](_V2/seguranca-avancada.md) |
 | Infraestrutura futura | [_V2/infraestrutura.md](_V2/infraestrutura.md) |
 | Concorrência futura | [_V2/concorrencia-workers.md](_V2/concorrencia-workers.md) |
+| Monitoramento futuro de tratamentos | [_V2/monitoramento-tratamentos.md](_V2/monitoramento-tratamentos.md) |
 
 ## Visão geral
 

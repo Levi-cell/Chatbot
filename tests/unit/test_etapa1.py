@@ -2,7 +2,10 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    primeira_etapa as etapa_module,
+    etapa1_worker as etapa_module,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_NOME_CLIENTE_VALIDO,
 )
 
 
@@ -18,6 +21,10 @@ def contexto_historico(
         "id_etapa_atual": etapa_atual,
         "id_etapa_cliente": 1,
         "id_etapa_resposta": etapa_resposta,
+        "id_etapa_origem_transicao": 1,
+        "transicoes_permitidas": {
+            EVENTO_NOME_CLIENTE_VALIDO: 2,
+        },
         "tipo_mensagem_atual": tipo_mensagem,
         "texto_cliente_atual": texto,
         "mensagem_cliente_atual": {
@@ -39,14 +46,14 @@ def retorno(nome, *, id_etapa_resultante=1):
     }
 
 
-class PrimeiraEtapaTests(unittest.TestCase):
+class Etapa1WorkerTests(unittest.TestCase):
     def test_conversa_nova_com_midia_usa_tratamento_de_inicio(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa_midia_inicio",
+            "enviar_etapa1_midia_inicio",
             return_value=retorno("midia_inicio"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(tipo_mensagem="image")
             )
 
@@ -56,75 +63,75 @@ class PrimeiraEtapaTests(unittest.TestCase):
     def test_conversa_nova_com_financeiro_usa_tratamento_de_inicio(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa_financeiro_inicio",
+            "enviar_etapa1_financeiro_inicio",
             return_value=retorno("financeiro_inicio"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(texto="qual o valor?")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
         self.assertEqual(resultado["nome"], "financeiro_inicio")
 
-    def test_conversa_nova_com_texto_normal_envia_primeira_etapa(self):
+    def test_conversa_nova_com_texto_normal_envia_etapa1(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa",
-            return_value=retorno("etapa_1"),
+            "enviar_etapa1",
+            return_value=retorno("etapa1"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(texto="ola")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "etapa_1")
+        self.assertEqual(resultado["nome"], "etapa1")
 
-    def test_etapa_um_com_midia_usa_tratamento_da_etapa(self):
+    def test_etapa1_com_midia_usa_tratamento_da_etapa(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa_midia",
-            return_value=retorno("midia_etapa_1"),
+            "enviar_etapa1_midia",
+            return_value=retorno("midia_etapa1"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(etapa_atual=1, etapa_resposta=2, tipo_mensagem="video")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "midia_etapa_1")
+        self.assertEqual(resultado["nome"], "midia_etapa1")
 
-    def test_etapa_um_com_financeiro_usa_tratamento_da_etapa(self):
+    def test_etapa1_com_financeiro_usa_tratamento_da_etapa(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa_financeiro",
-            return_value=retorno("financeiro_etapa_1"),
+            "enviar_etapa1_financeiro",
+            return_value=retorno("financeiro_etapa1"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(etapa_atual=1, etapa_resposta=2, texto="quanto custa?")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "financeiro_etapa_1")
+        self.assertEqual(resultado["nome"], "financeiro_etapa1")
 
-    def test_etapa_um_com_nome_invalido_usa_tratamento_de_contexto(self):
+    def test_etapa1_com_nome_invalido_usa_tratamento_de_contexto(self):
         with patch.object(
             etapa_module,
-            "enviar_primeira_etapa_contexto_nome_invalido",
+            "enviar_etapa1_contexto_nome_invalido",
             return_value=retorno("nome_invalido"),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(etapa_atual=1, etapa_resposta=2, texto="pppppp")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
         self.assertEqual(resultado["nome"], "nome_invalido")
 
-    def test_etapa_um_com_nome_valido_envia_segunda_etapa(self):
+    def test_etapa1_com_nome_valido_envia_etapa2(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno("etapa_2", id_etapa_resultante=2),
+            "enviar_etapa2",
+            return_value=retorno("etapa2", id_etapa_resultante=2),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(etapa_atual=1, etapa_resposta=2, texto="Maria")
             )
 
@@ -133,17 +140,17 @@ class PrimeiraEtapaTests(unittest.TestCase):
             "123456",
             nome="Maria",
         )
-        self.assertEqual(resultado["nome"], "etapa_2")
+        self.assertEqual(resultado["nome"], "etapa2")
         self.assertEqual(resultado["id_etapa_resultante"], 2)
         self.assertEqual(resultado["primeiro_nome_cliente"], "Maria")
 
-    def test_etapa_um_com_nome_composto_envia_segunda_etapa_sem_ponto(self):
+    def test_etapa1_com_nome_composto_envia_etapa2_sem_ponto(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno("etapa_2", id_etapa_resultante=2),
+            "enviar_etapa2",
+            return_value=retorno("etapa2", id_etapa_resultante=2),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     etapa_resposta=2,
@@ -158,13 +165,13 @@ class PrimeiraEtapaTests(unittest.TestCase):
         )
         self.assertEqual(resultado["primeiro_nome_cliente"], "Maria Julia")
 
-    def test_etapa_um_preserva_til_ao_enviar_segunda_etapa(self):
+    def test_etapa1_preserva_til_ao_enviar_etapa2(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno("etapa_2", id_etapa_resultante=2),
+            "enviar_etapa2",
+            return_value=retorno("etapa2", id_etapa_resultante=2),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     etapa_resposta=2,
@@ -179,13 +186,13 @@ class PrimeiraEtapaTests(unittest.TestCase):
         )
         self.assertEqual(resultado["primeiro_nome_cliente"], "João")
 
-    def test_etapa_um_remove_sobrenome_antes_de_enviar_segunda_etapa(self):
+    def test_etapa1_remove_sobrenome_antes_de_enviar_etapa2(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa",
-            return_value=retorno("etapa_2", id_etapa_resultante=2),
+            "enviar_etapa2",
+            return_value=retorno("etapa2", id_etapa_resultante=2),
         ) as sender:
-            resultado = etapa_module.resolve_primeira_etapa(
+            resultado = etapa_module.resolve_etapa1(
                 contexto_historico(
                     etapa_atual=1,
                     etapa_resposta=2,

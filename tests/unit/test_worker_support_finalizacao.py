@@ -2,8 +2,16 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.suporte import cache_repair
+from workers.worker_flow.transacoes import efeitos_transicao as efeitos
+from workers.worker_flow.transacoes import movimento_conversa as movimento
 from workers.worker_flow.transacoes import ordem_turno
 from workers.worker_flow.transacoes import persistencia_resposta as persistencia
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_NOME_CLIENTE_VALIDO,
+    EVENTO_NOME_DEPENDENTE_VALIDO,
+    EVENTO_PARA_MIM,
+    EVENTO_PARA_OUTRA_PESSOA,
+)
 
 
 DATA_BOT = "2026-01-01T00:00:00"
@@ -19,6 +27,9 @@ def contexto_historico_base(
         "resposta_bot_para_mensagem_atual": resposta_bot,
         "id_conversa": 10,
         "id_etapa_atual": id_etapa_atual,
+        "id_etapa_origem_transicao": (
+            id_etapa_atual if id_etapa_atual is not None else 1
+        ),
         "texto_cliente_atual": texto_cliente,
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
@@ -73,11 +84,11 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            persistencia,
-            "atualizar_conversa_resposta_bot",
+            movimento,
+            "inicializar_conversa_resposta_bot",
             fake_atualizar_conversa,
         ), patch.object(
-            persistencia,
+            movimento,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
@@ -137,16 +148,12 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            persistencia,
-            "atualizar_conversa_resposta_bot",
-            fake_atualizar_conversa,
-        ), patch.object(
-            persistencia,
+            movimento,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
             resultado = persistencia.atualizar_banco_com_contexto_final(
-                contexto_historico_base(),
+                contexto_historico_base(id_etapa_atual=1),
                 contexto_envio,
                 cursor,
             )
@@ -181,8 +188,20 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             )
             return 1
 
-        def fake_atualizar_sem_avancar(*_args, **_kwargs):
-            raise AssertionError("resposta normal idempotente deve atualizar etapa")
+        def fake_atualizar_sem_avancar(
+            id_conversa,
+            data_interacao,
+            cursor,
+        ):
+            chamadas.append(
+                (
+                    "update_bot_sem_avancar",
+                    id_conversa,
+                    data_interacao,
+                    cursor,
+                )
+            )
+            return 1
 
         cursor = object()
 
@@ -191,17 +210,14 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            persistencia,
-            "atualizar_conversa_resposta_bot",
-            fake_atualizar_conversa,
-        ), patch.object(
-            persistencia,
+            movimento,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
             resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(
-                    {"received_data_hora": DATA_BOT}
+                    {"received_data_hora": DATA_BOT},
+                    id_etapa_atual=1,
                 ),
                 {
                     "enviou": False,
@@ -212,10 +228,13 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
                 cursor,
             )
 
-        self.assertEqual(chamadas, [(10, 1, DATA_BOT, cursor)])
+        self.assertEqual(
+            chamadas,
+            [("update_bot_sem_avancar", 10, DATA_BOT, cursor)],
+        )
         self.assertTrue(resultado["resposta_ja_existia"])
         self.assertFalse(resultado["historico_bot_inserido"])
-        self.assertTrue(resultado["atualizar_conversa"])
+        self.assertFalse(resultado["atualizar_conversa"])
         self.assertTrue(resultado["atualizar_last_from_bot"])
 
     def test_resposta_ja_existia_de_tratamento_nao_atualiza_etapa_mas_volta_last_from_para_bot(self):
@@ -249,17 +268,14 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             "inserir_historico_mensagem_bot",
             fake_inserir_historico,
         ), patch.object(
-            persistencia,
-            "atualizar_conversa_resposta_bot",
-            fake_atualizar_conversa,
-        ), patch.object(
-            persistencia,
+            movimento,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_atualizar_sem_avancar,
         ):
             resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(
-                    {"received_data_hora": DATA_BOT}
+                    {"received_data_hora": DATA_BOT},
+                    id_etapa_atual=1,
                 ),
                 {
                     "enviou": False,
@@ -281,7 +297,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         self.assertFalse(resultado["atualizar_conversa"])
         self.assertTrue(resultado["atualizar_last_from_bot"])
 
-    def test_atualizar_banco_conforme_transicao_de_etapa_salva_nome_quando_etapa_um_avanca_para_dois(self):
+    def test_atualizar_banco_conforme_transicao_de_etapa_salva_nome_quando_etapa1_avanca_para_dois(self):
         chamadas = []
         cursor = object()
 
@@ -290,17 +306,18 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             return 1
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_nome_cliente_por_telefone",
             fake_atualizar_nome,
         ):
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=1,
                     texto_cliente="Maria",
                 ),
                 {
                     "id_etapa_resultante": 2,
+                    "evento_transicao": EVENTO_NOME_CLIENTE_VALIDO,
                     "primeiro_nome_cliente": "Maria",
                 },
                 cursor,
@@ -324,11 +341,11 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
             return 1
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_nome_cliente_por_telefone",
             fake_atualizar_nome,
         ):
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=1,
                     texto_cliente="Maria",
@@ -336,6 +353,7 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
                 {
                     "resposta_ja_existia": True,
                     "id_etapa_resultante": 2,
+                    "evento_transicao": EVENTO_NOME_CLIENTE_VALIDO,
                 },
                 cursor,
             )
@@ -347,10 +365,10 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_nome_cliente_por_telefone",
         ) as atualizar_nome:
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=1,
                     texto_cliente="Maria",
@@ -370,42 +388,43 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         cursor = object()
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_nome_cliente_por_telefone",
         ) as atualizar_nome:
             with self.assertRaises(ValueError):
-                persistencia.atualizar_banco_conforme_transicao_de_etapa(
+                efeitos.atualizar_banco_conforme_transicao_de_etapa(
                     contexto_historico_base(
                         id_etapa_atual=1,
                         texto_cliente="99",
                     ),
                     {
                         "id_etapa_resultante": 2,
+                        "evento_transicao": EVENTO_NOME_CLIENTE_VALIDO,
                     },
                     cursor,
                 )
 
         atualizar_nome.assert_not_called()
 
-    def test_transicao_dois_para_tres_para_mim_atualiza_status_sem_dependente(self):
+    def test_transicao_dois_para_quatro_para_mim_atualiza_status_sem_dependente(self):
         cursor = object()
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_status_dependente_conversa",
             return_value=1,
         ) as atualizar_status, patch.object(
-            persistencia,
+            efeitos,
             "inserir_dependente_para_conversa",
         ) as inserir_dependente:
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=2,
                     texto_cliente="Para mim",
                 ),
                 {
-                    "id_etapa_resultante": 3,
-                    "opcao_atendimento": "para_mim",
+                    "id_etapa_resultante": 4,
+                    "evento_transicao": EVENTO_PARA_MIM,
                 },
                 cursor,
             )
@@ -425,22 +444,22 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         }
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_status_dependente_conversa",
             return_value=1,
         ) as atualizar_status, patch.object(
-            persistencia,
+            efeitos,
             "inserir_dependente_para_conversa",
             return_value=dependente,
         ) as inserir_dependente:
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=2,
                     texto_cliente="Para outra pessoa",
                 ),
                 {
                     "id_etapa_resultante": 3,
-                    "opcao_atendimento": "para_outra_pessoa",
+                    "evento_transicao": EVENTO_PARA_OUTRA_PESSOA,
                 },
                 cursor,
             )
@@ -451,25 +470,26 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         self.assertTrue(resultado["dependente_criado"])
         self.assertEqual(resultado["id_dependente"], 30)
 
-    def test_transicao_dois_para_tres_reconstroi_opcao_no_retry(self):
+    def test_transicao_dois_para_quatro_reconstroi_evento_no_retry(self):
         cursor = object()
 
         with patch.object(
-            persistencia,
+            efeitos,
             "atualizar_status_dependente_conversa",
             return_value=1,
         ) as atualizar_status, patch.object(
-            persistencia,
+            efeitos,
             "inserir_dependente_para_conversa",
         ) as inserir_dependente:
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=2,
                     texto_cliente="Para mim",
                 ),
                 {
                     "resposta_ja_existia": True,
-                    "id_etapa_resultante": 3,
+                    "id_etapa_resultante": 4,
+                    "evento_transicao": EVENTO_PARA_MIM,
                 },
                 cursor,
             )
@@ -478,17 +498,66 @@ class WorkerSupportFinalizacaoTests(unittest.TestCase):
         inserir_dependente.assert_not_called()
         self.assertEqual(resultado["opcao_atendimento"], "para_mim")
 
-    def test_tratamento_na_etapa_dois_nao_atualiza_status_dependente(self):
+    def test_transicao_tres_para_quatro_salva_nome_dependente(self):
         cursor = object()
 
         with patch.object(
-            persistencia,
+            efeitos,
+            "atualizar_nome_dependente_por_conversa",
+            return_value=1,
+        ) as atualizar_nome:
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=3,
+                    texto_cliente="O nome da minha filha é Aline Braga",
+                ),
+                {
+                    "id_etapa_resultante": 4,
+                    "evento_transicao": EVENTO_NOME_DEPENDENTE_VALIDO,
+                    "primeiro_nome_dependente": "Aline",
+                },
+                cursor,
+            )
+
+        atualizar_nome.assert_called_once_with(10, "Aline", cursor)
+        self.assertTrue(resultado["dependente_nome_atualizado"])
+        self.assertEqual(resultado["primeiro_nome_dependente"], "Aline")
+
+    def test_transicao_tres_para_quatro_reconstroi_nome_no_retry(self):
+        cursor = object()
+
+        with patch.object(
+            efeitos,
+            "atualizar_nome_dependente_por_conversa",
+            return_value=1,
+        ) as atualizar_nome:
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=3,
+                    texto_cliente="Ela se chama Alice",
+                ),
+                {
+                    "resposta_ja_existia": True,
+                    "id_etapa_resultante": 4,
+                    "evento_transicao": EVENTO_NOME_DEPENDENTE_VALIDO,
+                },
+                cursor,
+            )
+
+        atualizar_nome.assert_called_once_with(10, "Alice", cursor)
+        self.assertEqual(resultado["primeiro_nome_dependente"], "Alice")
+
+    def test_tratamento_na_etapa2_nao_atualiza_status_dependente(self):
+        cursor = object()
+
+        with patch.object(
+            efeitos,
             "atualizar_status_dependente_conversa",
         ) as atualizar_status, patch.object(
-            persistencia,
+            efeitos,
             "inserir_dependente_para_conversa",
         ) as inserir_dependente:
-            resultado = persistencia.atualizar_banco_conforme_transicao_de_etapa(
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=2,
                     texto_cliente="quanto custa",

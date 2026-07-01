@@ -34,7 +34,7 @@ def contexto_banco_base(last_from="bot", etapa=1):
 
 
 class LastFromSemanticoTests(unittest.TestCase):
-    def test_conversa_nova_registra_cliente_e_responde_etapa_um(self):
+    def test_conversa_nova_registra_cliente_e_responde_etapa1(self):
         chamadas = []
 
         def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
@@ -80,6 +80,10 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_update_bot,
+        ), patch.object(
+            valida_historico,
+            "listar_transicoes_permitidas",
+            return_value={"nome_cliente_valido": 2},
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(),
@@ -134,6 +138,10 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "atualizar_conversa_mensagem_cliente",
             fake_update_cliente,
+        ), patch.object(
+            valida_historico,
+            "listar_transicoes_permitidas",
+            return_value={"nome_cliente_valido": 2},
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(retry=2),
@@ -200,6 +208,10 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_update_bot,
+        ), patch.object(
+            valida_historico,
+            "listar_transicoes_permitidas",
+            return_value={"nome_cliente_valido": 2},
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(retry=2),
@@ -266,6 +278,10 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "atualizar_conversa_resposta_bot_sem_avancar",
             fake_update_bot,
+        ), patch.object(
+            valida_historico,
+            "listar_transicoes_permitidas",
+            return_value={"nome_cliente_valido": 2},
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(retry=2),

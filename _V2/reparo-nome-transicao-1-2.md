@@ -33,7 +33,7 @@ texto valido
 -> nome e persistido na transicao 1 -> 2
 ```
 
-Antes de enviar a etapa 2, `primeira_etapa.py` executa a validacao do nome.
+Antes de enviar a etapa 2, `etapa1.py` executa a validacao do nome.
 Somente um resultado valido fornece `primeiro_nome` ao sender da etapa 2.
 
 Depois do envio:

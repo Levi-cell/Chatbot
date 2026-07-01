@@ -213,7 +213,7 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 flow_sender,
-                "resolve_primeira_etapa",
+                "resolve_etapa1",
                 side_effect=AssertionError("A nao pode ser enviada novamente"),
             ):
                 resultado_retry_a = flow_sender.flow_sender(
@@ -261,7 +261,7 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 flow_sender,
-                "resolve_primeira_etapa",
+                "resolve_etapa1",
                 return_value={
                     "enviou": True,
                     "resposta_ja_existia": False,

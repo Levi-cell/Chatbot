@@ -1,13 +1,13 @@
 import unittest
 
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_segunda_etapa import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
     OPCAO_PARA_MIM,
     OPCAO_PARA_OUTRA_PESSOA,
-    validar_segunda_etapa,
+    validar_etapa2,
 )
 
 
-class ValidaSegundaEtapaTests(unittest.TestCase):
+class ValidaEtapa2Tests(unittest.TestCase):
     def test_aceita_somente_as_duas_opcoes_normalizadas(self):
         casos = [
             ("Para mim", OPCAO_PARA_MIM),
@@ -20,7 +20,7 @@ class ValidaSegundaEtapaTests(unittest.TestCase):
         for texto, esperado in casos:
             with self.subTest(texto=texto):
                 self.assertEqual(
-                    validar_segunda_etapa(texto),
+                    validar_etapa2(texto),
                     esperado,
                 )
 
@@ -37,7 +37,7 @@ class ValidaSegundaEtapaTests(unittest.TestCase):
 
         for texto in casos:
             with self.subTest(texto=texto):
-                self.assertIsNone(validar_segunda_etapa(texto))
+                self.assertIsNone(validar_etapa2(texto))
 
 
 if __name__ == "__main__":

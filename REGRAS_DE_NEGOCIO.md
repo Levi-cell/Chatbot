@@ -353,7 +353,7 @@ Implementação principal:
   uma única transição.
 - A etapa nunca poderá retroceder.
 - Saltos numéricos são permitidos somente quando existir uma aresta explícita,
-  como `2 + para_mim -> 5`.
+  como `2 + para_mim -> 4`.
 - A atualização utilizará a origem persistida no histórico da mensagem e será
   revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do

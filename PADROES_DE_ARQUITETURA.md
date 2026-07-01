@@ -283,7 +283,13 @@ Contém orquestração de respostas:
   autorizado;
 - `etapas/validadores_universais/`: validações reutilizáveis entre etapas;
 - `etapas/validadores_contexto/`: validações específicas da pergunta atual;
-- `transicoes/`: eventos e resolução de `origem + evento -> destino`.
+- `transicoes/contexto_transicao.py`: montagem explícita da fotografia de
+  origem e destinos permitidos no contexto histórico;
+- `transicoes/resolver_transicao.py`: resolução de
+  `origem + evento -> destino`;
+- `transacoes/movimento_conversa.py`: inicialização, transição ou permanência;
+- `transacoes/efeitos_transicao.py`: efeitos de banco específicos de cada
+  aresta autorizada.
 
 Esses arquivos podem escolher qual integração chamar, mas não devem criar cliente
 PyWa, montar `Button` ou manter textos de saída.

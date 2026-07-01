@@ -9,26 +9,89 @@ DATA_BOT = "2026-01-01T00:01:00"
 
 
 class RepositoryTests(unittest.TestCase):
-    def test_atualizar_conversa_resposta_bot_exige_etapa(self):
+    def test_inicializar_conversa_exige_etapa1(self):
         with self.assertRaises(ValueError):
-            updates.atualizar_conversa_resposta_bot(10, None, DATA_BOT, FakeCursor())
+            updates.inicializar_conversa_resposta_bot(
+                10,
+                2,
+                DATA_BOT,
+                FakeCursor(),
+            )
 
-    def test_atualizar_conversa_resposta_bot_falha_se_nenhuma_linha(self):
+    def test_inicializar_conversa_falha_se_nenhuma_linha(self):
         with self.assertRaises(ValueError):
-            updates.atualizar_conversa_resposta_bot(10, 1, DATA_BOT, FakeCursor(rowcount=0))
+            updates.inicializar_conversa_resposta_bot(
+                10,
+                1,
+                DATA_BOT,
+                FakeCursor(rowcount=0),
+            )
 
-    def test_atualizar_conversa_resposta_bot_impede_salto_e_retrocesso(self):
+    def test_transicao_exige_origem_evento_e_destino(self):
+        casos = (
+            (None, "evento", 2),
+            (1, None, 2),
+            (1, "evento", None),
+        )
+
+        for origem, evento, destino in casos:
+            with self.subTest(
+                origem=origem,
+                evento=evento,
+                destino=destino,
+            ):
+                with self.assertRaises(ValueError):
+                    updates.atualizar_conversa_por_transicao(
+                        10,
+                        origem,
+                        evento,
+                        destino,
+                        DATA_BOT,
+                        FakeCursor(),
+                    )
+
+    def test_transicao_revalida_aresta_no_postgresql(self):
         cursor = FakeCursor(rowcount=1)
 
-        self.assertEqual(updates.atualizar_conversa_resposta_bot(10, 2, DATA_BOT, cursor), 1)
+        resultado = updates.atualizar_conversa_por_transicao(
+            10,
+            2,
+            "para_mim",
+            4,
+            DATA_BOT,
+            cursor,
+        )
+
+        self.assertEqual(resultado, 1)
         sql, params = cursor.calls[0]
+        self.assertIn("FROM chatbot.etapa_transicao", sql)
+        self.assertIn("transicao.id_etapa_origem = %s", sql)
+        self.assertIn("transicao.evento = %s", sql)
+        self.assertIn("transicao.id_etapa_destino = %s", sql)
+        self.assertNotIn("id_etapa_atual + 1", sql)
+        self.assertNotIn("GREATEST(id_etapa_atual", sql)
+        self.assertEqual(
+            params,
+            (2, 4, DATA_BOT, 10, 2, "para_mim", 4, 2, False, 4),
+        )
 
-        self.assertIn("UPDATE chatbot.conversa", sql)
-        self.assertIn("GREATEST(id_etapa_atual", sql)
-        self.assertIn("id_etapa_atual + 1", sql)
-        self.assertEqual(params, (2, 2, DATA_BOT, 10, 2, 2))
+    def test_transicao_idempotente_limita_reaplicacao_ao_destino(self):
+        cursor = FakeCursor(rowcount=1)
 
-        self.assertNotIn("NOW()", sql)
+        updates.atualizar_conversa_por_transicao(
+            10,
+            2,
+            "para_mim",
+            4,
+            DATA_BOT,
+            cursor,
+            permitir_reaplicacao=True,
+        )
+
+        sql, params = cursor.calls[0]
+        self.assertIn("ELSE conversa.id_etapa_atual", sql)
+        self.assertIn("AND conversa.id_etapa_atual = %s", sql)
+        self.assertEqual(params[-3:], (2, True, 4))
 
     def test_atualizar_conversa_mensagem_cliente_usa_data_persistida(self):
         cursor = FakeCursor(rowcount=1)
@@ -74,6 +137,30 @@ class RepositoryTests(unittest.TestCase):
         sql, params = cursor.calls[0]
         self.assertIn("SET status_dependente = %s", sql)
         self.assertEqual(params, (True, 10))
+
+    def test_atualizar_nome_dependente_por_conversa(self):
+        cursor = FakeCursor(rowcount=1)
+
+        resultado = updates.atualizar_nome_dependente_por_conversa(
+            10,
+            "Aline",
+            cursor,
+        )
+
+        self.assertEqual(resultado, 1)
+        sql, params = cursor.calls[0]
+        self.assertIn("UPDATE chatbot.dependente", sql)
+        self.assertIn("SET nome_dependente = %s", sql)
+        self.assertIn("WHERE id_conversa = %s", sql)
+        self.assertEqual(params, ("Aline", 10))
+
+    def test_atualizar_nome_dependente_exige_registro_da_conversa(self):
+        with self.assertRaises(ValueError):
+            updates.atualizar_nome_dependente_por_conversa(
+                10,
+                "Aline",
+                FakeCursor(rowcount=0),
+            )
 
     def test_atualizar_status_dependente_exige_conversa_existente(self):
         with self.assertRaises(ValueError):

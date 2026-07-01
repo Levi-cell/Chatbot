@@ -3,9 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
-from core.integrations.whatsapp.messages.primeira_etapa_messages import (
-    montar_mensagem_etapa_1,
-    montar_mensagem_financeiro_etapa_1,
+from core.integrations.whatsapp.messages.etapa1_messages import (
+    montar_mensagem_etapa1,
+    montar_mensagem_financeiro_etapa1,
     montar_mensagem_financeiro_inicio,
     montar_mensagem_midia_inicio,
 )
@@ -28,7 +28,7 @@ class FakeClienteWa:
 
 
 class PywaSenderEtapa1Tests(unittest.TestCase):
-    def test_enviar_primeira_etapa_usa_saudacao(self):
+    def test_enviar_etapa1_usa_saudacao(self):
         cliente_wa = FakeClienteWa()
 
         with patch.object(
@@ -40,12 +40,12 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
             "obter_saudacao_por_horario",
             return_value="Boa tarde",
         ):
-            resultado = sender_module.enviar_primeira_etapa(
+            resultado = sender_module.enviar_etapa1(
                 "5571999999999",
                 "123456",
             )
 
-        mensagem_esperada = montar_mensagem_etapa_1("Boa tarde")
+        mensagem_esperada = montar_mensagem_etapa1("Boa tarde")
 
         self.assertEqual(cliente_wa.calls[0]["to"], "5571999999999")
         self.assertEqual(cliente_wa.calls[0]["text"], mensagem_esperada)
@@ -68,7 +68,7 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
             "obter_saudacao_por_horario",
             return_value="Bom dia",
         ):
-            resultado = sender_module.enviar_primeira_etapa_midia_inicio(
+            resultado = sender_module.enviar_etapa1_midia_inicio(
                 "5571999999999",
                 "123456",
             )
@@ -95,7 +95,7 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
             "obter_saudacao_por_horario",
             return_value="Boa noite",
         ):
-            resultado = sender_module.enviar_primeira_etapa_financeiro_inicio(
+            resultado = sender_module.enviar_etapa1_financeiro_inicio(
                 "5571999999999",
                 "123456",
             )
@@ -110,7 +110,7 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 1)
 
-    def test_financeiro_etapa_um_nao_usa_saudacao(self):
+    def test_financeiro_etapa1_nao_usa_saudacao(self):
         cliente_wa = FakeClienteWa()
 
         with patch.object(
@@ -118,14 +118,14 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
             "conta_wa",
             return_value=cliente_wa,
         ):
-            resultado = sender_module.enviar_primeira_etapa_financeiro(
+            resultado = sender_module.enviar_etapa1_financeiro(
                 "5571999999999",
                 "123456",
             )
 
         self.assertEqual(
             cliente_wa.calls[0]["text"],
-            montar_mensagem_financeiro_etapa_1(),
+            montar_mensagem_financeiro_etapa1(),
         )
         self.assertTrue(resultado["tratamento"])
         self.assertEqual(resultado["id_etapa_resultante"], 1)
@@ -139,7 +139,7 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
             return_value=cliente_wa,
         ):
             with self.assertRaises(ErroEnvioMeta) as ctx:
-                sender_module.enviar_primeira_etapa(
+                sender_module.enviar_etapa1(
                     "5571999999999",
                     "123456",
                 )

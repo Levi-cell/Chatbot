@@ -1,5 +1,11 @@
-OPCAO_PARA_MIM = "para_mim"
-OPCAO_PARA_OUTRA_PESSOA = "para_outra_pessoa"
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_PARA_MIM,
+    EVENTO_PARA_OUTRA_PESSOA,
+)
+
+
+OPCAO_PARA_MIM = EVENTO_PARA_MIM
+OPCAO_PARA_OUTRA_PESSOA = EVENTO_PARA_OUTRA_PESSOA
 
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 
@@ -9,7 +15,7 @@ _OPCOES_ACEITAS = {
 }
 
 
-def validar_segunda_etapa(conteudo_texto):
+def validar_etapa2(conteudo_texto):
     """
     Aceita somente os dois textos exibidos nos botoes da etapa 2.
 

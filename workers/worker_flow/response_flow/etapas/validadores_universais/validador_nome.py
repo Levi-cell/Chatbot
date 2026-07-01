@@ -61,6 +61,24 @@ PADRAO_IDENTIFICACAO_COM_DOIS_PONTOS = re.compile(
     r"^(\s*(?:(?:o\s+)?meu\s+)?(?:nome|apelido))\s*:\s*",
     re.IGNORECASE,
 )
+PADRAO_VIRGULA_APRESENTACAO_TERCEIRO = re.compile(
+    r"^("
+    r"\s*(?:(?:e|eh|he|é)\s+)?"
+    r"(?:(?:o|a)\s+)?"
+    r"(?:meu|minha|nosso|nossa)\s+"
+    r"(?:filho|filha|pai|mãe|irmao|irmão|irma|irmã|"
+    r"avó|avô|avo|tio|tia|primo|prima|"
+    r"marido|esposa|esposo|noivo|noiva|namorado|namorada|"
+    r"companheiro|companheira|parceiro|parceira|dependente|"
+    r"neto|neta|sobrinho|sobrinha|enteado|enteada|afilhado|afilhada|"
+    r"genro|nora|padrasto|madrasta|sogro|sogra|cunhado|cunhada|"
+    r"amigo|amiga|colega|guri|moleque|princesa|"
+    r"criança|crianca|pequeno|pequena|menino|menina|garoto|garota|"
+    r"rapaz|moça|moca|bebê|bebe|vô|vo|vó|vovô|vovo|vovó|"
+    r"bisavô|bisavó|bisavo|velho|velha|coroa)"
+    r")\s*,\s*(?=se\s+chama\b)",
+    re.IGNORECASE,
+)
 PADRAO_PONTUACAO_FINAL = re.compile(r"[,\.!?]+$")
 PADRAO_CORTESIA_FINAL = re.compile(
     r"\s*,\s*(?:prazer|obrigad[oa])\s*[,\.!?]*$",
@@ -228,6 +246,272 @@ APRESENTACOES_CURTAS_NOME = {
     "é",
 }
 
+# Prefixos explícitos usados quando o cliente informa o nome de outra pessoa.
+# A lista é compartilhada por qualquer etapa que precise capturar um nome.
+RELACOES_TERCEIRO = (
+    ("o", "meu", "filho"),
+    ("meu", "filho"),
+    ("a", "minha", "filha"),
+    ("minha", "filha"),
+    ("o", "meu", "pai"),
+    ("meu", "pai"),
+    ("a", "minha", "mae"),
+    ("minha", "mae"),
+    ("o", "meu", "irmao"),
+    ("meu", "irmao"),
+    ("a", "minha", "irma"),
+    ("minha", "irma"),
+    ("o", "meu", "avo"),
+    ("meu", "avo"),
+    ("a", "minha", "avo"),
+    ("minha", "avo"),
+    ("o", "meu", "tio"),
+    ("meu", "tio"),
+    ("a", "minha", "tia"),
+    ("minha", "tia"),
+    ("o", "meu", "primo"),
+    ("meu", "primo"),
+    ("a", "minha", "prima"),
+    ("minha", "prima"),
+    ("o", "meu", "neto"),
+    ("meu", "neto"),
+    ("a", "minha", "neta"),
+    ("minha", "neta"),
+    ("o", "meu", "sobrinho"),
+    ("meu", "sobrinho"),
+    ("a", "minha", "sobrinha"),
+    ("minha", "sobrinha"),
+    ("o", "meu", "enteado"),
+    ("meu", "enteado"),
+    ("a", "minha", "enteada"),
+    ("minha", "enteada"),
+    ("o", "meu", "afilhado"),
+    ("meu", "afilhado"),
+    ("a", "minha", "afilhada"),
+    ("minha", "afilhada"),
+    ("o", "meu", "genro"),
+    ("meu", "genro"),
+    ("a", "minha", "nora"),
+    ("minha", "nora"),
+    ("o", "meu", "padrasto"),
+    ("meu", "padrasto"),
+    ("a", "minha", "madrasta"),
+    ("minha", "madrasta"),
+    ("o", "meu", "sogro"),
+    ("meu", "sogro"),
+    ("a", "minha", "sogra"),
+    ("minha", "sogra"),
+    ("o", "meu", "cunhado"),
+    ("meu", "cunhado"),
+    ("a", "minha", "cunhada"),
+    ("minha", "cunhada"),
+    ("o", "meu", "marido"),
+    ("meu", "marido"),
+    ("o", "meu", "esposo"),
+    ("meu", "esposo"),
+    ("a", "minha", "esposa"),
+    ("minha", "esposa"),
+    ("o", "meu", "noivo"),
+    ("meu", "noivo"),
+    ("a", "minha", "noiva"),
+    ("minha", "noiva"),
+    ("o", "meu", "namorado"),
+    ("meu", "namorado"),
+    ("a", "minha", "namorada"),
+    ("minha", "namorada"),
+    ("o", "meu", "guri"),
+    ("meu", "guri"),
+    ("o", "meu", "moleque"),
+    ("meu", "moleque"),
+    ("a", "minha", "princesa"),
+    ("minha", "princesa"),
+    ("a", "minha", "crianca"),
+    ("minha", "crianca"),
+    ("o", "meu", "pequeno"),
+    ("meu", "pequeno"),
+    ("a", "minha", "pequena"),
+    ("minha", "pequena"),
+    ("o", "meu", "velho"),
+    ("meu", "velho"),
+    ("a", "minha", "velha"),
+    ("minha", "velha"),
+    ("o", "meu", "coroa"),
+    ("meu", "coroa"),
+    ("a", "minha", "coroa"),
+    ("minha", "coroa"),
+    ("o", "meu", "menino"),
+    ("meu", "menino"),
+    ("a", "minha", "menina"),
+    ("minha", "menina"),
+    ("o", "meu", "garoto"),
+    ("meu", "garoto"),
+    ("a", "minha", "garota"),
+    ("minha", "garota"),
+    ("o", "meu", "rapaz"),
+    ("meu", "rapaz"),
+    ("a", "minha", "moca"),
+    ("minha", "moca"),
+    ("o", "meu", "bebe"),
+    ("meu", "bebe"),
+    ("a", "minha", "bebe"),
+    ("minha", "bebe"),
+    ("o", "meu", "vo"),
+    ("meu", "vo"),
+    ("a", "minha", "vo"),
+    ("minha", "vo"),
+    ("o", "meu", "vovo"),
+    ("meu", "vovo"),
+    ("a", "minha", "vovo"),
+    ("minha", "vovo"),
+    ("o", "meu", "bisavo"),
+    ("meu", "bisavo"),
+    ("a", "minha", "bisavo"),
+    ("minha", "bisavo"),
+    ("o", "meu", "companheiro"),
+    ("meu", "companheiro"),
+    ("a", "minha", "companheira"),
+    ("minha", "companheira"),
+    ("o", "meu", "parceiro"),
+    ("meu", "parceiro"),
+    ("a", "minha", "parceira"),
+    ("minha", "parceira"),
+    ("o", "meu", "amigo"),
+    ("meu", "amigo"),
+    ("a", "minha", "amiga"),
+    ("minha", "amiga"),
+    ("o", "meu", "colega"),
+    ("meu", "colega"),
+    ("a", "minha", "colega"),
+    ("minha", "colega"),
+    ("o", "meu", "dependente"),
+    ("meu", "dependente"),
+    ("a", "minha", "dependente"),
+    ("minha", "dependente"),
+)
+
+RELACOES_TERCEIRO_COM_PREPOSICAO = (
+    ("do", "meu", "filho"),
+    ("da", "minha", "filha"),
+    ("do", "meu", "pai"),
+    ("da", "minha", "mae"),
+    ("do", "meu", "irmao"),
+    ("da", "minha", "irma"),
+    ("do", "meu", "avo"),
+    ("da", "minha", "avo"),
+    ("do", "meu", "tio"),
+    ("da", "minha", "tia"),
+    ("do", "meu", "primo"),
+    ("da", "minha", "prima"),
+    ("do", "meu", "neto"),
+    ("da", "minha", "neta"),
+    ("do", "meu", "sobrinho"),
+    ("da", "minha", "sobrinha"),
+    ("do", "meu", "enteado"),
+    ("da", "minha", "enteada"),
+    ("do", "meu", "afilhado"),
+    ("da", "minha", "afilhada"),
+    ("do", "meu", "genro"),
+    ("da", "minha", "nora"),
+    ("do", "meu", "padrasto"),
+    ("da", "minha", "madrasta"),
+    ("do", "meu", "sogro"),
+    ("da", "minha", "sogra"),
+    ("do", "meu", "cunhado"),
+    ("da", "minha", "cunhada"),
+    ("do", "meu", "marido"),
+    ("do", "meu", "esposo"),
+    ("da", "minha", "esposa"),
+    ("do", "meu", "noivo"),
+    ("da", "minha", "noiva"),
+    ("do", "meu", "namorado"),
+    ("da", "minha", "namorada"),
+    ("do", "meu", "companheiro"),
+    ("da", "minha", "companheira"),
+    ("do", "meu", "dependente"),
+    ("da", "minha", "dependente"),
+    ("do", "meu", "guri"),
+    ("do", "meu", "moleque"),
+    ("da", "minha", "princesa"),
+    ("da", "minha", "crianca"),
+    ("do", "meu", "pequeno"),
+    ("da", "minha", "pequena"),
+    ("do", "meu", "velho"),
+    ("da", "minha", "velha"),
+    ("do", "meu", "coroa"),
+    ("da", "minha", "coroa"),
+    ("do", "meu", "menino"),
+    ("da", "minha", "menina"),
+    ("do", "meu", "garoto"),
+    ("da", "minha", "garota"),
+    ("do", "meu", "rapaz"),
+    ("da", "minha", "moca"),
+    ("do", "meu", "bebe"),
+    ("da", "minha", "bebe"),
+    ("do", "meu", "vo"),
+    ("da", "minha", "vo"),
+    ("do", "meu", "vovo"),
+    ("da", "minha", "vovo"),
+    ("do", "meu", "bisavo"),
+    ("da", "minha", "bisavo"),
+    ("do", "meu", "parceiro"),
+    ("da", "minha", "parceira"),
+    ("do", "meu", "amigo"),
+    ("da", "minha", "amiga"),
+    ("do", "meu", "colega"),
+    ("da", "minha", "colega"),
+)
+
+PREFIXOS_APRESENTACAO_TERCEIRO = (
+    ("o", "nome", "dele", "eh"),
+    ("o", "nome", "dele", "e"),
+    ("nome", "dele", "eh"),
+    ("nome", "dele", "e"),
+    ("o", "nome", "dela", "eh"),
+    ("o", "nome", "dela", "e"),
+    ("nome", "dela", "eh"),
+    ("nome", "dela", "e"),
+    ("ele", "se", "chama"),
+    ("ela", "se", "chama"),
+    ("se", "chama"),
+    ("chama-se",),
+    ("a", "pessoa", "se", "chama"),
+    ("o", "aluno", "se", "chama"),
+    ("a", "aluna", "se", "chama"),
+    ("o", "dependente", "se", "chama"),
+    ("a", "dependente", "se", "chama"),
+    ("o", "nome", "da", "pessoa", "eh"),
+    ("o", "nome", "da", "pessoa", "e"),
+    ("nome", "da", "pessoa", "eh"),
+    ("nome", "da", "pessoa", "e"),
+    ("o", "nome", "eh"),
+    ("o", "nome", "e"),
+    ("nome", "eh"),
+    ("nome", "e"),
+    ("painho", "se", "chama"),
+    ("mainha", "se", "chama"),
+    ("o", "nome", "de", "painho", "eh"),
+    ("o", "nome", "de", "painho", "e"),
+    ("nome", "de", "painho", "eh"),
+    ("nome", "de", "painho", "e"),
+    ("o", "nome", "de", "mainha", "eh"),
+    ("o", "nome", "de", "mainha", "e"),
+    ("nome", "de", "mainha", "eh"),
+    ("nome", "de", "mainha", "e"),
+) + tuple(
+    inicio + relacao + ("se", "chama")
+    for relacao in RELACOES_TERCEIRO
+    for inicio in (("e",), ("eh",), ("he",), ())
+) + tuple(
+    inicio + relacao + final
+    for relacao in RELACOES_TERCEIRO_COM_PREPOSICAO
+    for inicio in (("o", "nome"), ("nome",))
+    for final in (("eh",), ("e",))
+) + tuple(
+    relacao + final
+    for relacao in RELACOES_TERCEIRO
+    for final in (("eh",), ("e",))
+)
+
 # Correções seguras e curadas para nomes brasileiros cujo til costuma ser
 # omitido na digitação. Não é um acentuador genérico: somente estas chaves
 # conhecidas são convertidas para evitar alterar nomes raros por adivinhação.
@@ -257,7 +541,7 @@ NOMES_BRASILEIROS_COM_TIL = {
 
 # Estes prefixos declaram explicitamente que todo o restante representa nome.
 # Neles, sobrenomes posteriores podem ser ignorados após extrair até dois nomes.
-PREFIXOS_APRESENTACAO_COMPLETA = (
+PREFIXOS_APRESENTACAO_COMPLETA = PREFIXOS_APRESENTACAO_TERCEIRO + (
     ("pode", "me", "chamar", "de"),
     ("podem", "me", "chamar", "de"),
     ("o", "meu", "nome", "eh"),
@@ -1007,14 +1291,6 @@ def extrair_primeiro_nome_cliente(texto):
 
 
 def extrair_candidato_nome(palavras_originais, palavras_normalizadas):
-    # Aceita abreviações informais como "e João", "eh João" e "he João"
-    # somente porque esta função é usada na etapa que pergunta o nome.
-    if _primeira_palavra_e_apresentacao_curta(palavras_originais):
-        return _extrair_nome_declarado(
-            palavras_originais[1:],
-            palavras_normalizadas[1:],
-        )
-
     prefixo = _encontrar_prefixo(
         palavras_normalizadas,
         PREFIXOS_APRESENTACAO_COMPLETA,
@@ -1037,6 +1313,15 @@ def extrair_candidato_nome(palavras_originais, palavras_normalizadas):
         return _extrair_nome_declarado(
             palavras_originais[inicio_nome:],
             palavras_normalizadas[inicio_nome:],
+        )
+
+    # Aceita abreviações informais como "e João", "eh João" e "he João".
+    # Prefixos completos precisam ser avaliados antes para que construções
+    # como "é o meu filho, se chama João" não sejam cortadas após o "é".
+    if _primeira_palavra_e_apresentacao_curta(palavras_originais):
+        return _extrair_nome_declarado(
+            palavras_originais[1:],
+            palavras_normalizadas[1:],
         )
 
     return _extrair_nome_declarado(
@@ -1156,6 +1441,11 @@ def _encontrar_prefixo(palavras, prefixos):
 
 def _preparar_texto_nome(texto):
     texto_preparado = PADRAO_CORTESIA_FINAL.sub("", texto).rstrip()
+    texto_preparado = PADRAO_VIRGULA_APRESENTACAO_TERCEIRO.sub(
+        r"\1 ",
+        texto_preparado,
+        count=1,
+    )
     texto_preparado = PADRAO_SAUDACAO_INICIAL.sub(
         "",
         texto_preparado,

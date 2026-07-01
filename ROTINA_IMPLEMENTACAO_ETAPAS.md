@@ -39,7 +39,7 @@ origem + evento -> destino
 Exemplo:
 
 ```text
-2 + para_mim          -> 5
+2 + para_mim          -> 4
 2 + para_outra_pessoa -> 3
 ```
 
@@ -158,11 +158,11 @@ Responsabilidades proibidas:
 Exemplo:
 
 ```python
-MENSAGEM_ETAPA_3 = "Qual o nome da pessoa?"
+MENSAGEM_ETAPA3 = "Qual o nome da pessoa?"
 
 
-def montar_mensagem_etapa_3():
-    return MENSAGEM_ETAPA_3
+def montar_mensagem_etapa3():
+    return MENSAGEM_ETAPA3
 ```
 
 ### 5. Criar o sender
@@ -226,8 +226,8 @@ workers/worker_flow/response_flow/etapas/validadores_contexto/
 Exemplos:
 
 ```text
-valida_segunda_etapa.py
-valida_terceira_etapa.py
+valida_etapa2.py
+valida_etapa3.py
 valida_quarta_etapa.py
 ```
 
@@ -254,15 +254,15 @@ validador_financeiro.py
 validador_nome.py
 ```
 
-O validador de nome é universal porque pode validar o nome do cliente e,
-futuramente, o nome do dependente.
+O validador de nome é universal porque valida tanto o nome do cliente quanto o
+nome do dependente.
 
 ### 7. Criar o resolver da etapa
 
 Criar:
 
 ```text
-workers/worker_flow/response_flow/etapas/<etapa_atual>.py
+workers/worker_flow/response_flow/etapas/etapa<n>_worker.py
 ```
 
 O arquivo representa a etapa à qual o cliente está respondendo. Ele possui duas
@@ -288,25 +288,25 @@ Ordem recomendada:
 Modelo:
 
 ```python
-def resolve_terceira_etapa(contexto_historico):
+def resolve_etapa3(contexto_historico):
     tipo_mensagem = contexto_historico["tipo_mensagem_atual"]
     texto_cliente = contexto_historico["texto_cliente_atual"]
 
     if validar_midia(tipo_mensagem):
-        return enviar_terceira_etapa_midia(...)
+        return enviar_etapa3_midia(...)
 
     if validar_pergunta_financeira(texto_cliente):
-        return enviar_terceira_etapa_financeiro(...)
+        return enviar_etapa3_financeiro(...)
 
     resultado = validar_nome_cliente(texto_cliente)
 
     if not resultado.valido:
-        return enviar_terceira_etapa_nome_invalido(...)
+        return enviar_etapa3_contexto_nome_invalido(...)
 
     destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_NOME_DEPENDENTE_VALIDO,
-        destinos_esperados={ETAPA_IDADE_DEPENDENTE},
+        destinos_esperados={ETAPA_IDADE_ALUNO},
     )
 
     contexto_envio = enviar_quarta_etapa(...)
@@ -333,7 +333,7 @@ Exemplo:
 
 ```python
 if id_etapa_atual == 3:
-    return resolve_terceira_etapa(contexto_historico)
+    return resolve_etapa3(contexto_historico)
 ```
 
 O `flow_sender`:
@@ -347,16 +347,30 @@ O `flow_sender`:
 Uma etapa não implementada deve continuar levantando `NotImplementedError`.
 Não retornar sucesso fictício.
 
+Durante o desenvolvimento isolado de uma transição, uma simulação temporária
+do sender de destino pode existir somente quando estiver explicitamente
+marcada com `envio_simulado=True`, coberta por testes e sem ser classificada
+como confirmação da Meta. O bloco deve ser removido assim que o sender real do
+destino for implementado.
+
 ### 9. Implementar os efeitos da transição
 
 Atualizar:
 
 ```text
-workers/worker_flow/transacoes/persistencia_resposta.py
+workers/worker_flow/transacoes/efeitos_transicao.py
 ```
 
-A navegação já foi escolhida pela tabela. Esta camada grava somente os efeitos
-específicos da aresta.
+A navegação já foi escolhida pela tabela. Esse arquivo grava somente os efeitos
+específicos da aresta e deve deixar cada ponte visualmente explícita:
+
+```python
+if etapa_origem == ETAPA_DESTINO_ATENDIMENTO and evento == EVENTO_PARA_MIM:
+    # 2 -> 4
+
+if etapa_origem == ETAPA_DESTINO_ATENDIMENTO and evento == EVENTO_PARA_OUTRA_PESSOA:
+    # 2 -> 3
+```
 
 Exemplos:
 
@@ -374,8 +388,8 @@ para_outra_pessoa
 nome_dependente_valido
 -> salvar dependente.nome_dependente
 
-idade_dependente_valida
--> salvar dependente.idade
+idade_aluno_valida
+-> salvar cliente.idade ou dependente.idade conforme status_dependente
 ```
 
 Os efeitos devem:
@@ -393,6 +407,10 @@ Os efeitos devem:
 evento já autorizado
 -> persistir efeitos de negócio
 ```
+
+`persistencia_resposta.py` permanece como orquestrador curto da transação final.
+`movimento_conversa.py` decide somente entre inicialização, transição e
+permanência na etapa atual.
 
 ### 10. Ativar a aresta no conjunto final
 
@@ -431,9 +449,9 @@ Estrutura:
 ```text
 core/integrations/whatsapp/
 ├── messages/
-│   ├── primeira_etapa_messages.py
-│   ├── segunda_etapa_messages.py
-│   └── terceira_etapa_messages.py
+│   ├── etapa1_messages.py
+│   ├── etapa2_messages.py
+│   └── etapa3_messages.py
 └── pywa_functions/
     ├── cliente.py
     ├── saudacao.py
@@ -473,7 +491,7 @@ O contexto histórico carrega somente a fotografia da origem:
 {
     "id_etapa_origem_transicao": 2,
     "transicoes_permitidas": {
-        "para_mim": 5,
+        "para_mim": 4,
         "para_outra_pessoa": 3,
     },
 }
@@ -485,7 +503,7 @@ O contexto de envio carrega a decisão exata:
 {
     "id_etapa_origem_transicao": 2,
     "evento_transicao": "para_mim",
-    "id_etapa_resultante": 5,
+    "id_etapa_resultante": 4,
 }
 ```
 

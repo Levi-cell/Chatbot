@@ -2,7 +2,11 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    segunda_etapa as etapa_module,
+    etapa2_worker as etapa_module,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_PARA_MIM,
+    EVENTO_PARA_OUTRA_PESSOA,
 )
 
 
@@ -15,7 +19,12 @@ def contexto_historico(
         "id_conversa": 10,
         "id_etapa_atual": 2,
         "id_etapa_cliente": 2,
-        "id_etapa_resposta": 3,
+        "id_etapa_resposta": None,
+        "id_etapa_origem_transicao": 2,
+        "transicoes_permitidas": {
+            EVENTO_PARA_MIM: 4,
+            EVENTO_PARA_OUTRA_PESSOA: 3,
+        },
         "tipo_mensagem_atual": tipo_mensagem,
         "texto_cliente_atual": texto,
         "mensagem_cliente_atual": {
@@ -38,48 +47,48 @@ def retorno(nome):
     }
 
 
-class SegundaEtapaTests(unittest.TestCase):
-    def test_etapa_dois_com_midia_reenvia_etapa_com_tratamento(self):
+class Etapa2WorkerTests(unittest.TestCase):
+    def test_etapa2_com_midia_reenvia_etapa_com_tratamento(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa_midia",
-            return_value=retorno("midia_etapa_2"),
+            "enviar_etapa2_midia",
+            return_value=retorno("midia_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(tipo_mensagem="image", texto="")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "midia_etapa_2")
+        self.assertEqual(resultado["nome"], "midia_etapa2")
         self.assertEqual(resultado["id_etapa_resultante"], 2)
 
-    def test_etapa_dois_com_financeiro_reenvia_etapa_com_tratamento(self):
+    def test_etapa2_com_financeiro_reenvia_etapa_com_tratamento(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa_financeiro",
-            return_value=retorno("financeiro_etapa_2"),
+            "enviar_etapa2_financeiro",
+            return_value=retorno("financeiro_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(texto="quanto custa?")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "financeiro_etapa_2")
+        self.assertEqual(resultado["nome"], "financeiro_etapa2")
         self.assertEqual(resultado["id_etapa_resultante"], 2)
 
     def test_midia_tem_prioridade_sobre_texto_financeiro(self):
         with (
             patch.object(
                 etapa_module,
-                "enviar_segunda_etapa_midia",
-                return_value=retorno("midia_etapa_2"),
+                "enviar_etapa2_midia",
+                return_value=retorno("midia_etapa2"),
             ) as sender_midia,
             patch.object(
                 etapa_module,
-                "enviar_segunda_etapa_financeiro",
+                "enviar_etapa2_financeiro",
             ) as sender_financeiro,
         ):
-            etapa_module.resolve_segunda_etapa(
+            etapa_module.resolve_etapa2(
                 contexto_historico(
                     tipo_mensagem="image",
                     texto="quanto custa?",
@@ -89,44 +98,63 @@ class SegundaEtapaTests(unittest.TestCase):
         sender_midia.assert_called_once_with("5571999999999", "123456")
         sender_financeiro.assert_not_called()
 
-    def test_opcao_para_mim_simula_etapa_tres_sem_dependente(self):
-        resultado = etapa_module.resolve_segunda_etapa(
+    def test_opcao_para_mim_simula_etapa4_sem_dependente(self):
+        resultado = etapa_module.resolve_etapa2(
             contexto_historico(texto="Para mim")
         )
 
         self.assertTrue(resultado["enviou"])
         self.assertTrue(resultado["envio_simulado"])
-        self.assertEqual(resultado["id_etapa_resultante"], 3)
+        self.assertEqual(resultado["id_etapa_resultante"], 4)
         self.assertEqual(resultado["opcao_atendimento"], "para_mim")
+        self.assertEqual(resultado["evento_transicao"], EVENTO_PARA_MIM)
         self.assertFalse(resultado["status_dependente"])
 
-    def test_opcao_para_outra_pessoa_interativa_simula_etapa_tres(self):
-        resultado = etapa_module.resolve_segunda_etapa(
-            contexto_historico(
-                tipo_mensagem="interactive",
-                texto="Para outra pessoa",
-            )
-        )
+    def test_opcao_para_outra_pessoa_interativa_envia_etapa3(self):
+        contexto_sender = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.etapa3",
+            "id_etapa_resultante": 3,
+        }
 
-        self.assertTrue(resultado["envio_simulado"])
+        with patch.object(
+            etapa_module,
+            "enviar_etapa3",
+            return_value=contexto_sender,
+        ) as sender:
+            resultado = etapa_module.resolve_etapa2(
+                contexto_historico(
+                    tipo_mensagem="interactive",
+                    texto="Para outra pessoa",
+                )
+            )
+
+        sender.assert_called_once_with("5571999999999", "123456")
+        self.assertNotIn("envio_simulado", resultado)
         self.assertEqual(
             resultado["opcao_atendimento"],
             "para_outra_pessoa",
         )
+        self.assertEqual(resultado["id_etapa_resultante"], 3)
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_PARA_OUTRA_PESSOA,
+        )
         self.assertTrue(resultado["status_dependente"])
 
-    def test_opcao_invalida_reenvia_etapa_dois_com_tratamento(self):
+    def test_opcao_invalida_reenvia_etapa2_com_tratamento(self):
         with patch.object(
             etapa_module,
-            "enviar_segunda_etapa_contexto_opcao_invalida",
-            return_value=retorno("contexto_etapa_2"),
+            "enviar_etapa2_contexto_opcao_invalida",
+            return_value=retorno("contexto_etapa2"),
         ) as sender:
-            resultado = etapa_module.resolve_segunda_etapa(
+            resultado = etapa_module.resolve_etapa2(
                 contexto_historico(texto="eu quero para meu primo")
             )
 
         sender.assert_called_once_with("5571999999999", "123456")
-        self.assertEqual(resultado["nome"], "contexto_etapa_2")
+        self.assertEqual(resultado["nome"], "contexto_etapa2")
         self.assertEqual(resultado["id_etapa_resultante"], 2)
 
 

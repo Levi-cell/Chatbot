@@ -5,6 +5,8 @@ from core.logging_config import short_value
 
 logger = logging.getLogger("db.updates")
 
+ETAPA_INICIAL = 1
+
 
 def marcar_mensagem_como_enviada(id_mensagem, cursor):
     cursor.execute("""
@@ -74,60 +76,127 @@ def atualizar_conversa_mensagem_cliente(
     return cursor.rowcount
 
 
-def atualizar_conversa_resposta_bot(
+def inicializar_conversa_resposta_bot(
     id_conversa,
     id_etapa_resultante,
     data_interacao,
     cursor,
 ):
-    if id_etapa_resultante is None:
-        raise ValueError("id_etapa_resultante nao informado para atualizar conversa")
-
-    if data_interacao is None:
+    if id_etapa_resultante != ETAPA_INICIAL:
         raise ValueError(
-            "data_interacao nao informada para registrar resposta do bot"
+            "Inicializacao da conversa so pode persistir a etapa 1"
         )
+
+    _validar_data_interacao_bot(data_interacao)
 
     cursor.execute("""
         UPDATE chatbot.conversa
         SET
-            id_etapa_atual = CASE
-                WHEN id_etapa_atual IS NULL THEN %s
-                ELSE GREATEST(id_etapa_atual, %s)
-            END,
+            id_etapa_atual = %s,
             last_message_from = 'bot',
             last_interaction_at = %s
         WHERE id_conversa = %s
-          AND (
-              (id_etapa_atual IS NULL AND %s = 1)
-              OR
-              (
-                  id_etapa_atual IS NOT NULL
-                  AND %s <= id_etapa_atual + 1
-              )
-          );
+          AND id_etapa_atual IS NULL;
     """, (
-        id_etapa_resultante,
         id_etapa_resultante,
         data_interacao,
         id_conversa,
-        id_etapa_resultante,
-        id_etapa_resultante,
     ))
 
     logger.debug(
-        "conversa_update | acao=registrar_resposta_bot id_conversa=%s etapa=%s data_interacao=%s linhas=%s",
+        "conversa_update | acao=inicializar_etapa id_conversa=%s etapa=%s linhas=%s",
         id_conversa,
         id_etapa_resultante,
-        data_interacao,
         cursor.rowcount,
     )
 
     if cursor.rowcount != 1:
         raise ValueError(
-            "Conversa nao foi atualizada com resposta do bot; conversa "
-            "inexistente ou transicao de etapa invalida "
-            f"(id_conversa={id_conversa}, etapa={id_etapa_resultante}, "
+            "Conversa nao foi inicializada na etapa 1 "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
+def atualizar_conversa_por_transicao(
+    id_conversa,
+    id_etapa_origem,
+    evento_transicao,
+    id_etapa_destino,
+    data_interacao,
+    cursor,
+    *,
+    permitir_reaplicacao=False,
+):
+    if id_etapa_origem is None:
+        raise ValueError("Etapa de origem nao informada para transicao")
+
+    if not evento_transicao:
+        raise ValueError("Evento nao informado para transicao")
+
+    if id_etapa_destino is None:
+        raise ValueError("Etapa de destino nao informada para transicao")
+
+    _validar_data_interacao_bot(data_interacao)
+
+    cursor.execute(
+        """
+        UPDATE chatbot.conversa AS conversa
+        SET
+            id_etapa_atual = CASE
+                WHEN conversa.id_etapa_atual = %s THEN %s
+                ELSE conversa.id_etapa_atual
+            END,
+            last_message_from = 'bot',
+            last_interaction_at = %s
+        WHERE conversa.id_conversa = %s
+          AND EXISTS (
+              SELECT 1
+              FROM chatbot.etapa_transicao AS transicao
+              WHERE transicao.id_etapa_origem = %s
+                AND transicao.evento = %s
+                AND transicao.id_etapa_destino = %s
+          )
+          AND (
+              conversa.id_etapa_atual = %s
+              OR (
+                  %s = TRUE
+                  AND conversa.id_etapa_atual = %s
+              )
+          );
+        """,
+        (
+            id_etapa_origem,
+            id_etapa_destino,
+            data_interacao,
+            id_conversa,
+            id_etapa_origem,
+            evento_transicao,
+            id_etapa_destino,
+            id_etapa_origem,
+            bool(permitir_reaplicacao),
+            id_etapa_destino,
+        ),
+    )
+
+    logger.debug(
+        "conversa_update | acao=aplicar_transicao id_conversa=%s etapa_origem=%s evento=%s etapa_destino=%s reaplicacao=%s linhas=%s",
+        id_conversa,
+        id_etapa_origem,
+        evento_transicao,
+        id_etapa_destino,
+        bool(permitir_reaplicacao),
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada; transicao inexistente, origem "
+            "incompativel ou conversa ausente "
+            f"(id_conversa={id_conversa}, origem={id_etapa_origem}, "
+            f"evento={evento_transicao}, destino={id_etapa_destino}, "
+            f"reaplicacao={bool(permitir_reaplicacao)}, "
             f"linhas={cursor.rowcount})"
         )
 
@@ -139,10 +208,7 @@ def atualizar_conversa_resposta_bot_sem_avancar(
     data_interacao,
     cursor,
 ):
-    if data_interacao is None:
-        raise ValueError(
-            "data_interacao nao informada para registrar resposta do bot"
-        )
+    _validar_data_interacao_bot(data_interacao)
 
     cursor.execute("""
         UPDATE chatbot.conversa
@@ -168,6 +234,13 @@ def atualizar_conversa_resposta_bot_sem_avancar(
     return cursor.rowcount
 
 
+def _validar_data_interacao_bot(data_interacao):
+    if data_interacao is None:
+        raise ValueError(
+            "data_interacao nao informada para registrar resposta do bot"
+        )
+
+
 def atualizar_nome_cliente_por_telefone(waid_telefone, nome, cursor):
     if not waid_telefone:
         raise ValueError("waid_telefone nao informado para atualizar nome do cliente")
@@ -191,6 +264,39 @@ def atualizar_nome_cliente_por_telefone(waid_telefone, nome, cursor):
         raise ValueError(
             "Cliente nao foi atualizado com nome "
             f"(telefone={short_value(waid_telefone)}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
+def atualizar_nome_dependente_por_conversa(id_conversa, nome, cursor):
+    if not id_conversa:
+        raise ValueError(
+            "id_conversa nao informado para atualizar nome do dependente"
+        )
+
+    if not nome:
+        raise ValueError("nome nao informado para atualizar dependente")
+
+    cursor.execute(
+        """
+        UPDATE chatbot.dependente
+        SET nome_dependente = %s
+        WHERE id_conversa = %s;
+        """,
+        (nome, id_conversa),
+    )
+
+    logger.debug(
+        "dependente_update | acao=atualizar_nome id_conversa=%s linhas=%s",
+        id_conversa,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Dependente nao foi atualizado com nome "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
 
     return cursor.rowcount
