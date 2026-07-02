@@ -11,6 +11,7 @@ TRANSICOES_INICIAIS = (
     (2, "para_mim", 4),
     (2, "para_outra_pessoa", 3),
     (3, "nome_dependente_valido", 4),
+    (4, "idade_valida", 5),
 )
 
 # Novas arestas só entram quando resolver, sender, efeitos transacionais

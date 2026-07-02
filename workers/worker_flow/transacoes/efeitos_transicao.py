@@ -1,6 +1,10 @@
 import logging
 
 from core.logging_config import short_value
+from core.repositories.idade_aluno import (
+    atualizar_idade_cliente,
+    atualizar_idade_dependente,
+)
 from core.repositories.inserts import inserir_dependente_para_conversa
 from core.repositories.updates import (
     atualizar_nome_cliente_por_telefone,
@@ -10,11 +14,16 @@ from core.repositories.updates import (
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+    validar_idade,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_1_NOME_CLIENTE,
     ETAPA_2_DESTINO_ATENDIMENTO,
     ETAPA_3_NOME_DEPENDENTE,
     ETAPA_4_IDADE_ALUNO,
+    ETAPA_5_OFERTA_AULA,
+    EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PARA_MIM,
@@ -107,6 +116,22 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 ETAPA_4_IDADE_ALUNO,
             )
             return _persistir_nome_dependente_capturado_na_etapa3(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 4
+    if etapa_origem == ETAPA_4_IDADE_ALUNO:
+        # 4 -> 5: a idade do aluno foi validada.
+        if evento == EVENTO_IDADE_VALIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_5_OFERTA_AULA,
+            )
+            return _persistir_idade_capturada_na_etapa4(
                 contexto_historico,
                 contexto_envio,
                 cursor,
@@ -296,3 +321,56 @@ def _resolver_primeiro_nome_capturado(
         return resultado_nome.primeiro_nome
 
     return None
+
+
+def _persistir_idade_capturada_na_etapa4(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    idade = contexto_envio.get("idade_aluno")
+
+    if idade is None:
+        resultado = validar_idade(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+        if resultado.valida:
+            idade = resultado.idade
+
+    if idade is None:
+        raise ValueError(
+            "Idade não reconstruída na transição 4 -> 5"
+        )
+
+    if contexto_historico.get("status_dependente"):
+        atualizar_idade_dependente(
+            contexto_historico["id_conversa"],
+            idade,
+            cursor,
+        )
+        destino_dado = "dependente"
+    else:
+        atualizar_idade_cliente(
+            contexto_historico["id_cliente"],
+            idade,
+            cursor,
+        )
+        destino_dado = "cliente"
+
+    logger.info(
+        "idade_aluno_persistida | acao=salvar_efeito_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s "
+        "id_conversa=%s idade=%s destino_dado=%s",
+        EVENTO_IDADE_VALIDA,
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        idade,
+        destino_dado,
+    )
+
+    return {
+        "idade_aluno_atualizada": True,
+        "idade_aluno": idade,
+        "destino_dado": destino_dado,
+    }

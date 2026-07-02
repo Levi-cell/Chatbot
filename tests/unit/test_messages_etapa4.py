@@ -11,10 +11,22 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
     montar_mensagem_idade_etapa4,
     montar_mensagem_idade_etapa4_financeiro,
     montar_mensagem_idade_etapa4_midia,
+    montar_mensagem_idade_acima_99_etapa4,
 )
 
 
 class MessagesEtapa4Tests(unittest.TestCase):
+    def test_mensagem_acima_de_99_exibe_numero_comercial(self):
+        mensagem = montar_mensagem_idade_acima_99_etapa4(
+            "557536321234"
+        )
+
+        self.assertIn("557536321234", mensagem)
+
+    def test_mensagem_acima_de_99_exige_numero_comercial(self):
+        with self.assertRaises(ValueError):
+            montar_mensagem_idade_acima_99_etapa4("")
+
     def test_mensagens_do_cliente_perguntam_a_propria_idade(self):
         mensagens = (
             montar_mensagem_idade_etapa4(),

@@ -166,7 +166,7 @@ def worker_flow():
                 conn_ciclo.commit()
 
             except Exception as erro:
-                # TEMPORARIO: envio_simulado existe apenas enquanto a etapa 4
+                # TEMPORARIO: envio_simulado existe apenas enquanto a etapa 5
                 # nao possui sender Meta. Remover esta excecao junto com a
                 # simulacao quando o sender real for implementado.
                 if (
@@ -199,6 +199,7 @@ def worker_flow():
                 contexto_banco,
                 lock_version,
                 cursor_ciclo,
+                contexto_final,
             )
             conn_ciclo.commit()
 

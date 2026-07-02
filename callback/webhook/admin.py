@@ -58,6 +58,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "nome",
         "cnpj",
         "telefone",
+        "numero_comercial",
         "email_responsavel",
         "link_agendamento_clickable",
         "status_pagamento",
@@ -67,6 +68,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "nome",
         "cnpj",
         "telefone",
+        "numero_comercial",
         "email_responsavel",
         "link_agendamento",
     )

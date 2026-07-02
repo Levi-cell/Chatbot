@@ -1,6 +1,7 @@
 import logging
 
 from core.logging_config import short_value
+from core.repositories.contexto_etapa4 import buscar_contexto_etapa4
 from core.repositories.inserts import inserir_historico_mensagem_cliente
 from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
 from core.repositories.transicoes_etapa import listar_transicoes_permitidas
@@ -11,6 +12,9 @@ from core.repositories.updates import (
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     montar_contexto_transicao,
     prever_etapa_resposta,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_4_IDADE_ALUNO,
 )
 
 
@@ -72,6 +76,22 @@ def valida_historico(mensagem, contexto_banco, cursor):
         id_etapa_cliente,
         transicoes_permitidas,
     )
+    contexto_especifico_etapa = {}
+
+    if id_etapa_cliente == ETAPA_4_IDADE_ALUNO:
+        contexto_especifico_etapa = buscar_contexto_etapa4(
+            id_conversa,
+            contexto_banco["id_unidade"],
+            cursor,
+        )
+
+        if (
+            contexto_conversa.get("status_dependente")
+            and not contexto_especifico_etapa["nome_dependente"]
+        ):
+            raise ValueError(
+                "Etapa 4 de dependente sem nome persistido"
+            )
 
     if resposta_bot_para_mensagem_atual:
         id_etapa_resposta = resposta_bot_para_mensagem_atual["id_etapa"]
@@ -114,8 +134,10 @@ def valida_historico(mensagem, contexto_banco, cursor):
         short_value(mensagem["id_phone_unidade"]),
     )
 
-    return {
+    contexto_historico = {
         "id_conversa": id_conversa,
+        "id_cliente": contexto_banco.get("id_cliente"),
+        "id_unidade": contexto_banco.get("id_unidade"),
         "id_etapa_atual": contexto_conversa.get("id_etapa_atual"),
         "id_etapa_cliente": id_etapa_cliente,
         # Compatibilidade apenas para logs existentes. Este campo nunca decide
@@ -139,6 +161,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
         "precisa_tratamento_erro": False,
         "motivo_tratamento_erro": None,
     }
+    contexto_historico.update(contexto_especifico_etapa)
+    return contexto_historico
 
 
 def _resolver_etapa_cliente(contexto_conversa):

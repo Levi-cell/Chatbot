@@ -7,6 +7,7 @@ from core.database.deploy import (
     setup_database,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PARA_MIM,
@@ -63,6 +64,7 @@ class DeployContractTests(unittest.TestCase):
                 (2, EVENTO_PARA_MIM, 4),
                 (2, EVENTO_PARA_OUTRA_PESSOA, 3),
                 (3, EVENTO_NOME_DEPENDENTE_VALIDO, 4),
+                (4, EVENTO_IDADE_VALIDA, 5),
             ),
         )
 

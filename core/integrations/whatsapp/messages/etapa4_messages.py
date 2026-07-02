@@ -124,3 +124,22 @@ MENSAGEM_DEPENDENTE_MENOR_5_ETAPA4 = (
 
 def montar_mensagem_dependente_menor_5_etapa4(nome):
     return MENSAGEM_DEPENDENTE_MENOR_5_ETAPA4.format(nome=nome)
+
+
+### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
+
+MENSAGEM_IDADE_ACIMA_99_ETAPA4 = (
+    "Entre em contato com o número {numero_comercial} para continuar "
+    "seu atendimento personalizado."
+)
+
+
+def montar_mensagem_idade_acima_99_etapa4(numero_comercial):
+    numero = str(numero_comercial or "").strip()
+
+    if not numero:
+        raise ValueError("Número comercial da unidade não configurado")
+
+    return MENSAGEM_IDADE_ACIMA_99_ETAPA4.format(
+        numero_comercial=numero,
+    )

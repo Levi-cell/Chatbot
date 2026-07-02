@@ -8,6 +8,9 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
     enviar_etapa3,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
+    enviar_etapa4_cliente,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -50,10 +53,8 @@ def resolve_etapa2(contexto_historico):
     para_mim resolve 2 -> 4.
     para_outra_pessoa resolve 2 -> 3.
 
-    A etapa 3 possui sender real. A etapa 4 continua simulada até seu sender
-    existir. A simulação não altera a autorização da transição.
+    As etapas 3 e 4 possuem senders reais.
     """
-    id_conversa = contexto_historico["id_conversa"]
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
@@ -120,22 +121,12 @@ def resolve_etapa2(contexto_historico):
         contexto_envio["opcao_atendimento"] = evento_transicao
         contexto_envio["status_dependente"] = status_dependente
     else:
-        # TEMPORARIO: a etapa 4 ainda nao possui sender real.
-        logger.info(
-            "nesse momento a futura etapa %s foi enviada | acao=simular_envio_etapa id_conversa=%s id_mensagem_fila=%s evento=%s status_dependente=%s",
-            etapa_destino,
-            id_conversa,
-            mensagem_cliente_atual["id_mensagem_fila"],
-            evento_transicao,
-            status_dependente,
+        contexto_envio = enviar_etapa4_cliente(
+            cliente_telefone,
+            phone_id_unidade,
         )
-
-        contexto_envio = _montar_contexto_etapa_simulada(
-            contexto_historico,
-            etapa_destino,
-            evento_transicao,
-            status_dependente,
-        )
+        contexto_envio["opcao_atendimento"] = evento_transicao
+        contexto_envio["status_dependente"] = status_dependente
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
@@ -166,36 +157,6 @@ def _destinos_esperados_por_evento(evento_transicao):
         return {ETAPA_3_NOME_DEPENDENTE}
 
     return set()
-
-
-def _montar_contexto_etapa_simulada(
-    contexto_historico,
-    etapa_destino,
-    evento_transicao,
-    status_dependente,
-):
-    # TEMPORARIO: remover esta simulacao quando o sender da etapa 4 existir.
-    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
-    id_mensagem_fila = mensagem_cliente["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": (
-            f"Nesse momento a futura etapa {etapa_destino} foi enviada."
-        ),
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-        "opcao_atendimento": evento_transicao,
-        "status_dependente": status_dependente,
-    }
 
 
 def _logar_tipo_nao_suportado(contexto_historico):

@@ -6,6 +6,7 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
     montar_mensagem_contexto_idade_dependente_invalida_etapa4,
     montar_mensagem_contexto_idade_invalida_etapa4,
     montar_mensagem_dependente_menor_5_etapa4,
+    montar_mensagem_idade_acima_99_etapa4,
     montar_mensagem_idade_dependente_etapa4,
     montar_mensagem_idade_dependente_etapa4_financeiro,
     montar_mensagem_idade_dependente_etapa4_midia,
@@ -190,6 +191,24 @@ def enviar_etapa4_dependente_menor_5(
         phone_id_unidade,
         mensagem_bot,
         evento="enviar_etapa4_dependente_menor_5",
+    )
+
+
+# CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
+def enviar_etapa4_idade_acima_99(
+    cliente_telefone,
+    phone_id_unidade,
+    numero_comercial,
+):
+    mensagem_bot = montar_mensagem_idade_acima_99_etapa4(
+        numero_comercial
+    )
+
+    return _enviar_texto_etapa4(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa4_idade_acima_99",
     )
 
 

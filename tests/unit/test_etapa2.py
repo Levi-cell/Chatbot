@@ -98,13 +98,25 @@ class Etapa2WorkerTests(unittest.TestCase):
         sender_midia.assert_called_once_with("5571999999999", "123456")
         sender_financeiro.assert_not_called()
 
-    def test_opcao_para_mim_simula_etapa4_sem_dependente(self):
-        resultado = etapa_module.resolve_etapa2(
-            contexto_historico(texto="Para mim")
-        )
+    def test_opcao_para_mim_envia_etapa4_sem_dependente(self):
+        contexto_sender = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.etapa4",
+            "id_etapa_resultante": 4,
+        }
 
-        self.assertTrue(resultado["enviou"])
-        self.assertTrue(resultado["envio_simulado"])
+        with patch.object(
+            etapa_module,
+            "enviar_etapa4_cliente",
+            return_value=contexto_sender,
+        ) as sender:
+            resultado = etapa_module.resolve_etapa2(
+                contexto_historico(texto="Para mim")
+            )
+
+        sender.assert_called_once_with("5571999999999", "123456")
+        self.assertNotIn("envio_simulado", resultado)
         self.assertEqual(resultado["id_etapa_resultante"], 4)
         self.assertEqual(resultado["opcao_atendimento"], "para_mim")
         self.assertEqual(resultado["evento_transicao"], EVENTO_PARA_MIM)

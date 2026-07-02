@@ -118,14 +118,30 @@ class Etapa3WorkerTests(unittest.TestCase):
         self.assertTrue(resultado["tratamento"])
 
     def test_nome_valido_transiciona_para_etapa4(self):
-        resultado = etapa_module.resolve_etapa3(
-            contexto_historico(
-                texto="O nome da minha filha é Aline Braga"
-            )
-        )
+        contexto_sender = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "id_hash_msg_bot": "wamid.etapa4",
+            "id_etapa_resultante": 4,
+        }
 
-        self.assertTrue(resultado["enviou"])
-        self.assertTrue(resultado["envio_simulado"])
+        with patch.object(
+            etapa_module,
+            "enviar_etapa4_dependente",
+            return_value=contexto_sender,
+        ) as sender:
+            resultado = etapa_module.resolve_etapa3(
+                contexto_historico(
+                    texto="O nome da minha filha é Aline Braga"
+                )
+            )
+
+        sender.assert_called_once_with(
+            "5571999999999",
+            "123456",
+            "Aline",
+        )
+        self.assertNotIn("envio_simulado", resultado)
         self.assertEqual(resultado["id_etapa_resultante"], 4)
         self.assertEqual(
             resultado["evento_transicao"],

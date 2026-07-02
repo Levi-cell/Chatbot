@@ -14,6 +14,7 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
     montar_mensagem_idade_etapa4,
     montar_mensagem_idade_etapa4_financeiro,
     montar_mensagem_idade_etapa4_midia,
+    montar_mensagem_idade_acima_99_etapa4,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders import (
     etapa4 as sender_module,
@@ -164,6 +165,19 @@ class PywaSenderEtapa4Tests(unittest.TestCase):
                 )
                 self.assertNotIn("tratamento", resultado)
                 self.assertEqual(resultado["id_etapa_resultante"], 4)
+
+    def test_acima_de_99_envia_numero_comercial_sem_tratamento(self):
+        cliente_wa, resultado = self._executar_sender(
+            sender_module.enviar_etapa4_idade_acima_99,
+            "557536321234",
+        )
+
+        self.assertEqual(
+            cliente_wa.calls[0]["text"],
+            montar_mensagem_idade_acima_99_etapa4("557536321234"),
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 4)
+        self.assertNotIn("tratamento", resultado)
 
     def test_meta_falhou_levanta_exception_controlada(self):
         cliente_wa = FakeClienteWa(

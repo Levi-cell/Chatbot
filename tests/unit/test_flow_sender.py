@@ -5,6 +5,7 @@ import workers.worker_flow.response_flow.flow_sender as flow_sender_module
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
+    EVENTO_IDADE_VALIDA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
 )
@@ -96,7 +97,7 @@ class FlowSenderTests(unittest.TestCase):
             contexto_historico_base(
                 resposta_bot={
                     "id_mensagem": 101,
-                    "id_hash_msg": "simulacao.etapa4",
+                    "id_hash_msg": "wamid.etapa4",
                     "id_etapa": 4,
                 },
                 etapa_atual=4,
@@ -180,7 +181,7 @@ class FlowSenderTests(unittest.TestCase):
         esperado = {
             "enviou": True,
             "resposta_ja_existia": False,
-            "id_hash_msg_bot": "simulacao.etapa4",
+            "id_hash_msg_bot": "wamid.etapa4",
             "id_etapa_resultante": 4,
         }
 
@@ -199,10 +200,35 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
+    def test_etapa4_vai_para_etapa4(self):
+        esperado = {
+            "enviou": True,
+            "envio_simulado": True,
+            "id_hash_msg_bot": "simulacao.etapa5",
+            "id_etapa_resultante": 5,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa4",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=4,
+                    etapa_resposta=5,
+                    etapa_cliente=4,
+                    transicoes={EVENTO_IDADE_VALIDA: 5},
+                )
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
     def test_etapa_nao_implementada_nao_finge_sucesso(self):
         with self.assertRaises(NotImplementedError):
             flow_sender_module.flow_sender(
-                contexto_historico_base(etapa_atual=4, etapa_resposta=5)
+                contexto_historico_base(etapa_atual=5, etapa_resposta=6)
             )
 
 

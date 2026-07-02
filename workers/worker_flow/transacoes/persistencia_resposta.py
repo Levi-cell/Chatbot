@@ -1,6 +1,9 @@
 import logging
 
 from core.repositories.inserts import inserir_historico_mensagem_bot
+from workers.worker_flow.transacoes.encerramento_atendimento import (
+    resolver_intencao_encerramento,
+)
 from workers.worker_flow.transacoes.efeitos_transicao import (
     atualizar_banco_conforme_transicao_de_etapa,
 )
@@ -69,6 +72,10 @@ def atualizar_banco_com_contexto_final(
         contexto_envio,
         cursor,
     )
+    intencao_encerramento = resolver_intencao_encerramento(
+        contexto_historico,
+        contexto_envio,
+    )
 
     logger.info(
         "resposta_bot_persistida | acao=registrar_historico_e_contexto id_conversa=%s id_historico_bot=%s inserido=%s resposta_ja_existia=%s movimento=%s etapa=%s evento=%s id_hash_msg_bot=%s",
@@ -90,6 +97,7 @@ def atualizar_banco_com_contexto_final(
         "movimento_conversa": movimento,
         "atualizar_conversa": movimento != MOVIMENTO_SEM_AVANCO,
         "atualizar_last_from_bot": True,
+        "intencao_encerramento": intencao_encerramento,
     }
 
     if id_historico_bot is not None:

@@ -9,6 +9,8 @@ from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_3_NOME_DEPENDENTE,
     ETAPA_4_IDADE_ALUNO,
+    ETAPA_5_OFERTA_AULA,
+    EVENTO_IDADE_VALIDA,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
@@ -36,6 +38,15 @@ def contexto_transicao_etapa3():
         "id_etapa_origem_transicao": ETAPA_3_NOME_DEPENDENTE,
         "transicoes_permitidas": {
             EVENTO_NOME_DEPENDENTE_VALIDO: ETAPA_4_IDADE_ALUNO,
+        },
+    }
+
+
+def contexto_transicao_etapa4():
+    return {
+        "id_etapa_origem_transicao": ETAPA_4_IDADE_ALUNO,
+        "transicoes_permitidas": {
+            EVENTO_IDADE_VALIDA: ETAPA_5_OFERTA_AULA,
         },
     }
 
@@ -127,6 +138,15 @@ class TransicoesEtapaTests(unittest.TestCase):
         )
 
         self.assertEqual(destino, ETAPA_4_IDADE_ALUNO)
+
+    def test_idade_valida_resolve_etapa5(self):
+        destino = resolver_destino_transicao(
+            contexto_transicao_etapa4(),
+            EVENTO_IDADE_VALIDA,
+            destinos_esperados={ETAPA_5_OFERTA_AULA},
+        )
+
+        self.assertEqual(destino, ETAPA_5_OFERTA_AULA)
 
     def test_evento_ausente_e_recusado_antes_do_envio(self):
         with self.assertRaises(TransicaoEtapaInvalida):

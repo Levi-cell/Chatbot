@@ -226,6 +226,11 @@ class Unidade(models.Model):
     cnpj = models.CharField(unique=True, max_length=50)
     email_responsavel = models.CharField(unique=True, max_length=255)
     telefone = models.CharField(unique=True, max_length=20)
+    numero_comercial = models.CharField(
+        max_length=30,
+        blank=True,
+        null=True,
+    )
     phone_number_id = models.CharField(unique=True, max_length=100)
     link_agendamento = models.CharField(unique=True, max_length=400)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)

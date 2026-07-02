@@ -5,6 +5,9 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
     enviar_etapa3_financeiro,
     enviar_etapa3_midia,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
+    enviar_etapa4_dependente,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -42,9 +45,8 @@ def resolve_etapa3(contexto_historico):
     """
     Mídia, financeiro e nome inválido recebem tratamento sem avançar.
 
-    Nome válido resolve 3 -> 4 e carrega o primeiro nome do dependente para
-    a persistência transacional. A etapa 4 permanece simulada até seu sender
-    real ser implementado.
+    Nome válido resolve 3 -> 4, envia a etapa 4 e carrega o primeiro nome do
+    dependente para a persistência transacional.
     """
     id_conversa = contexto_historico["id_conversa"]
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
@@ -101,7 +103,7 @@ def resolve_etapa3(contexto_historico):
     )
 
     logger.info(
-        "etapa3_nome_dependente_validado | acao=simular_envio_etapa4 id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s primeiro_nome=%s",
+        "etapa3_nome_dependente_validado | acao=enviar_etapa4 id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s primeiro_nome=%s",
         id_conversa,
         mensagem_cliente_atual["id_mensagem_fila"],
         EVENTO_NOME_DEPENDENTE_VALIDO,
@@ -109,9 +111,10 @@ def resolve_etapa3(contexto_historico):
         short_value(resultado_nome.primeiro_nome),
     )
 
-    contexto_envio = _montar_contexto_etapa4_simulada(
-        contexto_historico,
-        etapa_destino,
+    contexto_envio = enviar_etapa4_dependente(
+        cliente_telefone,
+        phone_id_unidade,
+        resultado_nome.primeiro_nome,
     )
     contexto_envio["primeiro_nome_dependente"] = resultado_nome.primeiro_nome
 
@@ -133,30 +136,6 @@ def resolve_etapa3(contexto_historico):
 
 
 
-
-
-def _montar_contexto_etapa4_simulada(
-    contexto_historico,
-    etapa_destino,
-):
-    # TEMPORARIO: remover quando o sender real da etapa 4 existir.
-    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
-    id_mensagem_fila = mensagem_cliente["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "Nesse momento a futura etapa 4 foi enviada.",
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-    }
 
 
 def _logar_tipo_nao_suportado(contexto_historico):

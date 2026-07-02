@@ -244,6 +244,7 @@ def criar_tabelas():
             cnpj VARCHAR(50) UNIQUE NOT NULL,
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
+            numero_comercial VARCHAR(30),
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             status_pagamento BOOLEAN DEFAULT TRUE
@@ -314,6 +315,9 @@ def criar_tabelas():
         -- Os ALTERs mantem o setup idempotente tambem em bancos ja existentes.
         ALTER TABLE chatbot.cliente
         ADD COLUMN IF NOT EXISTS idade INTEGER;
+
+        ALTER TABLE chatbot.unidade
+        ADD COLUMN IF NOT EXISTS numero_comercial VARCHAR(30);
 
         ALTER TABLE chatbot.dependente
         ADD COLUMN IF NOT EXISTS id_conversa INT;
