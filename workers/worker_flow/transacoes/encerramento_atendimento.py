@@ -4,6 +4,7 @@ from core.repositories.encerramento_atendimento import (
     encerrar_conversa,
     excluir_dependente_da_conversa,
 )
+from core.repositories.politicas_etapa import buscar_politica_etapa
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     validar_idade,
 )
@@ -17,15 +18,14 @@ logger = logging.getLogger("worker.support")
 MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
 MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+MOTIVO_ETAPA_FINAL = "etapa_final"
 
 
 def resolver_intencao_encerramento(
     contexto_historico,
     contexto_envio,
+    cursor,
 ):
-    if contexto_envio.get("evento_transicao"):
-        return None
-
     if contexto_envio.get("encerrar_atendimento"):
         return {
             "motivo": contexto_envio["motivo_encerramento"],
@@ -36,9 +36,32 @@ def resolver_intencao_encerramento(
 
     # No retry, a resposta já existe e a decisão é reconstruída pela mesma
     # mensagem original da etapa 4, sem consultar conversas anteriores.
-    if not contexto_envio.get("resposta_ja_existia"):
+    if contexto_envio.get("resposta_ja_existia"):
+        intencao_reconstruida = _reconstruir_encerramento_etapa4(
+            contexto_historico
+        )
+        if intencao_reconstruida:
+            return intencao_reconstruida
+
+    if not contexto_envio.get("evento_transicao"):
         return None
 
+    id_etapa_destino = contexto_envio.get("id_etapa_resultante")
+    politica_destino = buscar_politica_etapa(
+        id_etapa_destino,
+        cursor,
+    )
+
+    if not politica_destino.encerra_automaticamente:
+        return None
+
+    return {
+        "motivo": MOTIVO_ETAPA_FINAL,
+        "excluir_dependente": False,
+    }
+
+
+def _reconstruir_encerramento_etapa4(contexto_historico):
     if (
         contexto_historico.get("id_etapa_origem_transicao")
         != ETAPA_4_IDADE_ALUNO
@@ -89,7 +112,7 @@ def aplicar_encerramento_se_necessario(
     encerrar_conversa(id_conversa, cursor)
 
     logger.info(
-        "atendimento_encerrado | acao=encerrar_sem_bloqueio "
+        "atendimento_encerrado | acao=encerrar_conversa "
         "id_conversa=%s motivo=%s dependente_excluido=%s",
         id_conversa,
         intencao_encerramento["motivo"],

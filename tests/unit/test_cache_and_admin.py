@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from django.contrib import admin, messages
@@ -29,6 +30,18 @@ class FakeRedisUnidade:
 
     def hexists(self, _key, _field):
         return self.presente
+
+
+class FakeRedisBloqueio:
+    def __init__(self):
+        self.payload = None
+        self.ttl = None
+
+    def hset(self, _key, mapping):
+        self.payload = mapping
+
+    def expire(self, _key, ttl):
+        self.ttl = ttl
 
 
 class FakeRequest:
@@ -162,6 +175,30 @@ class CacheAndAdminTests(unittest.TestCase):
             )
 
         self.assertEqual(chamadas, [("5571999999999", "123456")])
+
+    def test_cache_bloqueio_usa_prazo_recebido_do_banco(self):
+        redis_fake = FakeRedisBloqueio()
+        finalizou_em = datetime.now(timezone.utc)
+
+        with patch.object(
+            cache_conversas_bloqueadas,
+            "get_redis_safe",
+            return_value=redis_fake,
+        ):
+            registrado = (
+                cache_conversas_bloqueadas
+                .registrar_bloqueio_conversa_cache(
+                    "5571999999999",
+                    "123456",
+                    finalizou_em,
+                    15,
+                )
+            )
+
+        self.assertTrue(registrado)
+        self.assertEqual(redis_fake.payload["bloqueio_dias"], "15")
+        self.assertGreater(redis_fake.ttl, 14 * 24 * 60 * 60)
+        self.assertLessEqual(redis_fake.ttl, 15 * 24 * 60 * 60)
 
     def test_cache_reset_limpa_prefixos_e_recria_unidades(self):
         fake_redis = FakeRedis()

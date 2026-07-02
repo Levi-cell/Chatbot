@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from workers.worker_flow.transacoes import (
@@ -24,6 +25,7 @@ class EncerramentoEtapa4Tests(unittest.TestCase):
                 "resposta_ja_existia": True,
                 "id_etapa_resultante": 4,
             },
+            object(),
         )
 
         self.assertEqual(
@@ -41,6 +43,7 @@ class EncerramentoEtapa4Tests(unittest.TestCase):
                 "resposta_ja_existia": True,
                 "id_etapa_resultante": 4,
             },
+            object(),
         )
 
         self.assertEqual(
@@ -58,9 +61,85 @@ class EncerramentoEtapa4Tests(unittest.TestCase):
                 "resposta_ja_existia": True,
                 "id_etapa_resultante": 4,
             },
+            object(),
         )
 
         self.assertIsNone(resultado)
+
+    def test_transicao_para_etapa_final_cria_intencao_generica(self):
+        politica = SimpleNamespace(encerra_automaticamente=True)
+
+        with patch.object(
+            encerramento,
+            "buscar_politica_etapa",
+            return_value=politica,
+        ) as buscar:
+            resultado = encerramento.resolver_intencao_encerramento(
+                {
+                    "id_conversa": 10,
+                    "id_etapa_origem_transicao": 6,
+                },
+                {
+                    "evento_transicao": "agendamento_enviado",
+                    "id_etapa_resultante": 7,
+                },
+                object(),
+            )
+
+        buscar.assert_called_once()
+        self.assertEqual(
+            resultado,
+            {
+                "motivo": encerramento.MOTIVO_ETAPA_FINAL,
+                "excluir_dependente": False,
+            },
+        )
+
+    def test_retry_da_transicao_final_reconstroi_encerramento(self):
+        politica = SimpleNamespace(encerra_automaticamente=True)
+
+        with patch.object(
+            encerramento,
+            "buscar_politica_etapa",
+            return_value=politica,
+        ):
+            resultado = encerramento.resolver_intencao_encerramento(
+                {
+                    "id_conversa": 10,
+                    "id_etapa_origem_transicao": 6,
+                },
+                {
+                    "resposta_ja_existia": True,
+                    "evento_transicao": "agendamento_enviado",
+                    "id_etapa_resultante": 7,
+                },
+                object(),
+            )
+
+        self.assertEqual(
+            resultado,
+            {
+                "motivo": encerramento.MOTIVO_ETAPA_FINAL,
+                "excluir_dependente": False,
+            },
+        )
+
+    def test_tratamento_na_etapa4_nao_consulta_politica_nem_encerra(self):
+        with patch.object(
+            encerramento,
+            "buscar_politica_etapa",
+        ) as buscar:
+            resultado = encerramento.resolver_intencao_encerramento(
+                contexto_historico("não sei"),
+                {
+                    "tratamento": True,
+                    "id_etapa_resultante": 4,
+                },
+                object(),
+            )
+
+        self.assertIsNone(resultado)
+        buscar.assert_not_called()
 
     def test_aplicacao_exclui_dependente_antes_de_encerrar(self):
         chamadas = []

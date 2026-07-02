@@ -615,9 +615,16 @@ class EtapaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     list_display = (
         "id_etapa",
         "nome_etapa",
+        "encerra_automaticamente",
+        "bloqueio_dias",
+        "elegivel_funil",
     )
 
     search_fields = ("nome_etapa",)
+    list_filter = (
+        "encerra_automaticamente",
+        "elegivel_funil",
+    )
     ordering = ("id_etapa",)
 
     list_per_page = 50

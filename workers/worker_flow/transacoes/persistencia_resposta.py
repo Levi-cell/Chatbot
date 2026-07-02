@@ -75,6 +75,7 @@ def atualizar_banco_com_contexto_final(
     intencao_encerramento = resolver_intencao_encerramento(
         contexto_historico,
         contexto_envio,
+        cursor,
     )
 
     logger.info(

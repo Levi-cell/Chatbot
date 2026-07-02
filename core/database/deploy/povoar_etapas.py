@@ -7,13 +7,13 @@ logger = logging.getLogger("db.seed")
 
 
 ETAPAS = (
-    (1, "Saudação e nome do cliente"),
-    (2, "Destino do atendimento"),
-    (3, "Nome do dependente"),
-    (4, "Idade do aluno"),
-    (5, "Oferta de aula experimental e avaliação cognitiva"),
-    (6, "Email"),
-    (7, "Link de agendamento e entrada no funil"),
+    (1, "Saudação e nome do cliente", False, 0, False),
+    (2, "Destino do atendimento", False, 0, False),
+    (3, "Nome do dependente", False, 0, False),
+    (4, "Idade do aluno", False, 0, False),
+    (5,  "Oferta de aula experimental e avaliação cognitiva", False, 0, False),
+    (6, "Email", False, 0, False),
+    (7,"Link de agendamento e entrada no funil", True, 30, True),
 )
 
 
@@ -26,10 +26,21 @@ def insere_etapa_once():
 
         cursor.executemany(
             """
-            INSERT INTO chatbot.etapa (id_etapa, nome_etapa)
-            VALUES (%s, %s)
+            INSERT INTO chatbot.etapa (
+                id_etapa,
+                nome_etapa,
+                encerra_automaticamente,
+                bloqueio_dias,
+                elegivel_funil
+            )
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (id_etapa)
-            DO UPDATE SET nome_etapa = EXCLUDED.nome_etapa;
+            DO UPDATE SET
+                nome_etapa = EXCLUDED.nome_etapa,
+                encerra_automaticamente =
+                    EXCLUDED.encerra_automaticamente,
+                bloqueio_dias = EXCLUDED.bloqueio_dias,
+                elegivel_funil = EXCLUDED.elegivel_funil;
             """,
             ETAPAS,
         )
@@ -62,4 +73,3 @@ def insere_etapa_once():
     finally:
         if conn:
             conn.close()
-

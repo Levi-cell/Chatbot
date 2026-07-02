@@ -137,26 +137,32 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
         ),
         ultima_conversa AS (
             SELECT
-                id_conversa,
-                id_etapa_atual,
-                status_ativa,
-                finalizou_em,
+                c.id_conversa,
+                c.id_etapa_atual,
+                c.status_ativa,
+                c.finalizou_em,
                 CASE
-                    WHEN id_etapa_atual = 7
-                     AND finalizou_em > NOW() - INTERVAL '30 days'
+                    WHEN COALESCE(e.bloqueio_dias, 0) > 0
+                     AND c.finalizou_em
+                         > NOW() - (
+                             COALESCE(e.bloqueio_dias, 0)
+                             * INTERVAL '1 day'
+                         )
                     THEN 'bloqueada'
                     ELSE 'liberada'
                 END AS estado,
-                status_dependente,
-                last_message_from,
-                followup_stage,
-                followup_last_sent_at,
-                lead_no_funil
-            FROM chatbot.conversa
-            WHERE id_cliente = %s
-              AND id_unidade = %s
-              AND status_ativa = FALSE
-            ORDER BY finalizou_em DESC
+                c.status_dependente,
+                c.last_message_from,
+                c.followup_stage,
+                c.followup_last_sent_at,
+                c.lead_no_funil
+            FROM chatbot.conversa c
+            LEFT JOIN chatbot.etapa e
+              ON e.id_etapa = c.id_etapa_atual
+            WHERE c.id_cliente = %s
+              AND c.id_unidade = %s
+              AND c.status_ativa = FALSE
+            ORDER BY c.finalizou_em DESC
             LIMIT 1
         )
         SELECT
@@ -200,53 +206,6 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
         resultado[4] if resultado else None,
     )
     return resultado
-
-
-def buscar_finalizou_em_conversa(id_conversa, cursor):
-    cursor.execute("""
-        SELECT finalizou_em
-        FROM chatbot.conversa
-        WHERE id_conversa = %s
-        LIMIT 1;
-    """, (id_conversa,))
-
-    resultado = cursor.fetchone()
-    logger.debug(
-        "conversa_finalizacao_consultada | acao=buscar_finalizou_em id_conversa=%s encontrada=%s",
-        id_conversa,
-        bool(resultado),
-    )
-    return resultado[0] if resultado else None
-
-
-def buscar_conversa_bloqueada_por_cliente_unidade(
-    cliente_telefone,
-    id_phone_unidade,
-    cursor,
-):
-    cursor.execute("""
-        SELECT c.finalizou_em
-        FROM chatbot.conversa c
-        JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
-        WHERE cl.waid_telefone = %s
-          AND u.phone_number_id = %s
-          AND u.status_pagamento = TRUE
-          AND c.status_ativa = FALSE
-          AND c.id_etapa_atual = 7
-          AND c.finalizou_em > NOW() - INTERVAL '30 days'
-        ORDER BY c.finalizou_em DESC
-        LIMIT 1;
-    """, (cliente_telefone, id_phone_unidade))
-
-    resultado = cursor.fetchone()
-    logger.debug(
-        "conversa_bloqueada_consultada | acao=buscar_bloqueio cliente=%s phone_number_id=%s bloqueada=%s",
-        cliente_telefone,
-        id_phone_unidade,
-        bool(resultado),
-    )
-    return resultado[0] if resultado else None
 
 
 def existe_mensagem_anterior_aberta_conversa(

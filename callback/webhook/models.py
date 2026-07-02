@@ -86,6 +86,9 @@ class Conversa(models.Model):
 class Etapa(models.Model):
     id_etapa = models.AutoField(primary_key=True)
     nome_etapa = models.CharField(unique=True, max_length=100)
+    encerra_automaticamente = models.BooleanField(default=False)
+    bloqueio_dias = models.PositiveIntegerField(default=0)
+    elegivel_funil = models.BooleanField(default=False)
 
     class Meta:
         managed = False

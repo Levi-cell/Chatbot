@@ -5,14 +5,14 @@ from datetime import datetime, timedelta, timezone
 from core.database.connection_aws import get_conn
 from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
-from core.repositories.querys import buscar_conversa_bloqueada_por_cliente_unidade
+from core.repositories.politicas_etapa import (
+    buscar_bloqueio_ativo_por_cliente_unidade,
+)
 
 
 logger = logging.getLogger("cache.bloqueia_conversa")
 
 REDIS_PREFIX = "conversa_bloqueada"
-BLOQUEIO_DIAS = 30
-TTL_PADRAO_SEGUNDOS = BLOQUEIO_DIAS * 24 * 60 * 60
 
 
 def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
@@ -42,7 +42,8 @@ def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
 def registrar_bloqueio_conversa_cache(
     cliente_telefone,
     id_phone_unidade,
-    finalizou_em=None,
+    finalizou_em,
+    bloqueio_dias,
     redis_retries=1,
     redis_delay=0,
 ):
@@ -51,7 +52,7 @@ def registrar_bloqueio_conversa_cache(
     if key is None:
         return False
 
-    ttl = _calcular_ttl(finalizou_em)
+    ttl = _calcular_ttl(finalizou_em, bloqueio_dias)
 
     if ttl <= 0:
         logger.info(
@@ -65,6 +66,7 @@ def registrar_bloqueio_conversa_cache(
         "cliente_telefone": str(cliente_telefone),
         "id_phone_unidade": str(id_phone_unidade),
         "finalizou_em": str(finalizou_em) if finalizou_em else "",
+        "bloqueio_dias": str(bloqueio_dias),
     }
 
     try:
@@ -125,13 +127,13 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
         conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
 
-        finalizou_em = buscar_conversa_bloqueada_por_cliente_unidade(
+        bloqueio = buscar_bloqueio_ativo_por_cliente_unidade(
             cliente_telefone,
             id_phone_unidade,
             cursor,
         )
 
-        if finalizou_em is None:
+        if bloqueio is None:
             remover_bloqueio_conversa_cache(
                 cliente_telefone,
                 id_phone_unidade,
@@ -143,7 +145,8 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
         registrar_bloqueio_conversa_cache(
             cliente_telefone,
             id_phone_unidade,
-            finalizou_em,
+            bloqueio.finalizou_em,
+            bloqueio.bloqueio_dias,
             redis_retries=1,
             redis_delay=0,
         )
@@ -214,9 +217,12 @@ def _normalizar(valor):
     return texto or None
 
 
-def _calcular_ttl(finalizou_em):
+def _calcular_ttl(finalizou_em, bloqueio_dias):
+    if bloqueio_dias <= 0:
+        return 0
+
     if finalizou_em is None:
-        return TTL_PADRAO_SEGUNDOS
+        return bloqueio_dias * 24 * 60 * 60
 
     if isinstance(finalizou_em, str):
         finalizou_em = datetime.fromisoformat(finalizou_em)
@@ -224,7 +230,7 @@ def _calcular_ttl(finalizou_em):
     if finalizou_em.tzinfo is None:
         finalizou_em = finalizou_em.replace(tzinfo=timezone.utc)
 
-    bloqueado_ate = finalizou_em + timedelta(days=BLOQUEIO_DIAS)
+    bloqueado_ate = finalizou_em + timedelta(days=bloqueio_dias)
     agora = datetime.now(timezone.utc)
 
     return int((bloqueado_ate - agora).total_seconds())

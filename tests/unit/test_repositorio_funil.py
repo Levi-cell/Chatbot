@@ -29,26 +29,22 @@ class RepositorioFunilTests(unittest.TestCase):
         cursor = CursorFake(fetchall=[(10,), (20,)])
 
         resultado = listar_conversas_pendentes_funil(
-            7,
             cursor,
             limite=50,
         )
 
         self.assertEqual(resultado, [10, 20])
-        self.assertEqual(cursor.params, (7, 50))
-        self.assertIn("id_etapa_atual = %s", cursor.sql)
-        self.assertIn("status_ativa = FALSE", cursor.sql)
-        self.assertIn("finalizou_em IS NOT NULL", cursor.sql)
-        self.assertIn("lead_no_funil IS NOT TRUE", cursor.sql)
+        self.assertEqual(cursor.params, (50,))
+        self.assertIn("e.elegivel_funil = TRUE", cursor.sql)
+        self.assertIn("c.status_ativa = FALSE", cursor.sql)
+        self.assertIn("c.finalizou_em IS NOT NULL", cursor.sql)
+        self.assertIn("c.lead_no_funil IS NOT TRUE", cursor.sql)
 
-    def test_rejeita_etapa_final_ou_limite_invalidos(self):
+    def test_rejeita_limite_invalido(self):
         cursor = CursorFake()
 
         with self.assertRaises(ValueError):
-            listar_conversas_pendentes_funil(0, cursor)
-
-        with self.assertRaises(ValueError):
-            listar_conversas_pendentes_funil(7, cursor, limite=0)
+            listar_conversas_pendentes_funil(cursor, limite=0)
 
     def test_marca_envio_ao_funil_com_sucesso(self):
         cursor = CursorFake(fetchone=(10,))
@@ -61,7 +57,10 @@ class RepositorioFunilTests(unittest.TestCase):
         self.assertTrue(atualizado)
         self.assertEqual(cursor.params, (10,))
         self.assertIn("SET lead_no_funil = TRUE", cursor.sql)
-        self.assertIn("lead_no_funil IS NOT TRUE", cursor.sql)
+        self.assertIn("e.elegivel_funil = TRUE", cursor.sql)
+        self.assertIn("c.status_ativa = FALSE", cursor.sql)
+        self.assertIn("c.finalizou_em IS NOT NULL", cursor.sql)
+        self.assertIn("c.lead_no_funil IS NOT TRUE", cursor.sql)
 
     def test_marcacao_repetida_e_idempotente(self):
         cursor = CursorFake(fetchone=None)

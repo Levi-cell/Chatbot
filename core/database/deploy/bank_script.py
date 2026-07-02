@@ -253,7 +253,12 @@ def criar_tabelas():
         -- ETAPA
         CREATE TABLE IF NOT EXISTS chatbot.etapa (
             id_etapa SERIAL PRIMARY KEY,
-            nome_etapa VARCHAR(100) UNIQUE NOT NULL
+            nome_etapa VARCHAR(100) UNIQUE NOT NULL,
+            encerra_automaticamente BOOLEAN NOT NULL DEFAULT FALSE,
+            bloqueio_dias INTEGER NOT NULL DEFAULT 0,
+            elegivel_funil BOOLEAN NOT NULL DEFAULT FALSE,
+            CONSTRAINT ck_etapa_bloqueio_dias
+                CHECK (bloqueio_dias >= 0)
         );
 
         -- CONVERSA
@@ -311,6 +316,11 @@ def criar_tabelas():
         INCLUDE (id_conversa, id_etapa_atual)
         WHERE status_ativa = FALSE;
 
+        CREATE INDEX IF NOT EXISTS idx_conversa_funil_pendente
+        ON chatbot.conversa (id_etapa_atual, finalizou_em)
+        WHERE status_ativa = FALSE
+          AND lead_no_funil IS NOT TRUE;
+
         -- CAMPOS DA TRANSICAO ENTRE AS ETAPAS 2 E 3.
         -- Os ALTERs mantem o setup idempotente tambem em bancos ja existentes.
         ALTER TABLE chatbot.cliente
@@ -318,6 +328,59 @@ def criar_tabelas():
 
         ALTER TABLE chatbot.unidade
         ADD COLUMN IF NOT EXISTS numero_comercial VARCHAR(30);
+
+        -- POLITICAS DE COMPORTAMENTO DAS ETAPAS.
+        -- Os defaults reproduzem uma etapa comum: não encerra, não bloqueia
+        -- e não envia ao funil até o seed declarar expressamente o contrário.
+        ALTER TABLE chatbot.etapa
+        ADD COLUMN IF NOT EXISTS encerra_automaticamente
+            BOOLEAN NOT NULL DEFAULT FALSE;
+
+        ALTER TABLE chatbot.etapa
+        ADD COLUMN IF NOT EXISTS bloqueio_dias
+            INTEGER NOT NULL DEFAULT 0;
+
+        ALTER TABLE chatbot.etapa
+        ADD COLUMN IF NOT EXISTS elegivel_funil
+            BOOLEAN NOT NULL DEFAULT FALSE;
+
+        UPDATE chatbot.etapa
+        SET
+            encerra_automaticamente = COALESCE(
+                encerra_automaticamente,
+                FALSE
+            ),
+            bloqueio_dias = COALESCE(bloqueio_dias, 0),
+            elegivel_funil = COALESCE(elegivel_funil, FALSE);
+
+        ALTER TABLE chatbot.etapa
+        ALTER COLUMN encerra_automaticamente SET NOT NULL,
+        ALTER COLUMN bloqueio_dias SET NOT NULL,
+        ALTER COLUMN elegivel_funil SET NOT NULL;
+
+        -- Proteção para deploy parcial: a regra atual da etapa 7 já fica
+        -- preservada nesta mesma transação, antes mesmo da execução do seed.
+        UPDATE chatbot.etapa
+        SET
+            encerra_automaticamente = TRUE,
+            bloqueio_dias = 30,
+            elegivel_funil = TRUE
+        WHERE id_etapa = 7;
+
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname = 'ck_etapa_bloqueio_dias'
+                  AND conrelid = 'chatbot.etapa'::regclass
+            ) THEN
+                ALTER TABLE chatbot.etapa
+                ADD CONSTRAINT ck_etapa_bloqueio_dias
+                CHECK (bloqueio_dias >= 0);
+            END IF;
+        END
+        $$;
 
         ALTER TABLE chatbot.dependente
         ADD COLUMN IF NOT EXISTS id_conversa INT;

@@ -4,6 +4,7 @@ import unittest
 from core.database.deploy import (
     bank_script,
     etapa_transicao_script,
+    povoar_etapas,
     setup_database,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -42,6 +43,36 @@ class DeployContractTests(unittest.TestCase):
         self.assertIn("ADD COLUMN IF NOT EXISTS id_conversa INT", source)
         self.assertIn("dependente_id_conversa_fkey", source)
         self.assertIn("uq_dependente_conversa", source)
+
+    def test_etapa_possui_politicas_escalaveis(self):
+        source = inspect.getsource(bank_script.criar_tabelas)
+
+        self.assertIn("encerra_automaticamente BOOLEAN", source)
+        self.assertIn("bloqueio_dias INTEGER", source)
+        self.assertIn("elegivel_funil BOOLEAN", source)
+        self.assertIn("ck_etapa_bloqueio_dias", source)
+        self.assertIn("idx_conversa_funil_pendente", source)
+        self.assertIn("WHERE id_etapa = 7", source)
+
+    def test_seed_preserva_bloqueio_atual_somente_na_etapa_7(self):
+        etapa_final = povoar_etapas.ETAPAS[-1]
+
+        self.assertEqual(etapa_final[0], 7)
+        self.assertTrue(etapa_final[2])
+        self.assertEqual(etapa_final[3], 30)
+        self.assertTrue(etapa_final[4])
+        self.assertTrue(
+            all(
+                not encerra and dias == 0 and not funil
+                for (
+                    _id,
+                    _nome,
+                    encerra,
+                    dias,
+                    funil,
+                ) in povoar_etapas.ETAPAS[:-1]
+            )
+        )
 
     def test_tabela_transicao_possui_restricoes_de_seguranca(self):
         source = inspect.getsource(
