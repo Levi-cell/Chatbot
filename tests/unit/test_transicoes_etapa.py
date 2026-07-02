@@ -7,8 +7,8 @@ from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     prever_etapa_resposta,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_IDADE_ALUNO,
-    ETAPA_NOME_DEPENDENTE,
+    ETAPA_3_NOME_DEPENDENTE,
+    ETAPA_4_IDADE_ALUNO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
@@ -25,17 +25,17 @@ def contexto_transicoes():
     return {
         "id_etapa_origem_transicao": 2,
         "transicoes_permitidas": {
-            EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
-            EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
+            EVENTO_PARA_MIM: ETAPA_4_IDADE_ALUNO,
+            EVENTO_PARA_OUTRA_PESSOA: ETAPA_3_NOME_DEPENDENTE,
         },
     }
 
 
 def contexto_transicao_etapa3():
     return {
-        "id_etapa_origem_transicao": ETAPA_NOME_DEPENDENTE,
+        "id_etapa_origem_transicao": ETAPA_3_NOME_DEPENDENTE,
         "transicoes_permitidas": {
-            EVENTO_NOME_DEPENDENTE_VALIDO: ETAPA_IDADE_ALUNO,
+            EVENTO_NOME_DEPENDENTE_VALIDO: ETAPA_4_IDADE_ALUNO,
         },
     }
 
@@ -43,8 +43,8 @@ def contexto_transicao_etapa3():
 class TransicoesEtapaTests(unittest.TestCase):
     def test_resultado_da_consulta_vira_contexto_explicito(self):
         transicoes = {
-            EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
-            EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
+            EVENTO_PARA_MIM: ETAPA_4_IDADE_ALUNO,
+            EVENTO_PARA_OUTRA_PESSOA: ETAPA_3_NOME_DEPENDENTE,
         }
 
         resultado = montar_contexto_transicao(2, transicoes)
@@ -65,8 +65,8 @@ class TransicoesEtapaTests(unittest.TestCase):
         resultado = prever_etapa_resposta(
             2,
             {
-                EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
-                EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
+                EVENTO_PARA_MIM: ETAPA_4_IDADE_ALUNO,
+                EVENTO_PARA_OUTRA_PESSOA: ETAPA_3_NOME_DEPENDENTE,
             },
             etapa_inicial=1,
         )
@@ -76,10 +76,10 @@ class TransicoesEtapaTests(unittest.TestCase):
     def test_repositorio_carrega_eventos_e_destinos(self):
         cursor = FakeCursor(
             fetchall_result=[
-                (EVENTO_PARA_MIM, ETAPA_IDADE_ALUNO),
+                (EVENTO_PARA_MIM, ETAPA_4_IDADE_ALUNO),
                 (
                     EVENTO_PARA_OUTRA_PESSOA,
-                    ETAPA_NOME_DEPENDENTE,
+                    ETAPA_3_NOME_DEPENDENTE,
                 ),
             ]
         )
@@ -92,8 +92,8 @@ class TransicoesEtapaTests(unittest.TestCase):
         self.assertEqual(
             resultado,
             {
-                EVENTO_PARA_MIM: ETAPA_IDADE_ALUNO,
-                EVENTO_PARA_OUTRA_PESSOA: ETAPA_NOME_DEPENDENTE,
+                EVENTO_PARA_MIM: ETAPA_4_IDADE_ALUNO,
+                EVENTO_PARA_OUTRA_PESSOA: ETAPA_3_NOME_DEPENDENTE,
             },
         )
         sql, params = cursor.calls[0]
@@ -105,28 +105,28 @@ class TransicoesEtapaTests(unittest.TestCase):
         destino = resolver_destino_transicao(
             contexto_transicoes(),
             EVENTO_PARA_MIM,
-            destinos_esperados={ETAPA_IDADE_ALUNO},
+            destinos_esperados={ETAPA_4_IDADE_ALUNO},
         )
 
-        self.assertEqual(destino, ETAPA_IDADE_ALUNO)
+        self.assertEqual(destino, ETAPA_4_IDADE_ALUNO)
 
     def test_para_outra_pessoa_resolve_etapa3(self):
         destino = resolver_destino_transicao(
             contexto_transicoes(),
             EVENTO_PARA_OUTRA_PESSOA,
-            destinos_esperados={ETAPA_NOME_DEPENDENTE},
+            destinos_esperados={ETAPA_3_NOME_DEPENDENTE},
         )
 
-        self.assertEqual(destino, ETAPA_NOME_DEPENDENTE)
+        self.assertEqual(destino, ETAPA_3_NOME_DEPENDENTE)
 
     def test_nome_dependente_valido_resolve_etapa4(self):
         destino = resolver_destino_transicao(
             contexto_transicao_etapa3(),
             EVENTO_NOME_DEPENDENTE_VALIDO,
-            destinos_esperados={ETAPA_IDADE_ALUNO},
+            destinos_esperados={ETAPA_4_IDADE_ALUNO},
         )
 
-        self.assertEqual(destino, ETAPA_IDADE_ALUNO)
+        self.assertEqual(destino, ETAPA_4_IDADE_ALUNO)
 
     def test_evento_ausente_e_recusado_antes_do_envio(self):
         with self.assertRaises(TransicaoEtapaInvalida):
@@ -143,7 +143,7 @@ class TransicoesEtapaTests(unittest.TestCase):
             resolver_destino_transicao(
                 contexto,
                 EVENTO_PARA_MIM,
-                destinos_esperados={ETAPA_IDADE_ALUNO},
+                destinos_esperados={ETAPA_4_IDADE_ALUNO},
             )
 
     def test_sender_nao_pode_retornar_destino_diferente(self):
@@ -155,7 +155,7 @@ class TransicoesEtapaTests(unittest.TestCase):
                     "enviou": True,
                 },
                 EVENTO_PARA_MIM,
-                ETAPA_IDADE_ALUNO,
+                ETAPA_4_IDADE_ALUNO,
             )
 
     def test_tratamento_nao_pode_carregar_evento(self):
@@ -163,18 +163,18 @@ class TransicoesEtapaTests(unittest.TestCase):
             anexar_transicao_ao_contexto_envio(
                 contexto_transicoes(),
                 {
-                    "id_etapa_resultante": ETAPA_IDADE_ALUNO,
+                    "id_etapa_resultante": ETAPA_4_IDADE_ALUNO,
                     "enviou": True,
                     "tratamento": True,
                 },
                 EVENTO_PARA_MIM,
-                ETAPA_IDADE_ALUNO,
+                ETAPA_4_IDADE_ALUNO,
             )
 
     def test_retry_reconstroi_evento_pelo_destino(self):
         evento = identificar_evento_por_destino(
             contexto_transicoes(),
-            ETAPA_IDADE_ALUNO,
+            ETAPA_4_IDADE_ALUNO,
         )
 
         self.assertEqual(evento, EVENTO_PARA_MIM)

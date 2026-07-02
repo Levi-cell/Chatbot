@@ -279,8 +279,8 @@ Contém orquestração de respostas:
 - `flow_worker.py`: ciclo e transações;
 - `flow_sender.py`: preservação da idempotência e seleção do resolver da etapa
   atual;
-- `etapas/<etapa>.py`: validação da etapa atual e encaminhamento para o destino
-  autorizado;
+- `etapas/etapa<n>_worker.py`: validação da etapa atual e encaminhamento para o
+  destino autorizado;
 - `etapas/validadores_universais/`: validações reutilizáveis entre etapas;
 - `etapas/validadores_contexto/`: validações específicas da pergunta atual;
 - `transicoes/contexto_transicao.py`: montagem explícita da fotografia de
@@ -299,6 +299,51 @@ as transições permitidas para a origem e transporta a decisão no contexto. A
 persistência final revalida a mesma aresta no PostgreSQL antes do commit.
 
 Tratamentos não produzem evento de transição e permanecem na etapa atual.
+
+Todo resolver de etapa deve marcar explicitamente a fronteira entre validação e
+resolução do destino. O marcador fica depois de todos os retornos de tratamento
+e imediatamente antes da consulta ao mapa:
+
+```python
+# VALIDANDO DESTINO(S)
+# A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+etapa_destino = resolver_destino_transicao(...)
+```
+
+Antes dessa fronteira, o resolver apenas valida a resposta e pode permanecer na
+etapa atual. Depois dela, a resposta já é válida: o código resolve o destino,
+chama o sender correspondente e anexa a transição ao contexto de envio.
+
+### Constantes e efeitos de etapa
+
+Toda constante de estado deve mostrar o número persistido e o significado:
+
+```python
+ETAPA_1_NOME_CLIENTE = 1
+ETAPA_2_DESTINO_ATENDIMENTO = 2
+ETAPA_3_NOME_DEPENDENTE = 3
+ETAPA_4_IDADE_ALUNO = 4
+```
+
+Não usar números mágicos como `etapa_origem == 2` e não omitir o número no nome
+da constante. Esse padrão permite localizar a etapa sem perder seu significado.
+
+Em `transacoes/efeitos_transicao.py`, os efeitos devem ser agrupados primeiro
+pela etapa de origem e depois pelo evento:
+
+```python
+# ETAPA 2
+if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
+    if evento == EVENTO_PARA_MIM:
+        # 2 -> 4
+
+    if evento == EVENTO_PARA_OUTRA_PESSOA:
+        # 2 -> 3
+```
+
+Cada comentário de evento deve mostrar `origem -> destino`. A tabela
+`etapa_transicao` continua sendo a fonte de verdade, e o código apenas torna
+visíveis os efeitos de cada aresta autorizada.
 
 ### Tratamento de erros
 

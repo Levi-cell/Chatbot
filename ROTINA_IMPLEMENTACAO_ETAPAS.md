@@ -116,6 +116,21 @@ Exemplo:
 EVENTO_NOME_DEPENDENTE_VALIDO = "nome_dependente_valido"
 ```
 
+As constantes de etapa devem incluir número e significado:
+
+```python
+ETAPA_1_NOME_CLIENTE = 1
+ETAPA_2_DESTINO_ATENDIMENTO = 2
+ETAPA_3_NOME_DEPENDENTE = 3
+ETAPA_4_IDADE_ALUNO = 4
+```
+
+Para novas etapas, seguir obrigatoriamente:
+
+```text
+ETAPA_<NÚMERO>_<SIGNIFICADO>
+```
+
 Registrar a aresta em:
 
 ```text
@@ -280,9 +295,17 @@ Ordem recomendada:
 2. validar pergunta financeira
 3. validar contexto específico
 4. produzir evento
-5. resolver destino pelo mapa
-6. chamar o sender correspondente
-7. anexar origem, evento e destino ao contexto de envio
+5. marcar a fronteira VALIDANDO DESTINO(S)
+6. resolver destino pelo mapa
+7. chamar o sender correspondente
+8. anexar origem, evento e destino ao contexto de envio
+```
+
+O marcador obrigatório deve aparecer depois de todos os tratamentos:
+
+```python
+# VALIDANDO DESTINO(S)
+# A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
 ```
 
 Modelo:
@@ -306,7 +329,7 @@ def resolve_etapa3(contexto_historico):
     destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_NOME_DEPENDENTE_VALIDO,
-        destinos_esperados={ETAPA_IDADE_ALUNO},
+        destinos_esperados={ETAPA_4_IDADE_ALUNO},
     )
 
     contexto_envio = enviar_quarta_etapa(...)
@@ -365,11 +388,13 @@ A navegação já foi escolhida pela tabela. Esse arquivo grava somente os efeit
 específicos da aresta e deve deixar cada ponte visualmente explícita:
 
 ```python
-if etapa_origem == ETAPA_DESTINO_ATENDIMENTO and evento == EVENTO_PARA_MIM:
-    # 2 -> 4
+# ETAPA 2
+if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
+    if evento == EVENTO_PARA_MIM:
+        # 2 -> 4
 
-if etapa_origem == ETAPA_DESTINO_ATENDIMENTO and evento == EVENTO_PARA_OUTRA_PESSOA:
-    # 2 -> 3
+    if evento == EVENTO_PARA_OUTRA_PESSOA:
+        # 2 -> 3
 ```
 
 Exemplos:

@@ -25,7 +25,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
     validar_nome_cliente,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_DESTINO_ATENDIMENTO,
+    ETAPA_2_DESTINO_ATENDIMENTO,
     EVENTO_NOME_CLIENTE_VALIDO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -103,6 +103,8 @@ def resolve_etapa1(contexto_historico):
             phone_id_unidade,
         )
 
+    ### VALIDANDO NOME
+
     resultado_nome = validar_nome_cliente(texto_cliente)
 
     if not resultado_nome.valido:
@@ -117,12 +119,12 @@ def resolve_etapa1(contexto_historico):
             phone_id_unidade,
         )
 
-    # A tabela precisa autorizar 1 + nome_cliente_valido -> 2 antes da
-    # comunicação externa. Mapa ausente ou incorreto impede o envio.
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_NOME_CLIENTE_VALIDO,
-        destinos_esperados={ETAPA_DESTINO_ATENDIMENTO},
+        destinos_esperados={ETAPA_2_DESTINO_ATENDIMENTO},
     )
 
     logger.debug(
@@ -146,6 +148,22 @@ def resolve_etapa1(contexto_historico):
         EVENTO_NOME_CLIENTE_VALIDO,
         etapa_destino,
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _logar_tipo_nao_suportado(contexto_historico):

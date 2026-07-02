@@ -4,7 +4,7 @@ from core.repositories.updates import (
     inicializar_conversa_resposta_bot,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_NOME_CLIENTE,
+    ETAPA_1_NOME_CLIENTE,
 )
 
 
@@ -74,7 +74,7 @@ def resolver_movimento_conversa(
 
     # Primeiro contato: apenas apresenta a etapa 1, sem transição.
     if etapa_atual is None:
-        if etapa_destino != ETAPA_NOME_CLIENTE:
+        if etapa_destino != ETAPA_1_NOME_CLIENTE:
             raise ValueError(
                 "Conversa sem etapa so pode ser inicializada na etapa 1"
             )

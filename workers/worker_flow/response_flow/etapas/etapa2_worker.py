@@ -23,8 +23,8 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2
     validar_etapa2,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_IDADE_ALUNO,
-    ETAPA_NOME_DEPENDENTE,
+    ETAPA_3_NOME_DEPENDENTE,
+    ETAPA_4_IDADE_ALUNO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -98,6 +98,9 @@ def resolve_etapa2(contexto_historico):
             phone_id_unidade,
         )
 
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+
     destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
@@ -142,12 +145,25 @@ def resolve_etapa2(contexto_historico):
     )
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 def _destinos_esperados_por_evento(evento_transicao):
     if evento_transicao == OPCAO_PARA_MIM:
-        return {ETAPA_IDADE_ALUNO}
+        return {ETAPA_4_IDADE_ALUNO}
 
     if evento_transicao == OPCAO_PARA_OUTRA_PESSOA:
-        return {ETAPA_NOME_DEPENDENTE}
+        return {ETAPA_3_NOME_DEPENDENTE}
 
     return set()
 

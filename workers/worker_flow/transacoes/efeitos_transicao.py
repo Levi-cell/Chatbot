@@ -11,10 +11,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
     validar_nome_cliente,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_DESTINO_ATENDIMENTO,
-    ETAPA_IDADE_ALUNO,
-    ETAPA_NOME_CLIENTE,
-    ETAPA_NOME_DEPENDENTE,
+    ETAPA_1_NOME_CLIENTE,
+    ETAPA_2_DESTINO_ATENDIMENTO,
+    ETAPA_3_NOME_DEPENDENTE,
+    ETAPA_4_IDADE_ALUNO,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PARA_MIM,
@@ -46,77 +46,71 @@ def atualizar_banco_conforme_transicao_de_etapa(
     if not evento:
         return None
 
-    # Etapa 1 -> 2: o cliente informou o próprio nome.
-    if (
-        etapa_origem == ETAPA_NOME_CLIENTE
-        and evento == EVENTO_NOME_CLIENTE_VALIDO
-    ):
-        _exigir_destino(
-            etapa_origem,
-            evento,
-            etapa_destino,
-            ETAPA_DESTINO_ATENDIMENTO,
-        )
-        return _persistir_nome_cliente_capturado_na_etapa1(
-            contexto_historico,
-            contexto_envio,
-            cursor,
-        )
+    # ETAPA 1
+    if etapa_origem == ETAPA_1_NOME_CLIENTE:
+        # 1 -> 2: o cliente informou o próprio nome.
+        if evento == EVENTO_NOME_CLIENTE_VALIDO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_2_DESTINO_ATENDIMENTO,
+            )
+            return _persistir_nome_cliente_capturado_na_etapa1(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
 
-    # Etapa 2 -> 4: o atendimento será para o próprio cliente.
-    if (
-        etapa_origem == ETAPA_DESTINO_ATENDIMENTO
-        and evento == EVENTO_PARA_MIM
-    ):
-        _exigir_destino(
-            etapa_origem,
-            evento,
-            etapa_destino,
-            ETAPA_IDADE_ALUNO,
-        )
-        return _persistir_destino_atendimento_da_etapa2(
-            contexto_historico,
-            evento,
-            etapa_destino,
-            status_dependente=False,
-            cursor=cursor,
-        )
+    # ETAPA 2
+    if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
+        # 2 -> 4: o atendimento será para o próprio cliente.
+        if evento == EVENTO_PARA_MIM:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_4_IDADE_ALUNO,
+            )
+            return _persistir_destino_atendimento_da_etapa2(
+                contexto_historico,
+                evento,
+                etapa_destino,
+                status_dependente=False,
+                cursor=cursor,
+            )
 
-    # Etapa 2 -> 3: o atendimento será para um dependente.
-    if (
-        etapa_origem == ETAPA_DESTINO_ATENDIMENTO
-        and evento == EVENTO_PARA_OUTRA_PESSOA
-    ):
-        _exigir_destino(
-            etapa_origem,
-            evento,
-            etapa_destino,
-            ETAPA_NOME_DEPENDENTE,
-        )
-        return _persistir_destino_atendimento_da_etapa2(
-            contexto_historico,
-            evento,
-            etapa_destino,
-            status_dependente=True,
-            cursor=cursor,
-        )
+        # 2 -> 3: o atendimento será para um dependente.
+        if evento == EVENTO_PARA_OUTRA_PESSOA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_3_NOME_DEPENDENTE,
+            )
+            return _persistir_destino_atendimento_da_etapa2(
+                contexto_historico,
+                evento,
+                etapa_destino,
+                status_dependente=True,
+                cursor=cursor,
+            )
 
-    # Etapa 3 -> 4: o cliente informou o nome do dependente.
-    if (
-        etapa_origem == ETAPA_NOME_DEPENDENTE
-        and evento == EVENTO_NOME_DEPENDENTE_VALIDO
-    ):
-        _exigir_destino(
-            etapa_origem,
-            evento,
-            etapa_destino,
-            ETAPA_IDADE_ALUNO,
-        )
-        return _persistir_nome_dependente_capturado_na_etapa3(
-            contexto_historico,
-            contexto_envio,
-            cursor,
-        )
+    # ETAPA 3
+    if etapa_origem == ETAPA_3_NOME_DEPENDENTE:
+        # 3 -> 4: o cliente informou o nome do dependente.
+        if evento == EVENTO_NOME_DEPENDENTE_VALIDO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_4_IDADE_ALUNO,
+            )
+            return _persistir_nome_dependente_capturado_na_etapa3(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
 
     raise ValueError(
         "Transicao sem efeitos conhecidos "

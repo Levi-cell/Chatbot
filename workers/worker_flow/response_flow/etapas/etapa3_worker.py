@@ -18,7 +18,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
     validar_nome_cliente,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_IDADE_ALUNO,
+    ETAPA_4_IDADE_ALUNO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -74,6 +74,8 @@ def resolve_etapa3(contexto_historico):
             phone_id_unidade,
         )
 
+    ### VALIDACAO DE NOME
+
     resultado_nome = validar_nome_cliente(texto_cliente)
 
     if not resultado_nome.valido:
@@ -88,10 +90,14 @@ def resolve_etapa3(contexto_historico):
             phone_id_unidade,
         )
 
+
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_NOME_DEPENDENTE_VALIDO,
-        destinos_esperados={ETAPA_IDADE_ALUNO},
+        destinos_esperados={ETAPA_4_IDADE_ALUNO},
     )
 
     logger.info(
@@ -115,6 +121,18 @@ def resolve_etapa3(contexto_historico):
         EVENTO_NOME_DEPENDENTE_VALIDO,
         etapa_destino,
     )
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def _montar_contexto_etapa4_simulada(
