@@ -11,9 +11,12 @@ ETAPAS = (
     (2, "Destino do atendimento", False, 0, False),
     (3, "Nome do dependente", False, 0, False),
     (4, "Idade do aluno", False, 0, False),
-    (5,  "Oferta de aula experimental e avaliação cognitiva", False, 0, False),
-    (6, "Email", False, 0, False),
-    (7,"Link de agendamento e entrada no funil", True, 30, True),
+    (5, "Oferta de aula experimental e avaliação cognitiva", False, 0, False),
+    (6, "Oferta adiada e Instagram", False, 0, False),
+    (7, "Confirmação de retorno ao atendimento", False, 0, False),
+    (8, "Email", False, 0, False),
+    (9, "Link de agendamento", False, 0, False),
+    (10, "Atendimento finalizado e entrada no funil", True, 30, True),
 )
 
 

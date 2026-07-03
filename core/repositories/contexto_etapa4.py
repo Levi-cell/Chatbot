@@ -9,10 +9,16 @@ def buscar_contexto_etapa4(id_conversa, id_unidade, cursor):
         """
         SELECT
             u.numero_comercial,
+            cl.nome,
             d.nome_dependente
         FROM chatbot.unidade u
+        JOIN chatbot.conversa c
+          ON c.id_conversa = %s
+         AND c.id_unidade = u.id_unidade
+        JOIN chatbot.cliente cl
+          ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d
-          ON d.id_conversa = %s
+          ON d.id_conversa = c.id_conversa
         WHERE u.id_unidade = %s
         LIMIT 1;
         """,
@@ -27,18 +33,21 @@ def buscar_contexto_etapa4(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    numero_comercial, nome_dependente = resultado
+    numero_comercial, nome_cliente, nome_dependente = resultado
 
     logger.debug(
         "contexto_etapa4_consultado | id_conversa=%s id_unidade=%s "
-        "numero_comercial_configurado=%s dependente_nomeado=%s",
+        "numero_comercial_configurado=%s cliente_nomeado=%s "
+        "dependente_nomeado=%s",
         id_conversa,
         id_unidade,
         bool(numero_comercial),
+        bool(nome_cliente),
         bool(nome_dependente),
     )
 
     return {
         "numero_comercial_unidade": numero_comercial,
+        "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
     }

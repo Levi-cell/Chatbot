@@ -33,22 +33,10 @@ class Dependente(models.Model):
         null=True,
     )
     nome_dependente = models.CharField(max_length=200, blank=True, null=True)
-    telefone_dependente = models.CharField(
-        unique=True,
-        max_length=50,
-        blank=True,
-        null=True,
-    )
-    email_dependente = models.CharField(
-        unique=True,
-        max_length=200,
-        blank=True,
-        null=True,
-    )
     idade = models.IntegerField(blank=True, null=True)
 
     def __str__(self):
-        return self.nome_dependente or self.telefone_dependente or str(self.id_dependente)
+        return self.nome_dependente or str(self.id_dependente)
 
     class Meta:
         managed = False
@@ -236,6 +224,11 @@ class Unidade(models.Model):
     )
     phone_number_id = models.CharField(unique=True, max_length=100)
     link_agendamento = models.CharField(unique=True, max_length=400)
+    link_instagram = models.CharField(
+        max_length=400,
+        blank=True,
+        null=True,
+    )
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
     def __str__(self):

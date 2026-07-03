@@ -279,7 +279,8 @@ Implementação principal:
 
 - Poderá existir somente uma conversa ativa para o mesmo cliente e unidade.
 - Essa garantia é protegida pelo índice parcial `idx_conversa_unica_ativa`.
-- Uma conversa finalizada na etapa 7 permanecerá bloqueada por 30 dias.
+- Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
+  bloqueada pelo prazo declarado na política. Na V1, a etapa 10 usa 30 dias.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma

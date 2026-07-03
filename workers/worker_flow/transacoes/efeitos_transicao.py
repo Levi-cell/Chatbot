@@ -23,9 +23,15 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_3_NOME_DEPENDENTE,
     ETAPA_4_IDADE_ALUNO,
     ETAPA_5_OFERTA_AULA,
+    ETAPA_6_OFERTA_ADIADA,
+    ETAPA_7_RETORNO_OFERTA,
+    ETAPA_8_EMAIL,
+    EVENTO_CLIENTE_RETORNOU,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
+    EVENTO_OFERTA_ACEITA,
+    EVENTO_OFERTA_ADIADA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
 )
@@ -135,6 +141,52 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 contexto_envio,
                 cursor,
+            )
+
+    # ETAPA 5
+    if etapa_origem == ETAPA_5_OFERTA_AULA:
+        # 5 -> 8: o cliente aceitou agendar.
+        if evento == EVENTO_OFERTA_ACEITA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_8_EMAIL,
+            )
+            return _confirmar_decisao_oferta_da_etapa5(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+        # 5 -> 6: o cliente preferiu adiar.
+        if evento == EVENTO_OFERTA_ADIADA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_6_OFERTA_ADIADA,
+            )
+            return _confirmar_decisao_oferta_da_etapa5(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+    # ETAPA 6
+    if etapa_origem == ETAPA_6_OFERTA_ADIADA:
+        # 6 -> 7: o cliente enviou uma nova mensagem após adiar a oferta.
+        if evento == EVENTO_CLIENTE_RETORNOU:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_7_RETORNO_OFERTA,
+            )
+            return _confirmar_retorno_cliente_da_etapa6(
+                contexto_historico,
+                evento,
+                etapa_destino,
             )
 
     raise ValueError(
@@ -373,4 +425,56 @@ def _persistir_idade_capturada_na_etapa4(
         "idade_aluno_atualizada": True,
         "idade_aluno": idade,
         "destino_dado": destino_dado,
+    }
+
+
+def _confirmar_decisao_oferta_da_etapa5(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """
+    Torna explícita a aresta da oferta sem duplicar persistência.
+
+    A mudança de id_etapa_atual já foi executada e revalidada no PostgreSQL
+    por persistir_movimento_conversa antes dos efeitos específicos.
+    """
+    logger.info(
+        "decisao_oferta_persistida | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "decisao_oferta_persistida": True,
+        "decisao_oferta": evento,
+    }
+
+
+def _confirmar_retorno_cliente_da_etapa6(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """
+    Confirma a continuidade sem criar dado de negócio adicional.
+
+    A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
+    conversa. Esta etapa apenas torna explícita a aresta 6 -> 7.
+    """
+    logger.info(
+        "retorno_cliente_persistido | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "retorno_cliente_persistido": True,
+        "evento_retorno": evento,
     }

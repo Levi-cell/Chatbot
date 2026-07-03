@@ -48,7 +48,7 @@ def montar_mensagem_idade_dependente_etapa4_midia(nome):
 
 MENSAGEM_IDADE_ETAPA4_FINANCEIRO = (
     "Olha, demais informações como valores são apresentadas no atendimento "
-    "presencial após a aula gratuita.\n"
+    "presencial após a aula *gratuita*.\n"
     "Me diz, qual é a sua idade?"
 )
 
@@ -61,7 +61,7 @@ def montar_mensagem_idade_etapa4_financeiro():
 
 MENSAGEM_IDADE_DEPENDENTE_ETAPA4_FINANCEIRO = (
     "Olha, demais informações como valores são apresentadas no atendimento "
-    "presencial após a aula gratuita.\n"
+    "presencial após a aula *gratuita*.\n"
     "Me diz, qual é a idade de {nome}?"
 )
 

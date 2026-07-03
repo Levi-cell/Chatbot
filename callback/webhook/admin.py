@@ -61,6 +61,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "numero_comercial",
         "email_responsavel",
         "link_agendamento_clickable",
+        "link_instagram_clickable",
         "status_pagamento",
     )
 
@@ -71,6 +72,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "numero_comercial",
         "email_responsavel",
         "link_agendamento",
+        "link_instagram",
     )
 
     list_filter = ("status_pagamento",)
@@ -277,6 +279,16 @@ class UnidadeAdmin(admin.ModelAdmin):
         return "-"
 
     link_agendamento_clickable.short_description = "Agendamento"
+
+    def link_instagram_clickable(self, obj):
+        if obj.link_instagram:
+            return format_html(
+                '<a href="{}" target="_blank">Abrir</a>',
+                obj.link_instagram,
+            )
+        return "-"
+
+    link_instagram_clickable.short_description = "Instagram"
 
     def _registrar_meta_antes_de_salvar(self, request, phone_number_id):
         try:
@@ -585,15 +597,11 @@ class DependenteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "id_cliente",
         "id_conversa",
         "nome_dependente",
-        "telefone_dependente",
-        "email_dependente",
         "idade",
     )
 
     search_fields = (
         "nome_dependente",
-        "telefone_dependente",
-        "email_dependente",
         "id_cliente__waid_telefone",
         "id_cliente__nome",
     )

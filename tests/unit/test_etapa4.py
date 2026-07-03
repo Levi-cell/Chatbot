@@ -26,6 +26,7 @@ def contexto_historico(
         "tipo_mensagem_atual": tipo_mensagem,
         "texto_cliente_atual": texto,
         "status_dependente": status_dependente,
+        "nome_cliente": "Edcarlos",
         "nome_dependente": "Alice" if status_dependente else None,
         "numero_comercial_unidade": "557536321234",
         "mensagem_cliente_atual": {
@@ -130,20 +131,48 @@ class Etapa4WorkerTests(unittest.TestCase):
         self.assertTrue(resultado["encerrar_atendimento"])
 
     def test_cliente_18_avanca_para_etapa5(self):
-        resultado = etapa_module.resolve_etapa4(
-            contexto_historico("18")
-        )
+        with patch.object(
+            etapa_module,
+            "enviar_etapa5_cliente",
+            return_value={
+                "enviou": True,
+                "id_hash_msg_bot": "wamid.etapa5",
+                "id_etapa_resultante": 5,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa4(
+                contexto_historico("18")
+            )
 
-        self.assertTrue(resultado["envio_simulado"])
+        sender.assert_called_once_with(
+            "5575999999999",
+            "123456",
+            "Edcarlos",
+        )
+        self.assertNotIn("envio_simulado", resultado)
         self.assertEqual(resultado["id_etapa_resultante"], 5)
         self.assertEqual(resultado["evento_transicao"], EVENTO_IDADE_VALIDA)
         self.assertEqual(resultado["idade_aluno"], 18)
 
     def test_dependente_5_avanca_para_etapa5(self):
-        resultado = etapa_module.resolve_etapa4(
-            contexto_historico("5", status_dependente=True)
-        )
+        with patch.object(
+            etapa_module,
+            "enviar_etapa5_dependente",
+            return_value={
+                "enviou": True,
+                "id_hash_msg_bot": "wamid.etapa5",
+                "id_etapa_resultante": 5,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa4(
+                contexto_historico("5", status_dependente=True)
+            )
 
+        sender.assert_called_once_with(
+            "5575999999999",
+            "123456",
+            "Alice",
+        )
         self.assertEqual(resultado["id_etapa_resultante"], 5)
         self.assertEqual(resultado["idade_aluno"], 5)
 

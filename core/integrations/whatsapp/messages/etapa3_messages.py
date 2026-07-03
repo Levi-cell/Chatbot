@@ -27,7 +27,7 @@ def montar_mensagem_midia_etapa3():
 
 MENSAGEM_FINANCEIRO_ETAPA3 = (
     "Olha demais informações como valores são apresentadas no atendimento "
-    "presencial após a aula gratuita.\n"
+    "presencial após a aula *gratuita*.\n"
     "Fala para mim, qual o primeiro nome da pessoa?"
 )
 

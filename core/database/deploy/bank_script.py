@@ -225,8 +225,6 @@ def criar_tabelas():
             id_cliente INT NOT NULL,
             id_conversa INT,
             nome_dependente VARCHAR(200),
-            telefone_dependente VARCHAR(50) UNIQUE,
-            email_dependente VARCHAR(200) UNIQUE,
             idade INTEGER,
 
             FOREIGN KEY (id_cliente)
@@ -247,6 +245,7 @@ def criar_tabelas():
             numero_comercial VARCHAR(30),
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
+            link_instagram VARCHAR(400),
             status_pagamento BOOLEAN DEFAULT TRUE
         );
 
@@ -329,6 +328,27 @@ def criar_tabelas():
         ALTER TABLE chatbot.unidade
         ADD COLUMN IF NOT EXISTS numero_comercial VARCHAR(30);
 
+        ALTER TABLE chatbot.unidade
+        ADD COLUMN IF NOT EXISTS link_instagram VARCHAR(400);
+
+        -- Bootstrap idempotente da primeira unidade. Atualizações posteriores
+        -- feitas pelo Admin não são sobrescritas quando o link já existe.
+        UPDATE chatbot.unidade
+        SET link_instagram = 'https://www.instagram.com/supera.saj/'
+        WHERE nome = 'Supera - Santo Antônio de Jesus'
+          AND (
+              link_instagram IS NULL
+              OR BTRIM(link_instagram) = ''
+          );
+
+        -- Campos descontinuados antes da V1. O fluxo usa o telefone do cliente
+        -- responsável e não coleta contato próprio do dependente.
+        ALTER TABLE chatbot.dependente
+        DROP COLUMN IF EXISTS telefone_dependente;
+
+        ALTER TABLE chatbot.dependente
+        DROP COLUMN IF EXISTS email_dependente;
+
         -- POLITICAS DE COMPORTAMENTO DAS ETAPAS.
         -- Os defaults reproduzem uma etapa comum: não encerra, não bloqueia
         -- e não envia ao funil até o seed declarar expressamente o contrário.
@@ -358,14 +378,37 @@ def criar_tabelas():
         ALTER COLUMN bloqueio_dias SET NOT NULL,
         ALTER COLUMN elegivel_funil SET NOT NULL;
 
-        -- Proteção para deploy parcial: a regra atual da etapa 7 já fica
-        -- preservada nesta mesma transação, antes mesmo da execução do seed.
+        -- A etapa 7 deixou de ser final e agora representa a confirmação de
+        -- retorno. A etapa 10 concentra encerramento, bloqueio e funil.
         UPDATE chatbot.etapa
         SET
+            encerra_automaticamente = FALSE,
+            bloqueio_dias = 0,
+            elegivel_funil = FALSE
+        WHERE id_etapa = 7;
+
+        -- Proteção para deploy parcial: cria ou atualiza a etapa final antes
+        -- do seed completo sincronizar o catálogo de etapas.
+        INSERT INTO chatbot.etapa (
+            id_etapa,
+            nome_etapa,
+            encerra_automaticamente,
+            bloqueio_dias,
+            elegivel_funil
+        )
+        VALUES (
+            10,
+            'Atendimento finalizado e entrada no funil',
+            TRUE,
+            30,
+            TRUE
+        )
+        ON CONFLICT (id_etapa)
+        DO UPDATE SET
+            nome_etapa = EXCLUDED.nome_etapa,
             encerra_automaticamente = TRUE,
             bloqueio_dias = 30,
-            elegivel_funil = TRUE
-        WHERE id_etapa = 7;
+            elegivel_funil = TRUE;
 
         DO $$
         BEGIN

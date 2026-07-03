@@ -6,6 +6,9 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_IDADE_VALIDA,
+    EVENTO_CLIENTE_RETORNOU,
+    EVENTO_OFERTA_ACEITA,
+    EVENTO_OFERTA_ADIADA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
 )
@@ -117,6 +120,83 @@ class FlowSenderTests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 4)
 
+    def test_retry_reconstroi_oferta_aceita_cinco_para_oito(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 102,
+                    "id_hash_msg": "wamid.etapa8",
+                    "id_etapa": 8,
+                },
+                etapa_atual=8,
+                etapa_cliente=5,
+                retry=2,
+                transicoes={
+                    EVENTO_OFERTA_ACEITA: 8,
+                    EVENTO_OFERTA_ADIADA: 6,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_OFERTA_ACEITA,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 8)
+
+    def test_retry_reconstroi_oferta_adiada_cinco_para_seis(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 103,
+                    "id_hash_msg": "wamid.etapa6",
+                    "id_etapa": 6,
+                },
+                etapa_atual=6,
+                etapa_cliente=5,
+                retry=2,
+                transicoes={
+                    EVENTO_OFERTA_ACEITA: 8,
+                    EVENTO_OFERTA_ADIADA: 6,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_OFERTA_ADIADA,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 6)
+
+    def test_retry_reconstroi_retorno_seis_para_sete(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 104,
+                    "id_hash_msg": "wamid.etapa7",
+                    "id_etapa": 7,
+                },
+                etapa_atual=7,
+                etapa_cliente=6,
+                retry=2,
+                transicoes={
+                    EVENTO_CLIENTE_RETORNOU: 7,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_CLIENTE_RETORNOU,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 7)
+
     def test_conversa_sem_etapa_vai_para_etapa1(self):
         esperado = {
             "enviou": True,
@@ -203,8 +283,7 @@ class FlowSenderTests(unittest.TestCase):
     def test_etapa4_vai_para_etapa4(self):
         esperado = {
             "enviou": True,
-            "envio_simulado": True,
-            "id_hash_msg_bot": "simulacao.etapa5",
+            "id_hash_msg_bot": "wamid.etapa5",
             "id_etapa_resultante": 5,
         }
 
@@ -225,10 +304,63 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
-    def test_etapa_nao_implementada_nao_finge_sucesso(self):
+    def test_etapa5_vai_para_resolver_da_etapa5(self):
+        esperado = {
+            "enviou": True,
+            "envio_simulado": True,
+            "id_hash_msg_bot": "simulacao.etapa8",
+            "id_etapa_resultante": 8,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa5",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=5,
+                    etapa_resposta=None,
+                    etapa_cliente=5,
+                    transicoes={
+                        EVENTO_OFERTA_ACEITA: 8,
+                        EVENTO_OFERTA_ADIADA: 6,
+                    },
+                )
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
+    def test_etapa6_vai_para_resolver_da_etapa6(self):
+        esperado = {
+            "enviou": True,
+            "envio_simulado": True,
+            "id_hash_msg_bot": "simulacao.etapa7",
+            "id_etapa_resultante": 7,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa6",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=6,
+                    etapa_resposta=7,
+                    etapa_cliente=6,
+                    transicoes={EVENTO_CLIENTE_RETORNOU: 7},
+                )
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
+    def test_etapa7_ainda_nao_implementada_nao_finge_sucesso(self):
         with self.assertRaises(NotImplementedError):
             flow_sender_module.flow_sender(
-                contexto_historico_base(etapa_atual=5, etapa_resposta=6)
+                contexto_historico_base(etapa_atual=7, etapa_resposta=8)
             )
 
 

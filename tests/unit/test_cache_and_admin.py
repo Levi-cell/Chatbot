@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.contrib import admin, messages
 
 from webhook.admin import UnidadeAdmin
-from webhook.models import Unidade
+from webhook.models import Dependente, Unidade
 from core.cache import cache_reset, cache_unidade
 from core.cache.runtime import cache_cliente, cache_conversas_bloqueadas
 
@@ -56,6 +56,20 @@ def capturar_message_user(_self, request, message, level=messages.INFO):
 
 
 class CacheAndAdminTests(unittest.TestCase):
+    def test_models_refletem_instagram_e_contato_unico_do_responsavel(self):
+        campos_unidade = {
+            campo.name
+            for campo in Unidade._meta.fields
+        }
+        campos_dependente = {
+            campo.name
+            for campo in Dependente._meta.fields
+        }
+
+        self.assertIn("link_instagram", campos_unidade)
+        self.assertNotIn("telefone_dependente", campos_dependente)
+        self.assertNotIn("email_dependente", campos_dependente)
+
     def test_cache_cliente_redis_falha_retorna_none(self):
         with patch.object(
             cache_cliente,

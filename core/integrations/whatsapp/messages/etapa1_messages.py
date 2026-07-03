@@ -32,7 +32,7 @@ def montar_mensagem_midia_inicio(saudacao):
 MENSAGEM_FINANCEIRO_INICIO = (
     "{saudacao}! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️\n"
     "Olha demais informações como valores são apresentadas no atendimento "
-    "presencial após sua aula gratuita.\n"
+    "presencial após sua aula *gratuita*.\n"
     "Me diz, qual o seu primeiro nome?"
 )
 
@@ -55,7 +55,7 @@ def montar_mensagem_midia_etapa1():
 
 MENSAGEM_FINANCEIRO_ETAPA1 = (
     "Olha demais informações como valores são apresentadas no atendimento "
-    "presencial após sua aula gratuita.\n"
+    "presencial após sua aula *gratuita*.\n"
     "Me diz, qual o seu primeiro nome?"
 )
 

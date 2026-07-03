@@ -50,7 +50,7 @@ class FluxoInicioMidiaTests(unittest.TestCase):
 
     def test_origem_sem_transicao_nao_usa_soma(self):
         contexto_conversa = {
-            "id_etapa_atual": 7,
+            "id_etapa_atual": 10,
         }
 
         etapa_resposta = prever_etapa_resposta(

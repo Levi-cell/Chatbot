@@ -11,6 +11,10 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
     enviar_etapa4_dependente_midia,
     enviar_etapa4_idade_acima_99,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
+    enviar_etapa5_cliente,
+    enviar_etapa5_dependente,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     validar_idade,
@@ -49,6 +53,7 @@ def resolve_etapa4(contexto_historico):
         contexto_historico.get("status_dependente")
     )
     nome_dependente = contexto_historico.get("nome_dependente")
+    nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -141,7 +146,7 @@ def resolve_etapa4(contexto_historico):
     )
 
     logger.info(
-        "etapa4_idade_validada | acao=simular_envio_etapa5 "
+        "etapa4_idade_validada | acao=enviar_etapa5 "
         "id_conversa=%s id_mensagem_fila=%s evento=%s "
         "etapa_destino=%s idade=%s status_dependente=%s",
         contexto_historico["id_conversa"],
@@ -152,11 +157,20 @@ def resolve_etapa4(contexto_historico):
         status_dependente,
     )
 
-    contexto_envio = _montar_contexto_etapa5_simulada(
-        contexto_historico,
-        etapa_destino,
-        idade,
-    )
+    if status_dependente:
+        contexto_envio = enviar_etapa5_dependente(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+    else:
+        contexto_envio = enviar_etapa5_cliente(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_cliente,
+        )
+
+    contexto_envio["idade_aluno"] = idade
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
@@ -239,33 +253,6 @@ def _anexar_encerramento(
         }
     )
     return contexto_envio
-
-
-def _montar_contexto_etapa5_simulada(
-    contexto_historico,
-    etapa_destino,
-    idade,
-):
-    # TEMPORÁRIO: remover quando o sender real da etapa 5 existir.
-    id_mensagem_fila = contexto_historico[
-        "mensagem_cliente_atual"
-    ]["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "Nesse momento a futura etapa 5 foi enviada.",
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-        "idade_aluno": idade,
-    }
 
 
 def _logar_tratamento(

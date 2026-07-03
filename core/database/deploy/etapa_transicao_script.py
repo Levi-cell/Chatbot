@@ -12,10 +12,17 @@ TRANSICOES_INICIAIS = (
     (2, "para_outra_pessoa", 3),
     (3, "nome_dependente_valido", 4),
     (4, "idade_valida", 5),
+    (5, "oferta_aceita", 8),
+    (5, "oferta_adiada", 6),
+    (6, "cliente_retornou", 7),
+    (7, "retorno_confirmado", 8),
+    (7, "retorno_adiado", 6),
+    (8, "email_valido", 9),
+    (9, "agendamento_finalizado", 10),
 )
 
-# Novas arestas só entram quando resolver, sender, efeitos transacionais
-# e testes estiverem prontos no mesmo conjunto de mudanças.
+# O mapa declara o fluxo completo conhecido. Resolvers e senders continuam
+# responsáveis por produzir somente eventos já implementados na aplicação.
 
 
 def criar_e_povoar_transicoes_etapa():
@@ -55,9 +62,11 @@ def criar_e_povoar_transicoes_etapa():
             """
         )
 
-        # O deploy mantém uma whitelist exata. Transições antigas ou manuais
-        # não sobrevivem silenciosamente a uma nova versão da aplicação.
-        cursor.execute("DELETE FROM chatbot.etapa_transicao;")
+        # O deploy mantém uma whitelist exata e IDs previsíveis. Transições
+        # antigas não sobrevivem e a sequência sempre recomeça em 1.
+        cursor.execute(
+            "TRUNCATE TABLE chatbot.etapa_transicao RESTART IDENTITY;"
+        )
 
         cursor.executemany(
             """
