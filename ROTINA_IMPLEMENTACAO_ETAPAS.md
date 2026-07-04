@@ -272,12 +272,45 @@ validador_nome.py
 O validador de nome é universal porque valida tanto o nome do cliente quanto o
 nome do dependente.
 
+#### Regra de classificação dos validadores
+
+Use um validador universal somente quando ele for reutilizado com o mesmo
+significado e não escolher entre destinos diferentes. Ele pode identificar um
+tratamento, manter a etapa ou liberar a continuação normal.
+
+Use um validador contextual quando a resposta gerar eventos próprios da etapa,
+principalmente se esses eventos pularem ou retrocederem no mapa. Validadores de
+etapas distintas podem ter gramática semelhante e ainda assim permanecer
+separados:
+
+```text
+etapa 5 + resposta positiva -> oferta_aceita
+etapa 7 + resposta positiva -> retorno_confirmado
+```
+
+O resolver não deve traduzir uma decisão genérica para o evento. O próprio
+validador contextual devolve o evento:
+
+```python
+evento_transicao = validar_etapa5(texto_cliente)
+
+if evento_transicao is None:
+    return sender_de_tratamento(...)
+
+destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
+etapa_destino = resolver_destino_transicao(
+    contexto_historico,
+    evento_transicao,
+    destinos_esperados=destinos_esperados,
+)
+```
+
 ### 7. Criar o resolver da etapa
 
 Criar:
 
 ```text
-workers/worker_flow/response_flow/etapas/etapa<n>_worker.py
+workers/worker_flow/response_flow/etapas/resolver_etapa<n>.py
 ```
 
 O arquivo representa a etapa à qual o cliente está respondendo. Ele possui duas

@@ -166,9 +166,9 @@ def worker_flow():
                 conn_ciclo.commit()
 
             except Exception as erro:
-                # TEMPORARIO: a saída aceita da etapa 5 e o retorno da etapa
-                # 6 ainda simulam os envios das etapas 8 e 7. Remover esta
-                # excecao quando ambos os senders Meta forem implementados.
+                # TEMPORARIO: a saída válida da etapa 8 ainda simula o envio
+                # da etapa 9. Remover esta exceção quando o sender Meta da
+                # etapa 9 for implementado.
                 if (
                     contexto_envio.get("enviou")
                     and not contexto_envio.get("envio_simulado")

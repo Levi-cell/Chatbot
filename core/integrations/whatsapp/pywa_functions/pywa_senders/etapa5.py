@@ -15,6 +15,9 @@ from core.integrations.whatsapp.messages.etapa5_messages import (
     montar_mensagem_oferta_dependente_midia_etapa5,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
+from core.integrations.whatsapp.pywa_functions.resposta_envio import (
+    extrair_id_hash_msg_bot,
+)
 from core.logging_config import short_value
 
 
@@ -186,7 +189,7 @@ def _enviar_texto_etapa5(
             text=mensagem_bot,
             buttons=_montar_botoes_pywa_etapa5(),
         )
-        id_hash_msg_bot = _extrair_id_hash_msg_bot(sent_message)
+        id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
         logger.info(
             "%s_ok | acao=enviar_meta cliente=%s phone_number_id=%s "
@@ -241,18 +244,3 @@ def _montar_botoes_pywa_etapa5():
         )
         for titulo in montar_botoes_etapa5()
     ]
-
-
-def _extrair_id_hash_msg_bot(sent_message):
-    id_hash = getattr(sent_message, "id", None)
-    if id_hash:
-        return id_hash
-
-    if isinstance(sent_message, dict):
-        mensagens = sent_message.get("messages") or []
-        if mensagens:
-            id_hash = mensagens[0].get("id")
-            if id_hash:
-                return id_hash
-
-    raise ValueError("Meta confirmou envio, mas nao retornou id da mensagem")

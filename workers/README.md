@@ -105,7 +105,7 @@ fila sem duplicar o envio.
 - `flow_worker.py`: transação, checkpoints e handlers.
 - `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
   etapa atual;
-- `etapas/etapa<n>_worker.py`: valida a resposta, aplica tratamentos e
+- `etapas/resolver_etapa<n>.py`: valida a resposta, aplica tratamentos e
   encaminha para o destino autorizado;
 - `etapas/validadores_universais/`: mídia, financeiro, nome e outras validações
   reutilizáveis;
@@ -121,6 +121,11 @@ Textos e chamadas PyWa não pertencem a essa pasta. Use
 Tratamentos não produzem evento e permanecem na etapa atual. Respostas válidas
 utilizam a tabela `chatbot.etapa_transicao`; o destino não é calculado com
 `id_etapa + 1`.
+
+Validadores universais mantêm o mesmo significado em todas as etapas e não
+escolhem entre arestas diferentes. Quando uma resposta pode gerar destinos
+distintos, o validador é contextual e devolve diretamente o evento daquela
+origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
 
 ## Persistência de transições
 

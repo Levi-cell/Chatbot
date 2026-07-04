@@ -25,6 +25,16 @@ def get_waba_id():
     return WABA_ID
 
 
+def get_phone_number_id_dev():
+    if not PHONE_NUMBER_ID_DEV:
+        raise RuntimeError(
+            "Variavel de ambiente obrigatoria ausente: "
+            "META_PHONE_NUMBER_ID_DEV"
+        )
+
+    return PHONE_NUMBER_ID_DEV
+
+
 def get_phone_registration_pin():
     if not PHONE_REGISTRATION_PIN:
         raise RuntimeError(

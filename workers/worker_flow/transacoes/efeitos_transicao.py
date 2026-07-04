@@ -1,6 +1,7 @@
 import logging
 
 from core.logging_config import short_value
+from core.repositories.email_cliente import atualizar_email_cliente
 from core.repositories.idade_aluno import (
     atualizar_idade_cliente,
     atualizar_idade_dependente,
@@ -17,6 +18,9 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     validar_idade,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
+    validar_etapa8,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_1_NOME_CLIENTE,
     ETAPA_2_DESTINO_ATENDIMENTO,
@@ -26,7 +30,9 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_6_OFERTA_ADIADA,
     ETAPA_7_RETORNO_OFERTA,
     ETAPA_8_EMAIL,
+    ETAPA_9_LINK_AGENDAMENTO,
     EVENTO_CLIENTE_RETORNOU,
+    EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
@@ -34,6 +40,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_OFERTA_ADIADA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_RETORNO_ADIADO,
+    EVENTO_RETORNO_CONFIRMADO,
 )
 
 
@@ -187,6 +195,52 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 evento,
                 etapa_destino,
+            )
+
+    # ETAPA 7
+    if etapa_origem == ETAPA_7_RETORNO_OFERTA:
+        # 7 -> 8: o cliente retomou e confirmou o agendamento.
+        if evento == EVENTO_RETORNO_CONFIRMADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_8_EMAIL,
+            )
+            return _confirmar_decisao_retorno_da_etapa7(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+        # 7 -> 6: o cliente preferiu adiar novamente.
+        if evento == EVENTO_RETORNO_ADIADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_6_OFERTA_ADIADA,
+            )
+            return _confirmar_decisao_retorno_da_etapa7(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+    # ETAPA 8
+    if etapa_origem == ETAPA_8_EMAIL:
+        # 8 -> 9: o cliente informou um email estruturalmente válido.
+        if evento == EVENTO_EMAIL_VALIDO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_9_LINK_AGENDAMENTO,
+            )
+            return _persistir_email_capturado_na_etapa8(
+                contexto_historico,
+                contexto_envio,
+                cursor,
             )
 
     raise ValueError(
@@ -477,4 +531,81 @@ def _confirmar_retorno_cliente_da_etapa6(
     return {
         "retorno_cliente_persistido": True,
         "evento_retorno": evento,
+    }
+
+
+def _confirmar_decisao_retorno_da_etapa7(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """
+    Torna explícita a decisão do retorno sem duplicar persistência.
+
+    A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
+    conversa. Esta função confirma apenas as arestas 7 -> 8 e 7 -> 6.
+    """
+    logger.info(
+        "decisao_retorno_persistida | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "decisao_retorno_persistida": True,
+        "decisao_retorno": evento,
+    }
+
+
+def _persistir_email_capturado_na_etapa8(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    """
+    Persiste somente o email extraído e validado na etapa 8.
+
+    Em reaplicação idempotente, o contexto de envio não carrega o email.
+    Nesse caso, o dado é revalidado na mensagem original do cliente.
+    """
+    email = contexto_envio.get("email_cliente")
+
+    if email is None:
+        resultado_email = validar_etapa8(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+
+        if not resultado_email.valido:
+            raise ValueError(
+                "Email nao reconstruido na transicao 8 -> 9"
+            )
+
+        email = resultado_email.email
+
+    email = str(email).strip()
+
+    atualizar_email_cliente(
+        contexto_historico["id_cliente"],
+        email,
+        cursor,
+    )
+
+    logger.info(
+        "cliente_email_persistido | acao=salvar_efeito_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s "
+        "id_conversa=%s id_cliente=%s email_preenchido=%s",
+        EVENTO_EMAIL_VALIDO,
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        contexto_historico["id_cliente"],
+        bool(email),
+    )
+
+    return {
+        "cliente_email_atualizado": True,
+        "email_preenchido": bool(email),
     }

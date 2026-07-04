@@ -279,7 +279,7 @@ Contém orquestração de respostas:
 - `flow_worker.py`: ciclo e transações;
 - `flow_sender.py`: preservação da idempotência e seleção do resolver da etapa
   atual;
-- `etapas/etapa<n>_worker.py`: validação da etapa atual e encaminhamento para o
+- `etapas/resolver_etapa<n>.py`: validação da etapa atual e encaminhamento para o
   destino autorizado;
 - `etapas/validadores_universais/`: validações reutilizáveis entre etapas;
 - `etapas/validadores_contexto/`: validações específicas da pergunta atual;
@@ -299,6 +299,48 @@ as transições permitidas para a origem e transporta a decisão no contexto. A
 persistência final revalida a mesma aresta no PostgreSQL antes do commit.
 
 Tratamentos não produzem evento de transição e permanecem na etapa atual.
+
+### Escolha entre validador universal e contextual
+
+Um validador só pertence a `validadores_universais` quando:
+
+- é usado por mais de uma etapa;
+- possui o mesmo significado em todas elas;
+- apenas identifica tratamento/permanência ou permite seguir o fluxo;
+- não escolhe entre diferentes arestas do mapa.
+
+Mídia, financeiro e nome atendem a esse contrato. O resultado deles não muda
+de significado conforme a etapa que os chama.
+
+Um validador pertence a `validadores_contexto` quando a resposta produz eventos
+próprios daquela etapa, especialmente quando pode pular ou retroceder no mapa.
+Mesmo que duas etapas reconheçam textos idênticos, cada uma mantém seu
+validador quando devolve eventos diferentes:
+
+```text
+validar_etapa5("Quero agendar") -> oferta_aceita
+validar_etapa7("Quero agendar") -> retorno_confirmado
+```
+
+Nesse caso, a semelhança da gramática não transforma o validador em universal.
+O contrato relevante é o evento de negócio produzido para a origem atual.
+
+O resolver deve receber diretamente esse evento:
+
+```python
+evento_transicao = validar_etapa5(texto_cliente)
+
+destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
+etapa_destino = resolver_destino_transicao(
+    contexto_historico,
+    evento_transicao,
+    destinos_esperados=destinos_esperados,
+)
+```
+
+Não criar uma decisão neutra intermediária para depois traduzi-la em evento no
+resolver. A interpretação de uma resposta que escolhe arestas pertence ao
+validador contextual da própria etapa.
 
 Todo resolver de etapa deve marcar explicitamente a fronteira entre validação e
 resolução do destino. O marcador fica depois de todos os retornos de tratamento

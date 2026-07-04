@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    etapa5_worker as etapa_module,
+    resolver_etapa5 as etapa_module,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_OFERTA_ACEITA,
@@ -53,11 +53,21 @@ def retorno_tratamento_etapa5(tipo_tratamento):
 
 class Etapa5WorkerTests(unittest.TestCase):
     def test_quero_agendar_avanca_para_etapa8(self):
-        resultado = etapa_module.resolve_etapa5(
-            contexto_historico("quero muito")
-        )
+        with patch.object(
+            etapa_module,
+            "enviar_etapa8",
+            return_value={
+                "enviou": True,
+                "id_hash_msg_bot": "wamid.etapa8",
+                "id_etapa_resultante": 8,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa5(
+                contexto_historico("quero muito")
+            )
 
-        self.assertTrue(resultado["envio_simulado"])
+        sender.assert_called_once_with("5575999999999", "123456")
+        self.assertNotIn("envio_simulado", resultado)
         self.assertEqual(resultado["id_etapa_resultante"], 8)
         self.assertEqual(
             resultado["evento_transicao"],

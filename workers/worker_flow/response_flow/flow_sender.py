@@ -1,22 +1,28 @@
 import logging
 
-from workers.worker_flow.response_flow.etapas.etapa1_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa1 import (
     resolve_etapa1,
 )
-from workers.worker_flow.response_flow.etapas.etapa2_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa2 import (
     resolve_etapa2,
 )
-from workers.worker_flow.response_flow.etapas.etapa3_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa3 import (
     resolve_etapa3,
 )
-from workers.worker_flow.response_flow.etapas.etapa4_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa4 import (
     resolve_etapa4,
 )
-from workers.worker_flow.response_flow.etapas.etapa5_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa5 import (
     resolve_etapa5,
 )
-from workers.worker_flow.response_flow.etapas.etapa6_worker import (
+from workers.worker_flow.response_flow.etapas.resolver_etapa6 import (
     resolve_etapa6,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa7 import (
+    resolve_etapa7,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa8 import (
+    resolve_etapa8,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
@@ -99,6 +105,12 @@ def flow_sender(contexto_historico):
 
     if id_etapa_atual == 6:
         return resolve_etapa6(contexto_historico)
+
+    if id_etapa_atual == 7:
+        return resolve_etapa7(contexto_historico)
+
+    if id_etapa_atual == 8:
+        return resolve_etapa8(contexto_historico)
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",

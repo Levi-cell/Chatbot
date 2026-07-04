@@ -11,10 +11,11 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
     enviar_etapa6,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa8 import (
+    enviar_etapa8,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
-    OPCAO_QUERO_AGENDAR,
-    OPCAO_TALVEZ_MAIS_TARDE,
     TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
     validar_etapa5,
 )
@@ -28,6 +29,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_6_OFERTA_ADIADA,
     ETAPA_8_EMAIL,
+    EVENTO_OFERTA_ACEITA,
+    EVENTO_OFERTA_ADIADA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -53,8 +56,7 @@ def resolve_etapa5(contexto_historico):
     oferta_aceita resolve 5 -> 8.
     oferta_adiada resolve 5 -> 6.
 
-    A etapa 6 possui sender real. O envio da etapa 8 permanece simulado
-    somente enquanto seu sender ainda não existe.
+    As etapas 6 e 8 possuem senders reais.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -69,49 +71,65 @@ def resolve_etapa5(contexto_historico):
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    # Mídia tem prioridade sobre todas as validações de texto.
+    # CAMPOS QUE VALIDAM MIDIA NA ETAPA 5
     if validar_midia(tipo_mensagem):
-        _logar_tratamento(
-            contexto_historico,
-            "tipo_mensagem_nao_suportado",
-        )
-        return _enviar_tratamento_midia(
-            status_dependente,
+        _logar_tipo_nao_suportado(contexto_historico)
+
+        if status_dependente:
+            return enviar_etapa5_dependente_midia(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa5_cliente_midia(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
         )
 
-    # Pergunta financeira tem prioridade sobre a decisão da oferta.
+    # CAMPOS QUE VALIDAM FINANCEIRO NA ETAPA 5
     if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento(
+        _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
         )
-        return _enviar_tratamento_financeiro(
-            status_dependente,
+
+        if status_dependente:
+            return enviar_etapa5_dependente_financeiro(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa5_cliente_financeiro(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
         )
 
-    # VALIDANDO OPÇÕES
+    # VALIDANDO OPCOES
+    # O validador contextual já devolve o evento pertencente à etapa 5.
     evento_transicao = validar_etapa5(texto_cliente)
 
     if evento_transicao is None:
-        _logar_tratamento(
+        _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
         )
-        return _enviar_tratamento_contexto_invalido(
-            status_dependente,
+
+        if status_dependente:
+            return enviar_etapa5_dependente_contexto_invalido(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa5_cliente_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
         )
 
     # VALIDANDO DESTINO(S)
-    # A resposta passou pelos tratamentos; agora o mapa autoriza a aresta.
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
     destinos_esperados = _destinos_esperados_por_evento(
         evento_transicao
     )
@@ -127,8 +145,8 @@ def resolve_etapa5(contexto_historico):
         "status_dependente=%s",
         (
             "enviar_etapa6"
-            if evento_transicao == OPCAO_TALVEZ_MAIS_TARDE
-            else "simular_envio_etapa8"
+            if evento_transicao == EVENTO_OFERTA_ADIADA
+            else "enviar_etapa8"
         ),
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
@@ -137,17 +155,18 @@ def resolve_etapa5(contexto_historico):
         status_dependente,
     )
 
-    if evento_transicao == OPCAO_TALVEZ_MAIS_TARDE:
+    if evento_transicao == EVENTO_OFERTA_ADIADA:
         contexto_envio = enviar_etapa6(
             cliente_telefone,
             phone_id_unidade,
             link_instagram,
         )
     else:
-        contexto_envio = _montar_contexto_etapa8_simulada(
-            contexto_historico,
-            etapa_destino,
+        contexto_envio = enviar_etapa8(
+            cliente_telefone,
+            phone_id_unidade,
         )
+
     contexto_envio["decisao_oferta"] = evento_transicao
 
     return anexar_transicao_ao_contexto_envio(
@@ -158,106 +177,33 @@ def resolve_etapa5(contexto_historico):
     )
 
 
-def _enviar_tratamento_midia(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_midia(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-
-    return enviar_etapa5_cliente_midia(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-
-
-def _enviar_tratamento_financeiro(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_financeiro(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-
-    return enviar_etapa5_cliente_financeiro(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-
-
-def _enviar_tratamento_contexto_invalido(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_contexto_invalido(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-
-    return enviar_etapa5_cliente_contexto_invalido(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-
-
 def _destinos_esperados_por_evento(evento_transicao):
-    if evento_transicao == OPCAO_QUERO_AGENDAR:
+    if evento_transicao == EVENTO_OFERTA_ACEITA:
         return {ETAPA_8_EMAIL}
 
-    if evento_transicao == OPCAO_TALVEZ_MAIS_TARDE:
+    if evento_transicao == EVENTO_OFERTA_ADIADA:
         return {ETAPA_6_OFERTA_ADIADA}
 
     return set()
 
 
-def _montar_contexto_etapa8_simulada(
-    contexto_historico,
-    etapa_destino,
-):
-    # TEMPORÁRIO: remover quando o sender real da etapa 8 existir.
-    id_mensagem_fila = contexto_historico[
-        "mensagem_cliente_atual"
-    ]["id_mensagem_fila"]
+def _logar_tipo_nao_suportado(contexto_historico):
+    mensagem = contexto_historico["mensagem_cliente_atual"]
 
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": (
-            f"Nesse momento a futura etapa {etapa_destino} foi enviada."
-        ),
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-    }
+    logger.info(
+        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado "
+        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
+        "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
+        contexto_historico["id_conversa"],
+        mensagem["id_mensagem_fila"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
+        contexto_historico.get("tipo_mensagem_atual"),
+        contexto_historico["id_etapa_cliente"],
+    )
 
 
-def _logar_tratamento(
-    contexto_historico,
-    motivo,
-    *,
-    motivo_detalhado=None,
-):
+def _logar_tratamento_texto(contexto_historico, motivo):
     mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
@@ -265,7 +211,7 @@ def _logar_tratamento(
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
         "cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
-        motivo_detalhado,
+        None,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),

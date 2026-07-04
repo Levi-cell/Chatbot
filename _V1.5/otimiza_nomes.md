@@ -1255,7 +1255,7 @@ COPY requirements.txt /app/requirements.txt
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir -r /app/requirements.txt
 
-COPY . /app
+COPY ../_tarefas_finais /app
 
 RUN python tools/nomes_ibge/verificar_base_sqlite.py \
     --base /app/core/data/nomes_ibge/nomes_ibge.sqlite3

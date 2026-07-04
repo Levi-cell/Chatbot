@@ -9,9 +9,6 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 )
 
 
-OPCAO_QUERO_AGENDAR = EVENTO_OFERTA_ACEITA
-OPCAO_TALVEZ_MAIS_TARDE = EVENTO_OFERTA_ADIADA
-
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 
 TEXTO_BOTAO_QUERO_AGENDAR = "quero agendar"
@@ -74,11 +71,10 @@ PADRAO_RESPOSTA_POSITIVA = re.compile(
 
 def validar_etapa5(conteudo_texto):
     """
-    Converte a resposta da oferta em um dos eventos permitidos na etapa 5.
+    Converte a resposta da oferta diretamente no evento da etapa 5.
 
-    Clique e texto digitado chegam pelo mesmo conteudo_texto. A opção de
-    adiamento é intencionalmente estrita; respostas negativas livres recebem
-    tratamento, enquanto diferentes confirmações positivas são aceitas.
+    O adiamento é estrito. Respostas negativas livres recebem tratamento,
+    enquanto diferentes confirmações positivas produzem oferta_aceita.
     """
     if not isinstance(conteudo_texto, str):
         return None
@@ -89,18 +85,17 @@ def validar_etapa5(conteudo_texto):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_TALVEZ_MAIS_TARDE:
-        return OPCAO_TALVEZ_MAIS_TARDE
+        return EVENTO_OFERTA_ADIADA
 
-    # A negação sempre prevalece, inclusive em frases que também tenham
-    # palavras positivas, como "quero, mas não agora".
+    # A negação prevalece mesmo quando a frase também contém termo positivo.
     if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_QUERO_AGENDAR:
-        return OPCAO_QUERO_AGENDAR
+        return EVENTO_OFERTA_ACEITA
 
     if PADRAO_RESPOSTA_POSITIVA.search(texto_normalizado):
-        return OPCAO_QUERO_AGENDAR
+        return EVENTO_OFERTA_ACEITA
 
     return None
 

@@ -3,6 +3,7 @@ import logging
 from core.logging_config import short_value
 from core.repositories.contexto_etapa4 import buscar_contexto_etapa4
 from core.repositories.contexto_etapa5 import buscar_contexto_etapa5
+from core.repositories.contexto_etapa7 import buscar_contexto_etapa7
 from core.repositories.inserts import inserir_historico_mensagem_cliente
 from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
 from core.repositories.transicoes_etapa import listar_transicoes_permitidas
@@ -17,6 +18,8 @@ from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_4_IDADE_ALUNO,
     ETAPA_5_OFERTA_AULA,
+    ETAPA_6_OFERTA_ADIADA,
+    ETAPA_7_RETORNO_OFERTA,
 )
 
 
@@ -119,6 +122,25 @@ def valida_historico(mensagem, contexto_banco, cursor):
             raise ValueError(
                 "Etapa 5 sem nome do aluno persistido "
                 f"(campo={chave_nome})"
+            )
+
+    if id_etapa_cliente in {
+        ETAPA_6_OFERTA_ADIADA,
+        ETAPA_7_RETORNO_OFERTA,
+    }:
+        contexto_especifico_etapa = buscar_contexto_etapa7(
+            id_conversa,
+            contexto_banco["id_unidade"],
+            cursor,
+        )
+
+        if (
+            contexto_conversa.get("status_dependente")
+            and not contexto_especifico_etapa["nome_dependente"]
+        ):
+            raise ValueError(
+                "Retorno de dependente sem nome persistido "
+                f"(etapa={id_etapa_cliente})"
             )
 
     if resposta_bot_para_mensagem_atual:

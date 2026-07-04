@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import workers.worker_flow.response_flow.flow_sender as flow_sender_module
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_EMAIL_VALIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_IDADE_VALIDA,
@@ -11,6 +12,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_OFERTA_ADIADA,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_RETORNO_ADIADO,
+    EVENTO_RETORNO_CONFIRMADO,
 )
 
 
@@ -197,6 +200,79 @@ class FlowSenderTests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 7)
 
+    def test_retry_reconstroi_retorno_confirmado_sete_para_oito(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 105,
+                    "id_hash_msg": "wamid.etapa8",
+                    "id_etapa": 8,
+                },
+                etapa_atual=8,
+                etapa_cliente=7,
+                retry=2,
+                transicoes={
+                    EVENTO_RETORNO_CONFIRMADO: 8,
+                    EVENTO_RETORNO_ADIADO: 6,
+                },
+            )
+        )
+
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_RETORNO_CONFIRMADO,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 8)
+
+    def test_retry_reconstroi_retorno_adiado_sete_para_seis(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 106,
+                    "id_hash_msg": "wamid.etapa6",
+                    "id_etapa": 6,
+                },
+                etapa_atual=6,
+                etapa_cliente=7,
+                retry=2,
+                transicoes={
+                    EVENTO_RETORNO_CONFIRMADO: 8,
+                    EVENTO_RETORNO_ADIADO: 6,
+                },
+            )
+        )
+
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_RETORNO_ADIADO,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 6)
+
+    def test_retry_reconstroi_email_valido_oito_para_nove(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 107,
+                    "id_hash_msg": "wamid.etapa9",
+                    "id_etapa": 9,
+                },
+                etapa_atual=9,
+                etapa_cliente=8,
+                retry=2,
+                transicoes={
+                    EVENTO_EMAIL_VALIDO: 9,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_EMAIL_VALIDO,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 9)
+
     def test_conversa_sem_etapa_vai_para_etapa1(self):
         esperado = {
             "enviou": True,
@@ -307,8 +383,7 @@ class FlowSenderTests(unittest.TestCase):
     def test_etapa5_vai_para_resolver_da_etapa5(self):
         esperado = {
             "enviou": True,
-            "envio_simulado": True,
-            "id_hash_msg_bot": "simulacao.etapa8",
+            "id_hash_msg_bot": "wamid.etapa8",
             "id_etapa_resultante": 8,
         }
 
@@ -335,8 +410,7 @@ class FlowSenderTests(unittest.TestCase):
     def test_etapa6_vai_para_resolver_da_etapa6(self):
         esperado = {
             "enviou": True,
-            "envio_simulado": True,
-            "id_hash_msg_bot": "simulacao.etapa7",
+            "id_hash_msg_bot": "wamid.etapa7",
             "id_etapa_resultante": 7,
         }
 
@@ -357,11 +431,59 @@ class FlowSenderTests(unittest.TestCase):
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
 
-    def test_etapa7_ainda_nao_implementada_nao_finge_sucesso(self):
-        with self.assertRaises(NotImplementedError):
-            flow_sender_module.flow_sender(
-                contexto_historico_base(etapa_atual=7, etapa_resposta=8)
+    def test_etapa7_vai_para_resolver_da_etapa7(self):
+        esperado = {
+            "enviou": True,
+            "id_hash_msg_bot": "wamid.etapa8",
+            "id_etapa_resultante": 8,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa7",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=7,
+                    etapa_resposta=None,
+                    etapa_cliente=7,
+                    transicoes={
+                        EVENTO_RETORNO_CONFIRMADO: 8,
+                        EVENTO_RETORNO_ADIADO: 6,
+                    },
+                )
             )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
+    def test_etapa8_vai_para_resolver_da_etapa8(self):
+        esperado = {
+            "enviou": True,
+            "envio_simulado": True,
+            "id_hash_msg_bot": "simulacao.etapa9",
+            "id_etapa_resultante": 9,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa8",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=8,
+                    etapa_resposta=None,
+                    etapa_cliente=8,
+                    transicoes={
+                        EVENTO_EMAIL_VALIDO: 9,
+                    },
+                )
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
 
 
 if __name__ == "__main__":

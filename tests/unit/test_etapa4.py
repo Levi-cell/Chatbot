@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    etapa4_worker as etapa_module,
+    resolver_etapa4 as etapa_module,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_IDADE_VALIDA,

@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
-    etapa1_worker as etapa_module,
+    resolver_etapa1 as etapa_module,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_NOME_CLIENTE_VALIDO,
