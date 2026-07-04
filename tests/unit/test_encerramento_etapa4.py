@@ -77,11 +77,11 @@ class EncerramentoEtapa4Tests(unittest.TestCase):
             resultado = encerramento.resolver_intencao_encerramento(
                 {
                     "id_conversa": 10,
-                    "id_etapa_origem_transicao": 9,
+                    "id_etapa_origem_transicao": 16,
                 },
                 {
-                    "evento_transicao": "agendamento_finalizado",
-                    "id_etapa_resultante": 10,
+                    "evento_transicao": "atendimento_finalizado",
+                    "id_etapa_resultante": 17,
                 },
                 object(),
             )
@@ -106,12 +106,12 @@ class EncerramentoEtapa4Tests(unittest.TestCase):
             resultado = encerramento.resolver_intencao_encerramento(
                 {
                     "id_conversa": 10,
-                    "id_etapa_origem_transicao": 9,
+                    "id_etapa_origem_transicao": 16,
                 },
                 {
                     "resposta_ja_existia": True,
-                    "evento_transicao": "agendamento_finalizado",
-                    "id_etapa_resultante": 10,
+                    "evento_transicao": "atendimento_finalizado",
+                    "id_etapa_resultante": 17,
                 },
                 object(),
             )

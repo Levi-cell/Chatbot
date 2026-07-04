@@ -67,6 +67,9 @@ class CacheAndAdminTests(unittest.TestCase):
         }
 
         self.assertIn("link_instagram", campos_unidade)
+        self.assertIn("waba_id", campos_unidade)
+        self.assertIn("waba_id", UnidadeAdmin.list_display)
+        self.assertIn("waba_id", UnidadeAdmin.search_fields)
         self.assertNotIn("telefone_dependente", campos_dependente)
         self.assertNotIn("email_dependente", campos_dependente)
 

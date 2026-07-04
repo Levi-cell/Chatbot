@@ -24,6 +24,9 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa7 import (
 from workers.worker_flow.response_flow.etapas.resolver_etapa8 import (
     resolve_etapa8,
 )
+from workers.worker_flow.response_flow.etapas.resolver_etapa9 import (
+    resolve_etapa9,
+)
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
@@ -111,6 +114,9 @@ def flow_sender(contexto_historico):
 
     if id_etapa_atual == 8:
         return resolve_etapa8(contexto_historico)
+
+    if id_etapa_atual == 9:
+        return resolve_etapa9(contexto_historico)
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",

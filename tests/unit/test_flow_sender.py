@@ -14,6 +14,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_PARA_OUTRA_PESSOA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
+    EVENTO_TRIAGEM_INICIADA,
 )
 
 
@@ -273,6 +274,31 @@ class FlowSenderTests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 9)
 
+    def test_retry_reconstroi_inicio_triagem_nove_para_dez(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 108,
+                    "id_hash_msg": "simulacao.etapa10",
+                    "id_etapa": 10,
+                },
+                etapa_atual=10,
+                etapa_cliente=9,
+                retry=2,
+                transicoes={
+                    EVENTO_TRIAGEM_INICIADA: 10,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_TRIAGEM_INICIADA,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 10)
+
     def test_conversa_sem_etapa_vai_para_etapa1(self):
         esperado = {
             "enviou": True,
@@ -478,6 +504,33 @@ class FlowSenderTests(unittest.TestCase):
                     etapa_cliente=8,
                     transicoes={
                         EVENTO_EMAIL_VALIDO: 9,
+                    },
+                )
+            )
+
+        resolver.assert_called_once()
+        self.assertEqual(resultado, esperado)
+
+    def test_etapa9_vai_para_resolver_da_etapa9(self):
+        esperado = {
+            "enviou": True,
+            "envio_simulado": True,
+            "id_hash_msg_bot": "simulacao.etapa10",
+            "id_etapa_resultante": 10,
+        }
+
+        with patch.object(
+            flow_sender_module,
+            "resolve_etapa9",
+            return_value=esperado,
+        ) as resolver:
+            resultado = flow_sender_module.flow_sender(
+                contexto_historico_base(
+                    etapa_atual=9,
+                    etapa_resposta=None,
+                    etapa_cliente=9,
+                    transicoes={
+                        EVENTO_TRIAGEM_INICIADA: 10,
                     },
                 )
             )

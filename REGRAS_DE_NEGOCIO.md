@@ -280,7 +280,11 @@ Implementação principal:
 - Poderá existir somente uma conversa ativa para o mesmo cliente e unidade.
 - Essa garantia é protegida pelo índice parcial `idx_conversa_unica_ativa`.
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
-  bloqueada pelo prazo declarado na política. Na V1, a etapa 10 usa 30 dias.
+  bloqueada pelo prazo declarado na política.
+- As etapas 9 e 10 são intermediárias da triagem cognitiva e não encerram,
+  bloqueiam ou enviam a conversa ao funil.
+- A nova etapa final será marcada com essas políticas quando o restante da
+  triagem e do agendamento estiver implementado.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma

@@ -46,13 +46,23 @@ def retorno_tratamento_etapa8(tipo_tratamento):
 
 class Etapa8ResolverTests(unittest.TestCase):
     def test_email_valido_e_extraido_antes_de_avancar(self):
-        resultado = etapa_module.resolve_etapa8(
-            contexto_historico(
-                "Meu email é cliente+agenda@Exemplo.COM.br."
+        with patch.object(
+            etapa_module,
+            "enviar_etapa9",
+            return_value={
+                "enviou": True,
+                "resposta_ja_existia": False,
+                "id_hash_msg_bot": "wamid.etapa9",
+                "id_etapa_resultante": 9,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa8(
+                contexto_historico(
+                    "Meu email é cliente+agenda@Exemplo.COM.br."
+                )
             )
-        )
 
-        self.assertTrue(resultado["envio_simulado"])
+        sender.assert_called_once_with("5575999999999", "123456")
         self.assertEqual(resultado["id_etapa_resultante"], 9)
         self.assertEqual(
             resultado["evento_transicao"],

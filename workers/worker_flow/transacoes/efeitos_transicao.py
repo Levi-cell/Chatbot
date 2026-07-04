@@ -30,7 +30,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_6_OFERTA_ADIADA,
     ETAPA_7_RETORNO_OFERTA,
     ETAPA_8_EMAIL,
-    ETAPA_9_LINK_AGENDAMENTO,
+    ETAPA_9_INTRODUCAO_TRIAGEM,
+    ETAPA_10_TRIAGEM_PERGUNTA_1,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
@@ -42,6 +43,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_PARA_OUTRA_PESSOA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
+    EVENTO_TRIAGEM_INICIADA,
 )
 
 
@@ -235,12 +237,28 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_9_LINK_AGENDAMENTO,
+                ETAPA_9_INTRODUCAO_TRIAGEM,
             )
             return _persistir_email_capturado_na_etapa8(
                 contexto_historico,
                 contexto_envio,
                 cursor,
+            )
+
+    # ETAPA 9
+    if etapa_origem == ETAPA_9_INTRODUCAO_TRIAGEM:
+        # 9 -> 10: o cliente iniciou a triagem cognitiva.
+        if evento == EVENTO_TRIAGEM_INICIADA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_10_TRIAGEM_PERGUNTA_1,
+            )
+            return _confirmar_inicio_triagem_da_etapa9(
+                contexto_historico,
+                evento,
+                etapa_destino,
             )
 
     raise ValueError(
@@ -608,4 +626,30 @@ def _persistir_email_capturado_na_etapa8(
     return {
         "cliente_email_atualizado": True,
         "email_preenchido": bool(email),
+    }
+
+
+def _confirmar_inicio_triagem_da_etapa9(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """
+    Confirma a continuidade sem criar dado de negócio adicional.
+
+    A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
+    conversa. Esta função torna explícita somente a aresta 9 -> 10.
+    """
+    logger.info(
+        "inicio_triagem_persistido | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "inicio_triagem_persistido": True,
+        "evento_triagem": evento,
     }

@@ -5,6 +5,9 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa8 import (
     enviar_etapa8_financeiro,
     enviar_etapa8_midia,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa9 import (
+    enviar_etapa9,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
     TIPO_TRATAMENTO_EMAIL_INVALIDO,
@@ -18,7 +21,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_9_LINK_AGENDAMENTO,
+    ETAPA_9_INTRODUCAO_TRIAGEM,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -42,7 +45,6 @@ def resolve_etapa8(contexto_historico):
     Mídia, financeiro e email inválido recebem tratamento sem avançar.
 
     Um email estruturalmente válido produz email_valido para resolver 8 -> 9.
-    O envio da etapa 9 permanece simulado enquanto seu sender não existe.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -94,11 +96,11 @@ def resolve_etapa8(contexto_historico):
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         evento_transicao,
-        destinos_esperados={ETAPA_9_LINK_AGENDAMENTO},
+        destinos_esperados={ETAPA_9_INTRODUCAO_TRIAGEM},
     )
 
     logger.info(
-        "etapa8_email_recebido | acao=simular_envio_etapa9 "
+        "etapa8_email_recebido | acao=enviar_etapa9 "
         "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
@@ -106,9 +108,9 @@ def resolve_etapa8(contexto_historico):
         etapa_destino,
     )
 
-    contexto_envio = _montar_contexto_etapa9_simulada(
-        contexto_historico,
-        etapa_destino,
+    contexto_envio = enviar_etapa9(
+        cliente_telefone,
+        phone_id_unidade,
     )
     contexto_envio["email_cliente"] = resultado_email.email
 
@@ -118,33 +120,6 @@ def resolve_etapa8(contexto_historico):
         evento_transicao,
         etapa_destino,
     )
-
-
-def _montar_contexto_etapa9_simulada(
-    contexto_historico,
-    etapa_destino,
-):
-    # TEMPORÁRIO: remover quando o sender real da etapa 9 existir.
-    id_mensagem_fila = contexto_historico[
-        "mensagem_cliente_atual"
-    ]["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": (
-            f"Nesse momento a futura etapa {etapa_destino} foi enviada."
-        ),
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-    }
 
 
 def _logar_tipo_nao_suportado(contexto_historico):

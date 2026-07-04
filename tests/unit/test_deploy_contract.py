@@ -8,7 +8,6 @@ from core.database.deploy import (
     setup_database,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_AGENDAMENTO_FINALIZADO,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
@@ -20,6 +19,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_PARA_OUTRA_PESSOA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
+    EVENTO_TRIAGEM_INICIADA,
 )
 
 
@@ -68,6 +68,15 @@ class DeployContractTests(unittest.TestCase):
             source,
         )
 
+    def test_unidade_possui_waba_id_no_ddl_e_na_evolucao_idempotente(self):
+        source = inspect.getsource(bank_script.criar_tabelas)
+
+        self.assertIn("waba_id VARCHAR(100)", source)
+        self.assertIn(
+            "ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100)",
+            source,
+        )
+
     def test_etapa_possui_politicas_escalaveis(self):
         source = inspect.getsource(bank_script.criar_tabelas)
 
@@ -76,23 +85,17 @@ class DeployContractTests(unittest.TestCase):
         self.assertIn("elegivel_funil BOOLEAN", source)
         self.assertIn("ck_etapa_bloqueio_dias", source)
         self.assertIn("idx_conversa_funil_pendente", source)
-        self.assertIn("WHERE id_etapa = 7", source)
+        self.assertIn("WHERE id_etapa IN (7, 10)", source)
         self.assertIn(
-            "'Atendimento finalizado e entrada no funil'",
+            "'Triagem cognitiva - pergunta 1'",
             source,
         )
 
-    def test_seed_possui_dez_etapas_e_bloqueia_somente_na_etapa_10(self):
-        etapa_final = povoar_etapas.ETAPAS[-1]
-
+    def test_seed_possui_dez_etapas_intermediarias(self):
         self.assertEqual(
             [etapa[0] for etapa in povoar_etapas.ETAPAS],
             list(range(1, 11)),
         )
-        self.assertEqual(etapa_final[0], 10)
-        self.assertTrue(etapa_final[2])
-        self.assertEqual(etapa_final[3], 30)
-        self.assertTrue(etapa_final[4])
         self.assertTrue(
             all(
                 not encerra and dias == 0 and not funil
@@ -102,7 +105,7 @@ class DeployContractTests(unittest.TestCase):
                     encerra,
                     dias,
                     funil,
-                ) in povoar_etapas.ETAPAS[:-1]
+                ) in povoar_etapas.ETAPAS
             )
         )
 
@@ -137,7 +140,7 @@ class DeployContractTests(unittest.TestCase):
                 (7, EVENTO_RETORNO_CONFIRMADO, 8),
                 (7, EVENTO_RETORNO_ADIADO, 6),
                 (8, EVENTO_EMAIL_VALIDO, 9),
-                (9, EVENTO_AGENDAMENTO_FINALIZADO, 10),
+                (9, EVENTO_TRIAGEM_INICIADA, 10),
             ),
         )
 

@@ -243,6 +243,7 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
+            waba_id VARCHAR(100),
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             link_instagram VARCHAR(400),
@@ -329,6 +330,9 @@ def criar_tabelas():
         ADD COLUMN IF NOT EXISTS numero_comercial VARCHAR(30);
 
         ALTER TABLE chatbot.unidade
+        ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100);
+
+        ALTER TABLE chatbot.unidade
         ADD COLUMN IF NOT EXISTS link_instagram VARCHAR(400);
 
         -- Bootstrap idempotente da primeira unidade. Atualizações posteriores
@@ -378,17 +382,16 @@ def criar_tabelas():
         ALTER COLUMN bloqueio_dias SET NOT NULL,
         ALTER COLUMN elegivel_funil SET NOT NULL;
 
-        -- A etapa 7 deixou de ser final e agora representa a confirmação de
-        -- retorno. A etapa 10 concentra encerramento, bloqueio e funil.
+        -- As etapas 7 e 10 são estados intermediários do fluxo atual.
         UPDATE chatbot.etapa
         SET
             encerra_automaticamente = FALSE,
             bloqueio_dias = 0,
             elegivel_funil = FALSE
-        WHERE id_etapa = 7;
+        WHERE id_etapa IN (7, 10);
 
-        -- Proteção para deploy parcial: cria ou atualiza a etapa final antes
-        -- do seed completo sincronizar o catálogo de etapas.
+        -- Proteção para deploy parcial: cria ou atualiza a primeira pergunta
+        -- da triagem antes do seed completo sincronizar o catálogo.
         INSERT INTO chatbot.etapa (
             id_etapa,
             nome_etapa,
@@ -398,17 +401,17 @@ def criar_tabelas():
         )
         VALUES (
             10,
-            'Atendimento finalizado e entrada no funil',
-            TRUE,
-            30,
-            TRUE
+            'Triagem cognitiva - pergunta 1',
+            FALSE,
+            0,
+            FALSE
         )
         ON CONFLICT (id_etapa)
         DO UPDATE SET
             nome_etapa = EXCLUDED.nome_etapa,
-            encerra_automaticamente = TRUE,
-            bloqueio_dias = 30,
-            elegivel_funil = TRUE;
+            encerra_automaticamente = FALSE,
+            bloqueio_dias = 0,
+            elegivel_funil = FALSE;
 
         DO $$
         BEGIN

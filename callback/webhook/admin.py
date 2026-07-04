@@ -60,6 +60,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "telefone",
         "numero_comercial",
         "email_responsavel",
+        "waba_id",
+        "phone_number_id",
         "link_agendamento_clickable",
         "link_instagram_clickable",
         "status_pagamento",
@@ -71,6 +73,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "telefone",
         "numero_comercial",
         "email_responsavel",
+        "waba_id",
+        "phone_number_id",
         "link_agendamento",
         "link_instagram",
     )

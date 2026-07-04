@@ -15,8 +15,8 @@ ETAPAS = (
     (6, "Oferta adiada e Instagram", False, 0, False),
     (7, "Confirmação de retorno ao atendimento", False, 0, False),
     (8, "Email", False, 0, False),
-    (9, "Link de agendamento", False, 0, False),
-    (10, "Atendimento finalizado e entrada no funil", True, 30, True),
+    (9, "Introdução à triagem cognitiva", False, 0, False),
+    (10, "Triagem cognitiva - pergunta 1", False, 0, False),
 )
 
 
