@@ -3,6 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    CABECALHO_ETAPA7_RETORNO,
+    RODAPE_OPCAO_UNICA,
+)
 from core.integrations.whatsapp.messages.etapa7_messages import (
     BOTAO_ETAPA7_QUERO_AGENDAR,
     BOTAO_ETAPA7_TALVEZ_MAIS_TARDE,
@@ -78,6 +82,14 @@ class PywaSenderEtapa7Tests(unittest.TestCase):
 
                 chamada = cliente_wa.calls[0]
                 self.assertEqual(
+                    chamada["header"],
+                    CABECALHO_ETAPA7_RETORNO,
+                )
+                self.assertEqual(
+                    chamada["footer"],
+                    RODAPE_OPCAO_UNICA,
+                )
+                self.assertEqual(
                     [botao.title for botao in chamada["buttons"]],
                     [
                         BOTAO_ETAPA7_QUERO_AGENDAR,
@@ -88,6 +100,14 @@ class PywaSenderEtapa7Tests(unittest.TestCase):
                 self.assertEqual(
                     resultado["tipo_mensagem"],
                     "interactive_button",
+                )
+                self.assertEqual(
+                    resultado["cabecalho_mensagem"],
+                    CABECALHO_ETAPA7_RETORNO,
+                )
+                self.assertEqual(
+                    resultado["rodape_mensagem"],
+                    RODAPE_OPCAO_UNICA,
                 )
 
                 if tratamento:

@@ -3,6 +3,10 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    CABECALHO_ETAPA2_ATENDIMENTO,
+    RODAPE_OPCAO_UNICA,
+)
 from core.integrations.whatsapp.messages.etapa2_messages import (
     BOTAO_ETAPA2_OUTRA_PESSOA,
     BOTAO_ETAPA2_PARA_MIM,
@@ -52,6 +56,14 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
         self.assertEqual(cliente_wa.calls[0]["to"], "5571999999999")
         self.assertEqual(cliente_wa.calls[0]["text"], mensagem_esperada)
         self.assertEqual(
+            cliente_wa.calls[0]["header"],
+            CABECALHO_ETAPA2_ATENDIMENTO,
+        )
+        self.assertEqual(
+            cliente_wa.calls[0]["footer"],
+            RODAPE_OPCAO_UNICA,
+        )
+        self.assertEqual(
             titulos_botoes(cliente_wa.calls[0]),
             [BOTAO_ETAPA2_PARA_MIM, BOTAO_ETAPA2_OUTRA_PESSOA],
         )
@@ -61,6 +73,14 @@ class PywaSenderEtapa2Tests(unittest.TestCase):
         self.assertEqual(resultado["id_hash_msg_bot"], "wamid.bot.2")
         self.assertEqual(resultado["id_etapa_resultante"], 2)
         self.assertEqual(resultado["tipo_mensagem"], "interactive_button")
+        self.assertEqual(
+            resultado["cabecalho_mensagem"],
+            CABECALHO_ETAPA2_ATENDIMENTO,
+        )
+        self.assertEqual(
+            resultado["rodape_mensagem"],
+            RODAPE_OPCAO_UNICA,
+        )
         self.assertNotIn("tratamento", resultado)
 
     def test_midia_etapa2_marca_tratamento_e_mantem_botoes(self):

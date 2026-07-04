@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    CABECALHO_ETAPA9_TRIAGEM,
+)
 from core.integrations.whatsapp.messages.etapa9_messages import (
     BOTAO_ETAPA9_INICIAR_TRIAGEM,
 )
@@ -41,6 +44,11 @@ class PywaSenderEtapa9Tests(unittest.TestCase):
 
         chamada = cliente_wa.calls[0]
         self.assertEqual(
+            chamada["header"],
+            CABECALHO_ETAPA9_TRIAGEM,
+        )
+        self.assertNotIn("footer", chamada)
+        self.assertEqual(
             [botao.title for botao in chamada["buttons"]],
             [BOTAO_ETAPA9_INICIAR_TRIAGEM],
         )
@@ -49,6 +57,11 @@ class PywaSenderEtapa9Tests(unittest.TestCase):
             resultado["tipo_mensagem"],
             "interactive_button",
         )
+        self.assertEqual(
+            resultado["cabecalho_mensagem"],
+            CABECALHO_ETAPA9_TRIAGEM,
+        )
+        self.assertNotIn("rodape_mensagem", resultado)
         self.assertNotIn("tratamento", resultado)
 
     def test_meta_falhou_levanta_exception_controlada(self):

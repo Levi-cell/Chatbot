@@ -3,6 +3,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    CABECALHO_ETAPA1_SAUDACAO,
+    RODAPE_ETAPA1_BOAS_VINDAS,
+    RODAPE_TRATAMENTO_TEXTO,
+)
 from core.integrations.whatsapp.messages.etapa1_messages import (
     montar_mensagem_etapa1,
     montar_mensagem_financeiro_etapa1,
@@ -49,6 +54,16 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
 
         self.assertEqual(cliente_wa.calls[0]["to"], "5571999999999")
         self.assertEqual(cliente_wa.calls[0]["text"], mensagem_esperada)
+        self.assertTrue(
+            mensagem_esperada.startswith(
+                f"*{CABECALHO_ETAPA1_SAUDACAO}*"
+            )
+        )
+        self.assertTrue(
+            mensagem_esperada.endswith(
+                f"_{RODAPE_ETAPA1_BOAS_VINDAS}_"
+            )
+        )
         self.assertTrue(resultado["enviou"])
         self.assertFalse(resultado["resposta_ja_existia"])
         self.assertEqual(resultado["mensagem_bot"], mensagem_esperada)
@@ -126,6 +141,11 @@ class PywaSenderEtapa1Tests(unittest.TestCase):
         self.assertEqual(
             cliente_wa.calls[0]["text"],
             montar_mensagem_financeiro_etapa1(),
+        )
+        self.assertTrue(
+            resultado["mensagem_bot"].endswith(
+                f"_{RODAPE_TRATAMENTO_TEXTO}_"
+            )
         )
         self.assertTrue(resultado["tratamento"])
         self.assertEqual(resultado["id_etapa_resultante"], 1)

@@ -61,7 +61,10 @@ class MessagesTriagemTests(unittest.TestCase):
             BOTOES_TRIAGEM,
             ("Nunca", "Às vezes", "Frequentemente"),
         )
-        self.assertEqual(RODAPE_TRIAGEM, "Selecione uma opção abaixo")
+        self.assertEqual(
+            RODAPE_TRIAGEM,
+            "Selecione apenas uma opção abaixo.",
+        )
 
 
 if __name__ == "__main__":

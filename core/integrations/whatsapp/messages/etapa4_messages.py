@@ -1,3 +1,9 @@
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    RODAPE_TRATAMENTO_TEXTO,
+    montar_texto_com_rodape,
+)
+
+
 ### ENTRADA NA ETAPA 4 - CLIENTE
 
 MENSAGEM_IDADE_ETAPA4 = (
@@ -29,7 +35,10 @@ MENSAGEM_IDADE_ETAPA4_MIDIA = (
 
 
 def montar_mensagem_idade_etapa4_midia():
-    return MENSAGEM_IDADE_ETAPA4_MIDIA
+    return montar_texto_com_rodape(
+        MENSAGEM_IDADE_ETAPA4_MIDIA,
+        RODAPE_TRATAMENTO_TEXTO,
+    )
 
 
 ### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MÍDIA
@@ -41,7 +50,10 @@ MENSAGEM_IDADE_DEPENDENTE_ETAPA4_MIDIA = (
 
 
 def montar_mensagem_idade_dependente_etapa4_midia(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA4_MIDIA.format(nome=nome)
+    return montar_texto_com_rodape(
+        MENSAGEM_IDADE_DEPENDENTE_ETAPA4_MIDIA.format(nome=nome),
+        RODAPE_TRATAMENTO_TEXTO,
+    )
 
 
 ### CLIENTE RESPONDE À IDADE COM PERGUNTA FINANCEIRA
@@ -54,7 +66,10 @@ MENSAGEM_IDADE_ETAPA4_FINANCEIRO = (
 
 
 def montar_mensagem_idade_etapa4_financeiro():
-    return MENSAGEM_IDADE_ETAPA4_FINANCEIRO
+    return montar_texto_com_rodape(
+        MENSAGEM_IDADE_ETAPA4_FINANCEIRO,
+        RODAPE_TRATAMENTO_TEXTO,
+    )
 
 
 ### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM PERGUNTA FINANCEIRA
@@ -67,7 +82,10 @@ MENSAGEM_IDADE_DEPENDENTE_ETAPA4_FINANCEIRO = (
 
 
 def montar_mensagem_idade_dependente_etapa4_financeiro(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA4_FINANCEIRO.format(nome=nome)
+    return montar_texto_com_rodape(
+        MENSAGEM_IDADE_DEPENDENTE_ETAPA4_FINANCEIRO.format(nome=nome),
+        RODAPE_TRATAMENTO_TEXTO,
+    )
 
 
 ### CLIENTE RESPONDE À IDADE COM MENSAGEM FORA DE CONTEXTO
@@ -79,7 +97,10 @@ MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA4 = (
 
 
 def montar_mensagem_contexto_idade_invalida_etapa4():
-    return MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA4
+    return montar_texto_com_rodape(
+        MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA4,
+        RODAPE_TRATAMENTO_TEXTO,
+    )
 
 
 ### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MENSAGEM FORA DE CONTEXTO
@@ -92,8 +113,11 @@ MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA4 = (
 
 
 def montar_mensagem_contexto_idade_dependente_invalida_etapa4(nome):
-    return MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA4.format(
-        nome=nome,
+    return montar_texto_com_rodape(
+        MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA4.format(
+            nome=nome,
+        ),
+        RODAPE_TRATAMENTO_TEXTO,
     )
 
 

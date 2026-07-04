@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    RODAPE_OPCAO_UNICA,
+)
 from core.integrations.whatsapp.messages.etapa5_messages import (
     BOTAO_ETAPA5_QUERO_AGENDAR,
     BOTAO_ETAPA5_TALVEZ_MAIS_TARDE,
@@ -116,6 +119,7 @@ class PywaSenderEtapa5Tests(unittest.TestCase):
 
                 self.assertEqual(call["to"], "5571999999999")
                 self.assertEqual(call["text"], mensagem)
+                self.assertEqual(call["footer"], RODAPE_OPCAO_UNICA)
                 self.assertEqual(
                     titulos_botoes(call),
                     [
@@ -134,6 +138,10 @@ class PywaSenderEtapa5Tests(unittest.TestCase):
                 self.assertEqual(
                     resultado["tipo_mensagem"],
                     "interactive_button",
+                )
+                self.assertEqual(
+                    resultado["rodape_mensagem"],
+                    RODAPE_OPCAO_UNICA,
                 )
 
                 if tratamento:

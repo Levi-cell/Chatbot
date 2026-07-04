@@ -1,8 +1,7 @@
 # ENTRADA NA ETAPA 7 - RETORNO DO PROPRIO CLIENTE
 
 MENSAGEM_RETORNO_CLIENTE_ETAPA7 = (
-    "Que bom ter você de volta! ☺️\n\n"
-    "Vamos dar continuidade ao seu agendamento?"
+    "Vamos dar continuidade ao seu agendamento? ☺️"
 )
 
 
@@ -13,8 +12,7 @@ def montar_mensagem_retorno_cliente_etapa7():
 # ENTRADA NA ETAPA 7 - RETORNO PARA AGENDAMENTO DO DEPENDENTE
 
 MENSAGEM_RETORNO_DEPENDENTE_ETAPA7 = (
-    "Que bom ter você de volta! ☺️\n\n"
-    "Vamos dar continuidade ao agendamento de {nome}?"
+    "Vamos dar continuidade ao agendamento de {nome}? ☺️"
 )
 
 
@@ -26,8 +24,7 @@ def montar_mensagem_retorno_dependente_etapa7(nome):
 
 MENSAGEM_RETORNO_CLIENTE_MIDIA_ETAPA7 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas que bom ter você de volta! Vamos dar continuidade ao seu "
-    "agendamento?"
+    "Vamos dar continuidade ao seu agendamento?"
 )
 
 
@@ -39,8 +36,7 @@ def montar_mensagem_retorno_cliente_midia_etapa7():
 
 MENSAGEM_RETORNO_DEPENDENTE_MIDIA_ETAPA7 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas que bom ter você de volta! Vamos dar continuidade ao agendamento "
-    "de {nome}?"
+    "Vamos dar continuidade ao agendamento de {nome}?"
 )
 
 
@@ -53,8 +49,7 @@ def montar_mensagem_retorno_dependente_midia_etapa7(nome):
 MENSAGEM_RETORNO_CLIENTE_FINANCEIRO_ETAPA7 = (
     "Olha, demais informações, como valores, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas que bom ter você de volta! Vamos dar continuidade ao seu "
-    "agendamento?"
+    "Vamos dar continuidade ao seu agendamento?"
 )
 
 
@@ -67,8 +62,7 @@ def montar_mensagem_retorno_cliente_financeiro_etapa7():
 MENSAGEM_RETORNO_DEPENDENTE_FINANCEIRO_ETAPA7 = (
     "Olha, demais informações, como valores, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas que bom ter você de volta! Vamos dar continuidade ao agendamento "
-    "de {nome}?"
+    "Vamos dar continuidade ao agendamento de {nome}?"
 )
 
 
@@ -80,8 +74,7 @@ def montar_mensagem_retorno_dependente_financeiro_etapa7(nome):
 
 MENSAGEM_RETORNO_CLIENTE_CONTEXTO_INVALIDO_ETAPA7 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Vamos dar continuidade ao seu agendamento?\n\n"
-    "Selecione uma das opções abaixo."
+    "Vamos dar continuidade ao seu agendamento?"
 )
 
 
@@ -93,8 +86,7 @@ def montar_mensagem_retorno_cliente_contexto_invalido_etapa7():
 
 MENSAGEM_RETORNO_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA7 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Vamos dar continuidade ao agendamento de {nome}?\n\n"
-    "Selecione uma das opções abaixo."
+    "Vamos dar continuidade ao agendamento de {nome}?"
 )
 
 

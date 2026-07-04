@@ -99,7 +99,7 @@ MENSAGEM_OFERTA_CLIENTE_CONTEXTO_INVALIDO_ETAPA5 = (
     "Mas bora lá, quero te oferecer uma aula experimental + avaliação "
     "cognitiva *gratuita*. Elas servem para que possamos saber como anda a "
     "saúde do seu cérebro e para que você possa nos conhecer. 😄\n\n"
-    "Selecione uma das opções abaixo."
+    "Vamos agendar?"
 )
 
 
@@ -115,7 +115,7 @@ MENSAGEM_OFERTA_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA5 = (
     "cognitiva *gratuita* para {nome}. Elas servem para que possamos saber "
     "como anda a saúde do cérebro de {nome} e para que vocês possam nos "
     "conhecer. 😄\n\n"
-    "Selecione uma das opções abaixo."
+    "Vamos agendar?"
 )
 
 

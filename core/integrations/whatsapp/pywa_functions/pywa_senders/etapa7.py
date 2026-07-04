@@ -3,6 +3,10 @@ import logging
 from pywa.types import Button
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    CABECALHO_ETAPA7_RETORNO,
+    RODAPE_OPCAO_UNICA,
+)
 from core.integrations.whatsapp.messages.etapa7_messages import (
     montar_botoes_etapa7,
     montar_mensagem_retorno_cliente_contexto_invalido_etapa7,
@@ -186,6 +190,8 @@ def _enviar_texto_etapa7(
         sent_message = cliente_wa.send_message(
             to=cliente_telefone,
             text=mensagem_bot,
+            header=CABECALHO_ETAPA7_RETORNO,
+            footer=RODAPE_OPCAO_UNICA,
             buttons=_montar_botoes_pywa_etapa7(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
@@ -204,6 +210,8 @@ def _enviar_texto_etapa7(
             "enviou": True,
             "resposta_ja_existia": False,
             "mensagem_bot": mensagem_bot,
+            "cabecalho_mensagem": CABECALHO_ETAPA7_RETORNO,
+            "rodape_mensagem": RODAPE_OPCAO_UNICA,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": ID_ETAPA7,
             "tipo_mensagem": "interactive_button",
@@ -243,4 +251,3 @@ def _montar_botoes_pywa_etapa7():
         )
         for titulo in montar_botoes_etapa7()
     ]
-

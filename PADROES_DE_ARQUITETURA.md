@@ -466,6 +466,28 @@ Componentes compartilhados por um grupo de etapas podem possuir um helper
 próprio. `triagem_componentes.py`, por exemplo, atende exclusivamente às etapas
 10 a 15 e centraliza botões e rodapé, sem conter envio ou decisão de fluxo.
 
+Componentes visuais usados por diferentes etapas pertencem a
+`componentes_compartilhados.py`. Esse helper pode armazenar textos comuns e
+funções puras de composição, mas não pode conhecer cliente, conversa, evento ou
+destino.
+
+Na PyWa utilizada pelo projeto, `header` e `footer` só são enviados quando a
+mensagem possui botões e se torna interativa. Em mensagens de texto simples,
+esses argumentos são ignorados. Quando uma mensagem simples precisar da mesma
+hierarquia visual, o cabeçalho e o rodapé devem ser incorporados ao corpo:
+
+```text
+*Cabeçalho*
+
+Corpo da mensagem
+
+_Rodapé_
+```
+
+Cabeçalhos interativos não aceitam Markdown e o Markdown não produz efeito no
+rodapé interativo. Portanto, a ênfase com `*` e `_` pertence somente ao corpo de
+mensagens simples.
+
 ### `pywa_functions`
 
 É o único local permitido para chamadas diretas à biblioteca PyWa.
