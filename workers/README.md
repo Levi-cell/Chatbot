@@ -107,8 +107,8 @@ fila sem duplicar o envio.
   etapa atual;
 - `etapas/resolver_etapa<n>.py`: valida a resposta, aplica tratamentos e
   encaminha para o destino autorizado;
-- `etapas/validadores_universais/`: mídia, financeiro, nome e outras validações
-  reutilizáveis;
+- `etapas/validadores_universais/`: mídia, financeiro, nome, opções da triagem
+  e outras validações reutilizáveis;
 - `etapas/validadores_contexto/`: respostas específicas de cada pergunta;
 - `transicoes/contexto_transicao.py`: transforma o resultado da consulta em
   origem e mapa explícitos no contexto histórico;
@@ -158,5 +158,8 @@ cursor e não controlam a transação.
 - `tests/unit/test_flow_sender.py`;
 - `tests/unit/test_etapa1.py`;
 - `tests/unit/test_etapa2.py`;
+- `tests/unit/test_validador_triagem.py`;
+- `tests/unit/test_resolvers_triagem.py`;
+- `tests/unit/test_efeitos_triagem.py`;
 - `tests/unit/test_transicoes_etapa.py`;
 - `tests/unit/test_repositories.py`.

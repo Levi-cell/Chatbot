@@ -196,7 +196,7 @@ class RespostasDesafios(models.Model):
         db_column='id_etapa',
         related_name='respostas_desafios',
     )
-    resposta = models.CharField(max_length=10)
+    resposta = models.CharField(max_length=20)
     id_historico_mensagem_cliente = models.IntegerField(blank=True, null=True)
     criado_em = models.DateTimeField()
 

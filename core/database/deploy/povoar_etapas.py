@@ -17,6 +17,12 @@ ETAPAS = (
     (8, "Email", False, 0, False),
     (9, "Introdução à triagem cognitiva", False, 0, False),
     (10, "Triagem cognitiva - pergunta 1", False, 0, False),
+    (11, "Triagem cognitiva - pergunta 2", False, 0, False),
+    (12, "Triagem cognitiva - pergunta 3", False, 0, False),
+    (13, "Triagem cognitiva - pergunta 4", False, 0, False),
+    (14, "Triagem cognitiva - pergunta 5", False, 0, False),
+    (15, "Triagem cognitiva - pergunta 6", False, 0, False),
+    (16, "Agendamento após a triagem cognitiva", False, 0, False),
 )
 
 

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from workers.worker_flow.response_flow.etapas import (
     resolver_etapa9 as etapa_module,
@@ -33,14 +34,22 @@ def contexto_historico(
 
 class Etapa9ResolverTests(unittest.TestCase):
     def test_botao_inicia_triagem(self):
-        resultado = etapa_module.resolve_etapa9(
-            contexto_historico(
-                tipo_mensagem="interactive",
-                texto="Iniciar triagem",
+        with patch.object(
+            etapa_module,
+            "enviar_etapa10_cliente",
+            return_value={
+                "enviou": True,
+                "id_etapa_resultante": 10,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa9(
+                contexto_historico(
+                    tipo_mensagem="interactive",
+                    texto="Iniciar triagem",
+                )
             )
-        )
 
-        self.assertTrue(resultado["envio_simulado"])
+        sender.assert_called_once_with("5575999999999", "123456")
         self.assertEqual(resultado["id_etapa_resultante"], 10)
         self.assertEqual(
             resultado["evento_transicao"],
@@ -55,18 +64,52 @@ class Etapa9ResolverTests(unittest.TestCase):
             "document",
         ):
             with self.subTest(tipo_mensagem=tipo_mensagem):
-                resultado = etapa_module.resolve_etapa9(
-                    contexto_historico(
-                        tipo_mensagem=tipo_mensagem,
-                        texto="quanto custa?",
+                with patch.object(
+                    etapa_module,
+                    "enviar_etapa10_cliente",
+                    return_value={
+                        "enviou": True,
+                        "id_etapa_resultante": 10,
+                    },
+                ):
+                    resultado = etapa_module.resolve_etapa9(
+                        contexto_historico(
+                            tipo_mensagem=tipo_mensagem,
+                            texto="quanto custa?",
+                        )
                     )
-                )
 
                 self.assertEqual(
                     resultado["id_etapa_resultante"],
                     10,
                 )
                 self.assertNotIn("tratamento", resultado)
+
+    def test_dependente_recebe_pergunta_com_nome(self):
+        contexto = contexto_historico()
+        contexto.update(
+            {
+                "status_dependente": True,
+                "nome_dependente": "Alice",
+            }
+        )
+
+        with patch.object(
+            etapa_module,
+            "enviar_etapa10_dependente",
+            return_value={
+                "enviou": True,
+                "id_etapa_resultante": 10,
+            },
+        ) as sender:
+            resultado = etapa_module.resolve_etapa9(contexto)
+
+        sender.assert_called_once_with(
+            "5575999999999",
+            "123456",
+            "Alice",
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 10)
 
 
 if __name__ == "__main__":

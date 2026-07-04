@@ -27,6 +27,24 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa8 import (
 from workers.worker_flow.response_flow.etapas.resolver_etapa9 import (
     resolve_etapa9,
 )
+from workers.worker_flow.response_flow.etapas.resolver_etapa10 import (
+    resolve_etapa10,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa11 import (
+    resolve_etapa11,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa12 import (
+    resolve_etapa12,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa13 import (
+    resolve_etapa13,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa14 import (
+    resolve_etapa14,
+)
+from workers.worker_flow.response_flow.etapas.resolver_etapa15 import (
+    resolve_etapa15,
+)
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
@@ -117,6 +135,24 @@ def flow_sender(contexto_historico):
 
     if id_etapa_atual == 9:
         return resolve_etapa9(contexto_historico)
+
+    if id_etapa_atual == 10:
+        return resolve_etapa10(contexto_historico)
+
+    if id_etapa_atual == 11:
+        return resolve_etapa11(contexto_historico)
+
+    if id_etapa_atual == 12:
+        return resolve_etapa12(contexto_historico)
+
+    if id_etapa_atual == 13:
+        return resolve_etapa13(contexto_historico)
+
+    if id_etapa_atual == 14:
+        return resolve_etapa14(contexto_historico)
+
+    if id_etapa_atual == 15:
+        return resolve_etapa15(contexto_historico)
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",

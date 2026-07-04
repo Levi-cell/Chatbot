@@ -20,6 +20,12 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
     EVENTO_TRIAGEM_INICIADA,
+    EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
 
 
@@ -42,6 +48,11 @@ class DeployContractTests(unittest.TestCase):
         self.assertIn("CREATE TABLE IF NOT EXISTS chatbot.respostas_desafios", source)
         self.assertIn("UNIQUE (id_conversa, id_etapa)", source)
         self.assertIn("id_historico_mensagem_cliente INT NULL", source)
+        self.assertIn("resposta VARCHAR(20) NOT NULL", source)
+        self.assertIn(
+            "ALTER COLUMN resposta TYPE VARCHAR(20)",
+            source,
+        )
 
     def test_cliente_e_dependente_possuem_idade_e_conversa_vinculada(self):
         source = inspect.getsource(bank_script.criar_tabelas)
@@ -91,10 +102,10 @@ class DeployContractTests(unittest.TestCase):
             source,
         )
 
-    def test_seed_possui_dez_etapas_intermediarias(self):
+    def test_seed_possui_dezesseis_etapas_intermediarias(self):
         self.assertEqual(
             [etapa[0] for etapa in povoar_etapas.ETAPAS],
-            list(range(1, 11)),
+            list(range(1, 17)),
         )
         self.assertTrue(
             all(
@@ -141,6 +152,12 @@ class DeployContractTests(unittest.TestCase):
                 (7, EVENTO_RETORNO_ADIADO, 6),
                 (8, EVENTO_EMAIL_VALIDO, 9),
                 (9, EVENTO_TRIAGEM_INICIADA, 10),
+                (10, EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA, 11),
+                (11, EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA, 12),
+                (12, EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA, 13),
+                (13, EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA, 14),
+                (14, EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA, 15),
+                (15, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 16),
             ),
         )
 

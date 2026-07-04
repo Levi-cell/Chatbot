@@ -356,6 +356,23 @@ Antes dessa fronteira, o resolver apenas valida a resposta e pode permanecer na
 etapa atual. Depois dela, a resposta já é válida: o código resolve o destino,
 chama o sender correspondente e anexa a transição ao contexto de envio.
 
+Quando o resolver produz somente um evento e possui um único destino possível,
+o conjunto esperado deve ficar explícito na chamada:
+
+```python
+etapa_destino = resolver_destino_transicao(
+    contexto_historico,
+    EVENTO_RESPOSTA_VALIDA,
+    destinos_esperados={ETAPA_DESTINO},
+)
+```
+
+Quando a mesma origem produz múltiplos eventos e destinos, o resolver deve
+centralizar essa correspondência em
+`_destinos_esperados_por_evento(evento_transicao)`. A função interna não é
+necessária em fluxos lineares, pois apenas esconderia uma constante sem
+representar uma decisão real.
+
 ### Constantes e efeitos de etapa
 
 Toda constante de estado deve mostrar o número persistido e o significado:
@@ -445,6 +462,10 @@ Novos textos não devem ser escritos diretamente no worker ou em
 `pywa_functions`. Organize-os por responsabilidade, como `etapas.py` e
 `tratamentos.py`.
 
+Componentes compartilhados por um grupo de etapas podem possuir um helper
+próprio. `triagem_componentes.py`, por exemplo, atende exclusivamente às etapas
+10 a 15 e centraliza botões e rodapé, sem conter envio ou decisão de fluxo.
+
 ### `pywa_functions`
 
 É o único local permitido para chamadas diretas à biblioteca PyWa.
@@ -466,6 +487,13 @@ Não pode conter:
 - `commit`, `rollback` ou `close`;
 - decisão sobre limite de retry;
 - mutação direta de conversa, histórico ou fila.
+
+Quando várias etapas compartilham exatamente o mesmo contrato de transporte,
+um sender-base pode centralizar apenas a mecânica comum. `triagem_base.py`
+atende às etapas 10 a 15: monta os componentes PyWa, envia, extrai o ID da
+mensagem e produz o contexto de envio. Os senders públicos de cada etapa
+continuam responsáveis pelo conteúdo e o helper-base não pode validar respostas,
+produzir eventos ou escolher destinos.
 
 Separação interna recomendada:
 

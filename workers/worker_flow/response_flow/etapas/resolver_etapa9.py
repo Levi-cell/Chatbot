@@ -1,5 +1,9 @@
 import logging
 
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa10 import (
+    enviar_etapa10_cliente,
+    enviar_etapa10_dependente,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_10_TRIAGEM_PERGUNTA_1,
     EVENTO_TRIAGEM_INICIADA,
@@ -38,7 +42,7 @@ def resolve_etapa9(contexto_historico):
     )
 
     logger.info(
-        "etapa9_triagem_iniciada | acao=simular_envio_etapa10 "
+        "etapa9_triagem_iniciada | acao=enviar_etapa10 "
         "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
         "tipo_mensagem=%s",
         contexto_historico["id_conversa"],
@@ -48,10 +52,17 @@ def resolve_etapa9(contexto_historico):
         contexto_historico.get("tipo_mensagem_atual"),
     )
 
-    contexto_envio = _montar_contexto_etapa10_simulada(
-        contexto_historico,
-        etapa_destino,
-    )
+    if contexto_historico.get("status_dependente"):
+        contexto_envio = enviar_etapa10_dependente(
+            mensagem_cliente["cliente_telefone"],
+            mensagem_cliente["id_phone_unidade"],
+            contexto_historico.get("nome_dependente"),
+        )
+    else:
+        contexto_envio = enviar_etapa10_cliente(
+            mensagem_cliente["cliente_telefone"],
+            mensagem_cliente["id_phone_unidade"],
+        )
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
@@ -59,30 +70,3 @@ def resolve_etapa9(contexto_historico):
         EVENTO_TRIAGEM_INICIADA,
         etapa_destino,
     )
-
-
-def _montar_contexto_etapa10_simulada(
-    contexto_historico,
-    etapa_destino,
-):
-    # TEMPORARIO: remover quando a primeira pergunta e seu sender existirem.
-    id_mensagem_fila = contexto_historico[
-        "mensagem_cliente_atual"
-    ]["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": (
-            f"Nesse momento a futura etapa {etapa_destino} foi enviada."
-        ),
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-    }

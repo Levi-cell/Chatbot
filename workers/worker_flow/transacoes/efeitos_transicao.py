@@ -7,6 +7,7 @@ from core.repositories.idade_aluno import (
     atualizar_idade_dependente,
 )
 from core.repositories.inserts import inserir_dependente_para_conversa
+from core.repositories.respostas_triagem import registrar_resposta_triagem
 from core.repositories.updates import (
     atualizar_nome_cliente_por_telefone,
     atualizar_nome_dependente_por_conversa,
@@ -14,6 +15,9 @@ from core.repositories.updates import (
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
+    validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     validar_idade,
@@ -32,6 +36,12 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_8_EMAIL,
     ETAPA_9_INTRODUCAO_TRIAGEM,
     ETAPA_10_TRIAGEM_PERGUNTA_1,
+    ETAPA_11_TRIAGEM_PERGUNTA_2,
+    ETAPA_12_TRIAGEM_PERGUNTA_3,
+    ETAPA_13_TRIAGEM_PERGUNTA_4,
+    ETAPA_14_TRIAGEM_PERGUNTA_5,
+    ETAPA_15_TRIAGEM_PERGUNTA_6,
+    ETAPA_16_AGENDAMENTO,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
@@ -44,6 +54,12 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
     EVENTO_TRIAGEM_INICIADA,
+    EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
+    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
 
 
@@ -259,6 +275,102 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 evento,
                 etapa_destino,
+            )
+
+    # ETAPA 10
+    if etapa_origem == ETAPA_10_TRIAGEM_PERGUNTA_1:
+        # 10 -> 11: registra a resposta da pergunta 1.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_11_TRIAGEM_PERGUNTA_2,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 11
+    if etapa_origem == ETAPA_11_TRIAGEM_PERGUNTA_2:
+        # 11 -> 12: registra a resposta da pergunta 2.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_12_TRIAGEM_PERGUNTA_3,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 12
+    if etapa_origem == ETAPA_12_TRIAGEM_PERGUNTA_3:
+        # 12 -> 13: registra a resposta da pergunta 3.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_13_TRIAGEM_PERGUNTA_4,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 13
+    if etapa_origem == ETAPA_13_TRIAGEM_PERGUNTA_4:
+        # 13 -> 14: registra a resposta da pergunta 4.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_14_TRIAGEM_PERGUNTA_5,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 14
+    if etapa_origem == ETAPA_14_TRIAGEM_PERGUNTA_5:
+        # 14 -> 15: registra a resposta da pergunta 5.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_15_TRIAGEM_PERGUNTA_6,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 15
+    if etapa_origem == ETAPA_15_TRIAGEM_PERGUNTA_6:
+        # 15 -> 16: registra a resposta da pergunta 6.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_16_AGENDAMENTO,
+            )
+            return _persistir_resposta_triagem(
+                contexto_historico,
+                contexto_envio,
+                cursor,
             )
 
     raise ValueError(
@@ -652,4 +764,56 @@ def _confirmar_inicio_triagem_da_etapa9(
     return {
         "inicio_triagem_persistido": True,
         "evento_triagem": evento,
+    }
+
+
+def _persistir_resposta_triagem(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    """
+    Persiste a opção da pergunta de origem dentro da transação final.
+
+    Em reaplicação idempotente, o contexto de envio não possui a resposta.
+    Nesse caso, a opção é reconstruída pela mensagem original do cliente.
+    """
+    resposta_triagem = contexto_envio.get("resposta_triagem")
+
+    if resposta_triagem is None:
+        resposta_triagem = validar_resposta_triagem(
+            contexto_historico.get("texto_cliente_atual") or "",
+            contexto_historico.get("tipo_mensagem_atual"),
+        )
+
+    if resposta_triagem is None:
+        raise ValueError(
+            "Resposta da triagem não foi reconstruída na transição "
+            f"(etapa={contexto_historico.get('id_etapa_origem_transicao')})"
+        )
+
+    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
+    resultado = registrar_resposta_triagem(
+        contexto_historico["id_conversa"],
+        contexto_historico["id_etapa_origem_transicao"],
+        resposta_triagem,
+        mensagem_cliente.get("id_mensagem"),
+        cursor,
+    )
+
+    logger.info(
+        "efeito_resposta_triagem_persistido | acao=salvar_resposta "
+        "evento=%s etapa_origem=%s etapa_resultante=%s "
+        "id_conversa=%s resposta=%s inserido=%s",
+        contexto_envio.get("evento_transicao"),
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        resposta_triagem,
+        resultado["inserido"],
+    )
+
+    return {
+        "resposta_triagem_persistida": True,
+        **resultado,
     }

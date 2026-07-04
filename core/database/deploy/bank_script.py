@@ -540,7 +540,7 @@ def criar_tabelas():
             id_resposta_desafio SERIAL PRIMARY KEY,
             id_conversa INT NOT NULL,
             id_etapa INT NOT NULL,
-            resposta VARCHAR(10) NOT NULL,
+            resposta VARCHAR(20) NOT NULL,
             id_historico_mensagem_cliente INT NULL,
             criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
@@ -554,6 +554,9 @@ def criar_tabelas():
             CONSTRAINT uq_respostas_desafios_conversa_etapa
                 UNIQUE (id_conversa, id_etapa)
         );
+
+        ALTER TABLE chatbot.respostas_desafios
+        ALTER COLUMN resposta TYPE VARCHAR(20);
 
         -- FILA
         CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (

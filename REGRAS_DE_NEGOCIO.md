@@ -281,8 +281,9 @@ Implementação principal:
 - Essa garantia é protegida pelo índice parcial `idx_conversa_unica_ativa`.
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
   bloqueada pelo prazo declarado na política.
-- As etapas 9 e 10 são intermediárias da triagem cognitiva e não encerram,
-  bloqueiam ou enviam a conversa ao funil.
+- A etapa 9 introduz a triagem, as etapas 10 a 15 fazem as seis perguntas e a
+  etapa 16 reserva o início do agendamento. Nenhuma delas encerra, bloqueia ou
+  envia a conversa ao funil nesta versão.
 - A nova etapa final será marcada com essas políticas quando o restante da
   triagem e do agendamento estiver implementado.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
@@ -311,6 +312,17 @@ Depois que uma mensagem da fila for aceita pelo worker:
   resposta do bot persistida para aquela mensagem.
 - `last_interaction_at` deverá utilizar o horário persistido da mensagem, e não o
   horário em que o retry ocorreu.
+
+### Respostas da triagem cognitiva
+
+- Cada pergunta aceita somente `Nunca`, `Às vezes` ou `Frequentemente`.
+- Botão e texto digitado percorrem a mesma validação exata.
+- Qualquer outro conteúdo recebe o tratamento de contexto e mantém a conversa
+  na pergunta atual.
+- A resposta canônica é registrada em `chatbot.respostas_desafios` com a
+  conversa, a etapa da pergunta e o histórico da mensagem do cliente.
+- A restrição única por conversa e etapa torna a gravação idempotente.
+- Em retry, a resposta pode ser reconstruída pela mensagem original.
 
 ## 8. Histórico e idempotência da resposta do bot
 

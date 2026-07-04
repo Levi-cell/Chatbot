@@ -15,6 +15,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
     EVENTO_TRIAGEM_INICIADA,
+    EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
 )
 
 
@@ -299,6 +300,31 @@ class FlowSenderTests(unittest.TestCase):
         )
         self.assertEqual(resultado["id_etapa_resultante"], 10)
 
+    def test_retry_reconstroi_resposta_triagem_dez_para_onze(self):
+        resultado = flow_sender_module.flow_sender(
+            contexto_historico_base(
+                resposta_bot={
+                    "id_mensagem": 109,
+                    "id_hash_msg": "wamid.etapa11",
+                    "id_etapa": 11,
+                },
+                etapa_atual=11,
+                etapa_cliente=10,
+                retry=2,
+                transicoes={
+                    EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA: 11,
+                },
+            )
+        )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
+        )
+        self.assertEqual(resultado["id_etapa_resultante"], 11)
+
     def test_conversa_sem_etapa_vai_para_etapa1(self):
         esperado = {
             "enviou": True,
@@ -537,6 +563,31 @@ class FlowSenderTests(unittest.TestCase):
 
         resolver.assert_called_once()
         self.assertEqual(resultado, esperado)
+
+    def test_etapas_dez_a_quinze_usam_resolver_correspondente(self):
+        for etapa in range(10, 16):
+            with self.subTest(etapa=etapa):
+                esperado = {
+                    "enviou": True,
+                    "id_hash_msg_bot": f"wamid.etapa{etapa + 1}",
+                    "id_etapa_resultante": etapa + 1,
+                }
+
+                with patch.object(
+                    flow_sender_module,
+                    f"resolve_etapa{etapa}",
+                    return_value=esperado,
+                ) as resolver:
+                    resultado = flow_sender_module.flow_sender(
+                        contexto_historico_base(
+                            etapa_atual=etapa,
+                            etapa_cliente=etapa,
+                            transicoes={"evento_teste": etapa + 1},
+                        )
+                    )
+
+                resolver.assert_called_once()
+                self.assertEqual(resultado, esperado)
 
 
 if __name__ == "__main__":

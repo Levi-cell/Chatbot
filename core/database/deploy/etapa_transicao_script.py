@@ -19,6 +19,12 @@ TRANSICOES_INICIAIS = (
     (7, "retorno_adiado", 6),
     (8, "email_valido", 9),
     (9, "triagem_iniciada", 10),
+    (10, "triagem_pergunta_1_respondida", 11),
+    (11, "triagem_pergunta_2_respondida", 12),
+    (12, "triagem_pergunta_3_respondida", 13),
+    (13, "triagem_pergunta_4_respondida", 14),
+    (14, "triagem_pergunta_5_respondida", 15),
+    (15, "triagem_pergunta_6_respondida", 16),
 )
 
 # O mapa declara o fluxo completo conhecido. Resolvers e senders continuam
