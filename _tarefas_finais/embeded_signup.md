@@ -680,19 +680,17 @@ Código completo:
 ```python
 import logging
 
-from core.database.connection_aws import get_conn
+from core.database.deploy.transacao_deploy import transacao_deploy
 
 
 logger = logging.getLogger("db.embedded_signup_setup")
 
 
 def criar_estrutura_embedded_signup():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy(
+        "criar_estrutura_embedded_signup",
+        logger,
+    ) as cursor:
         cursor.execute(
             """
             ALTER TABLE chatbot.unidade
@@ -764,25 +762,9 @@ def criar_estrutura_embedded_signup():
             """
         )
 
-        conn.commit()
-        logger.info(
-            "banco_setup_ok | acao=criar_estrutura_embedded_signup"
-        )
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-
-        logger.exception(
-            "banco_setup_erro | "
-            "acao=criar_estrutura_embedded_signup erro=%s",
-            erro,
-        )
-        raise
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info(
+        "banco_setup_ok | acao=criar_estrutura_embedded_signup"
+    )
 ```
 
 Esse deploy é idempotente:
@@ -792,6 +774,10 @@ Esse deploy é idempotente:
 - não apaga registros;
 - não altera o formato do cache;
 - interrompe o setup se falhar.
+
+O `ALTER TABLE` deste passo é uma migração futura explícita para bancos que já
+existirem quando o Embedded Signup for aplicado. Ele não pertence ao DDL final
+de criação da V1 e não deve ser copiado para `bank_script.py`.
 
 ---
 
@@ -807,11 +793,10 @@ import logging
 from core.cache.cache_reset import resetar_cache_redis_dev
 from core.database.connection_check import connection_teste_psql
 from core.database.deploy.bank_script import (
-    configurar_timeouts_avancados,
+    configurar_role_banco,
     criar_funcao_dequeue_message,
     criar_funcoes_lock,
     criar_tabelas,
-    definir_timezone_role,
 )
 from core.database.deploy.cache_control_script import criar_cache_controle
 from core.database.deploy.embedded_signup_script import (
@@ -832,21 +817,22 @@ logger = logging.getLogger("db.deploy")
 
 def setup_database_aws():
     logger.info("banco_setup_iniciado | acao=configurar_banco")
+
     connection_teste_psql()
-    definir_timezone_role()
+    configurar_role_banco()
+
     criar_tabelas()
     criar_estrutura_embedded_signup()
     criar_cache_controle()
     criar_tabelas_bloqueio_flood()
     criar_indices_turno_cliente()
+
     criar_funcao_dequeue_message()
     criar_funcoes_lock()
-    configurar_timeouts_avancados()
+
     insere_etapa_once()
     criar_e_povoar_transicoes_etapa()
 
-    # Linha exclusiva para DEV/deploy: remove cache antigo dependente do banco
-    # e recria unidades.
     resetar_cache_redis_dev()
 
     logger.info("banco_setup_finalizado | acao=configurar_banco")

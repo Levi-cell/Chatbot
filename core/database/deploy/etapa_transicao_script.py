@@ -1,6 +1,6 @@
 import logging
 
-from core.database.connection_aws import get_conn
+from core.database.deploy.transacao_deploy import transacao_deploy
 
 
 logger = logging.getLogger("db.etapa_transicao")
@@ -32,12 +32,7 @@ TRANSICOES_INICIAIS = (
 
 
 def criar_e_povoar_transicoes_etapa():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy("sincronizar_mapa_transicoes", logger) as cursor:
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS chatbot.etapa_transicao (
@@ -68,8 +63,8 @@ def criar_e_povoar_transicoes_etapa():
             """
         )
 
-        # O deploy mantém uma whitelist exata e IDs previsíveis. Transições
-        # antigas não sobrevivem e a sequência sempre recomeça em 1.
+        # Isto sincroniza dados de catálogo, não migra schema. A whitelist
+        # precisa ser exata e manter IDs previsíveis após uma reexecução.
         cursor.execute(
             "TRUNCATE TABLE chatbot.etapa_transicao RESTART IDENTITY;"
         )
@@ -86,21 +81,7 @@ def criar_e_povoar_transicoes_etapa():
             TRANSICOES_INICIAIS,
         )
 
-        conn.commit()
-        logger.info(
-            "etapa_transicao_setup_ok | acao=sincronizar_mapa quantidade=%s",
-            len(TRANSICOES_INICIAIS),
-        )
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception(
-            "etapa_transicao_setup_erro | acao=sincronizar_mapa erro=%s",
-            erro,
-        )
-        raise
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info(
+        "etapa_transicao_setup_ok | acao=sincronizar_mapa quantidade=%s",
+        len(TRANSICOES_INICIAIS),
+    )

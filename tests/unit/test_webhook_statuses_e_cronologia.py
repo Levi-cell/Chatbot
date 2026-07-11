@@ -58,6 +58,11 @@ def payload_status_meta(status="sent"):
 
 
 class WebhookStatusesTests(unittest.TestCase):
+    def setUp(self):
+        self.print_patcher = patch("builtins.print")
+        self.print_patcher.start()
+        self.addCleanup(self.print_patcher.stop)
+
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
     def test_status_valido_retorna_200_sem_flood_redis_banco_ou_fila(self):
         request = FakeRequest(payload_status_meta())

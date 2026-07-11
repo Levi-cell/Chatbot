@@ -1,6 +1,10 @@
+import logging
 import os
 import sys
 from pathlib import Path
+
+
+logging.disable(logging.CRITICAL)
 
 
 ROOT_DIR = Path(__file__).resolve().parents[2]

@@ -1,26 +1,14 @@
 import logging
 
-from core.database.connection_aws import get_conn
+from core.database.deploy.transacao_deploy import transacao_deploy
 
 
 logger = logging.getLogger("db.deploy")
 
 
 def criar_funcoes_lock():
-
-    conn = None
-
-    try:
-
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy("criar_funcoes_lock", logger) as cursor:
         cursor.execute("""
-
-        DROP FUNCTION IF EXISTS chatbot.lock_conversa(INT);
-        DROP FUNCTION IF EXISTS chatbot.unlock_conversa(INT);
-        DROP FUNCTION IF EXISTS chatbot.unlock_conversa(INT, INT);
-
         CREATE OR REPLACE FUNCTION chatbot.lock_conversa(p_id_conversa INT)
         RETURNS TABLE (
             lock_ok BOOLEAN,
@@ -33,7 +21,6 @@ def criar_funcoes_lock():
             v_lock_version INT;
 
         BEGIN
-
             UPDATE chatbot.conversa c
             SET
                 processing = TRUE,
@@ -43,7 +30,8 @@ def criar_funcoes_lock():
                 c.id_conversa = p_id_conversa
                 AND (
                     c.processing = FALSE
-                    OR c.processing_started_at < NOW() - INTERVAL '110.0 seconds'
+                    OR c.processing_started_at
+                        < NOW() - INTERVAL '110.0 seconds'
                 )
             RETURNING c.lock_version INTO v_lock_version;
 
@@ -53,15 +41,12 @@ def criar_funcoes_lock():
             END IF;
 
             RETURN QUERY SELECT TRUE, v_lock_version;
-
         END;
 
         $$;
-
         """)
 
         cursor.execute("""
-
         CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(
             p_id_conversa INT,
             p_lock_version INT
@@ -74,7 +59,6 @@ def criar_funcoes_lock():
             updated_rows INTEGER;
 
         BEGIN
-
             UPDATE chatbot.conversa
             SET
                 processing = FALSE,
@@ -85,37 +69,17 @@ def criar_funcoes_lock():
             GET DIAGNOSTICS updated_rows = ROW_COUNT;
 
             RETURN updated_rows = 1;
-
         END;
 
         $$;
-
         """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=criar_funcoes_lock")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=criar_funcoes_lock erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=criar_funcoes_lock")
 
 
 def criar_funcao_dequeue_message():
-
-    conn = None
-
-    try:
-
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy("criar_funcao_dequeue_message", logger) as cursor:
         cursor.execute("""
-
         CREATE OR REPLACE FUNCTION chatbot.dequeue_message()
         RETURNS TABLE (
             id_mensagem INT,
@@ -132,11 +96,9 @@ def criar_funcao_dequeue_message():
         AS $$
 
         BEGIN
-
             RETURN QUERY
 
             WITH next_job AS (
-
                 SELECT f.id_mensagem
                 FROM chatbot.fila_mensagens f
                 WHERE
@@ -147,17 +109,18 @@ def criar_funcao_dequeue_message():
                     OR
                     (
                         f.status = 'processing'
-                        AND f.processing_started_at < NOW() - INTERVAL '2 minutes'
+                        AND f.processing_started_at
+                            < NOW() - INTERVAL '2 minutes'
                     )
                 ORDER BY
                     CASE
                         WHEN f.status = 'pending' THEN f.next_attempt_at
-                        WHEN f.status = 'processing' THEN f.processing_started_at
+                        WHEN f.status = 'processing'
+                            THEN f.processing_started_at
                     END NULLS FIRST,
                     f.id_mensagem
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
-
             )
 
             UPDATE chatbot.fila_mensagens f
@@ -178,39 +141,22 @@ def criar_funcao_dequeue_message():
                 f.received_data_hora,
                 f.id_hash_msg,
                 f.retry_count;
-
         END;
 
         $$;
-
         """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=criar_funcao_dequeue_message")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=criar_funcao_dequeue_message erro=%s", erro)
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=criar_funcao_dequeue_message")
 
 
 def criar_tabelas():
-
-    conn = None
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    """Cria o schema final da V1 em ordem de dependência, sem migrações."""
+    with transacao_deploy("criar_tabelas", logger) as cursor:
         cursor.execute("""
-
-        SET TIME ZONE 'America/Sao_Paulo';
-
         CREATE SCHEMA IF NOT EXISTS chatbot;
 
-        -- CLIENTE
+        -- 1. ENTIDADES SEM DEPENDÊNCIAS ENTRE TABELAS
+
         CREATE TABLE IF NOT EXISTS chatbot.cliente (
             id_cliente SERIAL PRIMARY KEY,
             nome VARCHAR(200),
@@ -219,23 +165,6 @@ def criar_tabelas():
             idade INTEGER
         );
 
-        -- DEPENDENTE
-        CREATE TABLE IF NOT EXISTS chatbot.dependente (
-            id_dependente SERIAL PRIMARY KEY,
-            id_cliente INT NOT NULL,
-            id_conversa INT,
-            nome_dependente VARCHAR(200),
-            idade INTEGER,
-
-            FOREIGN KEY (id_cliente)
-                REFERENCES chatbot.cliente(id_cliente)
-                ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_dependente_cliente
-        ON chatbot.dependente (id_cliente);
-
-        -- UNIDADE
         CREATE TABLE IF NOT EXISTS chatbot.unidade (
             id_unidade SERIAL PRIMARY KEY,
             nome VARCHAR(300) UNIQUE NOT NULL,
@@ -250,18 +179,19 @@ def criar_tabelas():
             status_pagamento BOOLEAN DEFAULT TRUE
         );
 
-        -- ETAPA
         CREATE TABLE IF NOT EXISTS chatbot.etapa (
             id_etapa SERIAL PRIMARY KEY,
             nome_etapa VARCHAR(100) UNIQUE NOT NULL,
             encerra_automaticamente BOOLEAN NOT NULL DEFAULT FALSE,
             bloqueio_dias INTEGER NOT NULL DEFAULT 0,
             elegivel_funil BOOLEAN NOT NULL DEFAULT FALSE,
+
             CONSTRAINT ck_etapa_bloqueio_dias
                 CHECK (bloqueio_dias >= 0)
         );
 
-        -- CONVERSA
+        -- 2. CONVERSA: RAIZ TRANSACIONAL DO ATENDIMENTO
+
         CREATE TABLE IF NOT EXISTS chatbot.conversa (
             id_conversa SERIAL PRIMARY KEY,
             id_cliente INT NOT NULL,
@@ -274,7 +204,7 @@ def criar_tabelas():
             last_interaction_at TIMESTAMPTZ,
 
             last_message_from VARCHAR(10)
-                CHECK (last_message_from IN ('cliente','bot')),
+                CHECK (last_message_from IN ('cliente', 'bot')),
 
             followup_stage INTEGER DEFAULT 0,
             followup_last_sent_at TIMESTAMPTZ NULL,
@@ -306,10 +236,14 @@ def criar_tabelas():
         WHERE status_ativa = TRUE;
 
         CREATE INDEX IF NOT EXISTS idx_conversa_followup
-        ON chatbot.conversa (last_message_from, followup_stage, last_interaction_at);
+        ON chatbot.conversa (
+            last_message_from,
+            followup_stage,
+            last_interaction_at
+        );
 
         CREATE INDEX IF NOT EXISTS idx_conversa_processing
-        ON chatbot.conversa(processing, processing_started_at);
+        ON chatbot.conversa (processing, processing_started_at);
 
         CREATE INDEX IF NOT EXISTS idx_conversa_ultima_inativa
         ON chatbot.conversa (id_cliente, id_unidade, finalizou_em DESC)
@@ -321,135 +255,27 @@ def criar_tabelas():
         WHERE status_ativa = FALSE
           AND lead_no_funil IS NOT TRUE;
 
-        -- CAMPOS DA TRANSICAO ENTRE AS ETAPAS 2 E 3.
-        -- Os ALTERs mantem o setup idempotente tambem em bancos ja existentes.
-        ALTER TABLE chatbot.cliente
-        ADD COLUMN IF NOT EXISTS idade INTEGER;
+        -- 3. DEPENDENTE: EXISTE SOMENTE DENTRO DE UMA CONVERSA
 
-        ALTER TABLE chatbot.unidade
-        ADD COLUMN IF NOT EXISTS numero_comercial VARCHAR(30);
+        CREATE TABLE IF NOT EXISTS chatbot.dependente (
+            id_dependente SERIAL PRIMARY KEY,
+            id_cliente INT NOT NULL,
+            id_conversa INT,
+            nome_dependente VARCHAR(200),
+            idade INTEGER,
 
-        ALTER TABLE chatbot.unidade
-        ADD COLUMN IF NOT EXISTS waba_id VARCHAR(100);
+            FOREIGN KEY (id_cliente)
+                REFERENCES chatbot.cliente(id_cliente)
+                ON DELETE CASCADE,
 
-        ALTER TABLE chatbot.unidade
-        ADD COLUMN IF NOT EXISTS link_instagram VARCHAR(400);
-
-        -- Bootstrap idempotente da primeira unidade. Atualizações posteriores
-        -- feitas pelo Admin não são sobrescritas quando o link já existe.
-        UPDATE chatbot.unidade
-        SET link_instagram = 'https://www.instagram.com/supera.saj/'
-        WHERE nome = 'Supera - Santo Antônio de Jesus'
-          AND (
-              link_instagram IS NULL
-              OR BTRIM(link_instagram) = ''
-          );
-
-        -- Campos descontinuados antes da V1. O fluxo usa o telefone do cliente
-        -- responsável e não coleta contato próprio do dependente.
-        ALTER TABLE chatbot.dependente
-        DROP COLUMN IF EXISTS telefone_dependente;
-
-        ALTER TABLE chatbot.dependente
-        DROP COLUMN IF EXISTS email_dependente;
-
-        -- POLITICAS DE COMPORTAMENTO DAS ETAPAS.
-        -- Os defaults reproduzem uma etapa comum: não encerra, não bloqueia
-        -- e não envia ao funil até o seed declarar expressamente o contrário.
-        ALTER TABLE chatbot.etapa
-        ADD COLUMN IF NOT EXISTS encerra_automaticamente
-            BOOLEAN NOT NULL DEFAULT FALSE;
-
-        ALTER TABLE chatbot.etapa
-        ADD COLUMN IF NOT EXISTS bloqueio_dias
-            INTEGER NOT NULL DEFAULT 0;
-
-        ALTER TABLE chatbot.etapa
-        ADD COLUMN IF NOT EXISTS elegivel_funil
-            BOOLEAN NOT NULL DEFAULT FALSE;
-
-        UPDATE chatbot.etapa
-        SET
-            encerra_automaticamente = COALESCE(
-                encerra_automaticamente,
-                FALSE
-            ),
-            bloqueio_dias = COALESCE(bloqueio_dias, 0),
-            elegivel_funil = COALESCE(elegivel_funil, FALSE);
-
-        ALTER TABLE chatbot.etapa
-        ALTER COLUMN encerra_automaticamente SET NOT NULL,
-        ALTER COLUMN bloqueio_dias SET NOT NULL,
-        ALTER COLUMN elegivel_funil SET NOT NULL;
-
-        -- As etapas 7 e 10 são estados intermediários do fluxo atual.
-        UPDATE chatbot.etapa
-        SET
-            encerra_automaticamente = FALSE,
-            bloqueio_dias = 0,
-            elegivel_funil = FALSE
-        WHERE id_etapa IN (7, 10);
-
-        -- Proteção para deploy parcial: cria ou atualiza a primeira pergunta
-        -- da triagem antes do seed completo sincronizar o catálogo.
-        INSERT INTO chatbot.etapa (
-            id_etapa,
-            nome_etapa,
-            encerra_automaticamente,
-            bloqueio_dias,
-            elegivel_funil
-        )
-        VALUES (
-            10,
-            'Triagem cognitiva - pergunta 1',
-            FALSE,
-            0,
-            FALSE
-        )
-        ON CONFLICT (id_etapa)
-        DO UPDATE SET
-            nome_etapa = EXCLUDED.nome_etapa,
-            encerra_automaticamente = FALSE,
-            bloqueio_dias = 0,
-            elegivel_funil = FALSE;
-
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'ck_etapa_bloqueio_dias'
-                  AND conrelid = 'chatbot.etapa'::regclass
-            ) THEN
-                ALTER TABLE chatbot.etapa
-                ADD CONSTRAINT ck_etapa_bloqueio_dias
-                CHECK (bloqueio_dias >= 0);
-            END IF;
-        END
-        $$;
-
-        ALTER TABLE chatbot.dependente
-        ADD COLUMN IF NOT EXISTS id_conversa INT;
-
-        ALTER TABLE chatbot.dependente
-        ADD COLUMN IF NOT EXISTS idade INTEGER;
-
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'dependente_id_conversa_fkey'
-                  AND conrelid = 'chatbot.dependente'::regclass
-            ) THEN
-                ALTER TABLE chatbot.dependente
-                ADD CONSTRAINT dependente_id_conversa_fkey
+            CONSTRAINT dependente_id_conversa_fkey
                 FOREIGN KEY (id_conversa)
                 REFERENCES chatbot.conversa(id_conversa)
-                ON DELETE CASCADE;
-            END IF;
-        END
-        $$;
+                ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_dependente_cliente
+        ON chatbot.dependente (id_cliente);
 
         CREATE UNIQUE INDEX IF NOT EXISTS uq_dependente_conversa
         ON chatbot.dependente (id_conversa)
@@ -458,7 +284,50 @@ def criar_tabelas():
         CREATE INDEX IF NOT EXISTS idx_dependente_conversa
         ON chatbot.dependente (id_conversa);
 
-        -- HISTORICO
+        -- 4. FILA: CRIADA ANTES DO HISTÓRICO PARA A FK NASCER PRONTA
+
+        CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
+            id_mensagem SERIAL PRIMARY KEY,
+            id_conversa INT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            retry_count INTEGER DEFAULT 0,
+            next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
+            processing_started_at TIMESTAMPTZ NULL,
+            received_data_hora TIMESTAMPTZ NOT NULL,
+            cliente_telefone VARCHAR(100) NOT NULL,
+            conteudo_texto TEXT,
+            tipo_mensagem VARCHAR(20) NOT NULL,
+            id_hash_msg VARCHAR(255) UNIQUE NOT NULL,
+            id_phone_unidade VARCHAR(100) NOT NULL,
+            unidade_telefone VARCHAR(100) NOT NULL,
+            last_error TEXT,
+
+            FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE SET NULL,
+
+            CHECK (status IN ('pending', 'processing', 'sent', 'failed'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_fila_pending_next_attempt
+        ON chatbot.fila_mensagens (next_attempt_at, id_mensagem)
+        WHERE status = 'pending';
+
+        CREATE INDEX IF NOT EXISTS idx_fila_processing_timeout
+        ON chatbot.fila_mensagens (processing_started_at, id_mensagem)
+        WHERE status = 'processing';
+
+        CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
+        ON chatbot.fila_mensagens (
+            id_conversa,
+            received_data_hora,
+            id_mensagem
+        )
+        WHERE id_conversa IS NOT NULL
+          AND status IN ('pending', 'processing');
+
+        -- 5. HISTÓRICO PARTICIONADO E RESPOSTAS DA TRIAGEM
+
         CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens (
             id_mensagem SERIAL,
             id_conversa INT NOT NULL,
@@ -483,6 +352,11 @@ def criar_tabelas():
 
             FOREIGN KEY (id_etapa)
                 REFERENCES chatbot.etapa(id_etapa)
+                ON DELETE SET NULL,
+
+            CONSTRAINT fk_historico_mensagem_fila
+                FOREIGN KEY (id_mensagem_fila)
+                REFERENCES chatbot.fila_mensagens(id_mensagem)
                 ON DELETE SET NULL,
 
             CONSTRAINT chk_historico_quem_enviou
@@ -535,7 +409,6 @@ def criar_tabelas():
           AND id_mensagem_fila IS NOT NULL
           AND id_hash_cliente_origem IS NOT NULL;
 
-        -- RESPOSTAS DO DESAFIO
         CREATE TABLE IF NOT EXISTS chatbot.respostas_desafios (
             id_resposta_desafio SERIAL PRIMARY KEY,
             id_conversa INT NOT NULL,
@@ -554,135 +427,26 @@ def criar_tabelas():
             CONSTRAINT uq_respostas_desafios_conversa_etapa
                 UNIQUE (id_conversa, id_etapa)
         );
-
-        ALTER TABLE chatbot.respostas_desafios
-        ALTER COLUMN resposta TYPE VARCHAR(20);
-
-        -- FILA
-        CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
-            id_mensagem SERIAL PRIMARY KEY,
-            id_conversa INT NULL,
-            status VARCHAR(20) NOT NULL DEFAULT 'pending',
-            retry_count INTEGER DEFAULT 0,
-            next_attempt_at TIMESTAMPTZ DEFAULT NOW(),
-            processing_started_at TIMESTAMPTZ NULL,
-            received_data_hora TIMESTAMPTZ NOT NULL,
-            cliente_telefone VARCHAR(100) NOT NULL,
-            conteudo_texto TEXT,
-            tipo_mensagem VARCHAR(20) NOT NULL,
-            id_hash_msg VARCHAR(255) UNIQUE NOT NULL,
-            id_phone_unidade VARCHAR(100) NOT NULL,
-            unidade_telefone VARCHAR(100) NOT NULL,
-            last_error TEXT,
-
-            FOREIGN KEY (id_conversa)
-                REFERENCES chatbot.conversa(id_conversa)
-                ON DELETE SET NULL,
-
-            CHECK (status IN ('pending','processing','sent','failed'))
-        );
-
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1
-                FROM pg_constraint
-                WHERE conname = 'fk_historico_mensagem_fila'
-                  AND conrelid = 'chatbot.historico_mensagens'::regclass
-            ) THEN
-                ALTER TABLE chatbot.historico_mensagens
-                ADD CONSTRAINT fk_historico_mensagem_fila
-                FOREIGN KEY (id_mensagem_fila)
-                REFERENCES chatbot.fila_mensagens(id_mensagem)
-                ON DELETE SET NULL;
-            END IF;
-        END $$;
-
-        CREATE INDEX IF NOT EXISTS idx_fila_pending_next_attempt
-        ON chatbot.fila_mensagens (next_attempt_at, id_mensagem)
-        WHERE status = 'pending';
-
-        CREATE INDEX IF NOT EXISTS idx_fila_processing_timeout
-        ON chatbot.fila_mensagens (processing_started_at, id_mensagem)
-        WHERE status = 'processing';
-
-        CREATE INDEX IF NOT EXISTS idx_fila_conversa_aberta_data
-        ON chatbot.fila_mensagens (id_conversa, received_data_hora, id_mensagem)
-        WHERE id_conversa IS NOT NULL
-          AND status IN ('pending','processing');
-
         """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=criar_tabelas")
-
-    except Exception as erro:
-
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=criar_tabelas erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=criar_tabelas")
 
 
-def definir_timezone_role():
-    conn = None
-    try:
-
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+def configurar_role_banco():
+    """Aplica timezone e limites operacionais da role em uma transação."""
+    with transacao_deploy("configurar_role_banco", logger) as cursor:
         cursor.execute("""
             ALTER ROLE fushi
             SET timezone TO 'America/Sao_Paulo';
-        """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=definir_timezone_role role=fushi")
-
-    except Exception as e:
-
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=definir_timezone_role role=fushi erro=%s", e)
-
-    finally:
-        if conn:
-            conn.close()
-
-
-def configurar_timeouts_avancados():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
-        cursor.execute("""
             ALTER ROLE fushi
             SET idle_in_transaction_session_timeout = '30min';
-        """)
 
-        cursor.execute("""
             ALTER ROLE fushi
             SET statement_timeout = '10min';
-        """)
 
-        cursor.execute("""
             ALTER ROLE fushi
             SET lock_timeout = '15s';
         """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=configurar_timeouts_avancados role=fushi")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=configurar_timeouts_avancados erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=configurar_role_banco role=fushi")

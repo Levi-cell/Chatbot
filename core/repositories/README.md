@@ -75,7 +75,7 @@ um `utils.py` genérico e não mova DDL para esta pasta.
 
 ## Testes relacionados
 
-- `tests/unit/test_repositories.py`;
-- `tests/unit/test_turno_cliente.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_lastfrom_semantico.py`.

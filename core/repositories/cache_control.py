@@ -6,30 +6,6 @@ logger = logging.getLogger("db.cache_control")
 CACHE_UNIDADES_NOME = "unidades"
 
 
-def criar_tabela_cache_controle_sql(cursor):
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS chatbot.cache_controle (
-            nome VARCHAR(100) PRIMARY KEY,
-            versao BIGINT NOT NULL DEFAULT 1,
-            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-    """)
-    logger.debug("cache_controle_ddl | acao=garantir_tabela nome=%s", CACHE_UNIDADES_NOME)
-
-
-def garantir_linha_cache_unidades(cursor):
-    cursor.execute("""
-        INSERT INTO chatbot.cache_controle (nome, versao, atualizado_em)
-        VALUES (%s, 1, NOW())
-        ON CONFLICT (nome) DO NOTHING;
-    """, (CACHE_UNIDADES_NOME,))
-    logger.debug(
-        "cache_controle_linha | acao=garantir_linha nome=%s linhas=%s",
-        CACHE_UNIDADES_NOME,
-        cursor.rowcount,
-    )
-
-
 def buscar_versao_cache_unidades(cursor):
     cursor.execute("""
         SELECT versao

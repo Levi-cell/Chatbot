@@ -1,6 +1,6 @@
 import logging
 
-from core.database.connection_aws import get_conn
+from core.database.deploy.transacao_deploy import transacao_deploy
 
 
 logger = logging.getLogger("db.seed")
@@ -27,12 +27,7 @@ ETAPAS = (
 
 
 def insere_etapa_once():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy("sincronizar_etapas", logger) as cursor:
         cursor.executemany(
             """
             INSERT INTO chatbot.etapa (
@@ -64,21 +59,7 @@ def insere_etapa_once():
             """
         )
 
-        conn.commit()
-        logger.info(
-            "banco_seed_ok | acao=sincronizar_etapas quantidade=%s",
-            len(ETAPAS),
-        )
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception(
-            "banco_seed_erro | acao=sincronizar_etapas erro=%s",
-            erro,
-        )
-        raise
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info(
+        "banco_seed_ok | acao=sincronizar_etapas quantidade=%s",
+        len(ETAPAS),
+    )

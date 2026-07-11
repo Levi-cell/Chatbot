@@ -1187,8 +1187,7 @@ if __name__ == "__main__":
 
 ### Testes adicionais obrigatorios no detector
 
-Atualizar `tests/unit/test_validador_nome.py` e
-`tests/unit/test_validador_nome_v1.py` para cobrir:
+Atualizar `tests/unit/test_validadores_essenciais.py` para cobrir:
 
 ```text
 SQLite desligado -> todos os testes atuais continuam iguais

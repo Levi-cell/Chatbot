@@ -1,21 +1,16 @@
 import logging
 
-from core.database.connection_aws import get_conn
+from core.database.deploy.transacao_deploy import transacao_deploy
 
 
 logger = logging.getLogger("db.flood_setup")
 
 
 def criar_tabelas_bloqueio_flood():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
-
+    with transacao_deploy("criar_tabelas_bloqueio_flood", logger) as cursor:
         cursor.execute("""
-            SET TIME ZONE 'America/Sao_Paulo';
-
+            -- Este índice composto sustenta a FK que valida unidade e phone ID
+            -- como o mesmo par cadastrado.
             CREATE UNIQUE INDEX IF NOT EXISTS uq_unidade_id_phone_number_id
             ON chatbot.unidade (id_unidade, phone_number_id);
 
@@ -73,14 +68,4 @@ def criar_tabelas_bloqueio_flood():
             ON chatbot.webhook_flood_evento (received_at);
         """)
 
-        conn.commit()
-        logger.info("banco_setup_ok | acao=criar_tabelas_bloqueio_flood")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=criar_tabelas_bloqueio_flood erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=criar_tabelas_bloqueio_flood")

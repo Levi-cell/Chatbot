@@ -11,6 +11,11 @@ from tests.payloads import payload_sem_mensagem, payload_texto_meta
 
 
 class WebhookPostFlowTests(unittest.TestCase):
+    def setUp(self):
+        self.print_patcher = patch("builtins.print")
+        self.print_patcher.start()
+        self.addCleanup(self.print_patcher.stop)
+
     def test_content_type_invalido_retorna_415_antes_de_assinatura(self):
         request = FakeRequest(
             payload_texto_meta(),

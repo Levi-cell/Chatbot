@@ -1,33 +1,33 @@
 import logging
 
-from core.database.connection_aws import get_conn
-from core.repositories.cache_control import (
-    criar_tabela_cache_controle_sql,
-    garantir_linha_cache_unidades,
-)
+from core.database.deploy.transacao_deploy import transacao_deploy
+from core.repositories.cache_control import CACHE_UNIDADES_NOME
 
 
 logger = logging.getLogger("db.cache_control_setup")
 
 
 def criar_cache_controle():
-    conn = None
+    with transacao_deploy("criar_cache_controle", logger) as cursor:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS chatbot.cache_controle (
+                nome VARCHAR(100) PRIMARY KEY,
+                versao BIGINT NOT NULL DEFAULT 1,
+                atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+        """)
 
-    try:
-        conn = get_conn(application_name="script_chatbot")
-        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO chatbot.cache_controle (
+                nome,
+                versao,
+                atualizado_em
+            )
+            VALUES (%s, 1, NOW())
+            ON CONFLICT (nome) DO NOTHING;
+            """,
+            (CACHE_UNIDADES_NOME,),
+        )
 
-        criar_tabela_cache_controle_sql(cursor)
-        garantir_linha_cache_unidades(cursor)
-
-        conn.commit()
-        logger.info("banco_setup_ok | acao=criar_cache_controle")
-
-    except Exception as erro:
-        if conn:
-            conn.rollback()
-        logger.exception("banco_setup_erro | acao=criar_cache_controle erro=%s", erro)
-
-    finally:
-        if conn:
-            conn.close()
+    logger.info("banco_setup_ok | acao=criar_cache_controle")

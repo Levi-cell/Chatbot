@@ -114,8 +114,5 @@ Esta integração não deve:
 
 ## Testes relacionados
 
-- `tests/unit/test_pywa_sender_etapa1.py`;
-- `tests/unit/test_pywa_sender_etapa2.py`;
-- `tests/unit/test_saudacao.py`;
-- `tests/unit/test_whatsapp_usuarios.py`;
-- `tests/unit/test_whatsapp_structure.py`.
+- `tests/unit/test_roteamento_essencial.py`;
+- `tests/unit/test_roteamento_essencial.py`.

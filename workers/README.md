@@ -151,15 +151,14 @@ cursor e não controlam a transação.
 ## Testes relacionados
 
 - `tests/unit/test_worker_flow_runtime.py`;
-- `tests/unit/test_worker_flow_contract.py`;
-- `tests/unit/test_worker_support_finalizacao.py`;
-- `tests/unit/test_retry_lock_lifecycle.py`;
+- `tests/unit/test_roteamento_essencial.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
 - `tests/unit/test_lastfrom_semantico.py`;
-- `tests/unit/test_flow_sender.py`;
-- `tests/unit/test_etapa1.py`;
-- `tests/unit/test_etapa2.py`;
-- `tests/unit/test_validador_triagem.py`;
-- `tests/unit/test_resolvers_triagem.py`;
+- `tests/unit/test_roteamento_essencial.py`;
+- `tests/unit/test_transicoes_etapa.py`;
+- `tests/unit/test_validadores_essenciais.py`;
+- `tests/unit/test_efeitos_triagem.py`;
 - `tests/unit/test_efeitos_triagem.py`;
 - `tests/unit/test_transicoes_etapa.py`;
-- `tests/unit/test_repositories.py`.
+- `tests/unit/test_persistencia_essencial.py`.

@@ -93,7 +93,6 @@ operação consciente de desenvolvimento/deploy e não pertence ao runtime comum
 
 ## Testes relacionados
 
-- `tests/unit/test_cache_and_admin.py`;
+- `tests/unit/test_cache_essencial.py`;
 - `tests/unit/test_flood_guard.py`;
-- `tests/unit/test_valida_banco.py`;
-- `tests/unit/test_try_except_contract.py`.
+- `tests/unit/test_retry_essencial.py`.

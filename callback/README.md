@@ -137,10 +137,10 @@ não deve ser confirmada no banco ou Redis.
 ## Testes relacionados
 
 - `tests/unit/test_webhook_post_flow.py`;
-- `tests/unit/test_webhook_transaction_contract.py`;
-- `tests/unit/test_populating_fila.py`;
-- `tests/unit/test_turno_cliente.py`;
+- `tests/unit/test_webhook_statuses_e_cronologia.py`;
+- `tests/unit/test_webhook_statuses_e_cronologia.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_flood_guard.py`;
-- `tests/unit/test_cache_and_admin.py`;
-- `tests/unit/test_security_config.py`.
+- `tests/unit/test_cache_essencial.py`;
+- `tests/unit/test_webhook_post_flow.py`.

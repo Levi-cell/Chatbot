@@ -1,91 +1,78 @@
-# Testes
+# Testes essenciais
 
-Todos os testes, mocks, fakes e payloads exclusivos de teste ficam nesta pasta.
-Código de produção não deve importar `tests`.
+Esta pasta mantém somente as proteções contra regressões com impacto real em
+produção. A suíte não tenta reproduzir cada arquivo, sender ou texto exibido.
 
-- [Portal do projeto](../README.md)
-- [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#testes)
+## O que permanece coberto
 
-## Estrutura
+- entrada segura do webhook, `statuses`, cronologia e indisponibilidade;
+- flood, regra de turno A/B/C e reentrega fora de ordem;
+- retry, lock com versão, idempotência e `last_message_from`;
+- mapa de transições e rejeição de saltos inválidos;
+- persistência final, tratamentos sem avanço e ramificações principais;
+- cache de unidade e bloqueio com fallback para o banco;
+- validadores de mídia, financeiro, nome, idade, decisão, email e triagem;
+- persistência das respostas da triagem;
+- contratos mínimos do DDL, catálogo de etapas e mapa inicial.
 
-```text
-tests/
-├── __init__.py       preparação de paths, Django e variáveis falsas de teste
-├── helpers.py        conexões, cursores e requests falsos
-├── payloads.py       payloads Meta fictícios
-└── unit/
-    └── test_*.py
+Testes de texto exato, comentários, estrutura de pastas, cada sender isolado e
+consultas SQL triviais foram removidos. Esses testes geravam manutenção e
+execução repetida sem proteger uma regra diferente.
+
+## Rotina durante o desenvolvimento
+
+Mudança comum e localizada:
+
+```powershell
+# Não rodar teste por padrão quando a alteração for só texto ou comentário.
 ```
 
-## Execução
+Mudança em uma regra já protegida:
 
-Suíte completa:
+```powershell
+python -m unittest tests.unit.test_validadores_essenciais
+```
+
+Mudança em webhook, fila, transação, retry ou transição:
+
+```powershell
+python -m unittest tests.unit.test_webhook_post_flow
+python -m unittest tests.unit.test_persistencia_essencial
+```
+
+Suíte mínima completa, reservada para alterações compartilhadas e preparação de
+deploy:
 
 ```powershell
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Arquivo específico:
+Os cenários semelhantes usam `subTest`. Assim, várias entradas continuam sendo
+validadas sem transformar cada exemplo em um teste independente.
 
-```powershell
-python -m unittest tests.unit.test_webhook_post_flow
+## Arquivos
+
+```text
+tests/
+|-- __init__.py
+|-- helpers.py
+|-- payloads.py
+`-- unit/
+    |-- test_cache_essencial.py
+    |-- test_deploy_essencial.py
+    |-- test_efeitos_triagem.py
+    |-- test_flood_guard.py
+    |-- test_fluxo_turno_abc.py
+    |-- test_lastfrom_semantico.py
+    |-- test_persistencia_essencial.py
+    |-- test_retry_essencial.py
+    |-- test_roteamento_essencial.py
+    |-- test_transicoes_etapa.py
+    |-- test_validadores_essenciais.py
+    |-- test_webhook_post_flow.py
+    |-- test_webhook_statuses_e_cronologia.py
+    `-- test_worker_flow_runtime.py
 ```
 
-Validação de sintaxe e imports:
-
-```powershell
-python -m compileall core workers callback tests
-python callback/manage.py check
-```
-
-Execute com o ambiente virtual que contém as dependências de
-[`requirements.txt`](../requirements.txt). Testes unitários não devem depender de
-Meta, Redis ou AWS reais.
-
-`tests/__init__.py` define valores fictícios para as variáveis obrigatórias de
-configuração. Isso permite testar `core/config_env.py`, Django e integrações sem
-ler segredos reais do `.env` local.
-
-## Estratégia
-
-Os testes cobrem comportamento e contratos arquiteturais:
-
-- fluxo A/B/C e primeira mensagem do turno;
-- idempotência por histórico específico do bot;
-- `last_message_from` semântico;
-- ordenação, locks e retry;
-- falha do banco depois do envio Meta;
-- status HTTP e transação do webhook;
-- fallback de cache e operações Meta-first;
-- estrutura de `messages`, `pywa_functions` e `tools`;
-- configuração por ambiente, mascaramento de identificadores e ausência de
-  dependência de segredos reais;
-- tratamento de mídia inicial, pergunta financeira e nome inválido sem avanço
-  indevido de etapa.
-
-## Convenções
-
-- `unittest` é o runner atual;
-- `patch` e classes `Fake*` ficam somente em `tests`;
-- valores de telefone, IDs e tokens são fictícios;
-- `.env` real não deve ser necessário para a suíte unitária;
-- sucesso, falha e retry devem ser cobertos em fluxos críticos;
-- testes de contrato podem usar `inspect` quando a fronteira arquitetural é parte
-  da garantia;
-- alterações de regra exigem atualizar teste e `REGRAS_DE_NEGOCIO.md`.
-
-## Ao adicionar um teste
-
-1. Escolha o módulo em `tests/unit` correspondente ao comportamento.
-2. Reutilize `helpers.py` e `payloads.py` antes de criar outro fake.
-3. Simule falhas externas; não faça chamadas reais.
-4. Confirme efeitos persistidos, status, commits e rollbacks relevantes.
-5. Rode o arquivo específico e depois a descoberta completa.
-
-## Testes de configuração e segurança
-
-O arquivo `tests/unit/test_security_config.py` cobre:
-
-- mascaramento de telefones e identificadores longos em logs;
-- rejeição de variável obrigatória ausente;
-- conversão de booleanos, inteiros e listas vindas do ambiente.
+Os testes são unitários e usam fakes/mocks. Eles não devem chamar Meta, Redis ou
+AWS reais e não devem depender dos segredos do `.env` local.

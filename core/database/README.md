@@ -16,6 +16,7 @@ core/database/
 └── deploy/
     ├── setup_database.py
     ├── bank_script.py
+    ├── transacao_deploy.py
     ├── cache_control_script.py
     ├── etapa_transicao_script.py
     ├── floodscript.py
@@ -43,14 +44,13 @@ Ordem atual:
 
 ```text
 healthcheck
--> timezone do role
--> tabelas e índices principais
+-> configuração única da role
+-> schema principal final
 -> controle de cache
 -> tabelas de flood
 -> índices de turno
 -> função de dequeue
 -> funções de lock
--> timeouts do role
 -> seed de etapas
 -> whitelist de transições de etapas
 -> reset de cache de desenvolvimento
@@ -61,18 +61,24 @@ healthcheck
 `origem + evento -> destino`. Uma aresta só deve entrar no seed quando resolver,
 sender, efeitos transacionais e testes estiverem prontos.
 
-Cada função controla sua conexão e transação. Funções concluídas anteriormente
-podem ter commit próprio; uma falha posterior não desfaz commits de funções
-anteriores.
+`transacao_deploy.py` centraliza conexão, commit, rollback e fechamento. Uma
+falha é relançada e interrompe o setup antes do log de finalização. Funções
+concluídas anteriormente mantêm seu próprio commit; a reexecução idempotente
+completa os passos restantes.
 
 Os comandos utilizam `IF NOT EXISTS`, `CREATE OR REPLACE` ou `ON CONFLICT` onde
-aplicável. Por isso, um setup interrompido normalmente pode ser executado de novo
-sem apagar o banco. Consulte os logs: os scripts atuais registram falhas dentro
-de cada função.
+aplicável. Por isso, um setup interrompido normalmente pode ser executado de
+novo sem apagar o banco.
+
+`bank_script.py` descreve diretamente o schema final da V1. Ele não contém
+`ALTER TABLE`, correções de colunas antigas, dados de unidade ou migrações
+históricas. As tabelas são criadas em ordem de dependência para que chaves
+estrangeiras e constraints já nasçam prontas.
 
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
-de schema existente exige migração explícita ou decisão consciente de recriação
-em desenvolvimento.
+de schema existente exige um script de migração separado ou decisão consciente
+de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL
+de criação final.
 
 ## Atomicidade
 
@@ -113,6 +119,6 @@ de segredos.
 
 ## Testes relacionados
 
-- `tests/unit/test_deploy_contract.py`;
-- `tests/unit/test_retry_lock_lifecycle.py`;
-- `tests/unit/test_worker_flow_contract.py`.
+- `tests/unit/test_deploy_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_persistencia_essencial.py`.

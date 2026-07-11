@@ -624,11 +624,11 @@ Sempre executar:
 
 ```text
 test_fluxo_turno_abc
-test_retry_lock_lifecycle
+test_retry_essencial
 test_lastfrom_semantico
-test_flow_sender
-test_worker_support_finalizacao
-test_repositories
+test_roteamento_essencial
+test_persistencia_essencial
+test_persistencia_essencial
 ```
 
 ## Definition of done
