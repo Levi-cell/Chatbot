@@ -1,6 +1,6 @@
 # ETAPA 10 - TESTE COGNITIVO, PERGUNTA 1
 
-CABECALHO_ETAPA10 = "Teste Cognitivo - Pergunta 1"
+CABECALHO_ETAPA10 = "Pergunta 1"
 
 MENSAGEM_CLIENTE_ETAPA10 = (
     "Com que frequência você esquece de acontecimentos recentes, "

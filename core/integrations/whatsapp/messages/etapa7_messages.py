@@ -1,7 +1,7 @@
 # ENTRADA NA ETAPA 7 - RETORNO DO PROPRIO CLIENTE
 
 MENSAGEM_RETORNO_CLIENTE_ETAPA7 = (
-    "Vamos dar continuidade ao seu agendamento? ☺️"
+    "Bem vindo de volta! Vamos dar continuidade ao seu agendamento? ☺️"
 )
 
 
@@ -12,7 +12,7 @@ def montar_mensagem_retorno_cliente_etapa7():
 # ENTRADA NA ETAPA 7 - RETORNO PARA AGENDAMENTO DO DEPENDENTE
 
 MENSAGEM_RETORNO_DEPENDENTE_ETAPA7 = (
-    "Vamos dar continuidade ao agendamento de {nome}? ☺️"
+    "Bem vindo de volta! Vamos dar continuidade ao agendamento de {nome}? ☺️"
 )
 
 

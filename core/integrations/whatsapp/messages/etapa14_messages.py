@@ -1,6 +1,6 @@
 # ETAPA 14 - TESTE COGNITIVO, PERGUNTA 5
 
-CABECALHO_ETAPA14 = "Teste Cognitivo - Pergunta 5"
+CABECALHO_ETAPA14 = "Pergunta 5"
 
 MENSAGEM_CLIENTE_ETAPA14 = (
     "Com que frequência você esquece palavras que queria dizer, "

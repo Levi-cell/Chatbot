@@ -27,11 +27,8 @@ button_reply.get("title") or button_reply.get("id")
 Assim, o worker recebe textos como `Para mim`, mas não preserva separadamente a
 identidade técnica do botão nem a etapa que o originou.
 
-Por isso, a V1 utiliza orientação preventiva:
-
-- mensagens com botões exibem `Selecione apenas uma opção abaixo.`;
-- tratamentos de texto exibem
-  `Dica: responda apenas à mensagem mais recente e envie uma resposta por vez.`.
+Por isso, a V1 utiliza como orientação preventiva apenas o rodapé das
+mensagens com botões: `Selecione apenas uma opção abaixo.`.
 
 ## 1. Clique em botão antigo
 

@@ -1,6 +1,6 @@
 # ETAPA 11 - TESTE COGNITIVO, PERGUNTA 2
 
-CABECALHO_ETAPA11 = "Teste Cognitivo - Pergunta 2"
+CABECALHO_ETAPA11 = "Pergunta 2"
 
 MENSAGEM_CLIENTE_ETAPA11 = (
     "Com que frequência você esquece o que foi fazer ou procurar "

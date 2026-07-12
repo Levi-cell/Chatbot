@@ -1,6 +1,6 @@
 # ETAPA 12 - TESTE COGNITIVO, PERGUNTA 3
 
-CABECALHO_ETAPA12 = "Teste Cognitivo - Pergunta 3"
+CABECALHO_ETAPA12 = "Pergunta 3"
 
 MENSAGEM_CLIENTE_ETAPA12 = (
     "Com que frequência você esquece nomes de pessoas conhecidas "

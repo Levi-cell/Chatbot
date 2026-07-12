@@ -473,20 +473,16 @@ destino.
 
 Na PyWa utilizada pelo projeto, `header` e `footer` só são enviados quando a
 mensagem possui botões e se torna interativa. Em mensagens de texto simples,
-esses argumentos são ignorados. Quando uma mensagem simples precisar da mesma
-hierarquia visual, o cabeçalho e o rodapé devem ser incorporados ao corpo:
+esses argumentos são ignorados.
 
-```text
-*Cabeçalho*
+O fluxo atual restringe cabeçalhos à introdução e às perguntas da triagem,
+etapas 9 a 15. As demais etapas não devem passar `header` para a Meta nem
+simular cabeçalho dentro do corpo da mensagem.
 
-Corpo da mensagem
-
-_Rodapé_
-```
-
-Cabeçalhos interativos não aceitam Markdown e o Markdown não produz efeito no
-rodapé interativo. Portanto, a ênfase com `*` e `_` pertence somente ao corpo de
-mensagens simples.
+Rodapés continuam permitidos nos pontos definidos pelo produto. Quando uma
+mensagem simples precisar de rodapé, ele deve ser incorporado ao corpo com a
+formatação aceita pelo WhatsApp. O Markdown não produz efeito no rodapé de uma
+mensagem interativa.
 
 ### `pywa_functions`
 

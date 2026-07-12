@@ -1,9 +1,3 @@
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    RODAPE_TRATAMENTO_TEXTO,
-    montar_texto_com_rodape,
-)
-
-
 ### MENSAGENS EXCLUSIVA PARA DEPENDENTE
 
 ### MENSAGEM DE INICIO PERGUNTANDO O NOME
@@ -26,10 +20,7 @@ MENSAGEM_MIDIA_ETAPA3 = (
 
 
 def montar_mensagem_midia_etapa3():
-    return montar_texto_com_rodape(
-        MENSAGEM_MIDIA_ETAPA3,
-        RODAPE_TRATAMENTO_TEXTO,
-    )
+    return MENSAGEM_MIDIA_ETAPA3
 
 
 ### CLIENTE RESPONDE AO NOME DA PESSOA COM FINANCEIRO
@@ -42,10 +33,7 @@ MENSAGEM_FINANCEIRO_ETAPA3 = (
 
 
 def montar_mensagem_financeiro_etapa3():
-    return montar_texto_com_rodape(
-        MENSAGEM_FINANCEIRO_ETAPA3,
-        RODAPE_TRATAMENTO_TEXTO,
-    )
+    return MENSAGEM_FINANCEIRO_ETAPA3
 
 
 ### CLIENTE RESPONDE O NOME DA PESSOA COM MENSAGEM FORA DE CONTEXTO
@@ -57,7 +45,4 @@ MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA3 = (
 
 
 def montar_mensagem_contexto_nome_invalido_etapa3():
-    return montar_texto_com_rodape(
-        MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA3,
-        RODAPE_TRATAMENTO_TEXTO,
-    )
+    return MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA3

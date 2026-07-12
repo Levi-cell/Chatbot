@@ -1,6 +1,6 @@
 # ETAPA 13 - TESTE COGNITIVO, PERGUNTA 4
 
-CABECALHO_ETAPA13 = "Teste Cognitivo - Pergunta 4"
+CABECALHO_ETAPA13 = "Pergunta 4"
 
 MENSAGEM_CLIENTE_ETAPA13 = (
     "Com que frequência você esquece de levar suas coisas com você?"

@@ -1,6 +1,6 @@
 # ETAPA 15 - TESTE COGNITIVO, PERGUNTA 6
 
-CABECALHO_ETAPA15 = "Teste Cognitivo - Pergunta 6"
+CABECALHO_ETAPA15 = "Pergunta 6"
 
 MENSAGEM_CLIENTE_ETAPA15 = (
     "Com que frequência você esquece o que aconteceu em um filme, "
