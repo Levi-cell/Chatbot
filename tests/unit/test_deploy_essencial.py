@@ -32,6 +32,7 @@ class DeployEssencialTests(unittest.TestCase):
             "waba_id VARCHAR(100)",
             "link_instagram VARCHAR(400)",
             "numero_comercial",
+            "bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE",
             "encerra_automaticamente BOOLEAN",
             "bloqueio_dias INTEGER",
             "elegivel_funil BOOLEAN",

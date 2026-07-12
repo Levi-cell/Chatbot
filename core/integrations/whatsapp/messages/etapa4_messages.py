@@ -111,35 +111,43 @@ def montar_mensagem_cliente_menor_18_etapa4():
     return MENSAGEM_CLIENTE_MENOR_18_ETAPA4
 
 
-### DEPENDENTE COM MENOS DE 5 ANOS
+### DEPENDENTE ABAIXO DA IDADE MINIMA DA UNIDADE
 
 MENSAGEM_DEPENDENTE_MENOR_5_ETAPA4 = (
-    "No momento, o Supera realiza treinamentos com crianças a partir de 5 "
-    "anos. Quando {nome} completar 5 anos, você poderá entrar em contato "
+    "No momento, esta unidade do Supera realiza treinamentos com crianças a "
+    "partir de {idade_minima} anos. Quando {nome} completar {idade_minima} "
+    "anos, você poderá entrar em contato "
     "novamente.\n\n"
     "Um abraço e até logo! 👋☺️"
 
 )
 
 
-def montar_mensagem_dependente_menor_5_etapa4(nome):
-    return MENSAGEM_DEPENDENTE_MENOR_5_ETAPA4.format(nome=nome)
+def montar_mensagem_dependente_menor_5_etapa4(
+    nome,
+    idade_minima=5,
+):
+    return MENSAGEM_DEPENDENTE_MENOR_5_ETAPA4.format(
+        nome=nome,
+        idade_minima=idade_minima,
+    )
 
 
 ### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
 
 MENSAGEM_IDADE_ACIMA_99_ETAPA4 = (
-    "Entre em contato com o número {numero_comercial} para continuar "
-    "seu atendimento personalizado."
+    "Entendi. Olha, para idades muito avançadas, é melhor falar com nossa "
+    "consultora especializada. Vou te passar o contato dela para continuar "
+    "o atendimento, tudo bem?\n\n"
+    "Basta clicar no botão abaixo."
 )
 
+BOTAO_FALAR_COM_CONSULTORA_ETAPA4 = "Falar com Consultora"
 
-def montar_mensagem_idade_acima_99_etapa4(numero_comercial):
-    numero = str(numero_comercial or "").strip()
 
-    if not numero:
-        raise ValueError("Número comercial da unidade não configurado")
+def montar_mensagem_idade_acima_99_etapa4():
+    return MENSAGEM_IDADE_ACIMA_99_ETAPA4
 
-    return MENSAGEM_IDADE_ACIMA_99_ETAPA4.format(
-        numero_comercial=numero,
-    )
+
+def montar_botao_idade_acima_99_etapa4():
+    return BOTAO_FALAR_COM_CONSULTORA_ETAPA4

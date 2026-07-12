@@ -176,6 +176,7 @@ def criar_tabelas():
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             link_instagram VARCHAR(400),
+            bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE
         );
 

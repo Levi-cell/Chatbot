@@ -12,6 +12,9 @@ MOTIVO_MULTIPLAS_IDADES = "multiplas_idades"
 MOTIVO_FORA_INTERVALO = "fora_intervalo"
 MOTIVO_FORMATO_INVALIDO = "formato_invalido"
 
+IDADE_MINIMA_DEPENDENTE_PADRAO = 5
+IDADE_MINIMA_DEPENDENTE_BPA = 4
+
 UNIDADES = {
     "um": 1,
     "uma": 1,
@@ -133,6 +136,14 @@ def validar_idade(texto):
         status=STATUS_IDADE_VALIDA,
         idade=idade,
     )
+
+
+def obter_idade_minima_dependente(bpa_ativo):
+    """Resolve o corte da unidade sem alterar a validação da idade informada."""
+    if bpa_ativo:
+        return IDADE_MINIMA_DEPENDENTE_BPA
+
+    return IDADE_MINIMA_DEPENDENTE_PADRAO
 
 
 def _tem_formato_numerico_invalido(texto):

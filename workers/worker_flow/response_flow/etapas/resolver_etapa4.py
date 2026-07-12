@@ -17,6 +17,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+    obter_idade_minima_dependente,
     validar_idade,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
@@ -52,6 +53,7 @@ def resolve_etapa4(contexto_historico):
     status_dependente = bool(
         contexto_historico.get("status_dependente")
     )
+    bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
     nome_dependente = contexto_historico.get("nome_dependente")
     nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
@@ -124,11 +126,16 @@ def resolve_etapa4(contexto_historico):
             MOTIVO_CLIENTE_MENOR_18,
         )
 
-    if status_dependente and idade < 5:
+    idade_minima_dependente = obter_idade_minima_dependente(
+        bpa_ativo
+    )
+
+    if status_dependente and idade < idade_minima_dependente:
         contexto_envio = enviar_etapa4_dependente_menor_5(
             cliente_telefone,
             phone_id_unidade,
             nome_dependente,
+            idade_minima_dependente,
         )
         return _anexar_encerramento(
             contexto_envio,

@@ -3,6 +3,7 @@ import unittest
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     STATUS_IDADE_ACIMA_LIMITE,
     STATUS_IDADE_INVALIDA,
+    obter_idade_minima_dependente,
     validar_idade,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
@@ -111,6 +112,8 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             validar_idade("cem anos").status,
             STATUS_IDADE_ACIMA_LIMITE,
         )
+        self.assertEqual(obter_idade_minima_dependente(False), 5)
+        self.assertEqual(obter_idade_minima_dependente(True), 4)
 
     def test_decisoes_das_etapas_cinco_e_sete_traduzem_eventos(self):
         validadores = (

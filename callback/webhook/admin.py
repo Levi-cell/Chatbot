@@ -64,6 +64,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "phone_number_id",
         "link_agendamento_clickable",
         "link_instagram_clickable",
+        "bpa_ativo",
         "status_pagamento",
     )
 
@@ -79,7 +80,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_instagram",
     )
 
-    list_filter = ("status_pagamento",)
+    list_filter = ("bpa_ativo", "status_pagamento")
     ordering = ("nome",)
 
     list_per_page = 50

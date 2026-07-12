@@ -234,6 +234,7 @@ class Unidade(models.Model):
         blank=True,
         null=True,
     )
+    bpa_ativo = models.BooleanField(default=False)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
     def __str__(self):

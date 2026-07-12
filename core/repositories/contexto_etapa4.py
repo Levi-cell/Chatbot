@@ -9,6 +9,7 @@ def buscar_contexto_etapa4(id_conversa, id_unidade, cursor):
         """
         SELECT
             u.numero_comercial,
+            u.bpa_ativo,
             cl.nome,
             d.nome_dependente
         FROM chatbot.unidade u
@@ -33,21 +34,28 @@ def buscar_contexto_etapa4(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    numero_comercial, nome_cliente, nome_dependente = resultado
+    (
+        numero_comercial,
+        bpa_ativo,
+        nome_cliente,
+        nome_dependente,
+    ) = resultado
 
     logger.debug(
         "contexto_etapa4_consultado | id_conversa=%s id_unidade=%s "
-        "numero_comercial_configurado=%s cliente_nomeado=%s "
-        "dependente_nomeado=%s",
+        "numero_comercial_configurado=%s bpa_ativo=%s "
+        "cliente_nomeado=%s dependente_nomeado=%s",
         id_conversa,
         id_unidade,
         bool(numero_comercial),
+        bool(bpa_ativo),
         bool(nome_cliente),
         bool(nome_dependente),
     )
 
     return {
         "numero_comercial_unidade": numero_comercial,
+        "bpa_ativo_unidade": bool(bpa_ativo),
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
     }

@@ -6,6 +6,7 @@ from core.repositories.encerramento_atendimento import (
 )
 from core.repositories.politicas_etapa import buscar_politica_etapa
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+    obter_idade_minima_dependente,
     validar_idade,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -85,7 +86,11 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
         return None
 
     if contexto_historico.get("status_dependente"):
-        if resultado.idade < 5:
+        idade_minima = obter_idade_minima_dependente(
+            contexto_historico.get("bpa_ativo_unidade")
+        )
+
+        if resultado.idade < idade_minima:
             return {
                 "motivo": MOTIVO_DEPENDENTE_MENOR_5,
                 "excluir_dependente": True,
