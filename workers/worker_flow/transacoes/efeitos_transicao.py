@@ -42,6 +42,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_14_TRIAGEM_PERGUNTA_5,
     ETAPA_15_TRIAGEM_PERGUNTA_6,
     ETAPA_16_AGENDAMENTO,
+    ETAPA_17_FINALIZACAO,
+    EVENTO_AGENDAMENTO_CONFIRMADO,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
@@ -371,6 +373,22 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 contexto_envio,
                 cursor,
+            )
+
+    # ETAPA 16
+    if etapa_origem == ETAPA_16_AGENDAMENTO:
+        # 16 -> 17: o cliente confirmou que concluiu o agendamento.
+        if evento == EVENTO_AGENDAMENTO_CONFIRMADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_17_FINALIZACAO,
+            )
+            return _confirmar_agendamento_da_etapa16(
+                contexto_historico,
+                evento,
+                etapa_destino,
             )
 
     raise ValueError(
@@ -816,4 +834,25 @@ def _persistir_resposta_triagem(
     return {
         "resposta_triagem_persistida": True,
         **resultado,
+    }
+
+
+def _confirmar_agendamento_da_etapa16(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """Confirma a aresta 16 -> 17 sem criar dado de negócio adicional."""
+    logger.info(
+        "agendamento_confirmado_persistido | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "agendamento_confirmado": True,
+        "evento_agendamento": evento,
     }

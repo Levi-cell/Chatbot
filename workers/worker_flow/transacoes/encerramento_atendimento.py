@@ -32,6 +32,7 @@ def resolver_intencao_encerramento(
             "excluir_dependente": bool(
                 contexto_envio.get("excluir_dependente")
             ),
+            "bloqueio_dias": 0,
         }
 
     # No retry, a resposta já existe e a decisão é reconstruída pela mesma
@@ -58,6 +59,7 @@ def resolver_intencao_encerramento(
     return {
         "motivo": MOTIVO_ETAPA_FINAL,
         "excluir_dependente": False,
+        "bloqueio_dias": politica_destino.bloqueio_dias,
     }
 
 
@@ -76,6 +78,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
         return {
             "motivo": MOTIVO_IDADE_ACIMA_99,
             "excluir_dependente": False,
+            "bloqueio_dias": 0,
         }
 
     if not resultado.valida:
@@ -86,6 +89,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
             return {
                 "motivo": MOTIVO_DEPENDENTE_MENOR_5,
                 "excluir_dependente": True,
+                "bloqueio_dias": 0,
             }
         return None
 
@@ -93,6 +97,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
         return {
             "motivo": MOTIVO_CLIENTE_MENOR_18,
             "excluir_dependente": False,
+            "bloqueio_dias": 0,
         }
 
     return None
@@ -104,12 +109,20 @@ def aplicar_encerramento_se_necessario(
     cursor,
 ):
     if not intencao_encerramento:
-        return False
+        return {
+            "atendimento_encerrado": False,
+            "finalizou_em": None,
+            "bloqueio_dias": 0,
+            "motivo": None,
+        }
 
     if intencao_encerramento["excluir_dependente"]:
         excluir_dependente_da_conversa(id_conversa, cursor)
 
-    encerrar_conversa(id_conversa, cursor)
+    finalizou_em = encerrar_conversa(id_conversa, cursor)
+    bloqueio_dias = int(
+        intencao_encerramento.get("bloqueio_dias") or 0
+    )
 
     logger.info(
         "atendimento_encerrado | acao=encerrar_conversa "
@@ -118,4 +131,9 @@ def aplicar_encerramento_se_necessario(
         intencao_encerramento["motivo"],
         intencao_encerramento["excluir_dependente"],
     )
-    return True
+    return {
+        "atendimento_encerrado": True,
+        "finalizou_em": finalizou_em,
+        "bloqueio_dias": bloqueio_dias,
+        "motivo": intencao_encerramento["motivo"],
+    }

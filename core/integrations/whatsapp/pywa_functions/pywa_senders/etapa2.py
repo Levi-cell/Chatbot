@@ -5,6 +5,7 @@ from pywa.types import Button
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     RODAPE_OPCAO_UNICA,
+    montar_texto_com_rodape,
 )
 from core.integrations.whatsapp.messages.etapa2_messages import (
     montar_botoes_etapa2,
@@ -98,11 +99,14 @@ def _enviar_texto_etapa2(
     tipo_tratamento=None,
 ):
     try:
+        mensagem_enviada = montar_texto_com_rodape(
+            mensagem_bot,
+            RODAPE_OPCAO_UNICA,
+        )
         cliente_wa = conta_wa(phone_id_unidade)
         sent_message = cliente_wa.send_message(
             to=cliente_telefone,
-            text=mensagem_bot,
-            footer=RODAPE_OPCAO_UNICA,
+            text=mensagem_enviada,
             buttons=_montar_botoes_pywa_etapa2(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
@@ -119,7 +123,7 @@ def _enviar_texto_etapa2(
         contexto_envio = {
             "enviou": True,
             "resposta_ja_existia": False,
-            "mensagem_bot": mensagem_bot,
+            "mensagem_bot": mensagem_enviada,
             "rodape_mensagem": RODAPE_OPCAO_UNICA,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": ID_ETAPA2,

@@ -45,6 +45,9 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa14 import (
 from workers.worker_flow.response_flow.etapas.resolver_etapa15 import (
     resolve_etapa15,
 )
+from workers.worker_flow.response_flow.etapas.resolver_etapa16 import (
+    resolve_etapa16,
+)
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
@@ -153,6 +156,12 @@ def flow_sender(contexto_historico):
 
     if id_etapa_atual == 15:
         return resolve_etapa15(contexto_historico)
+
+    if id_etapa_atual == 16:
+        return resolve_etapa16(contexto_historico)
+
+    # A etapa 17 é terminal e não possui resolver. Conversas encerradas são
+    # barradas pelo cache/webhook e pelo fallback transacional do worker.
 
     logger.warning(
         "flow_sender_etapa_pendente | acao=nao_enviar id_conversa=%s etapa=%s",

@@ -11,6 +11,9 @@ import logging
 from pywa.types import Button
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_texto_com_rodape,
+)
 from core.integrations.whatsapp.messages.triagem_componentes import (
     montar_botoes_triagem,
     montar_rodape_triagem,
@@ -39,12 +42,16 @@ def enviar_pergunta_triagem(
 ):
     """Envia uma pergunta da triagem com o contrato comum das etapas 10–15."""
     try:
+        rodape = montar_rodape_triagem()
+        mensagem_enviada = montar_texto_com_rodape(
+            mensagem_bot,
+            rodape,
+        )
         cliente_wa = conta_wa(phone_id_unidade)
         sent_message = cliente_wa.send_message(
             to=cliente_telefone,
-            text=mensagem_bot,
+            text=mensagem_enviada,
             header=cabecalho,
-            footer=montar_rodape_triagem(),
             buttons=_montar_botoes_pywa_triagem(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
@@ -63,9 +70,9 @@ def enviar_pergunta_triagem(
         contexto_envio = {
             "enviou": True,
             "resposta_ja_existia": False,
-            "mensagem_bot": mensagem_bot,
+            "mensagem_bot": mensagem_enviada,
             "cabecalho_mensagem": cabecalho,
-            "rodape_mensagem": montar_rodape_triagem(),
+            "rodape_mensagem": rodape,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": id_etapa,
             "tipo_mensagem": "interactive_button",

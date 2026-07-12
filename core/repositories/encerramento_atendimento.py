@@ -24,13 +24,18 @@ def encerrar_conversa(id_conversa, cursor):
             processing = FALSE,
             processing_started_at = NULL
         WHERE id_conversa = %s
-          AND status_ativa = TRUE;
+          AND status_ativa = TRUE
+        RETURNING finalizou_em;
         """,
         (id_conversa,),
     )
 
-    if cursor.rowcount != 1:
+    resultado = cursor.fetchone()
+
+    if not resultado:
         raise RuntimeError(
             "Conversa não encerrada "
             f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
+
+    return resultado[0]

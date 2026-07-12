@@ -27,6 +27,7 @@ from workers.worker_flow.suporte.estado_ciclo import (
 )
 from workers.worker_flow.transacoes.finalizacao_fila import (
     finalizar_mensagem_processada,
+    registrar_cache_bloqueio_apos_commit,
 )
 from workers.worker_flow.transacoes.lock_conversa import (
     liberar_lock_conversa_se_necessario,
@@ -166,13 +167,7 @@ def worker_flow():
                 conn_ciclo.commit()
 
             except Exception as erro:
-                # TEMPORARIO: a saída válida da etapa 8 ainda simula o envio
-                # da etapa 9. Remover esta exceção quando o sender Meta da
-                # etapa 9 for implementado.
-                if (
-                    contexto_envio.get("enviou")
-                    and not contexto_envio.get("envio_simulado")
-                ):
+                if contexto_envio.get("enviou"):
                     raise BancoFalhouAposEnvioMeta(
                         "Banco falhou depois da Meta confirmar envio",
                         id_mensagem=mensagem["id_mensagem"],
@@ -194,7 +189,7 @@ def worker_flow():
                 contexto_envio.get("tipo_tratamento"),
             )
 
-            finalizar_mensagem_processada(
+            resultado_encerramento = finalizar_mensagem_processada(
                 mensagem,
                 contexto_banco,
                 lock_version,
@@ -202,6 +197,11 @@ def worker_flow():
                 contexto_final,
             )
             conn_ciclo.commit()
+
+            registrar_cache_bloqueio_apos_commit(
+                mensagem,
+                resultado_encerramento,
+            )
 
         except ErroEnvioMeta as erro:
             logger.warning(

@@ -479,10 +479,11 @@ O fluxo atual restringe cabeçalhos à introdução e às perguntas da triagem,
 etapas 9 a 15. As demais etapas não devem passar `header` para a Meta nem
 simular cabeçalho dentro do corpo da mensagem.
 
-Rodapés continuam permitidos nos pontos definidos pelo produto. Quando uma
-mensagem simples precisar de rodapé, ele deve ser incorporado ao corpo com a
-formatação aceita pelo WhatsApp. O Markdown não produz efeito no rodapé de uma
-mensagem interativa.
+Rodapés continuam permitidos nos pontos definidos pelo produto e devem aparecer
+em itálico. Como o Markdown não produz efeito no campo `footer` de uma mensagem
+interativa, o projeto incorpora o rodapé ao próprio corpo usando `_texto_`,
+mesmo quando a mensagem possui botões. O sender não deve passar `footer` para a
+Meta nesses casos.
 
 ### `pywa_functions`
 

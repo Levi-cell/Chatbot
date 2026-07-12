@@ -25,6 +25,7 @@ TRANSICOES_INICIAIS = (
     (13, "triagem_pergunta_4_respondida", 14),
     (14, "triagem_pergunta_5_respondida", 15),
     (15, "triagem_pergunta_6_respondida", 16),
+    (16, "agendamento_confirmado", 17),
 )
 
 # O mapa declara o fluxo completo conhecido. Resolvers e senders continuam

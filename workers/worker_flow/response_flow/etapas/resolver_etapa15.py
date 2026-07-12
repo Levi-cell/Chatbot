@@ -4,6 +4,9 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa15 import (
     enviar_etapa15_cliente_contexto_invalido,
     enviar_etapa15_dependente_contexto_invalido,
 )
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa16 import (
+    enviar_etapa16,
+)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
     TIPO_TRATAMENTO_RESPOSTA_TRIAGEM_INVALIDA,
@@ -23,7 +26,7 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
 - VALIDAR A RESPOSTA DA PERGUNTA 6
-- ENCAMINHAR PARA O FUTURO AGENDAMENTO AUTORIZADO PELO MAPA
+- ENCAMINHAR PARA O AGENDAMENTO AUTORIZADO PELO MAPA
 """
 
 
@@ -35,6 +38,9 @@ def resolve_etapa15(contexto_historico):
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     status_dependente = bool(contexto_historico.get("status_dependente"))
     nome_dependente = contexto_historico.get("nome_dependente")
+    link_agendamento = contexto_historico.get(
+        "link_agendamento_unidade"
+    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -70,7 +76,7 @@ def resolve_etapa15(contexto_historico):
     )
 
     logger.info(
-        "etapa15_resposta_validada | acao=simular_envio_etapa16 "
+        "etapa15_resposta_validada | acao=enviar_etapa16 "
         "id_conversa=%s id_mensagem_fila=%s evento=%s "
         "etapa_destino=%s resposta=%s status_dependente=%s",
         contexto_historico["id_conversa"],
@@ -81,10 +87,10 @@ def resolve_etapa15(contexto_historico):
         status_dependente,
     )
 
-    # TEMPORARIO: remover quando a mensagem de agendamento existir.
-    contexto_envio = _montar_contexto_etapa16_simulada(
-        contexto_historico,
-        etapa_destino,
+    contexto_envio = enviar_etapa16(
+        cliente_telefone,
+        phone_id_unidade,
+        link_agendamento,
     )
     contexto_envio["resposta_triagem"] = resposta_triagem
 
@@ -94,32 +100,6 @@ def resolve_etapa15(contexto_historico):
         EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
         etapa_destino,
     )
-
-
-def _montar_contexto_etapa16_simulada(
-    contexto_historico,
-    etapa_destino,
-):
-    id_mensagem_fila = contexto_historico[
-        "mensagem_cliente_atual"
-    ]["id_mensagem_fila"]
-
-    return {
-        "enviou": True,
-        "envio_simulado": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": (
-            f"Nesse momento a futura etapa {etapa_destino} foi enviada."
-        ),
-        "id_hash_msg_bot": (
-            f"simulacao.etapa{etapa_destino}.fila.{id_mensagem_fila}"
-        ),
-        "id_etapa_resultante": etapa_destino,
-        "tipo_mensagem": "simulacao",
-        "canal": "simulacao_worker",
-        "atualizar_conversa": True,
-        "atualizar_last_from_bot": True,
-    }
 
 
 def _logar_tratamento_contexto(contexto_historico):

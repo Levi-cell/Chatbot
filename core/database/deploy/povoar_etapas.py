@@ -23,6 +23,7 @@ ETAPAS = (
     (14, "Triagem cognitiva - pergunta 5", False, 0, False),
     (15, "Triagem cognitiva - pergunta 6", False, 0, False),
     (16, "Agendamento após a triagem cognitiva", False, 0, False),
+    (17, "Finalização do atendimento", True, 30, True),
 )
 
 
