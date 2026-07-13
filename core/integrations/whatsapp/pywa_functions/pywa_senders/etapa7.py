@@ -38,8 +38,11 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 def enviar_etapa7_cliente(
     cliente_telefone,
     phone_id_unidade,
+    nome_cliente,
 ):
-    mensagem_bot = montar_mensagem_retorno_cliente_etapa7()
+    mensagem_bot = montar_mensagem_retorno_cliente_etapa7(
+        nome_cliente
+    )
 
     return _enviar_texto_etapa7(
         cliente_telefone,
@@ -53,10 +56,12 @@ def enviar_etapa7_cliente(
 def enviar_etapa7_dependente(
     cliente_telefone,
     phone_id_unidade,
+    nome_cliente,
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_retorno_dependente_etapa7(
-        nome_dependente
+        nome_cliente,
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(

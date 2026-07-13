@@ -1,23 +1,33 @@
 # ENTRADA NA ETAPA 7 - RETORNO DO PROPRIO CLIENTE
 
 MENSAGEM_RETORNO_CLIENTE_ETAPA7 = (
-    "Bem vindo de volta! Vamos dar continuidade ao seu agendamento? ☺️"
+    "Que bom ver você aqui novamente, {nome_cliente}! "
+    "Vamos dar continuidade ao seu agendamento? ☺️"
 )
 
 
-def montar_mensagem_retorno_cliente_etapa7():
-    return MENSAGEM_RETORNO_CLIENTE_ETAPA7
+def montar_mensagem_retorno_cliente_etapa7(nome_cliente):
+    return MENSAGEM_RETORNO_CLIENTE_ETAPA7.format(
+        nome_cliente=nome_cliente,
+    )
 
 
 # ENTRADA NA ETAPA 7 - RETORNO PARA AGENDAMENTO DO DEPENDENTE
 
 MENSAGEM_RETORNO_DEPENDENTE_ETAPA7 = (
-    "Bem vindo de volta! Vamos dar continuidade ao agendamento de {nome}? ☺️"
+    "Que bom ver você aqui novamente, {nome_cliente}! "
+    "Vamos dar continuidade ao agendamento de {nome_dependente}? ☺️"
 )
 
 
-def montar_mensagem_retorno_dependente_etapa7(nome):
-    return MENSAGEM_RETORNO_DEPENDENTE_ETAPA7.format(nome=nome)
+def montar_mensagem_retorno_dependente_etapa7(
+    nome_cliente,
+    nome_dependente,
+):
+    return MENSAGEM_RETORNO_DEPENDENTE_ETAPA7.format(
+        nome_cliente=nome_cliente,
+        nome_dependente=nome_dependente,
+    )
 
 
 # CLIENTE RESPONDE AO RETORNO PROPRIO COM MIDIA

@@ -35,6 +35,7 @@ def resolve_etapa6(contexto_historico):
     status_dependente = bool(
         contexto_historico.get("status_dependente")
     )
+    nome_cliente = contexto_historico.get("nome_cliente")
     nome_dependente = contexto_historico.get("nome_dependente")
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -63,12 +64,14 @@ def resolve_etapa6(contexto_historico):
         contexto_envio = enviar_etapa7_dependente(
             cliente_telefone,
             phone_id_unidade,
+            nome_cliente,
             nome_dependente,
         )
     else:
         contexto_envio = enviar_etapa7_cliente(
             cliente_telefone,
             phone_id_unidade,
+            nome_cliente,
         )
 
     return anexar_transicao_ao_contexto_envio(

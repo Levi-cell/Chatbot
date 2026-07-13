@@ -5,6 +5,7 @@ from core.repositories.contexto_etapa4 import buscar_contexto_etapa4
 from core.repositories.contexto_etapa5 import buscar_contexto_etapa5
 from core.repositories.contexto_etapa7 import buscar_contexto_etapa7
 from core.repositories.contexto_etapa16 import buscar_contexto_etapa16
+from core.repositories.contexto_triagem import buscar_contexto_triagem
 from core.repositories.inserts import inserir_historico_mensagem_cliente
 from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
 from core.repositories.transicoes_etapa import listar_transicoes_permitidas
@@ -21,6 +22,12 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_5_OFERTA_AULA,
     ETAPA_6_OFERTA_ADIADA,
     ETAPA_7_RETORNO_OFERTA,
+    ETAPA_9_INTRODUCAO_TRIAGEM,
+    ETAPA_10_TRIAGEM_PERGUNTA_1,
+    ETAPA_11_TRIAGEM_PERGUNTA_2,
+    ETAPA_12_TRIAGEM_PERGUNTA_3,
+    ETAPA_13_TRIAGEM_PERGUNTA_4,
+    ETAPA_14_TRIAGEM_PERGUNTA_5,
     ETAPA_15_TRIAGEM_PERGUNTA_6,
     ETAPA_16_AGENDAMENTO,
 )
@@ -29,6 +36,16 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 logger = logging.getLogger("worker.valida_historico")
 
 ETAPA_INICIAL = 1
+
+ETAPAS_TRIAGEM = {
+    ETAPA_9_INTRODUCAO_TRIAGEM,
+    ETAPA_10_TRIAGEM_PERGUNTA_1,
+    ETAPA_11_TRIAGEM_PERGUNTA_2,
+    ETAPA_12_TRIAGEM_PERGUNTA_3,
+    ETAPA_13_TRIAGEM_PERGUNTA_4,
+    ETAPA_14_TRIAGEM_PERGUNTA_5,
+    ETAPA_15_TRIAGEM_PERGUNTA_6,
+}
 
 
 def valida_historico(mensagem, contexto_banco, cursor):
@@ -137,6 +154,12 @@ def valida_historico(mensagem, contexto_banco, cursor):
             cursor,
         )
 
+        if not contexto_especifico_etapa["nome_cliente"]:
+            raise ValueError(
+                "Retorno da etapa 7 sem nome do cliente persistido "
+                f"(etapa={id_etapa_cliente})"
+            )
+
         if (
             contexto_conversa.get("status_dependente")
             and not contexto_especifico_etapa["nome_dependente"]
@@ -146,16 +169,38 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente})"
             )
 
+    # As etapas 9-15 compartilham o nome do dependente. O dado sempre volta
+    # do banco em cada ciclo para que retries reconstruam o contexto completo.
+    if id_etapa_cliente in ETAPAS_TRIAGEM:
+        contexto_especifico_etapa.update(
+            buscar_contexto_triagem(
+                id_conversa,
+                contexto_banco["id_unidade"],
+                cursor,
+            )
+        )
+
+        if (
+            contexto_conversa.get("status_dependente")
+            and not contexto_especifico_etapa["nome_dependente"]
+        ):
+            raise ValueError(
+                "Triagem de dependente sem nome persistido "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
     # A resposta da pergunta 6 envia a etapa 16, e os tratamentos da própria
     # etapa 16 repetem a mensagem. Os dois ciclos precisam do link da unidade.
     if id_etapa_cliente in {
         ETAPA_15_TRIAGEM_PERGUNTA_6,
         ETAPA_16_AGENDAMENTO,
     }:
-        contexto_especifico_etapa = buscar_contexto_etapa16(
-            id_conversa,
-            contexto_banco["id_unidade"],
-            cursor,
+        contexto_especifico_etapa.update(
+            buscar_contexto_etapa16(
+                id_conversa,
+                contexto_banco["id_unidade"],
+                cursor,
+            )
         )
 
     if resposta_bot_para_mensagem_atual:
