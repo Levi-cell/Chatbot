@@ -282,6 +282,39 @@ class IntegracaoFunilUnidade(models.Model):
         verbose_name_plural = 'Integrações do Funil por unidade'
 
 
+class FunilEnvio(models.Model):
+    id_funil_envio = models.AutoField(primary_key=True)
+    id_conversa = models.OneToOneField(
+        Conversa,
+        models.CASCADE,
+        db_column='id_conversa',
+        related_name='envio_funil',
+    )
+    status = models.CharField(
+        max_length=20,
+        default='pending',
+        choices=[
+            ('pending', 'pending'),
+            ('processing', 'processing'),
+            ('sent', 'sent'),
+        ],
+    )
+    retry_count = models.IntegerField(default=0)
+    next_attempt_at = models.DateTimeField()
+    processing_started_at = models.DateTimeField(blank=True, null=True)
+    enviado_em = models.DateTimeField(blank=True, null=True)
+    ultimo_erro = models.TextField(blank=True, null=True)
+    resposta_funil = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField()
+    atualizado_em = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'funil_envios'
+        verbose_name = 'Envio ao Funil'
+        verbose_name_plural = 'Envios ao Funil'
+
+
 class ClienteBloqueadoMeta(models.Model):
     id_bloqueio = models.AutoField(primary_key=True)
     id_cliente = models.ForeignKey(

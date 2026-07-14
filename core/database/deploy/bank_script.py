@@ -298,9 +298,8 @@ def criar_tabelas():
         WHERE status_ativa = FALSE;
 
         CREATE INDEX IF NOT EXISTS idx_conversa_funil_pendente
-        ON chatbot.conversa (id_etapa_atual, finalizou_em)
-        WHERE status_ativa = FALSE
-          AND lead_no_funil IS NOT TRUE;
+        ON chatbot.conversa (id_etapa_atual, id_conversa)
+        WHERE lead_no_funil IS NOT TRUE;
 
         -- 4. DEPENDENTE: EXISTE SOMENTE DENTRO DE UMA CONVERSA
 
@@ -474,6 +473,42 @@ def criar_tabelas():
             CONSTRAINT uq_respostas_desafios_conversa_etapa
                 UNIQUE (id_conversa, id_etapa)
         );
+
+        -- 7. FILA OPERACIONAL DO WORKER DE FUNIL
+
+        CREATE TABLE IF NOT EXISTS chatbot.funil_envios (
+            id_funil_envio SERIAL PRIMARY KEY,
+            id_conversa INT NOT NULL UNIQUE,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending',
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            processing_started_at TIMESTAMPTZ,
+            enviado_em TIMESTAMPTZ,
+            ultimo_erro TEXT,
+            resposta_funil TEXT,
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            CONSTRAINT funil_envios_id_conversa_fkey
+                FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE CASCADE,
+
+            CONSTRAINT ck_funil_envios_status
+                CHECK (status IN ('pending', 'processing', 'sent')),
+
+            CONSTRAINT ck_funil_envios_retry_count
+                CHECK (retry_count >= 0)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_funil_envios_disponiveis
+        ON chatbot.funil_envios (
+            status,
+            next_attempt_at,
+            processing_started_at,
+            id_funil_envio
+        )
+        WHERE status IN ('pending', 'processing');
         """)
 
     logger.info("banco_setup_ok | acao=criar_tabelas")

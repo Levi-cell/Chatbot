@@ -1,7 +1,8 @@
 # Chatbot WhatsApp
 
 Backend de atendimento assíncrono pelo WhatsApp, com entrada Django, fila em
-PostgreSQL, worker resiliente, cache Redis e integração Meta por PyWa.
+PostgreSQL, workers resilientes, cache Redis, integração Meta por PyWa e envio
+periódico de oportunidades ao Funil de Vendas.
 
 Este README é o portal do projeto. Regras detalhadas vivem nos documentos
 centrais e os mapas técnicos vivem nos READMEs de cada camada.
@@ -31,6 +32,7 @@ Para desenvolver novas etapas, siga a
 | SQL de runtime | [core/repositories/README.md](core/repositories/README.md) |
 | Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
 | WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
+| Funil de Vendas | [core/integrations/funil/README.md](core/integrations/funil/README.md) |
 | Segurança avançada futura | [_V2/seguranca-avancada.md](_V2/seguranca-avancada.md) |
 | Infraestrutura futura | [_V2/infraestrutura.md](_V2/infraestrutura.md) |
 | Concorrência futura | [_V2/concorrencia-workers.md](_V2/concorrencia-workers.md) |
@@ -45,6 +47,11 @@ Meta/WhatsApp
     -> workers/worker_flow
     -> core/integrations/whatsapp
     -> Meta/WhatsApp
+
+PostgreSQL: conversa em etapa elegível
+    -> workers/worker_funil
+    -> core/integrations/funil
+    -> Funil de Vendas: oportunidade em Leads
 ```
 
 Responsabilidades principais:
@@ -110,6 +117,13 @@ META_WEBHOOK_SIGNATURE_REQUIRED
 META_WABA_ID
 META_PHONE_NUMBER_ID_DEV
 WEBHOOK_MAX_BODY_BYTES
+FUNIL_WORKER_ENABLED
+FUNIL_INTERVALO_SEGUNDOS
+FUNIL_LIMITE_POR_CICLO
+FUNIL_LEASE_SEGUNDOS
+FUNIL_RETRY_LEAD_SEGUNDOS
+FUNIL_HTTP_CONNECT_TIMEOUT_SECONDS
+FUNIL_HTTP_READ_TIMEOUT_SECONDS
 ```
 
 Nunca registre valores reais de tokens, senhas ou payloads completos na
@@ -129,8 +143,9 @@ antes de alterar DDL ou funções PostgreSQL.
 
 ## Execução em desenvolvimento
 
-O bootstrap recomendado valida o cache inicial e abre webhook e worker em
-terminais separados:
+O bootstrap recomendado valida o cache inicial e abre webhook e worker de
+atendimento em terminais separados. Quando `FUNIL_WORKER_ENABLED=True`, abre
+também um terceiro terminal para o worker do Funil:
 
 ```powershell
 python main.py
@@ -168,6 +183,8 @@ política de mocks.
 - Redis acelera consultas e deve possuir fallback quando previsto;
 - o webhook apenas valida e enfileira;
 - o worker é dono do fluxo da conversa e das transações do ciclo;
+- o worker do Funil é independente, processa uma oportunidade por vez e nasce
+  desativado até a validação manual da integração;
 - a V1 opera com uma única instância de worker, já protegida por contratos que
   deverão sustentar múltiplas instâncias na V2;
 - chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;

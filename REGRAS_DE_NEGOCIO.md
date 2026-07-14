@@ -282,10 +282,11 @@ Implementação principal:
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
   bloqueada pelo prazo declarado na política.
 - A etapa 9 introduz a triagem, as etapas 10 a 15 fazem as seis perguntas e a
-  etapa 16 reserva o início do agendamento. Nenhuma delas encerra, bloqueia ou
-  envia a conversa ao funil nesta versão.
-- A nova etapa final será marcada com essas políticas quando o restante da
-  triagem e do agendamento estiver implementado.
+  etapa 16 apresenta o agendamento. A etapa 16 torna a conversa elegível ao
+  Funil, mas não encerra nem bloqueia o atendimento.
+- A etapa 17 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+  30 dias. Ela permanece elegível ao Funil caso a etapa 16 ainda não tenha sido
+  publicada.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma
@@ -298,6 +299,29 @@ Implementação principal:
 - `core/repositories/fluxo/politicas.py`
 - `workers/worker_flow/valida_banco.py`
 - `core/cache/runtime/cache_conversas_bloqueadas.py`
+
+### 6.1 Oportunidade no Funil de Vendas
+
+- Uma conversa torna-se elegível ao entrar na etapa 16.
+- A etapa 17 continua elegível apenas como recuperação; `lead_no_funil = TRUE`
+  impede um segundo envio confirmado da mesma conversa.
+- O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
+- O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
+  respostas canônicas da triagem.
+- Em atendimento para dependente, a oportunidade mantém o cliente pagante como
+  contato e inclui nome e idade do dependente nas observações.
+- A resposta só é confirmada quando o HTTP não falha e o JSON contém
+  `response = success`.
+- Falha antes da confirmação externa devolve `funil_envios` para `pending` e
+  não altera `lead_no_funil`.
+- `funil_envios` usa claim com `FOR UPDATE SKIP LOCKED` e lease para recuperar
+  itens abandonados em `processing`.
+- O título `Chatbot Lead [C<id_conversa>]` fornece referência determinística
+  para auditoria e reconciliação manual.
+- A V1 não cria atividade e não sincroniza atualizações posteriores do CRM.
+
+O processo é desativado por padrão e só inicia com
+`FUNIL_WORKER_ENABLED=True` depois do teste manual da unidade.
 
 ## 7. Histórico da mensagem do cliente
 
@@ -586,6 +610,19 @@ Duplicidade frequente, determinística ou ocorrida depois de a resposta do bot j
 estar persistida é bug. Duplicidade excepcional na janela externa entre Meta e
 banco é um trade-off conhecido e aceito na V1.
 
+O Funil possui uma janela externa equivalente:
+
+```text
+Funil confirmou a oportunidade
+        -> banco caiu antes de marcar lead_no_funil
+        -> lease expirou
+        -> retry pode criar outra oportunidade
+```
+
+O estado `processing` e o título determinístico reduzem e tornam rastreável esse
+caso, mas não existe exatamente uma vez sem consulta de reconciliação suportada
+pelo CRM.
+
 ## 15. O que é bug na V1
 
 São bugs, entre outros:
@@ -820,6 +857,8 @@ serviço:
 - falha de uma mensagem não encerra o processamento das demais;
 - o worker captura falhas, preserva ou reagenda o estado quando possível e
   continua o loop;
+- o worker do Funil isola erros por lead e reinicia falhas globais com espera
+  linear de 5 a 60 segundos;
 - `flow_worker.py` mantém o loop de consumo e os tratamentos por tipo de exceção;
 - se `worker_flow()` escapar com uma exceção, `main_worker.py` registra a falha,
   aguarda 5 segundos e inicia outro loop;
@@ -850,6 +889,7 @@ Implementação principal:
 
 - `workers/worker_flow/main_worker.py`
 - `workers/worker_flow/response_flow/flow_worker.py`
+- `workers/worker_funil/flow_worker.py`
 - `core/cache/redis_client.py`
 - `callback/webhook/services/post_flow.py`
 
@@ -872,6 +912,8 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `main_worker.py` reinicia `worker_flow()` depois de uma exceção. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 16/17, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
 
 ## 22. Orientação para futuras alterações

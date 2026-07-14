@@ -12,7 +12,7 @@ from workers.worker_flow.response_flow.flow_worker import worker_flow
 logger = logging.getLogger("worker.main")
 
 
-def inicia_worker_main():
+def inicia_worker_flow():
     while True:
         try:
             logger.info("worker_flow_iniciando")
@@ -26,4 +26,4 @@ def inicia_worker_main():
 
 
 if __name__ == "__main__":
-    inicia_worker_main()
+    inicia_worker_flow()

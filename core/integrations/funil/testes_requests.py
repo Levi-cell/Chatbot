@@ -1,71 +1,48 @@
+"""Ferramentas manuais para validar a integração sem consultar o chatbot."""
+
 import json
 from datetime import datetime
-from urllib.parse import urlencode
 
 import requests
+
+from core.integrations.funil.cliente import enviar_oportunidade
+from core.integrations.funil.oportunidades import (
+    montar_dados_lead_teste,
+    montar_payload_oportunidade,
+)
 
 
 URL_CONSULTA_INTEGRACOES = (
     "https://leads.funildevendas.com.br/supera/ApiConsult"
-)
-URL_BASE_API_CARROSSEL = (
-    "https://leads.funildevendas.com.br/apicarrossel/api/"
 )
 URL_BASE_CONSULTA_OPORTUNIDADES = (
     "https://app.funildevendas.com.br/api/v2/methodologies"
 )
 
 WIDGET_UNIDADE_SAJ = "FJA4E20240923185844"
-CANAL_META_ADS = 113340
-
-HTTP_TIMEOUT = (10, 30)
-
-OBSERVACOES_TESTE = (
-    "TESTE DE INTEGRACAO DO CHATBOT.\n"
-    "Oportunidade criada somente para validar o envio automatico ao CRM.\n"
-    "Nao entrar em contato com este registro."
+LINK_API_UNIDADE_SAJ = (
+    "https://leads.funildevendas.com.br/apicarrossel/api/"
+    "?W=FJA4E20240923185844"
 )
-ORIGEM_LEAD_TESTE = "Chatbot - Meta Ads"
-
-MARCADORES_API_CARROSSEL = {
-    "codigo_vendedor": "Code_User",
-    "codigo_metodologia": "Code_Methodology",
-    "codigo_canal_venda": "Code_Channel",
-    "codigo_etapa": "Code_StepMethodology",
-}
-
-
-def montar_url_api_carrossel(
-    widget=WIDGET_UNIDADE_SAJ,
-    codigo_canal=CANAL_META_ADS,
-):
-    query_string = urlencode(
-        {
-            "W": widget,
-            "ForceCodeChannel": codigo_canal,
-        }
-    )
-    return f"{URL_BASE_API_CARROSSEL}?{query_string}"
+CANAL_META_ADS = "113340"
+HTTP_TIMEOUT = (10, 30)
 
 
 def consultar_integracao_unidade(widget=WIDGET_UNIDADE_SAJ):
-    """Consulta o catalogo publico e retorna a integracao da unidade."""
-    response = requests.get(
-        URL_CONSULTA_INTEGRACOES,
-        timeout=HTTP_TIMEOUT,
-    )
+    """Consulta o catálogo público e retorna a integração da unidade."""
+    response = requests.get(URL_CONSULTA_INTEGRACOES, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
 
     try:
         integracoes = response.json()
     except ValueError as exc:
         raise RuntimeError(
-            "O catalogo ApiCarrossel nao retornou um JSON valido."
+            "O catálogo ApiCarrossel não retornou um JSON válido"
         ) from exc
 
     if not isinstance(integracoes, list):
         raise RuntimeError(
-            "O catalogo ApiCarrossel retornou uma estrutura inesperada."
+            "O catálogo ApiCarrossel retornou uma estrutura inesperada"
         )
 
     for integracao in integracoes:
@@ -81,102 +58,24 @@ def consultar_integracao_unidade(widget=WIDGET_UNIDADE_SAJ):
     return None
 
 
-def montar_payload_oportunidade_teste(
-    *,
-    nome_contato,
-    email="",
-    telefone="",
-    titulo=None,
-    observacoes=OBSERVACOES_TESTE,
-    origem_lead=ORIGEM_LEAD_TESTE,
-):
-    """Monta uma oportunidade de teste com os campos validados no CRM."""
-    if not titulo:
-        agora = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-        titulo = f"[TESTE CHATBOT {agora}] {nome_contato}"
-
-    return {
-        "oportunidades": [
-            {
-                "titulo": titulo,
-                "valor": "0",
-                **MARCADORES_API_CARROSSEL,
-                "personalizados": [
-                    {
-                        "titulo": "Observações",
-                        "valor": observacoes,
-                    },
-                    {
-                        "titulo": "Origem do lead",
-                        "valor": origem_lead,
-                    },
-                ],
-                "empresa": {
-                    "nome": nome_contato,
-                    "cnpj": "",
-                    "codigo_segmento": "0",
-                    "endereco_completo": {
-                        "logradouro": "",
-                        "numero": "",
-                        "complemento": "",
-                        "bairro": "",
-                        "cidade": "",
-                        "uf": "",
-                        "cep": "",
-                    },
-                    "personalizados": [],
-                },
-                "contato": {
-                    "nome": nome_contato,
-                    "email": email,
-                    "telefone1": telefone,
-                    "telefone2": "",
-                    "cargo": "",
-                    "cpf": "",
-                    "personalizados": [],
-                },
-            }
-        ]
-    }
+def montar_payload_oportunidade_teste():
+    """Monta o lead fictício completo sem executar qualquer POST."""
+    return montar_payload_oportunidade(montar_dados_lead_teste())
 
 
-def criar_oportunidade_teste(
-    *,
-    confirmar_envio_real=False,
-    nome_contato="Teste Chatbot - Nao contatar",
-    email="",
-    telefone="",
-    titulo=None,
-    observacoes=OBSERVACOES_TESTE,
-    origem_lead=ORIGEM_LEAD_TESTE,
-):
-    """Envia uma oportunidade real para a unidade configurada no endpoint."""
+def criar_oportunidade_teste(*, confirmar_envio_real=False):
+    """Cria um lead de teste real somente mediante confirmação explícita."""
     if confirmar_envio_real is not True:
         raise ValueError(
-            "Passe confirmar_envio_real=True para inserir no CRM."
+            "Passe confirmar_envio_real=True para inserir o teste no CRM"
         )
 
-    payload = montar_payload_oportunidade_teste(
-        nome_contato=nome_contato,
-        email=email,
-        telefone=telefone,
-        titulo=titulo,
-        observacoes=observacoes,
-        origem_lead=origem_lead,
-    )
-    response = requests.post(
-        montar_url_api_carrossel(),
-        json=payload,
+    return enviar_oportunidade(
+        link_api_carrossel=LINK_API_UNIDADE_SAJ,
+        codigo_canal_venda=CANAL_META_ADS,
+        payload=montar_payload_oportunidade_teste(),
         timeout=HTTP_TIMEOUT,
     )
-
-    return {
-        "status_http": response.status_code,
-        "sucesso_http": response.ok,
-        "content_type": response.headers.get("Content-Type"),
-        "resposta": _normalizar_resposta(response),
-        "titulo_enviado": payload["oportunidades"][0]["titulo"],
-    }
 
 
 def consultar_codigo_oportunidade(
@@ -188,20 +87,13 @@ def consultar_codigo_oportunidade(
     data_inicial=None,
     data_final=None,
 ):
-    """Localiza pelo titulo exato e devolve o codigo da oportunidade.
-
-    A consulta pertence a API autenticada do Funil de Vendas. As credenciais
-    sao argumentos para que este arquivo de teste nao armazene senha real.
-    """
+    """Localiza pelo título exato e devolve o código da oportunidade."""
     hoje = datetime.now().astimezone().date()
     data_inicial = data_inicial or hoje
     data_final = data_final or hoje
 
     response = requests.get(
-        (
-            f"{URL_BASE_CONSULTA_OPORTUNIDADES}/"
-            f"{codigo_funil}/opportunities/"
-        ),
+        f"{URL_BASE_CONSULTA_OPORTUNIDADES}/{codigo_funil}/opportunities/",
         params={
             "text": titulo,
             "initial_date": _formatar_data_consulta(data_inicial),
@@ -218,13 +110,13 @@ def consultar_codigo_oportunidade(
         corpo = response.json()
     except ValueError as exc:
         raise RuntimeError(
-            "A consulta de oportunidades nao retornou um JSON valido."
+            "A consulta de oportunidades não retornou um JSON válido"
         ) from exc
 
     resultados = corpo.get("results")
     if not isinstance(resultados, list):
         raise RuntimeError(
-            "A consulta de oportunidades retornou uma estrutura inesperada."
+            "A consulta de oportunidades retornou uma estrutura inesperada"
         )
 
     titulo_normalizado = titulo.strip().casefold()
@@ -237,23 +129,18 @@ def consultar_codigo_oportunidade(
 
     if not correspondencias:
         return None
-
     if len(correspondencias) > 1:
-        codigos = [
-            oportunidade.get("code")
-            for oportunidade in correspondencias
-        ]
+        codigos = [item.get("code") for item in correspondencias]
         raise RuntimeError(
-            "Mais de uma oportunidade possui o mesmo titulo exato: "
-            f"codigos={codigos}."
+            "Mais de uma oportunidade possui o mesmo título exato: "
+            f"códigos={codigos}"
         )
 
     codigo = correspondencias[0].get("code")
     if codigo is None:
         raise RuntimeError(
-            "A oportunidade foi localizada, mas veio sem o campo code."
+            "A oportunidade foi localizada, mas veio sem o campo code"
         )
-
     return codigo
 
 
@@ -263,15 +150,10 @@ def _formatar_data_consulta(valor):
     return str(valor)
 
 
-def _normalizar_resposta(response):
-    try:
-        return response.json()
-    except ValueError:
-        return response.text
-
-
 def _imprimir_resultado(resultado):
     print(json.dumps(resultado, ensure_ascii=False, indent=2))
 
 
 
+
+print(criar_oportunidade_teste(confirmar_envio_real=True))

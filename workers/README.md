@@ -1,7 +1,7 @@
 # Workers
 
-Camada assíncrona responsável por retirar mensagens da fila, interpretar o estado
-persistido, enviar respostas e concluir o processamento.
+Camada assíncrona responsável pelo atendimento no WhatsApp e pela publicação
+periódica de oportunidades no Funil de Vendas.
 
 - [Portal do projeto](../README.md)
 - [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
@@ -37,6 +37,12 @@ workers/
 │   └── suporte/
 │       ├── cache_repair.py
 │       └── estado_ciclo.py
+├── worker_funil/
+│   ├── main_worker.py
+│   ├── config.py
+│   ├── flow_worker.py
+│   ├── processamento.py
+│   └── exceptions.py
 ├── tratamento_erros_externos/
 └── challenge_template.py
 ```
@@ -148,6 +154,40 @@ histórico do bot
 O `flow_worker.py` continua dono do commit e rollback. Os repositórios recebem o
 cursor e não controlam a transação.
 
+## Worker do Funil
+
+`worker_funil` é independente do atendimento. Ele não consome
+`fila_mensagens`, não envia WhatsApp e não altera o mapa de transições.
+
+```text
+materializar conversas em etapas elegíveis
+-> claim de um funil_envios com FOR UPDATE SKIP LOCKED
+-> commit da reserva
+-> montar snapshot do cliente/dependente/triagem
+-> encerrar a transação de leitura
+-> criar uma oportunidade na ApiCarrossel
+-> marcar lead_no_funil e funil_envios=sent no mesmo commit local
+-> repetir até o limite do lote
+-> aguardar uma hora
+```
+
+Cada lead é isolado. Falha de payload ou API volta o item para `pending`, agenda
+a próxima tentativa e permite processar os demais. Falha global do ciclo usa
+espera linear de 5 em 5 segundos, limitada a 60 segundos.
+
+O claim possui lease: um item abandonado em `processing` volta a ser elegível
+depois de `FUNIL_LEASE_SEGUNDOS`. Isso permite recuperação de processo morto e
+protege múltiplas instâncias com `SKIP LOCKED`.
+
+Não existe transação distribuída entre PostgreSQL e Funil. Se o CRM confirmar e
+o banco cair antes do commit local, o item permanece `processing` e poderá ser
+reenviado após o lease. O título `Chatbot Lead [C<id_conversa>]` permite
+reconciliação manual; consulta automática é evolução futura.
+
+O processo nasce desativado. `FUNIL_WORKER_ENABLED=True` deve ser configurado
+somente depois do teste manual da unidade. Quando ativo, `main.py` abre um
+terceiro terminal exclusivamente para ele.
+
 ## Testes relacionados
 
 - `tests/unit/test_worker_flow_runtime.py`;
@@ -155,10 +195,7 @@ cursor e não controlam a transação.
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
 - `tests/unit/test_lastfrom_semantico.py`;
-- `tests/unit/test_roteamento_essencial.py`;
-- `tests/unit/test_transicoes_etapa.py`;
 - `tests/unit/test_validadores_essenciais.py`;
 - `tests/unit/test_efeitos_triagem.py`;
-- `tests/unit/test_efeitos_triagem.py`;
 - `tests/unit/test_transicoes_etapa.py`;
-- `tests/unit/test_persistencia_essencial.py`.
+- `tests/unit/test_funil_essencial.py`.

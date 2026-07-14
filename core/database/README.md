@@ -75,6 +75,11 @@ novo sem apagar o banco.
 históricas. As tabelas são criadas em ordem de dependência para que chaves
 estrangeiras e constraints já nasçam prontas.
 
+O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
+e `funil_envios`, fila operacional 1:1 da conversa. As etapas 16 e 17 são
+marcadas como `elegivel_funil`; encerramento e bloqueio de 30 dias continuam
+exclusivos da política da etapa 17.
+
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
 de schema existente exige um script de migração separado ou decisão consciente
 de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL
@@ -121,4 +126,5 @@ de segredos.
 
 - `tests/unit/test_deploy_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_persistencia_essencial.py`.
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_funil_essencial.py`.

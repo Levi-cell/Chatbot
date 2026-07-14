@@ -6,9 +6,21 @@ Este documento preserva as decisoes, descobertas e duvidas ainda abertas sobre
 a integracao entre o chatbot e o Funil de Vendas. Ele nao e um plano de
 implementacao e, por isso, nao contem o codigo completo dos arquivos.
 
-Quando as credenciais e os contratos externos forem confirmados, estas decisoes
-servirao de base para um `plano de implementacao.md` revisavel antes de qualquer
-alteracao no projeto.
+O documento começou como estratégia. Em 13/07/2026, a criação periódica de
+oportunidades foi implementada. As seções sobre atividades e reconciliação
+autenticada continuam registrando evolução futura.
+
+```text
+etapas 16 e 17 elegíveis
+-> funil_envios
+-> claim com SKIP LOCKED e lease
+-> uma oportunidade ApiCarrossel por conversa
+-> validar JSON response=success
+-> lead_no_funil=TRUE e funil_envios=sent
+```
+
+O worker permanece desativado por padrão até o teste manual dos campos da
+unidade. Nenhuma atividade é criada nesta versão.
 
 ## Fontes analisadas
 
@@ -83,7 +95,7 @@ Se o time do Supera confirmar a automacao de atividades, o fluxo sera ampliado
 para localizar a oportunidade, obter seu codigo e criar a atividade inicial.
 Essa ampliacao nao deve ser tratada como obrigatoria antes da confirmacao.
 
-### Campos personalizados confirmados
+### Campos personalizados enviados
 
 O teste e o modelo oficial do Supera confirmaram dois campos personalizados da
 oportunidade:
@@ -95,8 +107,10 @@ Origem do lead
 
 No JSON, os titulos devem ser enviados com a grafia exata configurada no CRM:
 o equivalente a `Observacoes`, com cedilha e tildes, e `Origem do lead`. O
-primeiro recebera o resumo do atendimento; o segundo identificara o chatbot e
-o canal de aquisicao.
+primeiro recebe o resumo do atendimento; o segundo identifica o chatbot como
+`Meta Chatbot`. Como a tela do CRM também possui campos nativos com nomes
+semelhantes, o preenchimento visual deve ser confirmado no teste manual de cada
+widget antes de ativar o worker.
 
 ### Ausencia de sincronizacao posterior
 
@@ -149,7 +163,7 @@ como `as vezes` com acento, sem alterar o valor canonico persistido.
 O titulo da oportunidade deve conter uma identificacao interna que nao muda:
 
 ```text
-[CHATBOT C123] Jamile
+Chatbot Lead [C123]
 ```
 
 `C123` representa `id_conversa = 123`. Essa identificacao permite localizar a
@@ -219,7 +233,7 @@ Relacao:
 conversa 1 ---- 0..1 funil_envios
 ```
 
-Campos previstos:
+Campos implementados:
 
 ```text
 id_funil_envio
@@ -228,12 +242,11 @@ status
 retry_count
 next_attempt_at
 processing_started_at
-codigo_oportunidade
-codigo_atividade (opcional e futuro)
-last_error
+enviado_em
+ultimo_erro
+resposta_funil
 criado_em
 atualizado_em
-enviado_em
 ```
 
 Nao e necessario duplicar `id_unidade` em `funil_envios`:
@@ -245,10 +258,11 @@ funil_envios
 -> integracao_funil_unidade
 ```
 
-Essa cadeia garante uma unica fonte para a relacao. O codigo externo da
-oportunidade fica em `funil_envios` porque pertence ao envio especifico daquela
-conversa. O codigo de atividade somente sera adicionado se essa automacao for
-autorizada.
+Essa cadeia garante uma unica fonte para a relacao. A V1 guarda a resposta do
+ApiCarrossel para auditoria, mas nao possui um codigo externo confiavel porque o
+endpoint de inclusao nao o devolve. `codigo_oportunidade` e
+`codigo_atividade` somente devem ser adicionados quando a consulta autenticada
+e a automacao de atividades forem aprovadas.
 
 O campo atual `conversa.lead_no_funil` pode continuar como resumo rapido:
 
@@ -260,7 +274,7 @@ TRUE  -> oportunidade confirmada no CRM
 A tabela `funil_envios` guarda os detalhes necessarios para retry, auditoria e
 recuperacao de estados intermediarios.
 
-## Arquitetura proposta
+## Arquitetura implementada
 
 ```text
 core/integrations/funil/
@@ -269,8 +283,11 @@ core/integrations/funil/
 core/repositories/funil/integracao.py
     configuracao da integracao do CRM por unidade
 
+core/repositories/funil/leads.py
+    fotografia completa do cliente, dependente e triagem
+
 core/repositories/funil/envios.py
-    consultas, claim, fotografia do lead e atualizacoes transacionais
+    materializacao, claim e atualizacoes transacionais da fila
 
 workers/worker_funil/
     supervisor, ciclo horario e processamento isolado de cada lead
@@ -304,7 +321,7 @@ Se o plano identificar duplicacao real, podera ser criado algo como
 
 ## Processamento de um ciclo
 
-O worker sera um processo supervisionado que executa um ciclo e aguarda uma
+O worker e um processo supervisionado que executa um ciclo e aguarda uma
 hora antes do proximo. O intervalo sera configuravel, com padrao de 3.600
 segundos.
 
@@ -372,8 +389,9 @@ Funil e PostgreSQL simultaneamente.
 A protecao correta combina:
 
 - estado persistido em `funil_envios`;
-- identificadores deterministicas;
-- consulta de reconciliacao no Funil;
+- identificadores deterministicos;
+- consulta de reconciliacao no Funil, quando a API autenticada estiver
+  disponivel;
 - operacoes locais pequenas e idempotentes.
 
 ## O que significa reconciliacao
@@ -381,15 +399,15 @@ A protecao correta combina:
 Reconciliacao e consultar a fonte externa para descobrir se uma operacao ja
 aconteceu quando o banco local nao conseguiu registrar o resultado.
 
-Exemplo:
+Exemplo futuro, depois de adicionar o codigo externo ao modelo:
 
 ```text
 1. Funil cria a oportunidade C123 com sucesso.
-2. O banco cai antes de salvar codigo_oportunidade.
+2. O banco cai antes de confirmar o envio local.
 3. funil_envios continua pendente ou processing.
-4. No retry, o worker procura [CHATBOT C123] no Funil, se a consulta
+4. No retry, o worker procura Chatbot Lead [C123] no Funil, se a consulta
    autenticada estiver disponivel.
-5. Se encontrar, reutiliza o codigo existente.
+5. Se encontrar, salva o codigo externo e reutiliza a oportunidade.
 6. Nao cria outra oportunidade.
 7. Confirma o envio local.
 ```
@@ -398,7 +416,7 @@ Se a atividade automatizada for autorizada posteriormente, surgira outro estado
 parcial:
 
 ```text
-1. Oportunidade foi criada e codigo_oportunidade foi salvo.
+1. Oportunidade foi criada e seu futuro codigo externo foi salvo.
 2. Criacao da atividade falha.
 3. O envio nao recebe lead_no_funil = TRUE.
 4. No retry, o worker nao recria a oportunidade.
@@ -479,18 +497,18 @@ response = failure -> operacao rejeitada
 
 Confiar apenas no status HTTP marcaria falhas como enviadas.
 
-## Configuracoes globais previstas no ambiente
+## Configuracoes globais no ambiente
 
 Valores globais, sem segredo especifico de unidade:
 
 ```text
-FUNIL_BASE_URL
+FUNIL_WORKER_ENABLED=False
 FUNIL_INTERVALO_SEGUNDOS=3600
-FUNIL_BATCH_LIMIT
-FUNIL_HTTP_CONNECT_TIMEOUT_SECONDS
-FUNIL_HTTP_READ_TIMEOUT_SECONDS
-FUNIL_PROCESSING_TIMEOUT_SECONDS
-FUNIL_RETRY_DELAY_SECONDS
+FUNIL_LIMITE_POR_CICLO=100
+FUNIL_LEASE_SEGUNDOS=900
+FUNIL_RETRY_LEAD_SEGUNDOS=3600
+FUNIL_HTTP_CONNECT_TIMEOUT_SECONDS=10
+FUNIL_HTTP_READ_TIMEOUT_SECONDS=30
 ```
 
 Uma chave mestra de criptografia podera ser necessaria caso credenciais por
@@ -508,11 +526,13 @@ resposta sobre credencial exclusiva de API.
 - confirmar se o tipo de atividade sera `WHATSAPP`, se aprovada;
 - validar no ambiente real a resposta da criacao de atividade;
 - confirmar a estrategia de consulta da atividade para reconciliacao;
-- somente depois escrever o plano com codigo completo por arquivo.
+- validar manualmente se os campos personalizados `Observacoes` e
+  `Origem do lead` aparecem nos campos visuais esperados de cada widget;
+- somente ativar `FUNIL_WORKER_ENABLED` depois dessa validacao.
 
 ## Veredito atual
 
-A arquitetura proposta atende aos requisitos de:
+A arquitetura implementada atende aos requisitos de:
 
 - elegibilidade desde a etapa 16;
 - isolamento por unidade;
@@ -524,7 +544,7 @@ A arquitetura proposta atende aos requisitos de:
 - protecao contra duplicidade em estados intermediarios;
 - manutencao do `worker_flow` atual sem acoplar o atendimento ao CRM.
 
-Ja ha informacao suficiente para planejar a criacao periodica de oportunidades
-via ApiCarrossel. A criacao de atividade e a reconciliacao automatica pelo
-codigo externo permanecem como extensoes condicionadas a autenticacao e a
-confirmacao da regra do Supera.
+A criacao periodica de oportunidades via ApiCarrossel esta implementada e
+desativada por padrao ate a validacao manual. A criacao de atividade e a
+reconciliacao automatica pelo codigo externo permanecem como extensoes
+condicionadas a autenticacao e a confirmacao da regra do Supera.

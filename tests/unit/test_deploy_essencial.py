@@ -29,6 +29,7 @@ class DeployEssencialTests(unittest.TestCase):
             "CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens",
             "CREATE TABLE IF NOT EXISTS chatbot.respostas_desafios",
             "CREATE TABLE IF NOT EXISTS chatbot.integracao_funil_unidade",
+            "CREATE TABLE IF NOT EXISTS chatbot.funil_envios",
             "UNIQUE (id_conversa, id_etapa)",
             "waba_id VARCHAR(100)",
             "link_instagram VARCHAR(400)",
@@ -38,6 +39,7 @@ class DeployEssencialTests(unittest.TestCase):
             "encerra_automaticamente BOOLEAN",
             "bloqueio_dias INTEGER",
             "elegivel_funil BOOLEAN",
+            "CHECK (status IN ('pending', 'processing', 'sent'))",
         )
 
         for contrato in contratos:
@@ -55,6 +57,11 @@ class DeployEssencialTests(unittest.TestCase):
             source.index("CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens"),
             source.index("CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens"),
         )
+
+        etapa_16 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)
+        etapa_17 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 17)
+        self.assertTrue(etapa_16[4])
+        self.assertTrue(etapa_17[4])
 
     def test_etapas_e_transicoes_formam_um_mapa_valido_e_contiguo(self):
         ids_etapa = [etapa[0] for etapa in povoar_etapas.ETAPAS]

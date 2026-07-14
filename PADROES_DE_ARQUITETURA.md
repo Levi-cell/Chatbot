@@ -194,18 +194,19 @@ persistência da aplicação. O ponto de entrada chama o repositório apropriado
 
 O arquivo que conhece o fluxo completo é o dono da transação.
 
-### Worker
+### Workers
 
-No processamento principal do worker, conexão, `commit`, `rollback` e `close`
-devem permanecer em:
+Cada worker controla a conexão e os commits de seu próprio domínio:
 
 ```text
 workers/worker_flow/response_flow/flow_worker.py
+workers/worker_funil/flow_worker.py
 ```
 
-Repositórios e funções auxiliares recebem o cursor aberto pelo `flow_worker`.
+Repositórios e funções auxiliares recebem o cursor aberto pelo orquestrador.
 Commits intermediários devem representar estados recuperáveis documentados nas
-regras de negócio.
+regras de negócio. Um worker não reutiliza a conexão nem o lock de domínio do
+outro.
 
 ### Webhook
 
@@ -273,6 +274,31 @@ Responsabilidades:
 - rotear resposta ou tratamento;
 - persistir resposta e contexto;
 - marcar a fila como `sent` somente após a persistência necessária.
+
+### `worker_funil`
+
+Responsabilidades:
+
+- materializar conversas cuja política de etapa é `elegivel_funil`;
+- reservar um `funil_envios` com `FOR UPDATE SKIP LOCKED`;
+- obter o snapshot persistido do lead;
+- encerrar a transação de leitura antes do HTTP;
+- chamar `core/integrations/funil` uma oportunidade por vez;
+- reagendar falha externa sem interromper os demais leads;
+- confirmar `lead_no_funil` e `funil_envios = sent` no mesmo commit local;
+- recuperar reservas abandonadas por lease.
+
+SQL permanece em `core/repositories/funil`. Payload, URL e interpretação da API
+permanecem em `core/integrations/funil`. O worker é o único dono do retry e da
+fronteira transacional.
+
+`worker_funil` não importa `worker_flow`, não usa lock de conversa e não acessa
+Redis. As duas áreas compartilham apenas recursos verdadeiramente centrais,
+como conexão, configuração e logging.
+
+Não tente manter uma transação PostgreSQL aberta durante o POST. PostgreSQL e
+Funil não formam uma transação distribuída; a pequena janela entre sucesso
+externo e commit local deve ser documentada e reconciliável.
 
 ### `response_flow`
 

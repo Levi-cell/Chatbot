@@ -30,13 +30,24 @@ core/repositories/
 |   `-- turno_cliente.py
 `-- funil/
     |-- integracao.py
-    `-- envios.py
+    |-- envios.py
+    `-- leads.py
 ```
 
 `atendimento` persiste as entidades centrais da conversa. `fluxo` consulta e
 registra regras do mapa de etapas. `unidades` concentra consultas e versao do
 cache. `seguranca` guarda as barreiras de turno e bloqueio. `funil` cobre a
 configuracao por unidade e o estado dos envios ao CRM.
+
+No domínio `funil`:
+
+- `integracao.py` lê widget, link e canal da unidade;
+- `leads.py` monta a fotografia persistida de cliente, dependente e triagem;
+- `envios.py` materializa, reivindica, reagenda e confirma a fila
+  `chatbot.funil_envios`.
+
+O repositório não executa HTTP. O `workers/worker_funil` controla commits e
+chama `core/integrations/funil` depois de encerrar a transação de leitura.
 
 ## Contrato
 

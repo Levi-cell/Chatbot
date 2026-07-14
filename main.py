@@ -9,6 +9,7 @@ from core.cache.cache_unidade import REDIS_KEY, carregar_cache_redis
 from core.database.connection_aws import get_conn
 from core.cache.redis_client import get_redis_safe
 from core.logging_config import setup_logging
+from workers.worker_funil.config import FUNIL_WORKER_ENABLED
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -97,7 +98,20 @@ def main():
         env,
     )
 
-    logger.info("ambiente_dev_iniciado | webhook=terminal worker=terminal")
+    if FUNIL_WORKER_ENABLED:
+        time.sleep(2)
+        abrir_terminal(
+            "Chatbot Worker Funil",
+            [sys.executable, "-m", "workers.worker_funil.main_worker"],
+            PROJECT_ROOT,
+            env,
+        )
+
+    logger.info(
+        "ambiente_dev_iniciado | webhook=terminal worker=terminal "
+        "worker_funil=%s",
+        "terminal" if FUNIL_WORKER_ENABLED else "desativado",
+    )
 
 
 if __name__ == "__main__":

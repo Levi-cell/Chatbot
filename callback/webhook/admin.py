@@ -29,6 +29,7 @@ from .models import (
     Dependente,
     Etapa,
     FilaMensagens,
+    FunilEnvio,
     HistoricoMensagens,
     IntegracaoFunilUnidade,
     RespostasDesafios,
@@ -88,6 +89,34 @@ class IntegracaoFunilUnidadeAdmin(admin.ModelAdmin):
 
     ordering = ("id_unidade",)
     list_select_related = ("id_unidade",)
+    list_per_page = 50
+    empty_value_display = "-"
+
+
+@admin.register(FunilEnvio)
+class FunilEnvioAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+    list_display = (
+        "id_funil_envio",
+        "id_conversa",
+        "status",
+        "retry_count",
+        "next_attempt_at",
+        "processing_started_at",
+        "enviado_em",
+        "atualizado_em",
+    )
+    search_fields = (
+        "id_conversa__id_conversa",
+        "id_conversa__id_cliente__nome",
+        "id_conversa__id_cliente__waid_telefone",
+    )
+    list_filter = ("status",)
+    ordering = ("-atualizado_em",)
+    date_hierarchy = "criado_em"
+    list_select_related = (
+        "id_conversa",
+        "id_conversa__id_cliente",
+    )
     list_per_page = 50
     empty_value_display = "-"
 
