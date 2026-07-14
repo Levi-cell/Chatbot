@@ -1,7 +1,7 @@
 import logging
 
 from core.database.deploy.transacao_deploy import transacao_deploy
-from core.repositories.cache_control import CACHE_UNIDADES_NOME
+from core.repositories.unidades.cache_control import CACHE_UNIDADES_NOME
 
 
 logger = logging.getLogger("db.cache_control_setup")

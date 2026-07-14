@@ -17,7 +17,9 @@ from core.integrations.whatsapp.tools.usuarios import (
     desbloquear_usuario_meta,
 )
 from core.logging_config import short_value
-from core.repositories.cache_control import incrementar_versao_cache_unidades
+from core.repositories.unidades.cache_control import (
+    incrementar_versao_cache_unidades,
+)
 
 from .models import (
     CacheControle,
@@ -28,6 +30,7 @@ from .models import (
     Etapa,
     FilaMensagens,
     HistoricoMensagens,
+    IntegracaoFunilUnidade,
     RespostasDesafios,
     Unidade,
     WebhookFloodEvento,
@@ -48,6 +51,45 @@ class SomenteVisualizacaoAdminMixin:
 
     def get_readonly_fields(self, request, obj=None):
         return [field.name for field in self.model._meta.fields]
+
+
+@admin.register(IntegracaoFunilUnidade)
+class IntegracaoFunilUnidadeAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_integracao_funil",
+        "id_unidade",
+        "nome_widget",
+        "codigo_widget",
+        "codigo_canal_venda",
+        "widget_ativo",
+        "integracao_ativa",
+        "data_salvamento_widget",
+        "atualizado_em",
+    )
+
+    search_fields = (
+        "id_unidade__nome",
+        "nome_widget",
+        "codigo_widget",
+        "codigo_canal_venda",
+        "link_api_carrossel",
+    )
+
+    list_filter = (
+        "widget_ativo",
+        "integracao_ativa",
+        "data_salvamento_widget",
+    )
+
+    readonly_fields = (
+        "criado_em",
+        "atualizado_em",
+    )
+
+    ordering = ("id_unidade",)
+    list_select_related = ("id_unidade",)
+    list_per_page = 50
+    empty_value_display = "-"
 
 
 @admin.register(Unidade)
@@ -653,6 +695,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "id_unidade",
         "id_etapa_atual",
         "status_ativa",
+        "motivo_encerramento",
         "last_message_from",
         "followup_stage",
         "lead_no_funil",
@@ -668,6 +711,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
 
     list_filter = (
         "status_ativa",
+        "motivo_encerramento",
         "lead_no_funil",
         "last_message_from",
         "followup_stage",

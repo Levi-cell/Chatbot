@@ -1,10 +1,10 @@
 import logging
 
-from core.repositories.encerramento_atendimento import (
-    encerrar_conversa,
+from core.repositories.atendimento.conversas import encerrar_conversa
+from core.repositories.atendimento.dependentes import (
     excluir_dependente_da_conversa,
 )
-from core.repositories.politicas_etapa import buscar_politica_etapa
+from core.repositories.fluxo.politicas import buscar_politica_etapa
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     obter_idade_minima_dependente,
     validar_idade,
@@ -21,6 +21,9 @@ MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
 MOTIVO_ETAPA_FINAL = "etapa_final"
 
+MOTIVO_ENCERRAMENTO_IDADE_INVALIDA = "idade_invalida"
+MOTIVO_ENCERRAMENTO_FOI_AGENDADO = "foi_agendado"
+
 
 def resolver_intencao_encerramento(
     contexto_historico,
@@ -30,6 +33,7 @@ def resolver_intencao_encerramento(
     if contexto_envio.get("encerrar_atendimento"):
         return {
             "motivo": contexto_envio["motivo_encerramento"],
+            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
             "excluir_dependente": bool(
                 contexto_envio.get("excluir_dependente")
             ),
@@ -59,6 +63,7 @@ def resolver_intencao_encerramento(
 
     return {
         "motivo": MOTIVO_ETAPA_FINAL,
+        "motivo_encerramento": MOTIVO_ENCERRAMENTO_FOI_AGENDADO,
         "excluir_dependente": False,
         "bloqueio_dias": politica_destino.bloqueio_dias,
     }
@@ -78,6 +83,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
     if resultado.acima_limite:
         return {
             "motivo": MOTIVO_IDADE_ACIMA_99,
+            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
             "excluir_dependente": False,
             "bloqueio_dias": 0,
         }
@@ -93,6 +99,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
         if resultado.idade < idade_minima:
             return {
                 "motivo": MOTIVO_DEPENDENTE_MENOR_5,
+                "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
                 "excluir_dependente": True,
                 "bloqueio_dias": 0,
             }
@@ -101,6 +108,7 @@ def _reconstruir_encerramento_etapa4(contexto_historico):
     if resultado.idade < 18:
         return {
             "motivo": MOTIVO_CLIENTE_MENOR_18,
+            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
             "excluir_dependente": False,
             "bloqueio_dias": 0,
         }
@@ -119,21 +127,29 @@ def aplicar_encerramento_se_necessario(
             "finalizou_em": None,
             "bloqueio_dias": 0,
             "motivo": None,
+            "motivo_encerramento": None,
         }
 
     if intencao_encerramento["excluir_dependente"]:
         excluir_dependente_da_conversa(id_conversa, cursor)
 
-    finalizou_em = encerrar_conversa(id_conversa, cursor)
+    motivo_encerramento = intencao_encerramento["motivo_encerramento"]
+    finalizou_em = encerrar_conversa(
+        id_conversa,
+        motivo_encerramento,
+        cursor,
+    )
     bloqueio_dias = int(
         intencao_encerramento.get("bloqueio_dias") or 0
     )
 
     logger.info(
         "atendimento_encerrado | acao=encerrar_conversa "
-        "id_conversa=%s motivo=%s dependente_excluido=%s",
+        "id_conversa=%s motivo=%s motivo_encerramento=%s "
+        "dependente_excluido=%s",
         id_conversa,
         intencao_encerramento["motivo"],
+        motivo_encerramento,
         intencao_encerramento["excluir_dependente"],
     )
     return {
@@ -141,4 +157,5 @@ def aplicar_encerramento_se_necessario(
         "finalizou_em": finalizou_em,
         "bloqueio_dias": bloqueio_dias,
         "motivo": intencao_encerramento["motivo"],
+        "motivo_encerramento": motivo_encerramento,
     }

@@ -1034,12 +1034,13 @@ Remover a coluna inteira tambem exige mexer em pontos sensiveis:
 - `bank_script.py`;
 - `models.py`;
 - `admin.py`;
-- `inserts.py`;
-- `updates.py`;
-- `querys.py`;
+- `core/repositories/atendimento/clientes.py`;
+- `core/repositories/atendimento/conversas.py`;
+- `core/repositories/atendimento/fila.py`;
+- `core/repositories/atendimento/historico.py`;
 - `valida_banco.py`;
 - `valida_historico.py`;
-- `turno_cliente.py`;
+- `core/repositories/seguranca/turno_cliente.py`;
 - testes de contrato do worker e webhook.
 
 Como a coluna nao gera custo relevante na V1, a decisao atual e manter.

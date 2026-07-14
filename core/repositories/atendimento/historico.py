@@ -1,135 +1,122 @@
 import logging
 
-from core.logging_config import short_value
+
+logger = logging.getLogger("db.atendimento.historico")
 
 
-logger = logging.getLogger("db.inserts")
-
-
-def inserindo_em_cliente_caso_seja_novo(waid_telefone, cursor):
+def buscar_ultimas_mensagens_historico(id_conversa, cursor, limite=6):
     cursor.execute("""
-            INSERT INTO chatbot.cliente (waid_telefone)
-            VALUES (%s)
-            ON CONFLICT (waid_telefone) DO NOTHING;
-        """, (waid_telefone,))
+        SELECT
+            id_mensagem,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
+        LIMIT %s;
+    """, (id_conversa, limite))
 
-    inserido = cursor.rowcount == 1
-
-
-    cursor.execute("""
-            SELECT id_cliente 
-            FROM chatbot.cliente 
-            WHERE waid_telefone = %s;
-        """, (waid_telefone,))
-    result = cursor.fetchone()
-
-    if result:
-        logger.debug(
-            "cliente_insert_resultado | acao=obter_cliente telefone=%s id_cliente=%s inserido=%s",
-            short_value(waid_telefone),
-            result[0],
-            inserido,
-        )
-        return result[0], inserido
-
-    raise ValueError(f"Anomalia Crítica: Cliente do telefone {waid_telefone} desapareceu da base durante a verificação!")
-
-
-def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
-    cursor.execute("""
-            INSERT INTO chatbot.conversa (
-                id_cliente,
-                id_unidade,
-                last_interaction_at,
-                last_message_from
-            )
-            VALUES (%s, %s, NOW(), 'cliente')
-            RETURNING id_conversa;
-        """, (id_cliente, id_unidade))
-
-    result = cursor.fetchone()
-
-    if result:
-        logger.debug(
-            "conversa_insert_resultado | acao=criar_conversa id_cliente=%s id_unidade=%s id_conversa=%s",
-            id_cliente,
-            id_unidade,
-            result[0],
-        )
-        return result[0]
-
-    raise ValueError(
-        f"Anomalia Crítica: conversa do cliente {id_cliente} "
-        f"e unidade {id_unidade} não foi criada!"
+    resultados = cursor.fetchall()
+    logger.debug(
+        "historico_consultado | acao=buscar_ultimas id_conversa=%s total=%s limite=%s",
+        id_conversa,
+        len(resultados),
+        limite,
     )
+    return resultados
 
 
-def inserir_dependente_para_conversa(id_conversa, cursor):
+def buscar_historico_cliente_por_mensagem_fila(
+    id_conversa,
+    id_mensagem_fila,
+    id_hash_msg,
+    cursor,
+):
     cursor.execute("""
-        WITH conversa_cliente AS (
-            SELECT id_cliente
-            FROM chatbot.conversa
-            WHERE id_conversa = %s
-        ),
-        existente AS (
-            SELECT id_dependente, id_cliente, id_conversa
-            FROM chatbot.dependente
-            WHERE id_conversa = %s
-            LIMIT 1
-        ),
-        inserido AS (
-            INSERT INTO chatbot.dependente (
-                id_cliente,
-                id_conversa
-            )
-            SELECT
-                id_cliente,
-                %s
-            FROM conversa_cliente
-            WHERE NOT EXISTS (SELECT 1 FROM existente)
-            RETURNING id_dependente, id_cliente, id_conversa
-        )
         SELECT
-            id_dependente,
-            id_cliente,
+            id_mensagem,
             id_conversa,
-            TRUE AS inserido
-        FROM inserido
-
-        UNION ALL
-
-        SELECT
-            id_dependente,
-            id_cliente,
-            id_conversa,
-            FALSE AS inserido
-        FROM existente
-
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+          AND quem_enviou = 'cliente'
+          AND id_mensagem_fila = %s
+          AND id_hash_msg = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
         LIMIT 1;
-    """, (id_conversa, id_conversa, id_conversa))
+    """, (id_conversa, id_mensagem_fila, id_hash_msg))
 
     resultado = cursor.fetchone()
-
-    if not resultado:
-        raise ValueError(
-            "Dependente nao foi inserido nem encontrado "
-            f"(id_conversa={id_conversa})"
-        )
-
-    logger.info(
-        "dependente_insert_resultado | acao=vincular_dependente_conversa id_dependente=%s id_cliente=%s id_conversa=%s inserido=%s",
-        resultado[0],
-        resultado[1],
-        resultado[2],
-        bool(resultado[3]),
+    logger.debug(
+        "historico_cliente_consultado | acao=buscar_por_fila id_conversa=%s id_mensagem_fila=%s encontrado=%s",
+        id_conversa,
+        id_mensagem_fila,
+        bool(resultado),
     )
+    return resultado
 
-    return {
-        "id_dependente": resultado[0],
-        "id_cliente": resultado[1],
-        "id_conversa": resultado[2],
-        "inserido": bool(resultado[3]),
-    }
+
+def buscar_resposta_bot_por_mensagem_cliente(
+    id_conversa,
+    id_mensagem_fila,
+    id_hash_cliente_origem,
+    cursor,
+):
+    cursor.execute("""
+        SELECT
+            id_mensagem,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            cliente_telefone,
+            conteudo_texto,
+            tipo_mensagem,
+            id_hash_msg,
+            id_mensagem_fila,
+            id_hash_cliente_origem,
+            id_phone_unidade,
+            unidade_telefone,
+            quem_enviou,
+            status_envio
+        FROM chatbot.historico_mensagens
+        WHERE id_conversa = %s
+          AND quem_enviou = 'bot'
+          AND id_mensagem_fila = %s
+          AND id_hash_cliente_origem = %s
+        ORDER BY received_data_hora DESC, id_mensagem DESC
+        LIMIT 1;
+    """, (id_conversa, id_mensagem_fila, id_hash_cliente_origem))
+
+    resultado = cursor.fetchone()
+    logger.debug(
+        "historico_bot_consultado | acao=buscar_resposta_por_origem id_conversa=%s id_mensagem_fila=%s encontrado=%s",
+        id_conversa,
+        id_mensagem_fila,
+        bool(resultado),
+    )
+    return resultado
 
 
 def inserir_historico_mensagem_cliente(
@@ -212,7 +199,8 @@ def inserir_historico_mensagem_cliente(
     if not resultado:
         raise ValueError(
             "Historico do cliente nao foi inserido nem encontrado "
-            f"(id_conversa={id_conversa}, id_mensagem={mensagem['id_mensagem']})"
+            f"(id_conversa={id_conversa}, "
+            f"id_mensagem={mensagem['id_mensagem']})"
         )
 
     logger.debug(
@@ -226,7 +214,11 @@ def inserir_historico_mensagem_cliente(
     return resultado[0], resultado[1], resultado[2], bool(resultado[3])
 
 
-def inserir_historico_mensagem_bot(contexto_historico, contexto_envio, cursor):
+def inserir_historico_mensagem_bot(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     id_hash_msg_bot = contexto_envio.get("id_hash_msg_bot")
 

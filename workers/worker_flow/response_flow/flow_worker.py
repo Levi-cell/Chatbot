@@ -5,8 +5,11 @@ from core.cache.cache_unidade import UnidadeNaoEncontrada
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
-from core.repositories.querys import pegar_mensagens_da_fila, tentar_lock_conversa
-from core.repositories.updates import vincular_mensagem_fila_a_conversa
+from core.repositories.atendimento.conversas import tentar_lock_conversa
+from core.repositories.atendimento.fila import (
+    pegar_mensagens_da_fila,
+    vincular_mensagem_fila_a_conversa,
+)
 from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
 from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
 from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta

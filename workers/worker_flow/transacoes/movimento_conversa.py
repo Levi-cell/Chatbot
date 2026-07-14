@@ -1,4 +1,4 @@
-from core.repositories.updates import (
+from core.repositories.atendimento.conversas import (
     atualizar_conversa_por_transicao,
     atualizar_conversa_resposta_bot_sem_avancar,
     inicializar_conversa_resposta_bot,

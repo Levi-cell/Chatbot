@@ -87,7 +87,7 @@ O par lógico é:
 cliente_telefone + id_phone_unidade
 ```
 
-`core/repositories/turno_cliente.py` usa advisory lock transacional para impedir
+`core/repositories/seguranca/turno_cliente.py` usa advisory lock transacional para impedir
 corridas. Enquanto existir fila aberta sem resposta própria do bot, mensagens
 posteriores do mesmo par são descartadas.
 

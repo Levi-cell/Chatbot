@@ -9,7 +9,7 @@ from core.integrations.whatsapp.tools.usuarios import (
     bloquear_usuario_meta,
 )
 from core.logging_config import short_value
-from core.repositories.bloqueio_meta import (
+from core.repositories.seguranca.bloqueio_meta import (
     buscar_id_cliente_por_wa_id,
     buscar_unidade_bloqueio_por_phone_id,
     contar_eventos_flood_banco,

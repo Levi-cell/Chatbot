@@ -191,7 +191,43 @@ def criar_tabelas():
                 CHECK (bloqueio_dias >= 0)
         );
 
-        -- 2. CONVERSA: RAIZ TRANSACIONAL DO ATENDIMENTO
+        -- 2. CONFIGURACAO DO FUNIL POR UNIDADE
+
+        CREATE TABLE IF NOT EXISTS chatbot.integracao_funil_unidade (
+            id_integracao_funil SERIAL PRIMARY KEY,
+            id_unidade INT NOT NULL UNIQUE,
+
+            nome_widget VARCHAR(300) NOT NULL,
+            data_salvamento_widget DATE,
+            codigo_widget VARCHAR(100) UNIQUE NOT NULL,
+            link_api_carrossel VARCHAR(500) UNIQUE NOT NULL,
+            codigo_canal_venda VARCHAR(100) NOT NULL,
+
+            widget_ativo BOOLEAN NOT NULL DEFAULT TRUE,
+            integracao_ativa BOOLEAN NOT NULL DEFAULT TRUE,
+
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            CONSTRAINT ck_integracao_funil_nome_widget
+                CHECK (BTRIM(nome_widget) <> ''),
+
+            CONSTRAINT ck_integracao_funil_codigo_widget
+                CHECK (BTRIM(codigo_widget) <> ''),
+
+            CONSTRAINT ck_integracao_funil_link_api
+                CHECK (BTRIM(link_api_carrossel) <> ''),
+
+            CONSTRAINT ck_integracao_funil_codigo_canal
+                CHECK (BTRIM(codigo_canal_venda) <> ''),
+
+            CONSTRAINT integracao_funil_unidade_id_unidade_fkey
+                FOREIGN KEY (id_unidade)
+                REFERENCES chatbot.unidade(id_unidade)
+                ON DELETE CASCADE
+        );
+
+        -- 3. CONVERSA: RAIZ TRANSACIONAL DO ATENDIMENTO
 
         CREATE TABLE IF NOT EXISTS chatbot.conversa (
             id_conversa SERIAL PRIMARY KEY,
@@ -218,6 +254,16 @@ def criar_tabelas():
 
             iniciou_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             finalizou_em TIMESTAMPTZ,
+            motivo_encerramento VARCHAR(30),
+
+            CONSTRAINT ck_conversa_motivo_encerramento
+                CHECK (
+                    motivo_encerramento IS NULL
+                    OR motivo_encerramento IN (
+                        'idade_invalida',
+                        'foi_agendado'
+                    )
+                ),
 
             FOREIGN KEY (id_cliente)
                 REFERENCES chatbot.cliente(id_cliente)
@@ -256,7 +302,7 @@ def criar_tabelas():
         WHERE status_ativa = FALSE
           AND lead_no_funil IS NOT TRUE;
 
-        -- 3. DEPENDENTE: EXISTE SOMENTE DENTRO DE UMA CONVERSA
+        -- 4. DEPENDENTE: EXISTE SOMENTE DENTRO DE UMA CONVERSA
 
         CREATE TABLE IF NOT EXISTS chatbot.dependente (
             id_dependente SERIAL PRIMARY KEY,
@@ -285,7 +331,7 @@ def criar_tabelas():
         CREATE INDEX IF NOT EXISTS idx_dependente_conversa
         ON chatbot.dependente (id_conversa);
 
-        -- 4. FILA: CRIADA ANTES DO HISTÓRICO PARA A FK NASCER PRONTA
+        -- 5. FILA: CRIADA ANTES DO HISTÓRICO PARA A FK NASCER PRONTA
 
         CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens (
             id_mensagem SERIAL PRIMARY KEY,
@@ -327,7 +373,7 @@ def criar_tabelas():
         WHERE id_conversa IS NOT NULL
           AND status IN ('pending', 'processing');
 
-        -- 5. HISTÓRICO PARTICIONADO E RESPOSTAS DA TRIAGEM
+        -- 6. HISTÓRICO PARTICIONADO E RESPOSTAS DA TRIAGEM
 
         CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens (
             id_mensagem SERIAL,

@@ -30,9 +30,9 @@ TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 ###  CENARIO NORMAL
 
-def enviar_etapa1(cliente_telefone, phone_id_unidade):
+def enviar_etapa1(cliente_telefone, phone_id_unidade, nome_unidade):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = montar_mensagem_etapa1(saudacao)
+    mensagem_bot = montar_mensagem_etapa1(saudacao, nome_unidade)
 
     return _enviar_texto_etapa1(
         cliente_telefone,
@@ -43,9 +43,13 @@ def enviar_etapa1(cliente_telefone, phone_id_unidade):
 
 ### PARA O WORKER QUANDO O CLIENTE INICIA COM MIDIA
 
-def enviar_etapa1_midia_inicio(cliente_telefone, phone_id_unidade):
+def enviar_etapa1_midia_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = montar_mensagem_midia_inicio(saudacao)
+    mensagem_bot = montar_mensagem_midia_inicio(saudacao, nome_unidade)
 
     return _enviar_texto_etapa1(
         cliente_telefone,
@@ -57,9 +61,16 @@ def enviar_etapa1_midia_inicio(cliente_telefone, phone_id_unidade):
 
 ### PARA O WORKER QUANDO O CLIENTE INICIA COM FINANCEIRO
 
-def enviar_etapa1_financeiro_inicio(cliente_telefone, phone_id_unidade):
+def enviar_etapa1_financeiro_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = montar_mensagem_financeiro_inicio(saudacao)
+    mensagem_bot = montar_mensagem_financeiro_inicio(
+        saudacao,
+        nome_unidade,
+    )
 
     return _enviar_texto_etapa1(
         cliente_telefone,

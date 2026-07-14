@@ -7,13 +7,16 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
 ### INICIO NORMAL
 
 MENSAGEM_ETAPA1 = (
-    "{saudacao}! Sou a Suh, atendente virtual do Supera! ☺️\n"
+    "{saudacao}! Sou a Suh, atendente virtual do {nome_unidade}! ☺️\n"
     "Como você se chama?"
 )
 
-def montar_mensagem_etapa1(saudacao):
+def montar_mensagem_etapa1(saudacao, nome_unidade):
     return montar_texto_com_rodape(
-        MENSAGEM_ETAPA1.format(saudacao=saudacao),
+        MENSAGEM_ETAPA1.format(
+            saudacao=saudacao,
+            nome_unidade=nome_unidade,
+        ),
         RODAPE_ETAPA1_BOAS_VINDAS,
     )
 
@@ -24,14 +27,17 @@ def montar_mensagem_etapa1(saudacao):
 ### INICIO PORÉM CLIENTE INICIA COM MIDA
 
 MENSAGEM_MIDIA_INICIO = (
-    "{saudacao}! Sou a Suh, atendente virtual do Supera! ☺️\n"
+    "{saudacao}! Sou a Suh, atendente virtual do {nome_unidade}! ☺️\n"
     "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
     "Me diz, qual o seu primeiro nome?"
 )
 
-def montar_mensagem_midia_inicio(saudacao):
+def montar_mensagem_midia_inicio(saudacao, nome_unidade):
     return montar_texto_com_rodape(
-        MENSAGEM_MIDIA_INICIO.format(saudacao=saudacao),
+        MENSAGEM_MIDIA_INICIO.format(
+            saudacao=saudacao,
+            nome_unidade=nome_unidade,
+        ),
         RODAPE_ETAPA1_BOAS_VINDAS,
     )
 
@@ -42,15 +48,18 @@ def montar_mensagem_midia_inicio(saudacao):
 ### INICIO PORÈM CLIENTE INICIA COM PERGUNTA FINANCEIRA
 
 MENSAGEM_FINANCEIRO_INICIO = (
-    "{saudacao}! Sou a Suh, atendente virtual do Supera! ☺️\n"
+    "{saudacao}! Sou a Suh, atendente virtual do {nome_unidade}! ☺️\n"
     "Olha demais informações como valores são apresentadas no atendimento "
     "presencial após sua aula *gratuita*.\n"
     "Me diz, qual o seu primeiro nome?"
 )
 
-def montar_mensagem_financeiro_inicio(saudacao):
+def montar_mensagem_financeiro_inicio(saudacao, nome_unidade):
     return montar_texto_com_rodape(
-        MENSAGEM_FINANCEIRO_INICIO.format(saudacao=saudacao),
+        MENSAGEM_FINANCEIRO_INICIO.format(
+            saudacao=saudacao,
+            nome_unidade=nome_unidade,
+        ),
         RODAPE_ETAPA1_BOAS_VINDAS,
     )
 

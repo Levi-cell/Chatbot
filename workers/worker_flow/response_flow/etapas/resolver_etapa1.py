@@ -62,6 +62,13 @@ def resolve_etapa1(contexto_historico):
     phone_id_unidade = mensagem_cliente_atual["id_phone_unidade"]
 
     conversa_sem_etapa = id_etapa_atual is None
+    nome_unidade = contexto_historico.get("nome_unidade")
+
+    if conversa_sem_etapa and not nome_unidade:
+        raise ValueError(
+            "Etapa 1 inicial sem nome da unidade "
+            f"(id_conversa={id_conversa})"
+        )
 
     # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
@@ -71,6 +78,7 @@ def resolve_etapa1(contexto_historico):
             return enviar_etapa1_midia_inicio(
                 cliente_telefone,
                 phone_id_unidade,
+                nome_unidade,
             )
 
         return enviar_etapa1_midia(
@@ -89,6 +97,7 @@ def resolve_etapa1(contexto_historico):
             return enviar_etapa1_financeiro_inicio(
                 cliente_telefone,
                 phone_id_unidade,
+                nome_unidade,
             )
 
         return enviar_etapa1_financeiro(
@@ -101,6 +110,7 @@ def resolve_etapa1(contexto_historico):
         return enviar_etapa1(
             cliente_telefone,
             phone_id_unidade,
+            nome_unidade,
         )
 
     ### VALIDANDO NOME

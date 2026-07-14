@@ -4,7 +4,7 @@ from core.cache.runtime.cache_conversas_bloqueadas import (
     registrar_bloqueio_conversa_cache,
 )
 from core.logging_config import short_value
-from core.repositories.updates import marcar_mensagem_como_enviada
+from core.repositories.atendimento.fila import marcar_mensagem_como_enviada
 from workers.worker_flow.transacoes.encerramento_atendimento import (
     aplicar_encerramento_se_necessario,
 )

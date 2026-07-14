@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from core.repositories import querys, updates
+from core.repositories.atendimento import conversas, fila
 from tests.helpers import FakeCursor
 from workers.tratamento_erros_externos import expection_process
 from workers.worker_flow.suporte import estado_ciclo
@@ -53,7 +53,7 @@ class RetryEssencialTests(unittest.TestCase):
     def test_reagendamento_libera_processing_e_respeita_delay(self):
         cursor = FakeCursor(rowcount=1)
 
-        linhas = updates.reagendar_mensagem(
+        linhas = fila.reagendar_mensagem(
             7,
             RuntimeError("meta caiu"),
             3,
@@ -71,7 +71,7 @@ class RetryEssencialTests(unittest.TestCase):
     def test_lock_retorna_versao_e_unlock_usa_a_mesma_versao(self):
         cursor_lock = FakeCursor(fetchone_result=(True, 4))
         self.assertEqual(
-            querys.tentar_lock_conversa(10, cursor_lock),
+        conversas.tentar_lock_conversa(10, cursor_lock),
             (True, 4),
         )
 

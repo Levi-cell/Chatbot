@@ -65,6 +65,15 @@ class Conversa(models.Model):
     lock_version = models.IntegerField(blank=True, null=True, default=0)
     iniciou_em = models.DateTimeField()
     finalizou_em = models.DateTimeField(blank=True, null=True)
+    motivo_encerramento = models.CharField(
+        max_length=30,
+        blank=True,
+        null=True,
+        choices=[
+            ("idade_invalida", "Idade inválida"),
+            ("foi_agendado", "Foi agendado"),
+        ],
+    )
 
     class Meta:
         managed = False
@@ -243,6 +252,34 @@ class Unidade(models.Model):
     class Meta:
         managed = False
         db_table = 'unidade'
+
+
+class IntegracaoFunilUnidade(models.Model):
+    id_integracao_funil = models.AutoField(primary_key=True)
+    id_unidade = models.OneToOneField(
+        Unidade,
+        models.CASCADE,
+        db_column='id_unidade',
+        related_name='integracao_funil',
+    )
+    nome_widget = models.CharField(max_length=300)
+    data_salvamento_widget = models.DateField(blank=True, null=True)
+    codigo_widget = models.CharField(unique=True, max_length=100)
+    link_api_carrossel = models.URLField(unique=True, max_length=500)
+    codigo_canal_venda = models.CharField(max_length=100)
+    widget_ativo = models.BooleanField(default=True)
+    integracao_ativa = models.BooleanField(default=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.id_unidade} / {self.nome_widget}"
+
+    class Meta:
+        managed = False
+        db_table = 'integracao_funil_unidade'
+        verbose_name = 'Integração do Funil por unidade'
+        verbose_name_plural = 'Integrações do Funil por unidade'
 
 
 class ClienteBloqueadoMeta(models.Model):

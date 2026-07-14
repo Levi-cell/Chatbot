@@ -1,8 +1,10 @@
 import logging
 
 from core.logging_config import short_value
-from core.repositories.querys import existe_mensagem_anterior_aberta_conversa
-from core.repositories.updates import reagendar_mensagem_sem_erro
+from core.repositories.atendimento.fila import (
+    existe_mensagem_anterior_aberta_conversa,
+    reagendar_mensagem_sem_erro,
+)
 
 
 logger = logging.getLogger("worker.support")

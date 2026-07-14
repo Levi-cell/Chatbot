@@ -154,14 +154,16 @@ Responsabilidades que não pertencem a `core`:
 Consultas e alterações de dados da aplicação devem ficar em
 `core/repositories/`.
 
-Exemplos:
+Os repositórios são agrupados por domínio e entidade:
 
-- `querys.py`: consultas e locks persistidos;
-- `inserts.py`: inserções;
-- `updates.py`: atualizações e reagendamentos;
-- `deletes.py`: exclusões;
-- repositórios específicos podem ser criados quando um domínio crescer, como
-  `bloqueio_meta.py` e `turno_cliente.py`.
+- `atendimento/`: clientes, conversas, dependentes, fila e histórico;
+- `fluxo/`: políticas, transições, respostas da triagem e contextos por etapa;
+- `unidades/`: consultas de unidade e controle de versão do cache;
+- `seguranca/`: regra de turno e persistência de bloqueios Meta;
+- `funil/`: configuração da integração por unidade e estado dos envios.
+
+Não agrupe operações apenas pelo verbo SQL. Uma mesma entidade pode concentrar
+consultas, inserções, atualizações e exclusões relacionadas ao seu contrato.
 
 DDL, criação de funções PostgreSQL e preparação de ambiente pertencem a
 `core/database/deploy/`, não aos repositórios de runtime.

@@ -1,18 +1,20 @@
 import logging
 
 from core.logging_config import short_value
-from core.repositories.email_cliente import atualizar_email_cliente
-from core.repositories.idade_aluno import (
+from core.repositories.atendimento.clientes import (
+    atualizar_email_cliente,
     atualizar_idade_cliente,
-    atualizar_idade_dependente,
-)
-from core.repositories.inserts import inserir_dependente_para_conversa
-from core.repositories.respostas_triagem import registrar_resposta_triagem
-from core.repositories.updates import (
     atualizar_nome_cliente_por_telefone,
-    atualizar_nome_dependente_por_conversa,
+)
+from core.repositories.atendimento.conversas import (
     atualizar_status_dependente_conversa,
 )
+from core.repositories.atendimento.dependentes import (
+    atualizar_idade_dependente,
+    atualizar_nome_dependente_por_conversa,
+    inserir_dependente_para_conversa,
+)
+from core.repositories.fluxo.triagem import registrar_resposta_triagem
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
 )

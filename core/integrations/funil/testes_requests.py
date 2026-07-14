@@ -274,25 +274,4 @@ def _imprimir_resultado(resultado):
     print(json.dumps(resultado, ensure_ascii=False, indent=2))
 
 
-if __name__ == "__main__":
-    # TESTE GET PUBLICO: consulta a configuracao sem criar oportunidade.
-    resultado_consulta = consultar_integracao_unidade()
-    _imprimir_resultado(resultado_consulta)
 
-    # TESTE POST REAL: descomente conscientemente para criar no CRM.
-    # resultado_envio = criar_oportunidade_teste(
-    #     confirmar_envio_real=True,
-    #     nome_contato="Teste Chatbot - Nao contatar",
-    #     email="",
-    #     telefone="",
-    # )
-    # _imprimir_resultado(resultado_envio)
-
-    # TESTE GET AUTENTICADO: informe o titulo exato retornado pelo POST.
-    # codigo_oportunidade = consultar_codigo_oportunidade(
-    #     titulo="[TESTE CHATBOT AAAAMMDD-HHMMSS] Teste Chatbot - Nao contatar",
-    #     codigo_funil=123,
-    #     email_api="usuario-api@exemplo.com",
-    #     senha_api="informe-somente-no-teste-local",
-    # )
-    # print(f"codigo_oportunidade={codigo_oportunidade}")

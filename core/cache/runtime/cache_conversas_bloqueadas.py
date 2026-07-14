@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from core.database.connection_aws import get_conn
 from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
-from core.repositories.politicas_etapa import (
+from core.repositories.fluxo.politicas import (
     buscar_bloqueio_ativo_por_cliente_unidade,
 )
 

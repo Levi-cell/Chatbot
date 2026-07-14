@@ -1,6 +1,6 @@
 import logging
 
-from core.repositories.inserts import inserir_historico_mensagem_bot
+from core.repositories.atendimento.historico import inserir_historico_mensagem_bot
 from workers.worker_flow.transacoes.encerramento_atendimento import (
     resolver_intencao_encerramento,
 )

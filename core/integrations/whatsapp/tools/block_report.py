@@ -9,10 +9,12 @@ from core.integrations.whatsapp.tools.config import (
 from core.integrations.whatsapp.tools.usuarios import (
     listar_usuarios_bloqueados_meta,
 )
-from core.repositories.bloqueio_meta import (
+from core.repositories.seguranca.bloqueio_meta import (
     listar_bloqueios_meta_banco_para_reconciliacao,
 )
-from core.repositories.querys import buscar_unidades_para_listagem_bloqueios
+from core.repositories.unidades.consultas import (
+    buscar_unidades_para_listagem_bloqueios,
+)
 
 
 def listar_bloqueados_de_cada_unidade(imprimir=True):

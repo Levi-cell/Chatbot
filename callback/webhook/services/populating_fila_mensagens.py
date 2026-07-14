@@ -2,7 +2,9 @@ import logging
 from datetime import datetime
 
 from core.logging_config import short_value
-from core.repositories.turno_cliente import avaliar_turno_cliente_para_fila
+from core.repositories.seguranca.turno_cliente import (
+    avaliar_turno_cliente_para_fila,
+)
 
 
 logger = logging.getLogger("webhook.fila")

@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
-from core.repositories import turno_cliente
+from core.repositories.seguranca import turno_cliente
 from workers.worker_flow.response_flow import flow_sender
 from workers.worker_flow.transacoes import finalizacao_fila, ordem_turno
 

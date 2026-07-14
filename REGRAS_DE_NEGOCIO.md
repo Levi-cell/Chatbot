@@ -202,7 +202,7 @@ corrida entre requisições.
 
 Implementação principal:
 
-- `core/repositories/turno_cliente.py`
+- `core/repositories/seguranca/turno_cliente.py`
 - `callback/webhook/services/populating_fila_mensagens.py`
 
 ## 2. Idempotência na entrada do webhook
@@ -251,8 +251,7 @@ Implementação principal:
 
 - `core/database/deploy/bank_script.py`, função `chatbot.dequeue_message()`
 - `workers/tratamento_erros_externos/expection_process.py`
-- `core/repositories/updates.py`
-- `core/repositories/deletes.py`
+- `core/repositories/atendimento/fila.py`
 
 ## 5. Ordenação e exclusão mútua
 
@@ -271,7 +270,8 @@ Implementação principal:
 
 - `core/database/deploy/bank_script.py`, funções `lock_conversa()` e
   `unlock_conversa()`
-- `core/repositories/querys.py`
+- `core/repositories/atendimento/conversas.py`
+- `core/repositories/atendimento/fila.py`
 - `workers/worker_flow/transacoes/lock_conversa.py`
 - `workers/worker_flow/transacoes/ordem_turno.py`
 
@@ -294,7 +294,8 @@ Implementação principal:
 Implementação principal:
 
 - `core/database/deploy/bank_script.py`
-- `core/repositories/querys.py`
+- `core/repositories/atendimento/conversas.py`
+- `core/repositories/fluxo/politicas.py`
 - `workers/worker_flow/valida_banco.py`
 - `core/cache/runtime/cache_conversas_bloqueadas.py`
 
@@ -728,7 +729,7 @@ Implementação principal:
 - `core/cache/cache_unidade.py`
 - `core/cache/runtime/cache_cliente.py`
 - `core/cache/runtime/cache_conversas_bloqueadas.py`
-- `core/repositories/cache_control.py`
+- `core/repositories/unidades/cache_control.py`
 - `workers/worker_flow/suporte/cache_repair.py`
 
 ## 19. Regras do Django Admin

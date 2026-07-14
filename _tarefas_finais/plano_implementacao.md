@@ -9,6 +9,13 @@ O documento fica **arquivado para avaliação futura**. O fluxo atualmente
 implementado continua sendo a versão escolhida para produção; a existência
 deste arquivo não autoriza aplicação parcial nem automática de suas mudanças.
 
+> **Observação para uma eventual aplicação futura:** antes de usar este
+> plano, ele deverá ser revisado e receber pequenas otimizações para incluir
+> `conversa.motivo_encerramento` em todos os encerramentos, usar
+> `{nome_unidade}` na saudação da etapa 5 destinada ao cliente novo e adaptar
+> o worker periódico do funil para considerar elegibilidade a partir da nova
+> etapa 24. Os blocos de código abaixo ainda não incorporam essas mudanças.
+
 Cada passo abaixo apresenta o conteúdo completo do arquivo criado ou alterado.
 Arquivos explicitamente removidos aparecem em uma seção própria, pois não
 possuem conteúdo final.

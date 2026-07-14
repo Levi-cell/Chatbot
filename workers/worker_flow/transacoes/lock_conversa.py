@@ -1,6 +1,6 @@
 import logging
 
-from core.repositories.querys import unlock_conversa
+from core.repositories.atendimento.conversas import unlock_conversa
 
 
 logger = logging.getLogger("worker.support")

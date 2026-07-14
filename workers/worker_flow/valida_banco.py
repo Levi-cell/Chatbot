@@ -3,11 +3,13 @@ import logging
 from core.cache.runtime.cache_cliente import buscar_cliente_cache
 from core.cache.cache_unidade import obter_id_unidade_redis_ou_plsql
 from core.logging_config import short_value
-from core.repositories.inserts import (
+from core.repositories.atendimento.clientes import (
     inserindo_em_cliente_caso_seja_novo,
+)
+from core.repositories.atendimento.conversas import (
+    buscar_estado_conversa,
     inserindo_em_conversa_caso_seja_nova,
 )
-from core.repositories.querys import buscar_estado_conversa
 
 
 logger = logging.getLogger("worker.valida_banco")

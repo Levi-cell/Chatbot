@@ -1,7 +1,10 @@
 import logging
 
-from core.repositories.deletes import deletar_mensagem_por_id, deletar_mensagem_se_max_retry
-from core.repositories.updates import reagendar_mensagem
+from core.repositories.atendimento.fila import (
+    deletar_mensagem_por_id,
+    deletar_mensagem_se_max_retry,
+    reagendar_mensagem,
+)
 
 
 logger = logging.getLogger("worker.erro")

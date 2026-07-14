@@ -266,7 +266,10 @@ recuperacao de estados intermediarios.
 core/integrations/funil/
     cliente HTTP, autenticacao, payloads e interpretacao das respostas
 
-core/repositories/funil.py
+core/repositories/funil/integracao.py
+    configuracao da integracao do CRM por unidade
+
+core/repositories/funil/envios.py
     consultas, claim, fotografia do lead e atualizacoes transacionais
 
 workers/worker_funil/

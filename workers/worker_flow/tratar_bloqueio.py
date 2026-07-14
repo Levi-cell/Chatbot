@@ -2,8 +2,8 @@ import logging
 
 from core.cache.runtime.cache_conversas_bloqueadas import registrar_bloqueio_conversa_cache
 from core.logging_config import short_value
-from core.repositories.deletes import deletar_mensagem_por_id
-from core.repositories.politicas_etapa import (
+from core.repositories.atendimento.fila import deletar_mensagem_por_id
+from core.repositories.fluxo.politicas import (
     buscar_bloqueio_conversa_por_id,
 )
 

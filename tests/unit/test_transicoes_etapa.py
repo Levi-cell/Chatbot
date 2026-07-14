@@ -1,6 +1,6 @@
 import unittest
 
-from core.repositories import transicoes_etapa
+from core.repositories.fluxo import transicoes as transicoes_etapa
 from tests.helpers import FakeCursor
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     montar_contexto_transicao,

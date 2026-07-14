@@ -24,6 +24,7 @@ def mensagem_base(retry=1):
 
 def contexto_banco_base(last_from="bot", etapa=1):
     return {
+        "id_unidade": 1,
         "conversa": {
             "id_conversa": 10,
             "id_etapa_atual": etapa,
@@ -84,6 +85,10 @@ class LastFromSemanticoTests(unittest.TestCase):
             valida_historico,
             "listar_transicoes_permitidas",
             return_value={"nome_cliente_valido": 2},
+        ), patch.object(
+            valida_historico,
+            "buscar_contexto_etapa1",
+            return_value={"nome_unidade": "Supera Teste"},
         ):
             contexto = valida_historico.valida_historico(
                 mensagem_base(),

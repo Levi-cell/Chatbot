@@ -1,18 +1,21 @@
 import logging
 
 from core.logging_config import short_value
-from core.repositories.contexto_etapa4 import buscar_contexto_etapa4
-from core.repositories.contexto_etapa5 import buscar_contexto_etapa5
-from core.repositories.contexto_etapa7 import buscar_contexto_etapa7
-from core.repositories.contexto_etapa16 import buscar_contexto_etapa16
-from core.repositories.contexto_triagem import buscar_contexto_triagem
-from core.repositories.inserts import inserir_historico_mensagem_cliente
-from core.repositories.querys import buscar_resposta_bot_por_mensagem_cliente
-from core.repositories.transicoes_etapa import listar_transicoes_permitidas
-from core.repositories.updates import (
+from core.repositories.atendimento.conversas import (
     atualizar_conversa_mensagem_cliente,
     atualizar_conversa_resposta_bot_sem_avancar,
 )
+from core.repositories.atendimento.historico import (
+    buscar_resposta_bot_por_mensagem_cliente,
+    inserir_historico_mensagem_cliente,
+)
+from core.repositories.fluxo.contextos.etapa1 import buscar_contexto_etapa1
+from core.repositories.fluxo.contextos.etapa4 import buscar_contexto_etapa4
+from core.repositories.fluxo.contextos.etapa5 import buscar_contexto_etapa5
+from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
+from core.repositories.fluxo.contextos.etapa16 import buscar_contexto_etapa16
+from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
+from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     montar_contexto_transicao,
     prever_etapa_resposta,
@@ -102,6 +105,16 @@ def valida_historico(mensagem, contexto_banco, cursor):
         transicoes_permitidas,
     )
     contexto_especifico_etapa = {}
+
+    # O nome da unidade vem do banco somente no primeiro contato. Respostas
+    # posteriores da etapa 1 usam mensagens de tratamento sem nova saudacao.
+    if contexto_conversa.get("id_etapa_atual") is None:
+        contexto_especifico_etapa.update(
+            buscar_contexto_etapa1(
+                contexto_banco["id_unidade"],
+                cursor,
+            )
+        )
 
     if id_etapa_cliente == ETAPA_4_IDADE_ALUNO:
         contexto_especifico_etapa = buscar_contexto_etapa4(

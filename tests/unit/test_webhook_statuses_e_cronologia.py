@@ -6,7 +6,7 @@ from django.test import override_settings
 
 from callback.webhook.services import post_flow
 from callback.webhook.services import populating_fila_mensagens as fila
-from core.repositories import turno_cliente
+from core.repositories.seguranca import turno_cliente
 from tests.helpers import FakeCursor, FakeRequest, json_response_payload
 from tests.payloads import payload_texto_meta
 

@@ -5,8 +5,11 @@ import time
 from core.database.connection_aws import get_conn
 from core.cache.redis_client import get_redis_safe
 from core.logging_config import short_value
-from core.repositories.cache_control import buscar_versao_cache_unidades
-from core.repositories.querys import buscar_id_unidade_por_phone_id, pegar_unidades
+from core.repositories.unidades.cache_control import buscar_versao_cache_unidades
+from core.repositories.unidades.consultas import (
+    buscar_id_unidade_por_phone_id,
+    pegar_unidades,
+)
 
 
 logger = logging.getLogger("cache.unidades")
