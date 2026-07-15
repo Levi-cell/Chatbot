@@ -323,7 +323,8 @@ A mensagem nao e marcada como sent indevidamente.
 Quando a fila voltar a ficar elegivel, o worker pode tentar novamente.
 ```
 
-Se o processo inteiro escapar, `main_worker.py` reinicia `worker_flow()`.
+Se o processo inteiro escapar, `iniciar_flow_worker.py` reinicia
+`worker_flow()`.
 
 ## Cenario 5: resposta do bot ja existe, mas nome ainda precisa ser reparado
 

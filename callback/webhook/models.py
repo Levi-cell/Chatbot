@@ -299,7 +299,7 @@ class FunilEnvio(models.Model):
             ('sent', 'sent'),
         ],
     )
-    retry_count = models.IntegerField(default=0)
+    attempt_count = models.IntegerField(default=0)
     next_attempt_at = models.DateTimeField()
     processing_started_at = models.DateTimeField(blank=True, null=True)
     enviado_em = models.DateTimeField(blank=True, null=True)

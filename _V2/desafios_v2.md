@@ -657,7 +657,7 @@ Observacao:
 async nao deve ser a primeira evolucao obrigatoria.
 ```
 
-Como o projeto usa chamadas sincronas e `psycopg2`, a evolucao mais natural e primeiro suportar multiplos workers sincronizados com isolamento correto.
+Como o projeto usa chamadas sincronas com `psycopg`, a evolucao mais natural e primeiro suportar multiplos workers sincronizados com isolamento correto.
 
 ## Desafio 8 - Redis, cache local e multiplos processos
 

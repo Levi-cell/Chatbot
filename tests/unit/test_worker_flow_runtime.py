@@ -77,6 +77,27 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
+    def test_erro_operacional_psycopg3_reinicia_conexao(self):
+        erro = flow_worker.psycopg.OperationalError("conexao indisponivel")
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("builtins.print"))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[erro, PararWorker()],
+            ))
+            tratar_conexao = stack.enter_context(patch.object(
+                flow_worker,
+                "handle_erro_conexao",
+                return_value=10,
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        tratar_conexao.assert_called_once_with(erro, 5)
+
     def test_fila_vazia_fecha_conexao_antes_de_aguardar(self):
         conn = FakeConn(FakeCursor())
 
@@ -185,7 +206,10 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             finalizar = stack.enter_context(patch.object(
                 flow_worker,
                 "finalizar_mensagem_processada",
-                side_effect=lambda *_args: eventos.append("marcar_sent"),
+                side_effect=lambda *_args: (
+                    eventos.append("marcar_sent")
+                    or {"atendimento_encerrado": False}
+                ),
             ))
 
             with self.assertRaises(PararWorker):
@@ -223,7 +247,10 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             finalizar = stack.enter_context(patch.object(
                 flow_worker,
                 "finalizar_mensagem_processada",
-                side_effect=lambda *_args: eventos.append("marcar_sent"),
+                side_effect=lambda *_args: (
+                    eventos.append("marcar_sent")
+                    or {"atendimento_encerrado": False}
+                ),
             ))
             tratar_erro = stack.enter_context(patch.object(
                 flow_worker,

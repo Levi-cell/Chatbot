@@ -3,13 +3,13 @@
 CABECALHO_ETAPA14 = "Pergunta 5"
 
 MENSAGEM_CLIENTE_ETAPA14 = (
-    "Com que frequência você esquece palavras que queria dizer, "
-    "mas que ficam na ponta da língua?"
+    "Com que frequência você perde a atenção/foco na atividade "
+    "que está fazendo?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA14 = (
-    "Com que frequência {nome} esquece palavras que queria dizer, "
-    "mas que ficam na ponta da língua?"
+    "Com que frequência {nome} perde a atenção/foco na atividade "
+    "que está fazendo?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA14 = (

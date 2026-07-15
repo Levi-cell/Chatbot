@@ -860,7 +860,7 @@ serviço:
 - o worker do Funil isola erros por lead e reinicia falhas globais com espera
   linear de 5 a 60 segundos;
 - `flow_worker.py` mantém o loop de consumo e os tratamentos por tipo de exceção;
-- se `worker_flow()` escapar com uma exceção, `main_worker.py` registra a falha,
+- se `worker_flow()` escapar com uma exceção, `iniciar_flow_worker.py` registra a falha,
   aguarda 5 segundos e inicia outro loop;
 - o webhook responde de maneira controlada a entradas inválidas e falhas
   conhecidas;
@@ -876,7 +876,7 @@ reinício do container ou processo. As camadas serão complementares:
 operação individual falha
     -> exception ou fallback trata
     -> flow_worker continua
-    -> main_worker reinicia o fluxo se ele escapar
+    -> iniciar_flow_worker reinicia o fluxo se ele escapar
     -> Docker reinicia o processo ou container se necessário
 ```
 
@@ -887,9 +887,10 @@ os loops e fallbacks da aplicação já formam a base dessa estratégia.
 
 Implementação principal:
 
-- `workers/worker_flow/main_worker.py`
+- `workers/worker_flow/iniciar_flow_worker.py`
 - `workers/worker_flow/response_flow/flow_worker.py`
-- `workers/worker_funil/flow_worker.py`
+- `workers/worker_funil/funil_worker.py`
+- `workers/worker_funil/iniciar_worker_funil.py`
 - `core/cache/redis_client.py`
 - `callback/webhook/services/post_flow.py`
 
@@ -911,7 +912,7 @@ Implementação principal:
 | Unidade Meta-first na criação e exclusão | Implementada | Falha da Meta impede a alteração do banco. |
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
-| Worker continua ou reinicia depois de falha | Implementada em camadas | `main_worker.py` reinicia `worker_flow()` depois de uma exceção. |
+| Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 16/17, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |

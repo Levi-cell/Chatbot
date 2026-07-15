@@ -480,7 +480,7 @@ def criar_tabelas():
             id_funil_envio SERIAL PRIMARY KEY,
             id_conversa INT NOT NULL UNIQUE,
             status VARCHAR(20) NOT NULL DEFAULT 'pending',
-            retry_count INTEGER NOT NULL DEFAULT 0,
+            attempt_count INTEGER NOT NULL DEFAULT 0,
             next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             processing_started_at TIMESTAMPTZ,
             enviado_em TIMESTAMPTZ,
@@ -497,8 +497,8 @@ def criar_tabelas():
             CONSTRAINT ck_funil_envios_status
                 CHECK (status IN ('pending', 'processing', 'sent')),
 
-            CONSTRAINT ck_funil_envios_retry_count
-                CHECK (retry_count >= 0)
+            CONSTRAINT ck_funil_envios_attempt_count
+                CHECK (attempt_count >= 0)
         );
 
         CREATE INDEX IF NOT EXISTS idx_funil_envios_disponiveis

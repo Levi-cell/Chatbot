@@ -13,7 +13,7 @@ periódica de oportunidades no Funil de Vendas.
 ```text
 workers/
 ├── worker_flow/
-│   ├── main_worker.py
+│   ├── iniciar_flow_worker.py
 │   ├── valida_banco.py
 │   ├── valida_historico.py
 │   ├── tratar_bloqueio.py
@@ -38,9 +38,9 @@ workers/
 │       ├── cache_repair.py
 │       └── estado_ciclo.py
 ├── worker_funil/
-│   ├── main_worker.py
+│   ├── iniciar_worker_funil.py
 │   ├── config.py
-│   ├── flow_worker.py
+│   ├── funil_worker.py
 │   ├── processamento.py
 │   └── exceptions.py
 ├── tratamento_erros_externos/
@@ -52,8 +52,9 @@ do worker.
 
 ## Ciclo principal
 
-`worker_flow/main_worker.py` supervisiona o processo. Se `worker_flow()` escapar
-com uma exceção, registra o traceback, aguarda e reinicia o fluxo.
+`worker_flow/iniciar_flow_worker.py` supervisiona o processo. Se
+`worker_flow()` escapar com uma exceção, registra o traceback, aguarda e
+reinicia o fluxo.
 
 `worker_flow/response_flow/flow_worker.py` é o orquestrador do ciclo:
 
@@ -159,6 +160,12 @@ cursor e não controlam a transação.
 `worker_funil` é independente do atendimento. Ele não consome
 `fila_mensagens`, não envia WhatsApp e não altera o mapa de transições.
 
+`funil_worker.py` possui o laço operacional interno: executa um ciclo completo,
+aguarda uma hora depois do sucesso e recupera indisponibilidade esperada do
+banco com espera linear de 5 em 5 segundos, limitada a 60. O arquivo
+`iniciar_worker_funil.py` possui o laço supervisor externo. Se uma falha crítica
+escapar do worker, ele aguarda 5 segundos fixos e cria o worker novamente.
+
 ```text
 materializar conversas em etapas elegíveis
 -> claim de um funil_envios com FOR UPDATE SKIP LOCKED
@@ -172,8 +179,9 @@ materializar conversas em etapas elegíveis
 ```
 
 Cada lead é isolado. Falha de payload ou API volta o item para `pending`, agenda
-a próxima tentativa e permite processar os demais. Falha global do ciclo usa
-espera linear de 5 em 5 segundos, limitada a 60 segundos.
+a próxima tentativa e permite processar os demais. Indisponibilidade operacional
+do banco é recuperada pelo laço interno; defeitos críticos escapam para o
+supervisor externo.
 
 O claim possui lease: um item abandonado em `processing` volta a ser elegível
 depois de `FUNIL_LEASE_SEGUNDOS`. Isso permite recuperação de processo morto e

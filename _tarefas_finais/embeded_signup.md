@@ -188,7 +188,6 @@ httpx==0.28.1
 idna==3.11
 psycopg==3.3.3
 psycopg-binary==3.3.3
-psycopg2==2.9.11
 python-dotenv==1.2.2
 pywa==3.8.0
 redis==7.4.0

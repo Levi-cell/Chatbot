@@ -25,5 +25,5 @@ def inicia_worker_flow():
             time.sleep(5)
 
 
-if __name__ == "__main__":
-    inicia_worker_flow()
+
+inicia_worker_flow()

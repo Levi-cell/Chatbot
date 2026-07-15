@@ -99,7 +99,7 @@ class FunilEnvioAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "id_funil_envio",
         "id_conversa",
         "status",
-        "retry_count",
+        "attempt_count",
         "next_attempt_at",
         "processing_started_at",
         "enviado_em",

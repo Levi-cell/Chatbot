@@ -1,6 +1,6 @@
 import logging
 
-import psycopg2
+import psycopg
 from core.cache.cache_unidade import UnidadeNaoEncontrada
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
@@ -252,7 +252,7 @@ def worker_flow():
             if conn_ciclo:
                 conn_ciclo.commit()
 
-        except psycopg2.OperationalError as erro:
+        except psycopg.OperationalError as erro:
             logger.warning(
                 "banco_operacional_erro | acao=retry_conexao id_mensagem=%s erro=%s",
                 estado_ciclo["id_mensagem"],

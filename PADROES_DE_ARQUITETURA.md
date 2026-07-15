@@ -200,7 +200,7 @@ Cada worker controla a conexão e os commits de seu próprio domínio:
 
 ```text
 workers/worker_flow/response_flow/flow_worker.py
-workers/worker_funil/flow_worker.py
+workers/worker_funil/funil_worker.py
 ```
 
 Repositórios e funções auxiliares recebem o cursor aberto pelo orquestrador.
@@ -288,13 +288,22 @@ Responsabilidades:
 - confirmar `lead_no_funil` e `funil_envios = sent` no mesmo commit local;
 - recuperar reservas abandonadas por lease.
 
+`funil_worker.py` é o processo duradouro: executa ciclos isolados, agenda uma
+hora entre ciclos bem-sucedidos e recupera indisponibilidade operacional do
+banco com espera linear de 5 em 5 segundos, limitada a 60. O arquivo
+`iniciar_worker_funil.py` forma o laço supervisor externo; somente uma falha
+crítica que escape do worker chega nele, provocando a recriação do worker após
+5 segundos fixos. Esse padrão evita nomes `flow_worker.py` duplicados e mantém
+recuperação operacional separada da supervisão do processo.
+
 SQL permanece em `core/repositories/funil`. Payload, URL e interpretação da API
 permanecem em `core/integrations/funil`. O worker é o único dono do retry e da
 fronteira transacional.
 
 `worker_funil` não importa `worker_flow`, não usa lock de conversa e não acessa
 Redis. As duas áreas compartilham apenas recursos verdadeiramente centrais,
-como conexão, configuração e logging.
+como conexão, configuração, logging e o tratamento genérico de reconexão em
+`workers/tratamento_erros_externos`.
 
 Não tente manter uma transação PostgreSQL aberta durante o POST. PostgreSQL e
 Funil não formam uma transação distribuída; a pequena janela entre sucesso

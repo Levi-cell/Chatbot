@@ -25,6 +25,11 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM chatbot.funil_envios fe_existente
+                    WHERE fe_existente.id_conversa = c.id_conversa
+              )
             ORDER BY c.id_conversa ASC
             LIMIT %s
         ) AS elegiveis
@@ -68,16 +73,22 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE
+            -- Novos leads vencem retries; os demais criterios apenas
+            -- desempatam registros com a mesma quantidade de tentativas.
             ORDER BY
-                COALESCE(fe.next_attempt_at, fe.processing_started_at),
-                fe.id_funil_envio
+                fe.attempt_count ASC,
+                CASE
+                    WHEN fe.status = 'pending' THEN fe.next_attempt_at
+                    ELSE fe.processing_started_at
+                END ASC,
+                fe.id_funil_envio ASC
             FOR UPDATE OF fe SKIP LOCKED
             LIMIT 1
         )
         UPDATE chatbot.funil_envios fe
         SET
             status = 'processing',
-            retry_count = fe.retry_count + 1,
+            attempt_count = fe.attempt_count + 1,
             processing_started_at = NOW(),
             ultimo_erro = NULL,
             atualizado_em = NOW()
@@ -86,7 +97,7 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
         RETURNING
             fe.id_funil_envio,
             fe.id_conversa,
-            fe.retry_count;
+            fe.attempt_count;
         """,
         (lease_segundos,),
     )
@@ -98,7 +109,7 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
     return {
         "id_funil_envio": resultado[0],
         "id_conversa": resultado[1],
-        "retry_count": resultado[2],
+        "attempt_count": resultado[2],
     }
 
 

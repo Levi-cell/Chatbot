@@ -3,7 +3,7 @@
 import json
 import logging
 
-import psycopg2
+import psycopg
 
 from core.integrations.funil.cliente import enviar_oportunidade
 from core.integrations.funil.oportunidades import montar_payload_oportunidade
@@ -77,12 +77,12 @@ def processar_envio_funil(envio, conn, cursor):
             "id_funil_envio=%s id_conversa=%s tentativa=%s status_http=%s",
             id_funil_envio,
             id_conversa,
-            envio["retry_count"],
+            envio["attempt_count"],
             resultado["status_http"],
         )
         return True
 
-    except psycopg2.Error:
+    except psycopg.Error:
         conn.rollback()
         if sucesso_externo:
             logger.critical(
@@ -134,7 +134,7 @@ def processar_envio_funil(envio, conn, cursor):
             "id_funil_envio=%s id_conversa=%s tentativa=%s erro=%s",
             id_funil_envio,
             id_conversa,
-            envio["retry_count"],
+            envio["attempt_count"],
             exc,
         )
         return False
@@ -147,4 +147,3 @@ def _validar_integracao_ativa(integracao):
         raise ValueError("Integração do Funil está desativada para a unidade")
     if not integracao["widget_ativo"]:
         raise ValueError("Widget do Funil está desativado para a unidade")
-

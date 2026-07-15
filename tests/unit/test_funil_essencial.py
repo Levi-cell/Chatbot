@@ -10,7 +10,13 @@ from core.integrations.funil.oportunidades import (
     montar_dados_lead_teste,
     montar_payload_oportunidade,
 )
+from core.repositories.funil.envios import (
+    reivindicar_proximo_envio,
+    sincronizar_envios_elegiveis,
+)
 from tests.helpers import FakeConn, FakeCursor
+from workers.worker_funil import funil_worker as executor_funil
+from workers.worker_funil import iniciar_worker_funil as supervisor_funil
 from workers.worker_funil.exceptions import BancoFalhouAposEnvioFunil
 from workers.worker_funil.funil_worker import executar_ciclo_funil
 from workers.worker_funil.processamento import processar_envio_funil
@@ -40,6 +46,36 @@ class _FakeSession:
 
 
 class FunilEssencialTests(unittest.TestCase):
+    def test_materializacao_exclui_conversas_ja_enfileiradas_antes_do_limite(self):
+        cursor = FakeCursor()
+
+        sincronizar_envios_elegiveis(cursor, limite=100)
+
+        sql, parametros = cursor.calls[0]
+        self.assertIn("NOT EXISTS", sql)
+        self.assertIn(
+            "fe_existente.id_conversa = c.id_conversa",
+            sql,
+        )
+        self.assertEqual(parametros, (100,))
+
+    def test_reivindicacao_prioriza_menor_numero_de_tentativas(self):
+        cursor = FakeCursor()
+
+        reivindicar_proximo_envio(cursor, lease_segundos=900)
+
+        sql, parametros = cursor.calls[0]
+        ordenacao = sql.split("ORDER BY", 1)[1].split("FOR UPDATE", 1)[0]
+        posicao_tentativas = ordenacao.index("fe.attempt_count ASC")
+        posicao_tempo = ordenacao.index("CASE")
+        posicao_id = ordenacao.index("fe.id_funil_envio ASC")
+
+        self.assertLess(posicao_tentativas, posicao_tempo)
+        self.assertLess(posicao_tempo, posicao_id)
+        self.assertIn("fe.next_attempt_at", ordenacao)
+        self.assertIn("fe.processing_started_at", ordenacao)
+        self.assertEqual(parametros, (900,))
+
     def test_payload_dependente_preenche_contato_e_observacoes(self):
         dados = montar_dados_lead_teste()
         dados["id_conversa"] = 123
@@ -50,11 +86,18 @@ class FunilEssencialTests(unittest.TestCase):
             for item in oportunidade["personalizados"]
         }
 
-        self.assertEqual(oportunidade["titulo"], "Chatbot Lead [C123]")
+        self.assertEqual(
+            oportunidade["titulo"],
+            "Chatbot Lead Supera Santo Antônio de Jesus",
+        )
+        self.assertEqual(
+            oportunidade["empresa"]["nome"],
+            "Edcarlos Teste - Não contatar | Enzo Teste | 12",
+        )
         self.assertEqual(oportunidade["contato"]["nome"], dados["nome_cliente"])
         self.assertEqual(
             oportunidade["contato"]["telefone1"],
-            dados["telefone_cliente"],
+            "5571994111866",
         )
         self.assertEqual(
             oportunidade["contato"]["email"],
@@ -63,6 +106,50 @@ class FunilEssencialTests(unittest.TestCase):
         self.assertEqual(personalizados["Origem do lead"], "Meta Chatbot")
         self.assertIn("Nome do dependente: Enzo Teste", personalizados["Observações"])
         self.assertIn("Às vezes: 3", personalizados["Observações"])
+
+    def test_payload_adiciona_nono_digito_ao_telefone_brasileiro(self):
+        dados = montar_dados_lead_teste()
+        dados["telefone_cliente"] = "557587006911"
+
+        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
+
+        self.assertEqual(
+            oportunidade["contato"]["telefone1"],
+            "5575987006911",
+        )
+
+    def test_payload_internacional_omite_telefone1_e_avisa_nas_observacoes(self):
+        dados = montar_dados_lead_teste()
+        dados["telefone_cliente"] = "351912345678"
+
+        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
+        observacoes = oportunidade["personalizados"][0]["valor"]
+
+        self.assertEqual(oportunidade["contato"]["telefone1"], "")
+        self.assertIn("351912345678", observacoes)
+        self.assertIn(
+            "número internacional fora do padrão brasileiro",
+            observacoes,
+        )
+        self.assertLess(
+            observacoes.index("- Idade do dependente: 12"),
+            observacoes.index(
+                "O cliente possui um número internacional fora do padrão brasileiro"
+            ),
+        )
+        self.assertLess(
+            observacoes.index(
+                "O cliente possui um número internacional fora do padrão brasileiro"
+            ),
+            observacoes.index("Resultado do teste de triagem"),
+        )
+        self.assertIn(
+            "- Idade do dependente: 12\n\n"
+            "O cliente possui um número internacional fora do padrão brasileiro, "
+            "por isso o campo Telefone 1 não foi preenchido.\n\n"
+            "Resultado do teste de triagem",
+            observacoes,
+        )
 
     def test_payload_titular_usa_somente_idade_do_cliente(self):
         dados = montar_dados_lead_teste()
@@ -78,6 +165,14 @@ class FunilEssencialTests(unittest.TestCase):
         oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
         observacoes = oportunidade["personalizados"][0]["valor"]
 
+        self.assertEqual(
+            oportunidade["titulo"],
+            "Chatbot Lead Supera Santo Antônio de Jesus",
+        )
+        self.assertEqual(
+            oportunidade["empresa"]["nome"],
+            "Edcarlos Teste - Não contatar | 25",
+        )
         self.assertIn("Idade do cliente: 25", observacoes)
         self.assertNotIn("Nome do dependente", observacoes)
 
@@ -146,7 +241,7 @@ class FunilEssencialTests(unittest.TestCase):
         }
         marcar_mock.side_effect = RuntimeError("banco indisponível")
         conn = FakeConn(FakeCursor())
-        envio = {"id_funil_envio": 7, "id_conversa": 123, "retry_count": 1}
+        envio = {"id_funil_envio": 7, "id_conversa": 123, "attempt_count": 1}
 
         with self.assertRaises(BancoFalhouAposEnvioFunil):
             processar_envio_funil(envio, conn, conn.cursor_obj)
@@ -154,10 +249,10 @@ class FunilEssencialTests(unittest.TestCase):
         self.assertEqual(conn.commits, 1)
         self.assertEqual(conn.rollbacks, 1)
 
-    @patch("workers.worker_funil.flow_worker.get_conn")
-    @patch("workers.worker_funil.flow_worker.sincronizar_envios_elegiveis")
-    @patch("workers.worker_funil.flow_worker.reivindicar_proximo_envio")
-    @patch("workers.worker_funil.flow_worker.processar_envio_funil")
+    @patch("workers.worker_funil.funil_worker.get_conn")
+    @patch("workers.worker_funil.funil_worker.sincronizar_envios_elegiveis")
+    @patch("workers.worker_funil.funil_worker.reivindicar_proximo_envio")
+    @patch("workers.worker_funil.funil_worker.processar_envio_funil")
     def test_ciclo_continua_depois_de_falha_individual(
         self,
         processar_mock,
@@ -171,8 +266,8 @@ class FunilEssencialTests(unittest.TestCase):
         get_conn_mock.return_value = conn
         sincronizar_mock.return_value = 2
         reivindicar_mock.side_effect = [
-            {"id_funil_envio": 1, "id_conversa": 101, "retry_count": 1},
-            {"id_funil_envio": 2, "id_conversa": 102, "retry_count": 1},
+            {"id_funil_envio": 1, "id_conversa": 101, "attempt_count": 1},
+            {"id_funil_envio": 2, "id_conversa": 102, "attempt_count": 1},
             None,
         ]
         processar_mock.side_effect = [False, True]
@@ -189,6 +284,51 @@ class FunilEssencialTests(unittest.TestCase):
             },
         )
         self.assertEqual(processar_mock.call_count, 2)
+
+    def test_supervisor_reinicia_ciclo_apos_falha_global(self):
+        with (
+            patch.object(supervisor_funil, "FUNIL_WORKER_ENABLED", True),
+            patch.object(supervisor_funil, "validar_configuracao_funil"),
+            patch.object(
+                supervisor_funil,
+                "funil_worker",
+                side_effect=[RuntimeError("banco indisponível"), KeyboardInterrupt],
+            ) as worker_mock,
+            patch.object(supervisor_funil.time, "sleep") as sleep_mock,
+            patch.object(supervisor_funil.logger, "exception"),
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                supervisor_funil.iniciar_worker_funil()
+
+        self.assertEqual(worker_mock.call_count, 2)
+        sleep_mock.assert_called_once_with(5)
+
+    def test_funil_worker_recupera_banco_com_backoff_linear(self):
+        erro_banco = executor_funil.psycopg.OperationalError(
+            "banco indisponivel"
+        )
+
+        with (
+            patch.object(
+                executor_funil,
+                "executar_ciclo_funil",
+                side_effect=[erro_banco, KeyboardInterrupt],
+            ) as ciclo_mock,
+            patch.object(
+                executor_funil,
+                "handle_erro_conexao",
+                return_value=10,
+            ) as retry_mock,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                executor_funil.funil_worker()
+
+        self.assertEqual(ciclo_mock.call_count, 2)
+        retry_mock.assert_called_once_with(
+            erro_banco,
+            5,
+            incremento_retry=5,
+        )
 
 
 if __name__ == "__main__":

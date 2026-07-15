@@ -1259,7 +1259,7 @@ COPY ../_tarefas_finais /app
 RUN python tools/nomes_ibge/verificar_base_sqlite.py \
     --base /app/core/data/nomes_ibge/nomes_ibge.sqlite3
 
-CMD ["python", "-m", "workers.worker_flow.main_worker"]
+CMD ["python", "-m", "workers.worker_flow.iniciar_flow_worker"]
 ```
 
 O `RUN verificar_base_sqlite.py` faz o build falhar se a base estiver ausente,
@@ -1495,7 +1495,7 @@ O plano somente sera considerado aplicado quando:
 12. O smoke test funcionar dentro do container.
 13. Nenhuma regra de fila, turno, retry, historico ou transacao for alterada.
 14. O worker continuar sendo executado por
-    `python -m workers.worker_flow.main_worker`.
+    `python -m workers.worker_flow.iniciar_flow_worker`.
 
 ## Resultado final
 

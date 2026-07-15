@@ -378,6 +378,106 @@ UNIQUE(provider, provider_event_id)
 
 Essa restricao evita processar o mesmo evento duas vezes.
 
+### Atividade de visita vinculada a oportunidade do Funil
+
+Status: ideia aprovada para estudo futuro. Nao implementar antes de confirmar
+na API do Funil como criar uma atividade e como obter o identificador remoto da
+oportunidade criada pela ApiCarrossel.
+
+O `funil_envios` atual nao e apenas um historico. Ele e a fila transacional da
+criacao da oportunidade e registra `pending`, `processing`, `sent`, tentativas,
+erros e a resposta do Funil. Depois de `status = 'sent'`, ele pode servir como
+raiz para atividades futuras da mesma oportunidade.
+
+A relacao planejada e:
+
+```text
+conversa 1 ---- 0..1 funil_envios 1 ---- 0..N funil_atividade_envios
+                                      |
+                                      +---- oportunidade no Funil
+```
+
+Uma oportunidade pode receber mais de uma atividade durante sua vida. Por isso,
+atividades nao devem ser gravadas como novas colunas em `funil_envios`.
+
+Antes de criar atividades, sera necessario confirmar se a resposta da criacao
+da oportunidade fornece seu codigo. Se fornecer, a evolucao recomendada e
+persisti-lo explicitamente:
+
+```text
+funil_envios.codigo_oportunidade_funil
+```
+
+Nao depender apenas de `resposta_funil`, titulo, nome, telefone ou email para
+encontrar a oportunidade. Se a ApiCarrossel nao devolver o codigo, sera
+necessario estudar um endpoint de consulta/reconciliacao antes de automatizar
+atividades.
+
+Tabela operacional sugerida:
+
+```text
+funil_atividade_envios
+----------------------
+id_funil_atividade_envio
+id_funil_envio
+id_agendamento
+tipo_atividade
+status
+retry_count
+next_attempt_at
+processing_started_at
+codigo_atividade_funil
+resposta_funil
+ultimo_erro
+enviado_em
+criado_em
+atualizado_em
+```
+
+Relacionamentos:
+
+```text
+id_funil_envio -> funil_envios.id_funil_envio
+id_agendamento -> agendamento.id_agendamento
+```
+
+Uma restricao como a seguinte devera ser avaliada na implementacao:
+
+```text
+UNIQUE(id_funil_envio, id_agendamento, tipo_atividade)
+```
+
+Ela impede que notificacoes repetidas do Google criem duas vezes a mesma visita.
+Reagendamento e cancelamento exigem decidir primeiro se a API do Funil permite
+atualizar/cancelar uma atividade existente ou se demanda uma nova versao.
+
+Fluxo futuro:
+
+```text
+Calendly cria o compromisso no Google Agenda
+-> sincronizacao grava ou atualiza agendamento
+-> sistema encontra a conversa e seu funil_envios
+-> exige funil_envios.status = sent
+-> exige codigo_oportunidade_funil conhecido
+-> materializa funil_atividade_envios como pending
+-> worker reivindica a atividade com lease
+-> envia atividade de visita para a oportunidade correta
+-> valida o sucesso logico da API
+-> marca funil_atividade_envios como sent
+```
+
+Se a atividade falhar antes da confirmacao externa, permanece pendente para
+retry. Se o Funil confirmar e o banco falhar antes do commit local, existira a
+mesma janela rara de duplicidade da oportunidade; o codigo remoto da atividade
+ou uma consulta de reconciliacao devera fechar essa janela.
+
+Escopo sugerido:
+
+- V1.5, somente se a API de atividades e o codigo da oportunidade forem
+  confirmados e simples de consumir;
+- V2, se depender da integracao completa com Google Agenda, OAuth, renovacao de
+  canais, reconciliacao ou atualizacao/cancelamento de atividades.
+
 ### Notificacoes recebidas
 
 Opcionalmente:
