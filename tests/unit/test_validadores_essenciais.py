@@ -15,6 +15,12 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
     validar_etapa8,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa17 import (
+    validar_etapa17,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
+    normalizar_comentario_etapa18,
+)
 from workers.worker_flow.response_flow.etapas.validadores_universais import (
     validador_nome,
 )
@@ -177,6 +183,52 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         ):
             with self.subTest(texto=texto, tipo=tipo):
                 self.assertIsNone(validar_resposta_triagem(texto, tipo))
+
+    def test_satisfacao_aceita_uma_unica_opcao_coerente(self):
+        casos = (
+            ("1", 1),
+            ("Muito ruim", 1),
+            ("1 - Muito ruim", 1),
+            ("2 Ruim", 2),
+            ("3 - Regular", 3),
+            ("Muito bom", 4),
+            ("satisfacao_5", 5),
+            ("5 Excelente", 5),
+        )
+
+        for texto, nota in casos:
+            with self.subTest(texto=texto):
+                self.assertEqual(validar_etapa17(texto), nota)
+
+        for texto in (
+            "2 - Bom",
+            "2 3",
+            "2 - Ruim 3 - Regular",
+            "5 - Muito bom",
+            "Excelente ou Muito bom",
+            "Qual é o horário?",
+            "",
+        ):
+            with self.subTest(texto=texto):
+                self.assertIsNone(validar_etapa17(texto))
+
+    def test_comentario_preserva_texto_e_usa_null_para_recusa_ou_midia(self):
+        self.assertEqual(
+            normalizar_comentario_etapa18(
+                "  Atendimento muito atencioso!  ",
+                "text",
+            ),
+            "Atendimento muito atencioso!",
+        )
+        self.assertIsNone(
+            normalizar_comentario_etapa18(
+                "Prefiro não comentar",
+                "interactive",
+            )
+        )
+        self.assertIsNone(
+            normalizar_comentario_etapa18("legenda ignorada", "image")
+        )
 
 
 if __name__ == "__main__":

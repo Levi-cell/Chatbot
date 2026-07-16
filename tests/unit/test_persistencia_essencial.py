@@ -1,12 +1,14 @@
 import unittest
 from unittest.mock import patch
 
+from core.repositories.fluxo.politicas import PoliticaEtapa
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
 )
 from workers.worker_flow.transacoes import efeitos_transicao as efeitos
+from workers.worker_flow.transacoes import encerramento_atendimento as encerramento
 from workers.worker_flow.transacoes import movimento_conversa as movimento
 from workers.worker_flow.transacoes import persistencia_resposta as persistencia
 
@@ -216,6 +218,54 @@ class PersistenciaEssencialTests(unittest.TestCase):
                     inserir_dependente.assert_called_once()
                 else:
                     inserir_dependente.assert_not_called()
+
+    def test_somente_etapa_19_encerra_e_aplica_bloqueio_de_30_dias(self):
+        contexto = contexto_historico_base(id_etapa_atual=18)
+
+        for id_etapa in (17, 18):
+            with self.subTest(id_etapa=id_etapa), patch.object(
+                encerramento,
+                "buscar_politica_etapa",
+                return_value=PoliticaEtapa(
+                    id_etapa=id_etapa,
+                    encerra_automaticamente=False,
+                    bloqueio_dias=0,
+                    elegivel_funil=True,
+                ),
+            ):
+                resultado = encerramento.resolver_intencao_encerramento(
+                    contexto,
+                    {
+                        "evento_transicao": "evento_teste",
+                        "id_etapa_resultante": id_etapa,
+                    },
+                    object(),
+                )
+
+            self.assertIsNone(resultado)
+
+        with patch.object(
+            encerramento,
+            "buscar_politica_etapa",
+            return_value=PoliticaEtapa(
+                id_etapa=19,
+                encerra_automaticamente=True,
+                bloqueio_dias=30,
+                elegivel_funil=True,
+            ),
+        ):
+            resultado = encerramento.resolver_intencao_encerramento(
+                contexto,
+                {
+                    "evento_transicao": "comentario_satisfacao_recebido",
+                    "id_etapa_resultante": 19,
+                },
+                object(),
+            )
+
+        self.assertEqual(resultado["motivo"], "etapa_final")
+        self.assertEqual(resultado["motivo_encerramento"], "foi_agendado")
+        self.assertEqual(resultado["bloqueio_dias"], 30)
 
 
 if __name__ == "__main__":

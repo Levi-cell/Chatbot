@@ -80,7 +80,7 @@ class RoteamentoEssencialTests(unittest.TestCase):
         self.assertEqual(resultado, esperado)
 
     def test_cada_etapa_implementada_chama_seu_resolver(self):
-        for etapa_atual in (None, *range(1, 16)):
+        for etapa_atual in (None, *range(1, 19)):
             etapa_resolver = 1 if etapa_atual is None else etapa_atual
             esperado = {
                 "enviou": True,

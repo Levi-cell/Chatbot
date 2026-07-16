@@ -21,7 +21,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_17_FINALIZACAO,
+    ETAPA_17_PESQUISA_SATISFACAO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -33,7 +33,7 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
 - APLICAR OS TRATAMENTOS DA ETAPA 16
-- ENCAMINHAR PARA A ETAPA TERMINAL 17 AUTORIZADA PELO MAPA
+- ENCAMINHAR PARA A PESQUISA DE SATISFACAO AUTORIZADA PELO MAPA
 """
 
 
@@ -46,6 +46,7 @@ def resolve_etapa16(contexto_historico):
     link_agendamento = contexto_historico.get(
         "link_agendamento_unidade"
     )
+    nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -93,7 +94,7 @@ def resolve_etapa16(contexto_historico):
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         evento_transicao,
-        destinos_esperados={ETAPA_17_FINALIZACAO},
+        destinos_esperados={ETAPA_17_PESQUISA_SATISFACAO},
     )
 
     logger.info(
@@ -108,6 +109,7 @@ def resolve_etapa16(contexto_historico):
     contexto_envio = enviar_etapa17(
         cliente_telefone,
         phone_id_unidade,
+        nome_cliente,
     )
 
     return anexar_transicao_ao_contexto_envio(

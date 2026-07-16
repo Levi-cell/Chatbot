@@ -1,11 +1,12 @@
 """Componentes de apresentação compartilhados pelo fluxo do WhatsApp.
 
-Fora da triagem, o fluxo utiliza somente rodapés pontuais. O cabeçalho
-compartilhado permanece restrito à introdução da triagem cognitiva.
+Fora da triagem, o fluxo utiliza somente rodapés pontuais. Cabeçalhos
+compartilhados identificam a introdução da triagem e a pesquisa final.
 """
 
 
 CABECALHO_ETAPA9_TRIAGEM = "Triagem cognitiva"
+CABECALHO_PESQUISA_SATISFACAO = "Pesquisa de satisfação"
 
 RODAPE_ETAPA1_BOAS_VINDAS = "Seja muito bem-vindo(a)!"
 RODAPE_ETAPA6_ESPERA = "Estaremos te esperando!"

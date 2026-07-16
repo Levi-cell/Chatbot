@@ -474,7 +474,26 @@ def criar_tabelas():
                 UNIQUE (id_conversa, id_etapa)
         );
 
-        -- 7. FILA OPERACIONAL DO WORKER DE FUNIL
+        -- 7. PESQUISA DE SATISFACAO DO ATENDIMENTO
+
+        CREATE TABLE IF NOT EXISTS chatbot.pesquisa_satisfacao (
+            id_pesquisa_satisfacao SERIAL PRIMARY KEY,
+            id_conversa INT NOT NULL UNIQUE,
+            nota SMALLINT,
+            comentario TEXT,
+            criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+            CONSTRAINT pesquisa_satisfacao_id_conversa_fkey
+                FOREIGN KEY (id_conversa)
+                REFERENCES chatbot.conversa(id_conversa)
+                ON DELETE CASCADE,
+
+            CONSTRAINT ck_pesquisa_satisfacao_nota
+                CHECK (nota IS NULL OR nota BETWEEN 1 AND 5)
+        );
+
+        -- 8. FILA OPERACIONAL DO WORKER DE FUNIL
 
         CREATE TABLE IF NOT EXISTS chatbot.funil_envios (
             id_funil_envio SERIAL PRIMARY KEY,

@@ -57,6 +57,8 @@ class FunilEssencialTests(unittest.TestCase):
             "fe_existente.id_conversa = c.id_conversa",
             sql,
         )
+        self.assertIn("e.elegivel_funil = TRUE", sql)
+        self.assertIn("c.lead_no_funil IS NOT TRUE", sql)
         self.assertEqual(parametros, (100,))
 
     def test_reivindicacao_prioriza_menor_numero_de_tentativas(self):
@@ -182,6 +184,17 @@ class FunilEssencialTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "exatamente 6"):
             montar_payload_oportunidade(dados)
+
+    def test_payload_nao_inclui_dados_da_pesquisa_de_satisfacao(self):
+        dados = montar_dados_lead_teste()
+        dados["nota_satisfacao"] = 5
+        dados["comentario_satisfacao"] = "Comentário interno da pesquisa"
+
+        payload_serializado = repr(montar_payload_oportunidade(dados))
+
+        self.assertNotIn("nota_satisfacao", payload_serializado)
+        self.assertNotIn("comentario_satisfacao", payload_serializado)
+        self.assertNotIn("Comentário interno da pesquisa", payload_serializado)
 
     def test_cliente_preserva_widget_e_forca_canal(self):
         url = montar_url_envio(

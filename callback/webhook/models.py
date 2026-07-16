@@ -220,6 +220,26 @@ class RespostasDesafios(models.Model):
         ]
 
 
+class PesquisaSatisfacao(models.Model):
+    id_pesquisa_satisfacao = models.AutoField(primary_key=True)
+    id_conversa = models.OneToOneField(
+        Conversa,
+        models.CASCADE,
+        db_column='id_conversa',
+        related_name='pesquisa_satisfacao',
+    )
+    nota = models.PositiveSmallIntegerField(blank=True, null=True)
+    comentario = models.TextField(blank=True, null=True)
+    criado_em = models.DateTimeField()
+    atualizado_em = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'pesquisa_satisfacao'
+        verbose_name = 'Pesquisa de satisfação'
+        verbose_name_plural = 'Pesquisas de satisfação'
+
+
 class Unidade(models.Model):
     id_unidade = models.AutoField(primary_key=True)
     nome = models.CharField(unique=True, max_length=300)

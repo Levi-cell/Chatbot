@@ -32,6 +32,7 @@ from .models import (
     FunilEnvio,
     HistoricoMensagens,
     IntegracaoFunilUnidade,
+    PesquisaSatisfacao,
     RespostasDesafios,
     Unidade,
     WebhookFloodEvento,
@@ -926,6 +927,37 @@ class RespostasDesafiosAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         return super().get_queryset(request).select_related(
             "id_conversa",
             "id_etapa",
+        )
+
+
+@admin.register(PesquisaSatisfacao)
+class PesquisaSatisfacaoAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+
+    list_display = (
+        "id_pesquisa_satisfacao",
+        "id_conversa",
+        "nota",
+        "comentario",
+        "criado_em",
+        "atualizado_em",
+    )
+
+    search_fields = (
+        "id_conversa__id_conversa",
+        "id_conversa__id_cliente__nome",
+        "comentario",
+    )
+
+    list_filter = ("nota",)
+    ordering = ("-atualizado_em",)
+    date_hierarchy = "atualizado_em"
+    list_per_page = 50
+    empty_value_display = "-"
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "id_conversa",
+            "id_conversa__id_cliente",
         )
 
 

@@ -284,9 +284,11 @@ Implementação principal:
 - A etapa 9 introduz a triagem, as etapas 10 a 15 fazem as seis perguntas e a
   etapa 16 apresenta o agendamento. A etapa 16 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
-- A etapa 17 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
-  30 dias. Ela permanece elegível ao Funil caso a etapa 16 ainda não tenha sido
-  publicada.
+- A etapa 17 registra uma nota de satisfação de 1 a 5 e a etapa 18 registra o
+  comentário opcional. Esses dados são internos, não compõem o payload do
+  Funil e não encerram nem bloqueiam o atendimento.
+- A etapa 19 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+  30 dias.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma
@@ -303,8 +305,10 @@ Implementação principal:
 ### 6.1 Oportunidade no Funil de Vendas
 
 - Uma conversa torna-se elegível ao entrar na etapa 16.
-- A etapa 17 continua elegível apenas como recuperação; `lead_no_funil = TRUE`
-  impede um segundo envio confirmado da mesma conversa.
+- As etapas 16, 17, 18 e 19 permanecem elegíveis. Assim, avançar na pesquisa
+  antes do próximo ciclo horário não remove a conversa da fila do Funil.
+- `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
+  conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
 - O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
   respostas canônicas da triagem.
@@ -913,7 +917,7 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
-| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 16/17, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 16–19, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
 

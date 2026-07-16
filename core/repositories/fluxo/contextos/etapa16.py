@@ -5,13 +5,17 @@ logger = logging.getLogger("db.contexto_etapa16")
 
 
 def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
-    """Carrega o link de agendamento da unidade vinculada à conversa."""
+    """Carrega o agendamento e o cliente vinculados à conversa."""
     cursor.execute(
         """
-        SELECT u.link_agendamento
+        SELECT
+            u.link_agendamento,
+            cl.nome
         FROM chatbot.conversa c
         JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.cliente cl
+          ON cl.id_cliente = c.id_cliente
         WHERE c.id_conversa = %s
           AND c.id_unidade = %s
         LIMIT 1;
@@ -27,7 +31,7 @@ def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    link_agendamento = resultado[0]
+    link_agendamento, nome_cliente = resultado
 
     if not link_agendamento or not str(link_agendamento).strip():
         raise ValueError(
@@ -35,14 +39,22 @@ def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
             f"(id_unidade={id_unidade})"
         )
 
+    if not nome_cliente or not str(nome_cliente).strip():
+        raise ValueError(
+            "Cliente sem nome para iniciar a pesquisa de satisfação "
+            f"(id_conversa={id_conversa})"
+        )
+
     logger.debug(
         "contexto_etapa16_consultado | id_conversa=%s id_unidade=%s "
-        "link_agendamento_configurado=%s",
+        "link_agendamento_configurado=%s nome_cliente_configurado=%s",
         id_conversa,
         id_unidade,
+        True,
         True,
     )
 
     return {
         "link_agendamento_unidade": str(link_agendamento).strip(),
+        "nome_cliente": str(nome_cliente).strip(),
     }

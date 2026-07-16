@@ -15,6 +15,16 @@ from core.repositories.atendimento.dependentes import (
     inserir_dependente_para_conversa,
 )
 from core.repositories.fluxo.triagem import registrar_resposta_triagem
+from core.repositories.fluxo.pesquisa_satisfacao import (
+    salvar_comentario_satisfacao,
+    salvar_nota_satisfacao,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa17 import (
+    validar_etapa17,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
+    normalizar_comentario_etapa18,
+)
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
 )
@@ -44,9 +54,12 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_14_TRIAGEM_PERGUNTA_5,
     ETAPA_15_TRIAGEM_PERGUNTA_6,
     ETAPA_16_AGENDAMENTO,
-    ETAPA_17_FINALIZACAO,
+    ETAPA_17_PESQUISA_SATISFACAO,
+    ETAPA_18_COMENTARIO_SATISFACAO,
+    ETAPA_19_FINALIZACAO,
     EVENTO_AGENDAMENTO_CONFIRMADO,
     EVENTO_CLIENTE_RETORNOU,
+    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
@@ -57,6 +70,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_PARA_OUTRA_PESSOA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
+    EVENTO_SATISFACAO_AVALIADA,
     EVENTO_TRIAGEM_INICIADA,
     EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
     EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
@@ -379,18 +393,50 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 16
     if etapa_origem == ETAPA_16_AGENDAMENTO:
-        # 16 -> 17: o cliente confirmou que concluiu o agendamento.
+        # 16 -> 17: o cliente confirmou o agendamento e inicia a pesquisa.
         if evento == EVENTO_AGENDAMENTO_CONFIRMADO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_17_FINALIZACAO,
+                ETAPA_17_PESQUISA_SATISFACAO,
             )
             return _confirmar_agendamento_da_etapa16(
                 contexto_historico,
                 evento,
                 etapa_destino,
+            )
+
+    # ETAPA 17
+    if etapa_origem == ETAPA_17_PESQUISA_SATISFACAO:
+        # 17 -> 18: registra a nota normalizada da pesquisa de satisfacao.
+        if evento == EVENTO_SATISFACAO_AVALIADA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_18_COMENTARIO_SATISFACAO,
+            )
+            return _persistir_nota_satisfacao_da_etapa17(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 18
+    if etapa_origem == ETAPA_18_COMENTARIO_SATISFACAO:
+        # 18 -> 19: registra o comentario opcional antes da finalizacao.
+        if evento == EVENTO_COMENTARIO_SATISFACAO_RECEBIDO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_19_FINALIZACAO,
+            )
+            return _persistir_comentario_satisfacao_da_etapa18(
+                contexto_historico,
+                contexto_envio,
+                cursor,
             )
 
     raise ValueError(
@@ -844,7 +890,7 @@ def _confirmar_agendamento_da_etapa16(
     evento,
     etapa_destino,
 ):
-    """Confirma a aresta 16 -> 17 sem criar dado de negócio adicional."""
+    """Confirma a aresta 16 -> 17 sem criar dado de negocio adicional."""
     logger.info(
         "agendamento_confirmado_persistido | acao=confirmar_transicao "
         "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
@@ -857,4 +903,86 @@ def _confirmar_agendamento_da_etapa16(
     return {
         "agendamento_confirmado": True,
         "evento_agendamento": evento,
+    }
+
+
+def _persistir_nota_satisfacao_da_etapa17(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    """Persiste a nota; em retry, reconstrói o valor pela mensagem original."""
+    nota_satisfacao = contexto_envio.get("nota_satisfacao")
+
+    if nota_satisfacao is None:
+        nota_satisfacao = validar_etapa17(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+
+    if nota_satisfacao is None:
+        raise ValueError(
+            "Nota de satisfacao ausente na transicao 17 -> 18 "
+            f"(id_conversa={contexto_historico['id_conversa']})"
+        )
+
+    resultado = salvar_nota_satisfacao(
+        contexto_historico["id_conversa"],
+        nota_satisfacao,
+        cursor,
+    )
+
+    logger.info(
+        "efeito_nota_satisfacao_persistido | acao=salvar_nota "
+        "evento=%s etapa_origem=%s etapa_resultante=%s "
+        "id_conversa=%s nota=%s inserido=%s",
+        contexto_envio.get("evento_transicao"),
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        nota_satisfacao,
+        resultado["inserido"],
+    )
+
+    return {
+        "nota_satisfacao_persistida": True,
+        **resultado,
+    }
+
+
+def _persistir_comentario_satisfacao_da_etapa18(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    """Persiste texto integral ou NULL para mídia e recusa explícita."""
+    if "comentario_satisfacao" in contexto_envio:
+        comentario_satisfacao = contexto_envio["comentario_satisfacao"]
+    else:
+        comentario_satisfacao = normalizar_comentario_etapa18(
+            contexto_historico.get("texto_cliente_atual") or "",
+            contexto_historico.get("tipo_mensagem_atual"),
+        )
+
+    resultado = salvar_comentario_satisfacao(
+        contexto_historico["id_conversa"],
+        comentario_satisfacao,
+        cursor,
+    )
+
+    logger.info(
+        "efeito_comentario_satisfacao_persistido | "
+        "acao=salvar_comentario evento=%s etapa_origem=%s "
+        "etapa_resultante=%s id_conversa=%s "
+        "comentario_preenchido=%s inserido=%s",
+        contexto_envio.get("evento_transicao"),
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        bool(comentario_satisfacao),
+        resultado["inserido"],
+    )
+
+    return {
+        "comentario_satisfacao_persistido": True,
+        **resultado,
     }
