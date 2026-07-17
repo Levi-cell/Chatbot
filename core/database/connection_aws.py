@@ -2,7 +2,7 @@ import logging
 
 import psycopg
 
-from core.config_env import env_int, env_required
+from core.config_env import env_int, env_optional, env_required
 
 
 logger = logging.getLogger("db.connection")
@@ -14,6 +14,15 @@ setup = {
     "password": env_required("DB_PASSWORD"),
     "port": env_int("DB_PORT", 5432),
 }
+
+_db_sslmode = env_optional("DB_SSLMODE")
+_db_sslrootcert = env_optional("DB_SSLROOTCERT")
+
+if _db_sslmode:
+    setup["sslmode"] = _db_sslmode
+
+if _db_sslrootcert:
+    setup["sslrootcert"] = _db_sslrootcert
 
 
 def get_conn(application_name=None):

@@ -117,7 +117,14 @@ DB_NAME
 DB_USER
 DB_PASSWORD
 DB_PORT
+DB_SSLMODE
+DB_SSLROOTCERT
 ```
+
+`DB_SSLMODE` e `DB_SSLROOTCERT` são opcionais para preservar o comportamento
+local. Em produção, use `DB_SSLMODE=verify-full`, aponte
+`DB_SSLROOTCERT` para uma CA confiável e mantenha em `DB_HOST` o hostname real
+do servidor, necessário para a validação do certificado.
 
 Novas credenciais não devem ser adicionadas ao código, README, logs ou prints.
 Em desenvolvimento, use `.env` local baseado em `.env.example`. Em produção, use

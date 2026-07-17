@@ -100,11 +100,14 @@ DJANGO_SECRET_KEY
 DJANGO_DEBUG
 DJANGO_ALLOWED_HOSTS
 DJANGO_CSRF_TRUSTED_ORIGINS
+DJANGO_TRUST_X_FORWARDED_PROTO
 DB_HOST
 DB_NAME
 DB_USER
 DB_PASSWORD
 DB_PORT
+DB_SSLMODE
+DB_SSLROOTCERT
 REDIS_HOST
 REDIS_PORT
 REDIS_USERNAME
@@ -143,13 +146,18 @@ antes de alterar DDL ou funções PostgreSQL.
 
 ## Execução em desenvolvimento
 
-O bootstrap recomendado valida o cache inicial e abre webhook e worker de
-atendimento em terminais separados. Quando `FUNIL_WORKER_ENABLED=True`, abre
-também um terceiro terminal para o worker do Funil:
+A aplicação não possui um processo central. Webhook, worker de atendimento e
+worker do Funil têm ciclos de vida independentes e se coordenam pelo PostgreSQL.
+Inicie cada processo em seu próprio terminal:
 
 ```powershell
-python main.py
+python callback/manage.py runserver
+python -m workers.worker_flow.iniciar_flow_worker
+python -m workers.worker_funil.iniciar_worker_funil
 ```
+
+O terceiro processo encerra imediatamente enquanto
+`FUNIL_WORKER_ENABLED=False`.
 
 Endpoint do webhook:
 

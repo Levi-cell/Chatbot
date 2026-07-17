@@ -26,6 +26,13 @@ SESSION_COOKIE_SECURE = env_bool("DJANGO_SESSION_COOKIE_SECURE", False)
 CSRF_COOKIE_SECURE = env_bool("DJANGO_CSRF_COOKIE_SECURE", False)
 SECURE_HSTS_SECONDS = env_int("DJANGO_SECURE_HSTS_SECONDS", 0)
 
+# Habilite somente quando um proxy confiavel sobrescrever X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = (
+    ("HTTP_X_FORWARDED_PROTO", "https")
+    if env_bool("DJANGO_TRUST_X_FORWARDED_PROTO", False)
+    else None
+)
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -97,6 +104,19 @@ LOGGING = {
 
 WSGI_APPLICATION = 'callback.wsgi.application'
 
+_database_options = {
+    "options": "-c search_path=chatbot",
+}
+
+_db_sslmode = env_optional("DB_SSLMODE")
+_db_sslrootcert = env_optional("DB_SSLROOTCERT")
+
+if _db_sslmode:
+    _database_options["sslmode"] = _db_sslmode
+
+if _db_sslrootcert:
+    _database_options["sslrootcert"] = _db_sslrootcert
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -105,9 +125,7 @@ DATABASES = {
         "PASSWORD": env_required("DB_PASSWORD"),
         "HOST": env_required("DB_HOST"),
         "PORT": env_int("DB_PORT", 5432),
-        "OPTIONS": {
-            "options": "-c search_path=chatbot"
-        }
+        "OPTIONS": _database_options,
     }
 }
 
@@ -135,3 +153,4 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"

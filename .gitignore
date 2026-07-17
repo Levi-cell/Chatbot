@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 codex_patch/
 dev_cache_inicial.py
+callback/staticfiles/
 
 .env
 .env.*

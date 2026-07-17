@@ -43,4 +43,5 @@ def iniciar_worker_funil():
             time.sleep(5)
 
 
-
+if __name__ == "__main__":
+    iniciar_worker_funil()
