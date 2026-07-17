@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from django.test import override_settings
@@ -118,6 +118,21 @@ class WebhookStatusesTests(unittest.TestCase):
 
 
 class BarreiraCronologicaTests(unittest.TestCase):
+    def test_timestamp_meta_preserva_instante_utc_com_fuso_explicito(self):
+        timestamp_meta = "1760000000"
+
+        dados = fila.extrair_dados_whatsapp(
+            payload_texto_meta(timestamp=timestamp_meta)
+        )
+
+        esperado = datetime.fromtimestamp(
+            int(timestamp_meta),
+            tz=timezone.utc,
+        )
+        self.assertEqual(dados["received_data_hora"], esperado)
+        self.assertEqual(dados["next_attempt_at"], esperado)
+        self.assertIs(dados["received_data_hora"].tzinfo, timezone.utc)
+
     def test_mensagem_unica_reentregue_sem_interacao_posterior_e_aceita(self):
         recebida_em = datetime(2026, 6, 26, 18, 22, 11)
 

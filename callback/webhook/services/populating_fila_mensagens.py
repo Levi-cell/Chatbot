@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.logging_config import short_value
 from core.repositories.seguranca.turno_cliente import (
@@ -126,7 +126,13 @@ def extrair_dados_whatsapp(data):
         tipo = message.get("type")
         conteudo_texto = extrair_conteudo_texto_mensagem(message, tipo)
 
-        received_data_hora = datetime.fromtimestamp(int(timestamp))
+        # O timestamp da Meta representa um instante Unix em UTC. Mantemos o
+        # fuso explícito para o PostgreSQL não reinterpretar um datetime
+        # ingênuo conforme o timezone configurado na role da aplicação.
+        received_data_hora = datetime.fromtimestamp(
+            int(timestamp),
+            tz=timezone.utc,
+        )
 
         if not all([
             cliente_telefone,

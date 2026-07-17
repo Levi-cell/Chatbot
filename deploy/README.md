@@ -25,7 +25,10 @@ sudo chmod 0640 /etc/chatbot/chatbot.env
 ```
 
 Defina `FUNIL_WORKER_ENABLED=True`, configure RDS com TLS e Redis local em
-`127.0.0.1`, e prepare o Django:
+`127.0.0.1`, e mantenha `PGSSLCERTMODE=disable` quando o RDS autenticar por
+usuario/senha. Essa opcao desativa apenas o certificado TLS de cliente; use
+`DB_SSLMODE=verify-full` e `DB_SSLROOTCERT` para continuar validando o
+certificado do servidor. Depois, prepare o Django:
 
 ```bash
 /opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py check --deploy
