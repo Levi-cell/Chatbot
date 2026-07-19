@@ -1,5 +1,12 @@
 # Plano de implementação: Embedded Signup da Meta
 
+> **DOCUMENTO SUPERADO — NÃO IMPLEMENTAR COMO ESTÁ.** Este plano antigo assume
+> um único token do usuário de sistema `ed` para todas as WABAs e não contém as
+> proteções multi-WABA atualmente exigidas. A especificação vigente está em
+> [`../deploy_v1.0.0/01_onboarding_meta_assistido.md`](../deploy_v1.0.0/01_onboarding_meta_assistido.md)
+> e
+> [`../deploy_v1.0.0/02_plano_tecnico_multi_waba.md`](../deploy_v1.0.0/02_plano_tecnico_multi_waba.md).
+
 ## Estado deste documento
 
 Este plano **não está aplicado**.

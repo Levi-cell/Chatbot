@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from tests.helpers import FakeConn, FakeCursor
 from workers.worker_flow.response_flow import flow_worker
+from workers.worker_flow.suporte import estado_ciclo
 
 
 class PararWorker(BaseException):
@@ -77,6 +78,12 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
+    def test_fila_vazia_aguarda_tres_segundos(self):
+        with patch.object(estado_ciclo.time, "sleep") as sleep:
+            estado_ciclo.aguardar_fila_vazia()
+
+        sleep.assert_called_once_with(3)
+
     def test_erro_operacional_psycopg3_reinicia_conexao(self):
         erro = flow_worker.psycopg.OperationalError("conexao indisponivel")
 

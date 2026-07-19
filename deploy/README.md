@@ -78,3 +78,33 @@ Somente depois de o HTTPS funcionar, ative no ambiente
 `DJANGO_SESSION_COOKIE_SECURE=True` e `DJANGO_CSRF_COOKIE_SECURE=True`, e
 reinicie o webhook. O Nginx sobrescreve `X-Forwarded-Proto`; o Django nao confia
 em um valor enviado diretamente pelo cliente.
+
+## Atualizacao rotineira da branch prod
+
+O procedimento canonico esta em
+[`regras_deploy/rotina_deploy.md`](../regras_deploy/rotina_deploy.md).
+
+Na atualizacao comum, somente `chatbot-worker-flow` e
+`chatbot-worker-funil` sao parados. O webhook continua recebendo e enfileirando,
+mas precisa receber `HUP` depois do `git pull`: o Gunicorn de producao nao possui
+auto-reload. Alteracao de `.env` ou da unit do webhook exige `restart` e segue
+[`modificando_env_e_banco_em_prod.md`](../regras_deploy/modificando_env_e_banco_em_prod.md).
+
+## Limpeza operacional unica do Redis
+
+Depois de apagar clientes e conversas do RDS, pare os processos que acessam
+esses dados, limpe apenas o cache operacional e torne a iniciar os servicos.
+Essa e uma manutencao destrutiva excepcional, nao a rotina comum de deploy:
+
+```bash
+sudo systemctl stop chatbot-webhook chatbot-worker-flow chatbot-worker-funil
+
+cd /opt/chatbot/app
+sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
+  /opt/chatbot/venv/bin/python -m core.cache.cache_reset --operacional
+
+sudo systemctl start chatbot-webhook chatbot-worker-flow chatbot-worker-funil
+systemctl is-active chatbot-webhook chatbot-worker-flow chatbot-worker-funil
+```
+
+Nao exponha a porta `6379` e nao use `FLUSHDB` ou `FLUSHALL` em producao.

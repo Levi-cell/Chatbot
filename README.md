@@ -21,6 +21,8 @@ Para desenvolver novas etapas, siga a
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
 | [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
+| [Rotina de deploy](regras_deploy/rotina_deploy.md) | Publicação da `prod`, atualização da Lightsail e ciclo dos serviços. |
+| [Ambiente e banco em produção](regras_deploy/modificando_env_e_banco_em_prod.md) | Troca segura do `.env` e evolução controlada do schema no RDS. |
 | [Evolução para a V2](_V2/desafios_v2.md) | Escala, múltiplos workers e desafios técnicos futuros. |
 
 ## Documentação técnica

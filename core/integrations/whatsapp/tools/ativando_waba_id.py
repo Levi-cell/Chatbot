@@ -13,6 +13,19 @@ logger = logging.getLogger("whatsapp.waba")
 
 
 def ativar_waba_id(waba_id):
+    """Assina o App atual aos webhooks de uma WABA autorizada.
+
+    A URL pública e o verify token do webhook continuam configurados uma única
+    vez no App Meta. Esta chamada será usada no onboarding multi-WABA para
+    assinar o mesmo App em cada nova WABA de cliente; ela não cria outro App,
+    não cadastra outro endpoint e não precisa ser repetida por número.
+
+    A implementação futura também deverá receber/resolver o business token da
+    autorização proprietária da WABA, em vez de usar a credencial global.
+    """
+    # TODO(multi-WABA): receber ou resolver a credencial da autorização que
+    # contém esta WABA; nunca reutilizar silenciosamente o token global para
+    # ativos pertencentes a clientes terceiros.
     url = f"https://graph.facebook.com/v25.0/{waba_id}/subscribed_apps"
 
     headers = {
@@ -48,4 +61,3 @@ def _imprimir_resultado(status, resposta):
 #     setup_logging()
 #     status_http, resposta_meta = ativar_waba_id(get_waba_id())
 #     _imprimir_resultado(status_http, resposta_meta)
-

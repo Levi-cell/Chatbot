@@ -91,8 +91,26 @@ ao processo, limitada e não substitui Redis em ambiente com múltiplas instânc
 `cache_reset.py` limpa chaves conhecidas e recria o cache de unidades. É uma
 operação consciente de desenvolvimento/deploy e não pertence ao runtime comum.
 
+## Reset operacional de produção
+
+Quando clientes e conversas forem removidos do banco, execute o modo
+`--operacional` uma única vez na mesma máquina do Redis:
+
+```bash
+cd /opt/chatbot/app
+sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
+  /opt/chatbot/venv/bin/python -m core.cache.cache_reset --operacional
+```
+
+Esse modo remove somente os prefixos `cliente_cache:`,
+`conversa_bloqueada:` e `webhook_flood_rate:`. O mapa de unidades, suas chaves
+de versão e outras configurações do Redis permanecem intactos. O comando falha
+com código diferente de zero se o Redis estiver indisponível e pode ser
+repetido com segurança.
+
 ## Testes relacionados
 
 - `tests/unit/test_cache_essencial.py`;
+- `tests/unit/test_cache_reset_operacional.py`;
 - `tests/unit/test_flood_guard.py`;
 - `tests/unit/test_retry_essencial.py`.

@@ -1,4 +1,6 @@
+import argparse
 import logging
+import sys
 
 from core.cache.runtime.cache_flood_redis import RATE_PREFIX
 from core.cache.runtime.cache_cliente import REDIS_PREFIX as CLIENTE_PREFIX
@@ -22,11 +24,46 @@ CHAVES_EXATAS_RESET = (
     CACHE_TEMP_KEY,
 )
 
-PADROES_RESET = (
+PADROES_OPERACIONAIS_RESET = (
     f"{CLIENTE_PREFIX}*",
     f"{CONVERSA_BLOQUEADA_PREFIX}:*",
     f"{RATE_PREFIX}:*",
 )
+
+# Compatibilidade com o reset completo de desenvolvimento.
+PADROES_RESET = PADROES_OPERACIONAIS_RESET
+
+
+def resetar_cache_operacional(redis_client=None):
+    """
+    Remove apenas estado operacional ligado a clientes e conversas.
+
+    O cache de unidades e suas chaves de versao permanecem intactos. A funcao
+    aceita um client apenas para facilitar testes; em producao usa a conexao
+    configurada no ambiente da aplicacao.
+    """
+
+    r = (
+        redis_client
+        if redis_client is not None
+        else get_redis_safe(retries=1, delay=0)
+    )
+    removidas_por_padrao = {}
+
+    for padrao in PADROES_OPERACIONAIS_RESET:
+        removidas_por_padrao[padrao] = _remover_por_padrao(r, padrao)
+
+    total_removido = sum(removidas_por_padrao.values())
+    logger.warning(
+        "cache_operacional_resetado | acao=limpar_clientes_conversas_flood "
+        "total=%s por_padrao=%s",
+        total_removido,
+        removidas_por_padrao,
+    )
+    return {
+        "chaves_por_padrao": removidas_por_padrao,
+        "total_removido": total_removido,
+    }
 
 
 def resetar_cache_redis_dev():
@@ -88,3 +125,42 @@ def _remover_por_padrao(redis_client, padrao):
         total_removido += int(redis_client.delete(*lote))
 
     return total_removido
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Utilitarios controlados de manutencao do cache Redis.",
+    )
+    parser.add_argument(
+        "--operacional",
+        action="store_true",
+        help=(
+            "remove somente cache de clientes, bloqueios de conversa e "
+            "contadores de flood"
+        ),
+    )
+    args = parser.parse_args(argv)
+
+    if not args.operacional:
+        parser.error("informe explicitamente --operacional")
+
+    try:
+        resultado = resetar_cache_operacional()
+    except Exception as exc:
+        logger.exception(
+            "cache_operacional_reset_falhou | acao=abortar erro=%s",
+            exc,
+        )
+        print(f"RESET_CACHE_OPERACIONAL_FALHOU: {exc}", file=sys.stderr)
+        return 1
+
+    print(
+        "RESET_CACHE_OPERACIONAL_OK "
+        f"total_removido={resultado['total_removido']} "
+        f"por_padrao={resultado['chaves_por_padrao']}"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
