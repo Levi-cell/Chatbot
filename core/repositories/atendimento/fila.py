@@ -15,20 +15,19 @@ def pegar_mensagens_da_fila(cursor):
     return registro
 
 
-def existe_mensagem_anterior_aberta_conversa(
-    id_conversa,
+def existe_mensagem_anterior_aberta_atendimento(
+    cliente_telefone,
+    id_phone_unidade,
     id_mensagem_atual,
     received_data_hora,
     cursor,
 ):
-    if id_conversa is None:
-        return False
-
     cursor.execute("""
         SELECT EXISTS (
             SELECT 1
             FROM chatbot.fila_mensagens
-            WHERE id_conversa = %s
+            WHERE cliente_telefone = %s
+              AND id_phone_unidade = %s
               AND id_mensagem <> %s
               AND status IN ('pending', 'processing')
               AND (
@@ -41,7 +40,8 @@ def existe_mensagem_anterior_aberta_conversa(
             LIMIT 1
         );
     """, (
-        id_conversa,
+        cliente_telefone,
+        id_phone_unidade,
         id_mensagem_atual,
         received_data_hora,
         received_data_hora,
@@ -50,8 +50,10 @@ def existe_mensagem_anterior_aberta_conversa(
 
     resultado = bool(cursor.fetchone()[0])
     logger.debug(
-        "fila_ordem_consultada | acao=verificar_anterior id_conversa=%s id_mensagem=%s existe_anterior=%s",
-        id_conversa,
+        "fila_ordem_consultada | acao=verificar_anterior "
+        "cliente=%s phone_number_id=%s id_mensagem=%s existe_anterior=%s",
+        cliente_telefone,
+        id_phone_unidade,
         id_mensagem_atual,
         resultado,
     )
@@ -82,18 +84,50 @@ def vincular_mensagem_fila_a_conversa(
         UPDATE chatbot.fila_mensagens
         SET id_conversa = %s
         WHERE id_mensagem = %s
+          AND status = 'processing'
           AND (
               id_conversa IS NULL
               OR id_conversa = %s
           );
     """, (id_conversa, id_mensagem, id_conversa))
+
+    linhas = cursor.rowcount
+    vinculo_reparado = False
+
+    if linhas == 0:
+        cursor.execute("""
+            UPDATE chatbot.fila_mensagens AS fila
+            SET id_conversa = %s
+            WHERE fila.id_mensagem = %s
+              AND fila.status = 'processing'
+              AND fila.id_conversa IS DISTINCT FROM %s
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM chatbot.historico_mensagens AS historico
+                  WHERE historico.id_mensagem_fila = fila.id_mensagem
+              );
+        """, (id_conversa, id_mensagem, id_conversa))
+        linhas = cursor.rowcount
+        vinculo_reparado = linhas == 1
+
+        if vinculo_reparado:
+            logger.warning(
+                "fila_vinculo_reparado | "
+                "motivo=vinculo_legado_sem_historico "
+                "id_mensagem=%s id_conversa=%s",
+                id_mensagem,
+                id_conversa,
+            )
+
     logger.debug(
-        "fila_update | acao=vincular_conversa id_mensagem=%s id_conversa=%s linhas=%s",
+        "fila_update | acao=vincular_conversa id_mensagem=%s "
+        "id_conversa=%s linhas=%s vinculo_reparado=%s",
         id_mensagem,
         id_conversa,
-        cursor.rowcount,
+        linhas,
+        vinculo_reparado,
     )
-    return cursor.rowcount
+    return linhas
 
 
 def reagendar_mensagem_sem_erro(

@@ -8,6 +8,7 @@ from core.logging_config import short_value
 from core.repositories.atendimento.conversas import tentar_lock_conversa
 from core.repositories.atendimento.fila import (
     pegar_mensagens_da_fila,
+    reagendar_mensagem_sem_erro,
     vincular_mensagem_fila_a_conversa,
 )
 from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
@@ -92,6 +93,13 @@ def worker_flow():
                 mensagem["retry_count"],
             )
 
+            if reagendar_se_houver_mensagem_anterior(
+                mensagem,
+                cursor_ciclo,
+            ):
+                conn_ciclo.commit()
+                continue
+
             contexto_banco = validar_banco_mensagem(
                 mensagem,
                 cursor_ciclo,
@@ -101,37 +109,9 @@ def worker_flow():
             contexto_conversa = contexto_banco["conversa"]
             id_conversa = contexto_conversa["id_conversa"]
 
-            linhas_vinculadas = vincular_mensagem_fila_a_conversa(
-                mensagem["id_mensagem"],
-                id_conversa,
-                cursor_ciclo,
-            )
-
-            # Esta escrita nao participa do lock de turno nem decide qual
-            # conversa sera processada. O WHERE do repositorio apenas evita
-            # sobrescrever silenciosamente um vinculo diferente ja
-            # persistido. Um rowcount zero pode ocorrer legitimamente quando
-            # uma mensagem aguardava outra anterior e, no retry, a conversa
-            # anterior ja foi encerrada sem bloqueio ativo. Nesse caso o
-            # contexto recalculado deve continuar ate as barreiras de ordem e
-            # idempotencia (`resposta_bot_para_mensagem_atual`), sem virar
-            # erro generico.
-            if linhas_vinculadas == 0:
-                logger.warning(
-                    "mensagem_conversa_vinculo_preservado | "
-                    "motivo=vinculo_preexistente_divergente "
-                    "acao=continuar_contexto_recalculado "
-                    "id_mensagem=%s cliente=%s phone_number_id=%s "
-                    "id_conversa_calculada=%s",
-                    mensagem["id_mensagem"],
-                    short_value(mensagem["cliente_telefone"]),
-                    short_value(mensagem["id_phone_unidade"]),
-                    id_conversa,
-                )
-
             conn_ciclo.commit()
             logger.debug(
-                "mensagem_conversa_vinculada | acao=commit id_mensagem=%s id_conversa=%s estado=%s",
+                "contexto_banco_confirmado | acao=commit id_mensagem=%s id_conversa_calculada=%s estado=%s",
                 mensagem["id_mensagem"],
                 id_conversa,
                 contexto_conversa["estado"],
@@ -156,14 +136,37 @@ def worker_flow():
 
             if not lock_ok:
                 logar_lock_recusado(mensagem, contexto_banco)
+                reagendar_mensagem_sem_erro(
+                    mensagem["id_mensagem"],
+                    cursor_ciclo,
+                    delay_seconds=5,
+                )
+                conn_ciclo.commit()
                 continue
 
-            if reagendar_se_houver_mensagem_anterior(
-                    mensagem,
-                    contexto_banco,
-                    lock_version,
+            linhas_vinculadas = vincular_mensagem_fila_a_conversa(
+                mensagem["id_mensagem"],
+                id_conversa,
+                cursor_ciclo,
+            )
+
+            if linhas_vinculadas == 0:
+                logger.critical(
+                    "mensagem_conversa_vinculo_inconsistente | "
+                    "motivo=historico_conflitante_ou_fila_ausente "
+                    "acao=reagendar_sem_consumir_retry id_mensagem=%s "
+                    "cliente=%s phone_number_id=%s "
+                    "id_conversa_calculada=%s",
+                    mensagem["id_mensagem"],
+                    short_value(mensagem["cliente_telefone"]),
+                    short_value(mensagem["id_phone_unidade"]),
+                    id_conversa,
+                )
+                reagendar_mensagem_sem_erro(
+                    mensagem["id_mensagem"],
                     cursor_ciclo,
-            ):
+                    delay_seconds=300,
+                )
                 conn_ciclo.commit()
                 continue
 

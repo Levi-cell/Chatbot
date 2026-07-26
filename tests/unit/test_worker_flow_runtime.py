@@ -183,7 +183,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         stack.enter_context(patch.object(
             flow_worker,
             "reagendar_se_houver_mensagem_anterior",
-            return_value=False,
+            side_effect=lambda *_args: eventos.append("verificar_ordem") or False,
         ))
         stack.enter_context(patch.object(
             flow_worker,
@@ -204,6 +204,50 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             flow_worker,
             "handle_erro_generico",
         ))
+
+    def test_mensagem_anterior_reagenda_antes_de_validar_banco(self):
+        conn = FakeConn(FakeCursor())
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("builtins.print"))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=registro_fila(),
+            ))
+            barreira = stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_se_houver_mensagem_anterior",
+                return_value=True,
+            ))
+            validar = stack.enter_context(patch.object(
+                flow_worker,
+                "validar_banco_mensagem",
+            ))
+            lock = stack.enter_context(patch.object(
+                flow_worker,
+                "tentar_lock_conversa",
+            ))
+            vincular = stack.enter_context(patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        barreira.assert_called_once()
+        validar.assert_not_called()
+        lock.assert_not_called()
+        vincular.assert_not_called()
+        self.assertEqual(conn.commits, 2)
+        self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
 
     def test_ciclo_normal_persiste_resposta_antes_de_marcar_sent(self):
         conn = FakeConn(FakeCursor())
@@ -231,9 +275,10 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(
             eventos,
             [
+                "verificar_ordem",
                 "validar_banco",
-                "vincular_conversa",
                 "adquirir_lock",
+                "vincular_conversa",
                 "persistir_cliente",
                 "enviar_meta",
                 "persistir_bot",
@@ -246,7 +291,108 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
         self.assertTrue(conn.closed)
 
-    def test_vinculo_divergente_nao_bloqueia_recuperacao_do_turno(self):
+    def test_checkpoint_cache_e_atomicidade_vinculo_historico(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+        commits_observados = {}
+
+        def confirmar_cache(*_args):
+            commits_observados["cache"] = conn.commits
+            return False
+
+        def vincular_conversa(*_args):
+            commits_observados["vinculo"] = conn.commits
+            return 1
+
+        def persistir_historico(*_args):
+            commits_observados["historico"] = conn.commits
+            return contexto_historico()
+
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            stack.enter_context(patch.object(
+                flow_worker,
+                "confirmar_cache_cliente_se_pendente",
+                side_effect=confirmar_cache,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+                side_effect=vincular_conversa,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "valida_historico",
+                side_effect=persistir_historico,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "atualizar_banco_com_contexto_final",
+                return_value=contexto_final(),
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "finalizar_mensagem_processada",
+                return_value={"atendimento_encerrado": False},
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        self.assertEqual(commits_observados["cache"], 2)
+        self.assertEqual(commits_observados["vinculo"], 3)
+        self.assertEqual(commits_observados["historico"], 3)
+
+    def test_lock_recusado_reagenda_sem_consumir_retry(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            stack.enter_context(patch.object(
+                flow_worker,
+                "tentar_lock_conversa",
+                return_value=(False, None),
+            ))
+            reagendar = stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_mensagem_sem_erro",
+                return_value=1,
+            ))
+            vincular = stack.enter_context(patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+            ))
+            historico = stack.enter_context(patch.object(
+                flow_worker,
+                "valida_historico",
+            ))
+            enviar = stack.enter_context(patch.object(
+                flow_worker,
+                "flow_sender",
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "liberar_lock_conversa_se_necessario",
+                return_value=None,
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        reagendar.assert_called_once_with(
+            7,
+            conn.cursor_obj,
+            delay_seconds=5,
+        )
+        vincular.assert_not_called()
+        historico.assert_not_called()
+        enviar.assert_not_called()
+        self.assertEqual(conn.commits, 4)
+        self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
+
+    def test_vinculo_inconsistente_reagenda_sem_enviar(self):
         conn = FakeConn(FakeCursor())
         eventos = []
 
@@ -261,46 +407,43 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
                 flow_worker,
                 "handle_erro_generico",
             ))
+            reagendar = stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_mensagem_sem_erro",
+                return_value=1,
+            ))
             aviso = stack.enter_context(patch.object(
                 flow_worker.logger,
-                "warning",
+                "critical",
             ))
-            stack.enter_context(patch.object(
+            persistir_bot = stack.enter_context(patch.object(
                 flow_worker,
                 "atualizar_banco_com_contexto_final",
-                side_effect=lambda *_args: (
-                    eventos.append("persistir_bot")
-                    or contexto_final()
-                ),
             ))
-            stack.enter_context(patch.object(
+            finalizar = stack.enter_context(patch.object(
                 flow_worker,
                 "finalizar_mensagem_processada",
-                side_effect=lambda *_args: (
-                    eventos.append("marcar_sent")
-                    or {"atendimento_encerrado": False}
-                ),
             ))
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
 
         tratar_erro.assert_not_called()
+        persistir_bot.assert_not_called()
+        finalizar.assert_not_called()
+        reagendar.assert_called_once_with(7, conn.cursor_obj, delay_seconds=300)
         self.assertEqual(
             eventos,
             [
+                "verificar_ordem",
                 "validar_banco",
                 "adquirir_lock",
-                "persistir_cliente",
-                "enviar_meta",
-                "persistir_bot",
-                "marcar_sent",
                 "liberar_lock",
             ],
         )
         aviso.assert_called_once()
         self.assertIn(
-            "motivo=vinculo_preexistente_divergente",
+            "motivo=historico_conflitante_ou_fila_ausente",
             aviso.call_args.args[0],
         )
         self.assertEqual(conn.rollbacks, 0)

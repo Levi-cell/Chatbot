@@ -14,12 +14,21 @@ Cenario raro:
 3. Cliente pode receber a mensagem.
 4. Banco falha antes de salvar historico do bot.
 5. Fila nao vira sent.
-6. No retry, o banco nao encontra resposta do bot vinculada.
-7. Worker pode enviar a mesma resposta novamente.
+6. Enquanto a fila permanecer pending/processing sem resposta do bot
+   persistida, o webhook ignora e nao enfileira novas mensagens daquele cliente
+   para aquela unidade.
+7. Depois do timeout/retry, o banco ainda nao encontra resposta do bot
+   vinculada.
+8. Worker pode enviar a mesma resposta novamente.
+9. Somente depois de persistir a resposta e concluir a fila o turno volta a ser
+   liberado.
+10. Uma mensagem posterior ignorada nessa janela nao volta automaticamente; o
+    cliente precisa responder novamente.
 ```
 
-Esse cenario nao perde a mensagem valida do cliente, mas pode gerar duplicidade
-rara de resposta.
+A mensagem original permanece recuperavel pelo retry, mas esse cenario pode
+gerar resposta duplicada e descartar uma mensagem posterior recebida durante a
+janela de inconsistencia.
 
 ## Por que nao e urgente na V1
 
@@ -217,6 +226,143 @@ Isso e importante: o worker nao pergunta para a Meta no retry. O worker pergunta
 para o proprio sistema, que deve ter salvo anteriormente o POST de status enviado
 pela Meta.
 
+## Proposta consolidada: reparo proativo pelo webhook de status
+
+A responsabilidade pode ficar bem definida no webhook, desde que seja o ramo que
+processa `value.statuses`, e nao apenas o ramo que recebe a proxima mensagem do
+cliente.
+
+Distincao importante:
+
+```text
+biz_opaque_callback_data volta de forma confiavel em value.statuses.
+Ele nao deve ser considerado um campo garantido em value.messages quando o
+cliente envia a proxima mensagem.
+```
+
+Portanto, o reparo nao precisa esperar o cliente responder. Assim que a Meta
+enviar um status `sent`, `delivered` ou `read`, o webhook pode reconhecer a
+tentativa e reparar o estado que o worker nao conseguiu confirmar.
+
+### Pre-condicao: registrar a intencao antes do envio
+
+O tracker precisa apontar para uma ordem de envio criada e confirmada no banco
+antes da chamada para a Meta.
+
+Fluxo recomendado:
+
+```text
+1. Worker cria tentativa_envio_bot com um identificador unico.
+2. Banco confirma essa intencao antes da chamada para a Meta.
+3. Worker envia a mensagem usando esse identificador como tracker.
+4. Meta aceita a mensagem e devolve o wamid.
+5. Meta envia value.statuses com:
+   - statuses[].id = wamid da mensagem do bot;
+   - statuses[].biz_opaque_callback_data = tracker.
+6. Webhook valida a assinatura Meta e localiza a intencao registrada.
+```
+
+O valor enviado para a Meta pode ser pequeno e opaco:
+
+```text
+v1:<uuid_da_tentativa>
+```
+
+Os dados de negocio ficam na tabela local associada ao UUID:
+
+```text
+id_mensagem_fila
+id_conversa
+id_hash_cliente_origem
+id_etapa_origem
+id_etapa_resultante
+evento_transicao
+resumo ou hash da resposta
+phone_number_id
+cliente_telefone
+```
+
+Isso e mais seguro e mais facil de versionar do que colocar todo o estado da
+conversa dentro do tracker.
+
+### Reparo atomico executado pelo webhook
+
+Ao receber um status positivo com tracker valido:
+
+```text
+1. Persistir o evento de status de forma idempotente.
+2. Bloquear a tentativa/fila correspondente para atualizacao.
+3. Verificar se a resposta do bot ja existe no historico.
+4. Se ja existir:
+   - apenas confirmar a tentativa/status;
+   - nao repetir efeitos.
+5. Se nao existir e a fila estiver pending ou processing:
+   - registrar a resposta do bot usando o wamid de statuses[].id;
+   - aplicar a transicao e os efeitos pendentes de forma idempotente;
+   - atualizar etapa e last_message_from da conversa;
+   - marcar a fila como sent;
+   - marcar a tentativa como reparada.
+6. Confirmar tudo em uma unica transacao.
+```
+
+O webhook saudavel e o worker saudavel podem disputar esse reparo. Por isso, a
+operacao precisa usar restricoes unicas, bloqueio de linha e os mesmos metodos
+idempotentes de persistencia. Quem confirmar primeiro vence; o outro apenas
+reconhece que o estado ja foi concluido.
+
+### Nao apagar apenas a fila
+
+Apagar a linha `processing` ou somente muda-la para `sent` nao e suficiente.
+
+Se o sistema nao reparar tambem o historico, a etapa e os efeitos da transicao,
+a proxima mensagem do cliente pode continuar a partir de um contexto antigo.
+
+Assim, a regra futura deve ser:
+
+```text
+Status Meta confirmado + reparo completo = marcar fila como sent.
+Status Meta confirmado + reparo incompleto = repair_pending e alerta.
+Nunca apagar silenciosamente a evidencia da tentativa.
+```
+
+### Barreira adicional na entrada de nova mensagem
+
+O reparo pelo status deve normalmente acontecer antes da proxima resposta do
+cliente. Ainda assim, existe uma corrida possivel entre os dois webhooks.
+
+Antes de ignorar uma nova mensagem por
+`fila_aberta_sem_resposta_bot`, o webhook pode:
+
+```text
+1. localizar a tentativa da mensagem bloqueadora;
+2. verificar se ja existe status Meta positivo persistido;
+3. executar o mesmo reparo idempotente;
+4. reavaliar o turno;
+5. enfileirar a nova mensagem se a anterior tiver sido reparada.
+```
+
+Se o status ainda nao chegou, o comportamento conservador permanece: nao existe
+prova suficiente de que a Meta aceitou a resposta e a nova mensagem continua
+bloqueada.
+
+Um eventual `context.id` presente em uma resposta explicita do cliente pode ser
+usado como evidencia adicional, mas nao como mecanismo principal, pois mensagens
+comuns do cliente nao sao obrigadas a responder/citar a mensagem anterior.
+
+### Cenarios obrigatorios de teste
+
+```text
+- status chega antes da persistencia normal do worker;
+- status chega depois da persistencia normal do worker;
+- o mesmo status e entregue mais de uma vez;
+- tracker invalido, desconhecido ou de outra unidade;
+- status failed nao conclui a fila como resposta enviada;
+- webhook de status e worker tentam concluir a mesma fila ao mesmo tempo;
+- nova mensagem do cliente chega durante o reparo;
+- reparo parcial vira repair_pending e nao libera o turno;
+- reparo completo libera o turno sem reenviar pela Meta.
+```
+
 ## Estrategia recomendada para V2
 
 Criar uma estrutura local para rastrear envios do bot.
@@ -394,7 +540,11 @@ Para a V2:
 
 ```text
 Implementar tracker como parte do desenho de envio/resposta/status.
-Usar tracker em conjunto com tabela de status Meta e reparo idempotente.
+Registrar uma intencao duravel antes de chamar a Meta.
+Usar tracker em conjunto com tabela de status Meta.
+Executar reparo idempotente e proativo no webhook de value.statuses.
+Usar a verificacao do worker no retry como segunda barreira.
+Reavaliar o turno no webhook antes de ignorar uma nova mensagem.
 Tratar tracker como obrigatorio em todo envio do bot.
 Assinar o campo messages na Meta para receber value.statuses.
 ```

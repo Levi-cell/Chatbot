@@ -1,10 +1,13 @@
 # ENTRADA NA ETAPA 5 - CLIENTE
 
 MENSAGEM_OFERTA_CLIENTE_ETAPA5 = (
-    "Que maravilha, {nome}! 🥰\n\n"
-    "Gostaria de te oferecer uma aula experimental + avaliação cognitiva "
-    "*gratuita*. Elas servem para que possamos saber como anda a saúde do "
-    "seu cérebro e para que você possa nos conhecer. 😄\n\n"
+    "Que notícia Maravilhosa! 😍\n\n"
+    "Quero te presentear com uma experiência que pode fazer toda a diferença "
+    "no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
+    "uma avaliação que vai mostrar como estão habilidades importantes para o "
+    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
+    "\n\n"
     "Vamos agendar?"
 )
 
@@ -16,10 +19,13 @@ def montar_mensagem_oferta_cliente_etapa5(nome):
 # ENTRADA NA ETAPA 5 - DEPENDENTE
 
 MENSAGEM_OFERTA_DEPENDENTE_ETAPA5 = (
-    "Que maravilha! 🥰\n\n"
-    "Gostaria de oferecer uma aula experimental + avaliação cognitiva "
-    "*gratuita* para {nome}. Elas servem para que possamos saber como anda "
-    "a saúde do cérebro de {nome} e para que vocês possam nos conhecer. 😄\n\n"
+    "Que notícia Maravilhosa! 😍\n\n"
+    "Quero presentear {nome} com uma experiência que pode fazer toda a "
+    "diferença no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
+    "fará uma avaliação que vai mostrar como estão habilidades importantes "
+    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
+    "lógico.\n\n"
     "Vamos agendar?"
 )
 
@@ -32,9 +38,12 @@ def montar_mensagem_oferta_dependente_etapa5(nome):
 
 MENSAGEM_OFERTA_CLIENTE_MIDIA_ETAPA5 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero te oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita*. Elas servem para que possamos saber como anda a "
-    "saúde do seu cérebro e para que você possa nos conhecer. 😄\n\n"
+    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
+    "uma avaliação que vai mostrar como estão habilidades importantes para o "
+    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
+    "\n\n"
     "Vamos agendar?"
 )
 
@@ -47,10 +56,12 @@ def montar_mensagem_oferta_cliente_midia_etapa5():
 
 MENSAGEM_OFERTA_DEPENDENTE_MIDIA_ETAPA5 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita* para {nome}. Elas servem para que possamos saber "
-    "como anda a saúde do cérebro de {nome} e para que vocês possam nos "
-    "conhecer. 😄\n\n"
+    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "diferença no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
+    "fará uma avaliação que vai mostrar como estão habilidades importantes "
+    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
+    "lógico.\n\n"
     "Vamos agendar?"
 )
 
@@ -64,9 +75,12 @@ def montar_mensagem_oferta_dependente_midia_etapa5(nome):
 MENSAGEM_OFERTA_CLIENTE_FINANCEIRO_ETAPA5 = (
     "Olha, demais informações, como valores, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero te oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita*. Elas servem para que possamos saber como anda a "
-    "saúde do seu cérebro e para que você possa nos conhecer. 😄\n\n"
+    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
+    "uma avaliação que vai mostrar como estão habilidades importantes para o "
+    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
+    "\n\n"
     "Vamos agendar?"
 )
 
@@ -80,10 +94,12 @@ def montar_mensagem_oferta_cliente_financeiro_etapa5():
 MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA5 = (
     "Olha, demais informações, como valores, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita* para {nome}. Elas servem para que possamos saber "
-    "como anda a saúde do cérebro de {nome} e para que vocês possam nos "
-    "conhecer. 😄\n\n"
+    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "diferença no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
+    "fará uma avaliação que vai mostrar como estão habilidades importantes "
+    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
+    "lógico.\n\n"
     "Vamos agendar?"
 )
 
@@ -96,9 +112,12 @@ def montar_mensagem_oferta_dependente_financeiro_etapa5(nome):
 
 MENSAGEM_OFERTA_CLIENTE_CONTEXTO_INVALIDO_ETAPA5 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero te oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita*. Elas servem para que possamos saber como anda a "
-    "saúde do seu cérebro e para que você possa nos conhecer. 😄\n\n"
+    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
+    "uma avaliação que vai mostrar como estão habilidades importantes para o "
+    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
+    "\n\n"
     "Vamos agendar?"
 )
 
@@ -111,10 +130,12 @@ def montar_mensagem_oferta_cliente_contexto_invalido_etapa5():
 
 MENSAGEM_OFERTA_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA5 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero oferecer uma aula experimental + avaliação "
-    "cognitiva *gratuita* para {nome}. Elas servem para que possamos saber "
-    "como anda a saúde do cérebro de {nome} e para que vocês possam nos "
-    "conhecer. 😄\n\n"
+    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "diferença no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
+    "fará uma avaliação que vai mostrar como estão habilidades importantes "
+    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
+    "lógico.\n\n"
     "Vamos agendar?"
 )
 

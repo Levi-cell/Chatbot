@@ -70,10 +70,18 @@ class EstadoTurnoABC:
     def adquirir_lock_turno(self, *_args):
         self.locks_turno += 1
 
-    def existe_anterior(self, id_conversa, id_mensagem, recebida_em, _cursor):
+    def existe_anterior(
+        self,
+        cliente_telefone,
+        id_phone_unidade,
+        id_mensagem,
+        recebida_em,
+        _cursor,
+    ):
+        assert cliente_telefone == CLIENTE
+        assert id_phone_unidade == PHONE_ID
         return any(
-            fila["id_conversa"] == id_conversa
-            and fila["id_mensagem"] != id_mensagem
+            fila["id_mensagem"] != id_mensagem
             and fila["status"] in {"pending", "processing"}
             and (
                 fila["received_data_hora"],
@@ -187,7 +195,7 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 ordem_turno,
-                "existe_mensagem_anterior_aberta_conversa",
+                "existe_mensagem_anterior_aberta_atendimento",
                 side_effect=estado.existe_anterior,
             ), patch.object(
                 ordem_turno,
@@ -196,8 +204,6 @@ class FluxoTurnoABCTests(unittest.TestCase):
             ):
                 b_reagendada = ordem_turno.reagendar_se_houver_mensagem_anterior(
                     mensagem_worker(estado, 2),
-                    contexto_banco(),
-                    lock_version=4,
                     cursor=object(),
                 )
 
@@ -244,14 +250,12 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
             with patch.object(
                 ordem_turno,
-                "existe_mensagem_anterior_aberta_conversa",
+                "existe_mensagem_anterior_aberta_atendimento",
                 side_effect=estado.existe_anterior,
             ):
                 b_ainda_tem_anterior = (
                     ordem_turno.reagendar_se_houver_mensagem_anterior(
                         mensagem_worker(estado, 2),
-                        contexto_banco(),
-                        lock_version=5,
                         cursor=object(),
                     )
                 )
