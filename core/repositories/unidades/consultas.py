@@ -30,6 +30,20 @@ def buscar_unidades_para_listagem_bloqueios(cursor):
     return cursor.fetchall()
 
 
+def buscar_unidades_para_reconciliacao_meta(cursor):
+    cursor.execute("""
+        SELECT id_unidade, nome, waba_id, phone_number_id
+        FROM chatbot.unidade
+        WHERE waba_id IS NOT NULL
+          AND waba_id <> ''
+          AND phone_number_id IS NOT NULL
+          AND phone_number_id <> ''
+        ORDER BY id_unidade;
+    """)
+
+    return cursor.fetchall()
+
+
 def buscar_id_unidade_por_phone_id(phone_number_id, cursor):
     cursor.execute("""
         SELECT id_unidade

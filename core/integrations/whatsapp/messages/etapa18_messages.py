@@ -3,7 +3,7 @@
 TEXTO_BOTAO_SEM_COMENTARIO_ETAPA18 = "Prefiro não comentar"
 
 MENSAGEM_ETAPA18 = (
-    "Você tem algum comentário ou sugestão para melhorar nosso atendimento? "
+    "Você tem algum comentário ou sugestão para melhorar nosso atendimento?\n"
     "Seu feedback é muito importante para nós! 😊"
 )
 

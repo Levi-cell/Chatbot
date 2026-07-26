@@ -2,8 +2,8 @@
 
 MENSAGEM_ETAPA19 = (
     "Perfeito! 🥰\n"
-    "Agora é só aguardar o dia da avaliação.No próximo dia útil, nossa equipe "
-    "entrará em contato.\n"
+    "Agora é só aguardar o dia da avaliação.\n"
+    "No próximo dia útil, nossa equipe entrará em contato.\n"
     "Até breve! 👋🏼😉"
 )
 

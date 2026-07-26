@@ -13,5 +13,10 @@ RODAPE_ETAPA6_ESPERA = "Estaremos te esperando!"
 RODAPE_OPCAO_UNICA = "Selecione apenas uma opção abaixo."
 
 
+def montar_texto_com_cabecalho(mensagem, cabecalho):
+    """Mantém o cabeçalho no corpo para padronizar sua exibição no WhatsApp."""
+    return f"*{cabecalho}*\n\n{mensagem}"
+
+
 def montar_texto_com_rodape(mensagem, rodape):
     return f"{mensagem}\n\n_{rodape}_"

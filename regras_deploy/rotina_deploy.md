@@ -96,7 +96,7 @@ git status -sb
 ```
 
 Antes do commit, confira a lista de arquivos preparada por
-`git diff --cached --name-status`. Nunca publique `.env`, `.env.prod`, tokens,
+`git diff --cached --name-status`. Nunca publique `.env`, tokens,
 senhas, certificados ou dumps do banco.
 
 O `-u` não é necessário no `git push`: a `prod` já acompanha `origin/prod`.
@@ -284,5 +284,10 @@ sudo journalctl -u chatbot-webhook.service -n 200 --no-pager
 sudo journalctl -u chatbot-worker-flow.service -n 200 --no-pager
 sudo journalctl -u chatbot-worker-funil.service -n 200 --no-pager
 sudo nginx -t
-redis-cli ping
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python -c "from core.cache.redis_client import get_redis; r=get_redis(); print(\"REDIS_PING=\", r.ping()); print(\"REDIS_DESTINO=\", r.connection_pool.connection_kwargs.get(\"host\"), r.connection_pool.connection_kwargs.get(\"port\"))"'
 ```
+
+O ultimo comando usa o Redis definido no ambiente da aplicacao. Nao use
+`redis-cli ping` sem host: ele consulta `127.0.0.1:6379` e nao valida o Redis
+remoto de producao. Consulte tambem
+[`servicos_e_redis_remoto.md`](servicos_e_redis_remoto.md).

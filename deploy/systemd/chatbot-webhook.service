@@ -1,8 +1,7 @@
 [Unit]
 Description=Chatbot - webhook Django via Gunicorn
 Wants=network-online.target
-Requires=redis-server.service
-After=network-online.target redis-server.service
+After=network-online.target
 
 [Service]
 Type=simple

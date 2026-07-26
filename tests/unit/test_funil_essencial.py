@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from core.integrations.funil.cliente import (
     enviar_oportunidade,
@@ -46,6 +46,55 @@ class _FakeSession:
 
 
 class FunilEssencialTests(unittest.TestCase):
+    def test_worker_registra_lote_e_aguarda_trinta_minutos(self):
+        resumo = {
+            "materializados": 2,
+            "processados": 2,
+            "enviados": 2,
+            "falhas": 0,
+        }
+
+        with (
+            patch.object(
+                executor_funil,
+                "executar_ciclo_funil",
+                side_effect=[resumo, KeyboardInterrupt],
+            ),
+            patch.object(executor_funil.time, "sleep") as sleep_mock,
+            patch("builtins.print") as print_mock,
+            patch.object(executor_funil.logger, "info") as log_info,
+        ):
+            with self.assertRaises(KeyboardInterrupt):
+                executor_funil.funil_worker()
+
+        self.assertEqual(executor_funil.FUNIL_INTERVALO_SEGUNDOS, 1800)
+        self.assertEqual(executor_funil.FUNIL_LIMITE_POR_CICLO, 100)
+        sleep_mock.assert_called_once_with(1800)
+        print_mock.assert_called_once_with("PROXIMO CICLO EM 30 MINUTOS")
+        self.assertIn(
+            call(
+                "funil_worker_iniciado | intervalo_segundos=%s "
+                "limite_por_ciclo=%s",
+                1800,
+                100,
+            ),
+            log_info.call_args_list,
+        )
+        self.assertIn(
+            call(
+                "funil_ciclo_concluido | acao=aguardar_proximo "
+                "materializados=%s processados=%s enviados=%s falhas=%s "
+                "limite_por_ciclo=%s aguardar=%ss",
+                2,
+                2,
+                2,
+                0,
+                100,
+                1800,
+            ),
+            log_info.call_args_list,
+        )
+
     def test_materializacao_exclui_conversas_ja_enfileiradas_antes_do_limite(self):
         cursor = FakeCursor()
 

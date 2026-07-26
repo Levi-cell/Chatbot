@@ -2,24 +2,28 @@ import logging
 
 from core.cache.cache_reset import resetar_cache_redis_dev
 from core.database.connection_check import connection_teste_psql
-from core.database.deploy.bank_script import (
+from core.database.deploy_database.bank_script import (
     configurar_role_banco,
     criar_funcao_dequeue_message,
     criar_funcoes_lock,
     criar_tabelas,
 )
-from core.database.deploy.cache_control_script import criar_cache_controle
-from core.database.deploy.etapa_transicao_script import (
+from core.database.deploy_database.cache_control_script import (
+    criar_cache_controle,
+)
+from core.database.deploy_database.etapa_transicao_script import (
     criar_e_povoar_transicoes_etapa,
 )
-from core.database.deploy.floodscript import criar_tabelas_bloqueio_flood
-from core.database.deploy.povoar_etapas import insere_etapa_once
-from core.database.deploy.turno_cliente_script import (
+from core.database.deploy_database.floodscript import (
+    criar_tabelas_bloqueio_flood,
+)
+from core.database.deploy_database.povoar_etapas import insere_etapa_once
+from core.database.deploy_database.turno_cliente_script import (
     criar_indices_turno_cliente,
 )
 
 
-logger = logging.getLogger("db.deploy")
+logger = logging.getLogger("db.deploy_database")
 
 
 def setup_database_aws():

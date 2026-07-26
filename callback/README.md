@@ -110,6 +110,16 @@ fallbacks é Redis, banco e memória local. O bloqueio utiliza
 Relatórios e reconciliação manual ficam em
 `core/integrations/whatsapp/tools/block_report.py`.
 
+O relatório é somente leitura e possui duas conferências distintas:
+
+- bloqueios: compara `(phone_id_unidade, wa_id_cliente)` entre a lista da Meta
+  e `chatbot.cliente_bloqueado_meta`;
+- registros Cloud API: percorre o `waba_id` de cada unidade e compara os
+  `phone_number_id` retornados pela Meta com `chatbot.unidade`.
+
+Ele apenas informa `sincronizados`, `somente_na_meta` e `somente_no_banco`; não
+bloqueia, desbloqueia, registra ou remove dados automaticamente.
+
 ## Transações
 
 `post_flow.py` é dono da conexão usada para enfileirar:

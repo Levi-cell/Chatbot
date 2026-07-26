@@ -15,7 +15,7 @@ substitui a [rotina comum de deploy](rotina_deploy.md).
 - O banco RDS já existente recebe um `ALTER` incremental separado, revisado e
   executado no DBeaver.
 - O `ALTER` aplicado no DBeaver não deve ser copiado para
-  `core/database/deploy/bank_script.py` como migração histórica.
+  `core/database/deploy_database/bank_script.py` como migração histórica.
 - `INSERT`, `UPDATE`, `DELETE` ou `TRUNCATE` manual de dados de negócio em
   produção continua proibido, exceto no reset operacional explicitamente
   autorizado e documentado na Parte C. O uso comum do DBeaver descrito aqui é
@@ -56,9 +56,10 @@ autocura ocorre no tratamento conhecido e a mensagem volta pelo retry.
 
 ### 1. Preparar o conteúdo fora da VM
 
-Use um arquivo local privado, por exemplo `.env.prod`, que já é ignorado pelo
-Git. Tome `.env.example` como catálogo de chaves, mas mantenha os valores reais
-específicos de produção. Não copie cegamente o `.env` de desenvolvimento.
+Use somente o arquivo local privado `.env`, que já é ignorado pelo Git, como
+fonte local de configuração. Mantenha suas chaves alinhadas com
+`/etc/chatbot/chatbot.env`, que é a fonte carregada pelos serviços da VM. Não
+crie arquivos paralelos como `.env.prod`.
 
 Antes de copiar, confira especialmente:
 
@@ -73,12 +74,16 @@ DJANGO_CSRF_COOKIE_SECURE=True
 DB_SSLMODE=verify-full
 DB_SSLROOTCERT=/etc/ssl/certs/aws-rds-global-bundle.pem
 PGSSLCERTMODE=disable
-REDIS_HOST=127.0.0.1
+REDIS_HOST=ENDPOINT_DO_REDIS_REMOTO
 FUNIL_WORKER_ENABLED=True
 ```
 
 Os demais tokens, IDs, senhas e endpoints devem conter os valores reais do
 ambiente, sem serem enviados ao GitHub.
+
+Na VM de producao, `REDIS_HOST` nunca deve ser `localhost`, `127.0.0.1` ou
+`::1`. A rotina operacional e a remocao do Redis local estao documentadas em
+[`servicos_e_redis_remoto.md`](servicos_e_redis_remoto.md).
 
 ### 2. Criar backup e arquivo temporário na Lightsail
 
@@ -155,7 +160,7 @@ O segundo comando não deve produzir saída.
 Valide a presença das configurações essenciais:
 
 ```bash
-sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new'); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','META_WABA_ID','META_PHONE_NUMBER_ID_DEV','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
+sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new'); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
 ```
 
 O comando deve imprimir `AMBIENTE_OK`.
@@ -287,12 +292,12 @@ Executar novamente `setup_database.py` não substitui a migração incremental.
 
 ### Arquivos canônicos que podem precisar mudar
 
-- `core/database/deploy/bank_script.py`: schema principal final;
-- `core/database/deploy/cache_control_script.py`: controle de versão do cache;
-- `core/database/deploy/floodscript.py`: estruturas de flood e bloqueio;
-- `core/database/deploy/turno_cliente_script.py`: índices de turno;
-- `core/database/deploy/etapa_transicao_script.py`: tabela e mapa de transições;
-- `core/database/deploy/povoar_etapas.py`: catálogo final das etapas;
+- `core/database/deploy_database/bank_script.py`: schema principal final;
+- `core/database/deploy_database/cache_control_script.py`: controle de versão do cache;
+- `core/database/deploy_database/floodscript.py`: estruturas de flood e bloqueio;
+- `core/database/deploy_database/turno_cliente_script.py`: índices de turno;
+- `core/database/deploy_database/etapa_transicao_script.py`: tabela e mapa de transições;
+- `core/database/deploy_database/povoar_etapas.py`: catálogo final das etapas;
 - `callback/webhook/models.py`: representação no Admin, sempre com
   `managed = False` para essas tabelas.
 

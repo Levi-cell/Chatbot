@@ -44,7 +44,7 @@ Na V1, o projeto deve:
 - não registrar credenciais reais em código, README, prints ou logs;
 - carregar credenciais por variável de ambiente;
 - manter `.env` fora do Git;
-- usar `.env.example` apenas com valores fictícios;
+- documentar nomes de variáveis sem publicar valores secretos;
 - mascarar identificadores numéricos longos nos logs;
 - manter tabelas administrativas com permissões restritas;
 - preservar as regras de negócio já definidas para fila, turno, bloqueios e

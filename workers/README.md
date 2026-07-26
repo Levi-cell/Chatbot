@@ -87,6 +87,32 @@ Os commits intermediários são checkpoints recuperáveis:
 Uma função auxiliar pode executar uma operação com o cursor recebido, mas não
 deve decidir a transação fora do orquestrador.
 
+### Vínculo da fila com a conversa
+
+O vínculo `fila_mensagens.id_conversa` é uma anotação de integridade e
+ordenação; ele não é o lock de turno e não substitui a resolução atual por
+`(cliente, unidade)`.
+
+O repositório somente preenche o vínculo quando ele está vazio ou já aponta
+para a mesma conversa. Se o `UPDATE` retornar zero linhas, o worker registra
+`mensagem_conversa_vinculo_preservado` e continua com o contexto recalculado.
+Esse caso não entra no retry genérico porque pode acontecer legitimamente
+quando uma mensagem aguardou a anterior e a conversa foi encerrada sem
+bloqueio ativo antes do seu próximo processamento.
+
+Se a conversa anterior continuar ativa, a mensagem permanece na mesma conversa
+e segue a etapa já atualizada. Se o encerramento tiver bloqueio vigente, a
+mensagem é removida como conversa bloqueada. Uma conversa nova só é resolvida
+quando o encerramento permite recomeço imediato (`bloqueio_dias = 0`) ou quando
+o bloqueio já expirou.
+
+As barreiras que continuam decidindo o atendimento são:
+
+- advisory lock do turno por cliente e unidade no webhook;
+- lock versionado da conversa no worker;
+- verificação de mensagem anterior ainda aberta;
+- `resposta_bot_para_mensagem_atual`, que impede novo envio em um retry.
+
 ## Retry e recuperação
 
 - dequeue incrementa `retry_count`;

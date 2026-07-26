@@ -4,7 +4,6 @@ from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.tools.config import (
     get_meta_http_timeout,
     get_token_usuario_meta,
-    get_waba_id,
 )
 from core.integrations.whatsapp.tools.usuarios import (
     listar_usuarios_bloqueados_meta,
@@ -14,6 +13,7 @@ from core.repositories.seguranca.bloqueio_meta import (
 )
 from core.repositories.unidades.consultas import (
     buscar_unidades_para_listagem_bloqueios,
+    buscar_unidades_para_reconciliacao_meta,
 )
 
 
@@ -129,7 +129,15 @@ def job_reconciliacao_bloqueios_cliente_unidades_meta():
 
 def job_reconciliacao_register__waba_unidades_meta():
     unidades_banco = _listar_unidades_banco()
-    numeros_waba_meta = _listar_numeros_waba_meta()
+    numeros_waba_meta = []
+
+    for waba_id in sorted({
+        unidade["waba_id"]
+        for unidade in unidades_banco
+    }):
+        numeros_waba_meta.extend(
+            _listar_numeros_waba_meta(waba_id)
+        )
 
     banco_por_phone_id = {
         unidade["phone_id_unidade"]: unidade
@@ -162,7 +170,8 @@ def job_reconciliacao_register__waba_unidades_meta():
             print(
                 f"   - unidade {unidade['id_unidade']} "
                 f"{unidade['nome_unidade']} | phone id "
-                f"({phone_id_unidade}) | Meta status "
+                f"({phone_id_unidade}) | WABA "
+                f"({unidade['waba_id']}) | Meta status "
                 f"{numero_meta['status']}"
             )
         print()
@@ -174,6 +183,7 @@ def job_reconciliacao_register__waba_unidades_meta():
             print(
                 f"   - phone id ({phone_id_unidade}) registrado "
                 f"como Cloud API na Meta, mas ausente no banco | "
+                f"WABA ({numero_meta['waba_id']}) | "
                 f"numero {numero_meta['display_phone_number']} | "
                 f"nome {numero_meta['verified_name']} | "
                 f"status {numero_meta['status']}"
@@ -187,7 +197,8 @@ def job_reconciliacao_register__waba_unidades_meta():
             print(
                 f"   - unidade {unidade['id_unidade']} "
                 f"{unidade['nome_unidade']} | phone id "
-                f"({phone_id_unidade}) existe no banco, mas nao "
+                f"({phone_id_unidade}) | WABA "
+                f"({unidade['waba_id']}) existe no banco, mas nao "
                 "aparece registrado como Cloud API na Meta"
             )
         print()
@@ -212,7 +223,7 @@ def _listar_unidades_banco():
     cursor = conn.cursor()
 
     try:
-        unidades = buscar_unidades_para_listagem_bloqueios(cursor)
+        unidades = buscar_unidades_para_reconciliacao_meta(cursor)
 
     finally:
         conn.close()
@@ -221,20 +232,29 @@ def _listar_unidades_banco():
         {
             "id_unidade": id_unidade,
             "nome_unidade": nome_unidade,
+            "waba_id": str(waba_id),
             "phone_id_unidade": str(phone_id_unidade),
         }
         for (
             id_unidade,
             nome_unidade,
+            waba_id,
             phone_id_unidade,
         ) in unidades
     ]
 
 
-def _listar_numeros_waba_meta():
+def _listar_numeros_waba_meta(waba_id):
+    waba_id = str(waba_id or "").strip()
+
+    if not waba_id:
+        raise ValueError(
+            "waba_id nao informado para reconciliacao de registros"
+        )
+
     url = (
         f"https://graph.facebook.com/v25.0/"
-        f"{get_waba_id()}/phone_numbers"
+        f"{waba_id}/phone_numbers"
     )
     headers = {
         "Authorization": f"Bearer {get_token_usuario_meta()}",
@@ -262,6 +282,7 @@ def _listar_numeros_waba_meta():
         for numero in payload.get("data", []):
             platform_type = numero.get("platform_type")
             numeros.append({
+                "waba_id": waba_id,
                 "phone_id_unidade": str(numero["id"]),
                 "display_phone_number": numero.get(
                     "display_phone_number"

@@ -4,17 +4,9 @@ from pathlib import Path
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 DEPLOY = RAIZ_PROJETO / "deploy"
-ENV_EXAMPLE = RAIZ_PROJETO / ".env.example"
 
 
 class ArquivosDeployProducaoTests(unittest.TestCase):
-    def test_ambiente_desativa_certificado_cliente_do_libpq(self):
-        conteudo = ENV_EXAMPLE.read_text(encoding="utf-8")
-
-        self.assertIn("DB_SSLMODE=", conteudo)
-        self.assertIn("DB_SSLROOTCERT=", conteudo)
-        self.assertIn("PGSSLCERTMODE=disable", conteudo)
-
     def test_tres_servicos_sao_independentes_e_supervisionados(self):
         unidades = {
             "chatbot-webhook.service": (
@@ -40,6 +32,12 @@ class ArquivosDeployProducaoTests(unittest.TestCase):
                 )
                 self.assertIn("Restart=always", conteudo)
                 self.assertIn("WantedBy=multi-user.target", conteudo)
+                self.assertIn("Wants=network-online.target", conteudo)
+                self.assertIn("After=network-online.target", conteudo)
+                self.assertNotRegex(
+                    conteudo,
+                    r"(?mi)^(Requires|Wants|After)=.*redis",
+                )
 
                 for comando in comandos:
                     self.assertIn(comando, conteudo)

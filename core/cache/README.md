@@ -94,12 +94,13 @@ operação consciente de desenvolvimento/deploy e não pertence ao runtime comum
 ## Reset operacional de produção
 
 Quando clientes e conversas forem removidos do banco, execute o modo
-`--operacional` uma única vez na mesma máquina do Redis:
+`--operacional` uma única vez com as variáveis do ambiente de produção
+carregadas. O Redis de produção é remoto; não existe servidor Redis local na
+VM:
 
 ```bash
 cd /opt/chatbot/app
-sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
-  /opt/chatbot/venv/bin/python -m core.cache.cache_reset --operacional
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python -m core.cache.cache_reset --operacional'
 ```
 
 Esse modo remove somente os prefixos `cliente_cache:`,
@@ -107,6 +108,9 @@ Esse modo remove somente os prefixos `cliente_cache:`,
 de versão e outras configurações do Redis permanecem intactos. O comando falha
 com código diferente de zero se o Redis estiver indisponível e pode ser
 repetido com segurança.
+
+Para apagar exclusivamente bloqueios de 30 dias, siga o comando protegido em
+[`regras_deploy/servicos_e_redis_remoto.md`](../../regras_deploy/servicos_e_redis_remoto.md).
 
 ## Testes relacionados
 

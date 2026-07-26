@@ -5,6 +5,7 @@ from pywa.types import Button
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     CABECALHO_ETAPA9_TRIAGEM,
+    montar_texto_com_cabecalho,
 )
 from core.integrations.whatsapp.messages.etapa9_messages import (
     montar_botoes_etapa9,
@@ -33,15 +34,18 @@ def enviar_etapa9(
         cliente_wa = conta_wa(phone_id_unidade)
         sent_message = cliente_wa.send_message(
             to=cliente_telefone,
-            text=mensagem_bot,
-            header=CABECALHO_ETAPA9_TRIAGEM,
+            text=montar_texto_com_cabecalho(
+                mensagem_bot,
+                CABECALHO_ETAPA9_TRIAGEM,
+            ),
             buttons=_montar_botoes_pywa_etapa9(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
         logger.info(
             "enviar_etapa9_ok | acao=enviar_meta cliente=%s "
-            "phone_number_id=%s id_hash_msg_bot=%s",
+            "phone_number_id=%s id_hash_msg_bot=%s "
+            "cabecalho=corpo_negrito",
             short_value(cliente_telefone),
             short_value(phone_id_unidade),
             id_hash_msg_bot,

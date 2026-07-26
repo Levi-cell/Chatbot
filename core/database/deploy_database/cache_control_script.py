@@ -1,6 +1,6 @@
 import logging
 
-from core.database.deploy.transacao_deploy import transacao_deploy
+from core.database.deploy_database.transacao_deploy import transacao_deploy
 from core.repositories.unidades.cache_control import CACHE_UNIDADES_NOME
 
 

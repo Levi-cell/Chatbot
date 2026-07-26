@@ -287,7 +287,7 @@ if __name__ == "__main__":
 
 ---
 
-## Passo 4 - `.env.example`
+## Passo 4 - configuração de ambiente
 
 Remover `FUNIL_INTERVALO_SEGUNDOS`. O arquivo de ambiente nao deve controlar
 uma responsabilidade que passa a pertencer ao Linux.
@@ -323,8 +323,6 @@ META_ACCESS_TOKEN=
 META_WEBHOOK_VERIFY_TOKEN=troque-por-um-token-forte
 META_APP_SECRET=
 META_WEBHOOK_SIGNATURE_REQUIRED=False
-META_WABA_ID=
-META_PHONE_NUMBER_ID_DEV=
 META_APP_ID=
 META_PHONE_REGISTRATION_PIN=
 META_HTTP_CONNECT_TIMEOUT_SECONDS=30
@@ -868,11 +866,11 @@ FUNIL_WORKER_ENABLED=True
 
 ```bash
 sudo install -m 0644 \
-  /opt/chatbot/app/deploy/systemd/chatbot-funil.service \
+  /opt/chatbot/app/deploy_database/systemd/chatbot-funil.service \
   /etc/systemd/system/chatbot-funil.service
 
 sudo install -m 0644 \
-  /opt/chatbot/app/deploy/systemd/chatbot-funil.timer \
+  /opt/chatbot/app/deploy_database/systemd/chatbot-funil.timer \
   /etc/systemd/system/chatbot-funil.timer
 
 sudo systemctl daemon-reload

@@ -101,11 +101,34 @@ def worker_flow():
             contexto_conversa = contexto_banco["conversa"]
             id_conversa = contexto_conversa["id_conversa"]
 
-            vincular_mensagem_fila_a_conversa(
+            linhas_vinculadas = vincular_mensagem_fila_a_conversa(
                 mensagem["id_mensagem"],
                 id_conversa,
                 cursor_ciclo,
             )
+
+            # Esta escrita nao participa do lock de turno nem decide qual
+            # conversa sera processada. O WHERE do repositorio apenas evita
+            # sobrescrever silenciosamente um vinculo diferente ja
+            # persistido. Um rowcount zero pode ocorrer legitimamente quando
+            # uma mensagem aguardava outra anterior e, no retry, a conversa
+            # anterior ja foi encerrada sem bloqueio ativo. Nesse caso o
+            # contexto recalculado deve continuar ate as barreiras de ordem e
+            # idempotencia (`resposta_bot_para_mensagem_atual`), sem virar
+            # erro generico.
+            if linhas_vinculadas == 0:
+                logger.warning(
+                    "mensagem_conversa_vinculo_preservado | "
+                    "motivo=vinculo_preexistente_divergente "
+                    "acao=continuar_contexto_recalculado "
+                    "id_mensagem=%s cliente=%s phone_number_id=%s "
+                    "id_conversa_calculada=%s",
+                    mensagem["id_mensagem"],
+                    short_value(mensagem["cliente_telefone"]),
+                    short_value(mensagem["id_phone_unidade"]),
+                    id_conversa,
+                )
+
             conn_ciclo.commit()
             logger.debug(
                 "mensagem_conversa_vinculada | acao=commit id_mensagem=%s id_conversa=%s estado=%s",

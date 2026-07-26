@@ -79,10 +79,16 @@ def contexto_final():
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
     def test_fila_vazia_aguarda_tres_segundos(self):
-        with patch.object(estado_ciclo.time, "sleep") as sleep:
+        with (
+            patch.object(estado_ciclo.time, "sleep") as sleep,
+            patch.object(estado_ciclo.logger, "debug") as log_debug,
+        ):
             estado_ciclo.aguardar_fila_vazia()
 
         sleep.assert_called_once_with(3)
+        log_debug.assert_called_once_with(
+            "fila_vazia | acao=aguardar segundos=3"
+        )
 
     def test_erro_operacional_psycopg3_reinicia_conexao(self):
         erro = flow_worker.psycopg.OperationalError("conexao indisponivel")
@@ -237,6 +243,66 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         )
         finalizar.assert_called_once()
         self.assertEqual(conn.commits, 7)
+        self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
+
+    def test_vinculo_divergente_nao_bloqueia_recuperacao_do_turno(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            stack.enter_context(patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+                return_value=0,
+            ))
+            tratar_erro = stack.enter_context(patch.object(
+                flow_worker,
+                "handle_erro_generico",
+            ))
+            aviso = stack.enter_context(patch.object(
+                flow_worker.logger,
+                "warning",
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "atualizar_banco_com_contexto_final",
+                side_effect=lambda *_args: (
+                    eventos.append("persistir_bot")
+                    or contexto_final()
+                ),
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "finalizar_mensagem_processada",
+                side_effect=lambda *_args: (
+                    eventos.append("marcar_sent")
+                    or {"atendimento_encerrado": False}
+                ),
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        tratar_erro.assert_not_called()
+        self.assertEqual(
+            eventos,
+            [
+                "validar_banco",
+                "adquirir_lock",
+                "persistir_cliente",
+                "enviar_meta",
+                "persistir_bot",
+                "marcar_sent",
+                "liberar_lock",
+            ],
+        )
+        aviso.assert_called_once()
+        self.assertIn(
+            "motivo=vinculo_preexistente_divergente",
+            aviso.call_args.args[0],
+        )
         self.assertEqual(conn.rollbacks, 0)
         self.assertTrue(conn.closed)
 

@@ -13,11 +13,12 @@ produção. A suíte não tenta reproduzir cada arquivo, sender ou texto exibido
 - cache de unidade e bloqueio com fallback para o banco;
 - validadores de mídia, financeiro, nome, idade, decisão, email e triagem;
 - persistência das respostas da triagem;
+- apresentação uniforme dos cabeçalhos interativos do WhatsApp;
 - contratos mínimos do DDL, catálogo de etapas e mapa inicial.
 
-Testes de texto exato, comentários, estrutura de pastas, cada sender isolado e
-consultas SQL triviais foram removidos. Esses testes geravam manutenção e
-execução repetida sem proteger uma regra diferente.
+Testes de frases completas, comentários, estrutura de pastas, duplicações por
+sender e consultas SQL triviais foram removidos. Esses testes geravam
+manutenção e execução repetida sem proteger uma regra diferente.
 
 ## Rotina durante o desenvolvimento
 

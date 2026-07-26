@@ -12,9 +12,14 @@ from core.cache.cache_unidade import (
     validar_cache_unidades_disponivel_ou_erro,
 )
 from core.integrations.whatsapp.tools.ativando_numero import registrar_numero_whatsapp
+from core.integrations.whatsapp.tools.ativando_waba_id import ativar_waba_id
+from core.integrations.whatsapp.tools.desativa_waba_id import desativar_waba_id
 from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
 from core.integrations.whatsapp.tools.usuarios import (
     desbloquear_usuario_meta,
+)
+from core.integrations.whatsapp.tools.validando_phone_waba import (
+    validar_phone_number_id_da_waba,
 )
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
@@ -158,6 +163,12 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_per_page = 50
     empty_value_display = "-"
 
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None:
+            return ("waba_id", "phone_number_id")
+
+        return ()
+
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         try:
             return super().changeform_view(
@@ -212,15 +223,38 @@ class UnidadeAdmin(admin.ModelAdmin):
                         )
                     return
 
+                waba_id = self.cleaned_data.get("waba_id")
                 phone_number_id = self.cleaned_data.get("phone_number_id")
 
-                if not phone_number_id:
+                if not waba_id:
+                    self.add_error(
+                        "waba_id",
+                        "Informe a WABA que sera assinada pelo App.",
+                    )
                     return
 
-                if not model_admin._registrar_meta_antes_de_salvar(
+                campo_com_erro = model_admin._preparar_meta_antes_de_salvar(
                     request,
+                    waba_id,
                     phone_number_id,
-                ):
+                )
+
+                if campo_com_erro == "vinculo_waba_phone":
+                    self.add_error(
+                        "phone_number_id",
+                        "Este phone ID nao pertence a WABA informada. "
+                        "A unidade nao foi salva.",
+                    )
+                    return
+
+                if campo_com_erro == "waba_id":
+                    self.add_error(
+                        "waba_id",
+                        "A Meta falhou ao assinar esta WABA. Unidade nao foi salva.",
+                    )
+                    return
+
+                if campo_com_erro == "phone_number_id":
                     self.add_error(
                         "phone_number_id",
                         "A Meta falhou ao registrar este numero. Unidade nao foi salva.",
@@ -367,6 +401,135 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     link_instagram_clickable.short_description = "Instagram"
 
+    def _preparar_meta_antes_de_salvar(
+        self,
+        request,
+        waba_id,
+        phone_number_id,
+    ):
+        if not self._validar_vinculo_phone_waba_antes_de_salvar(
+            request,
+            waba_id,
+            phone_number_id,
+        ):
+            return "vinculo_waba_phone"
+
+        if not self._ativar_waba_antes_de_salvar(request, waba_id):
+            return "waba_id"
+
+        if not self._registrar_meta_antes_de_salvar(
+            request,
+            phone_number_id,
+        ):
+            return "phone_number_id"
+
+        return None
+
+    def _validar_vinculo_phone_waba_antes_de_salvar(
+        self,
+        request,
+        waba_id,
+        phone_number_id,
+    ):
+        try:
+            status, resposta = validar_phone_number_id_da_waba(
+                waba_id,
+                phone_number_id,
+            )
+
+            if not self._meta_resposta_sucesso(status, resposta):
+                logger.error(
+                    "whatsapp_phone_waba_vinculo_invalido | "
+                    "acao=bloquear_save waba_id=%s phone_number_id=%s "
+                    "status=%s motivo=%s",
+                    short_value(waba_id),
+                    short_value(phone_number_id),
+                    status,
+                    resposta.get("reason")
+                    if isinstance(resposta, dict)
+                    else None,
+                )
+                self.message_user(
+                    request,
+                    "A Meta nao confirmou que o phone ID pertence a "
+                    "WABA informada. A unidade nao foi salva.",
+                    level=messages.ERROR,
+                )
+                return False
+
+            logger.info(
+                "whatsapp_phone_waba_vinculo_ok | "
+                "acao=permitir_ativacao waba_id=%s phone_number_id=%s",
+                short_value(waba_id),
+                short_value(phone_number_id),
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "whatsapp_phone_waba_validacao_erro | "
+                "acao=bloquear_save waba_id=%s phone_number_id=%s "
+                "erro=%s",
+                short_value(waba_id),
+                short_value(phone_number_id),
+                exc,
+            )
+            self.message_user(
+                request,
+                "Erro ao validar WABA e phone ID na Meta. "
+                f"A unidade nao foi salva: {exc}",
+                level=messages.ERROR,
+            )
+            return False
+
+    def _ativar_waba_antes_de_salvar(self, request, waba_id):
+        try:
+            status, resposta = ativar_waba_id(waba_id)
+
+            if not self._meta_resposta_sucesso(status, resposta):
+                logger.error(
+                    "whatsapp_waba_ativar_falhou | acao=bloquear_save "
+                    "waba_id=%s status=%s resposta=%s",
+                    short_value(waba_id),
+                    status,
+                    resposta,
+                )
+                self.message_user(
+                    request,
+                    "Erro ao assinar WABA no WhatsApp. "
+                    f"Unidade nao foi salva: {resposta}",
+                    level=messages.ERROR,
+                )
+                return False
+
+            self._marcar_meta_sucesso(
+                request,
+                acao="ativar_waba",
+                waba_id=waba_id,
+            )
+            logger.info(
+                "whatsapp_waba_ativada | acao=permitir_registro_numero "
+                "waba_id=%s status=%s",
+                short_value(waba_id),
+                status,
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "whatsapp_waba_ativar_erro | acao=bloquear_save "
+                "waba_id=%s erro=%s",
+                short_value(waba_id),
+                exc,
+            )
+            self.message_user(
+                request,
+                "Erro inesperado ao assinar WABA. "
+                f"Unidade nao foi salva: {exc}",
+                level=messages.ERROR,
+            )
+            return False
+
     def _registrar_meta_antes_de_salvar(self, request, phone_number_id):
         try:
             status, resposta = registrar_numero_whatsapp(phone_number_id)
@@ -387,7 +550,7 @@ class UnidadeAdmin(admin.ModelAdmin):
 
             self._marcar_meta_sucesso(
                 request,
-                acao="registrar",
+                acao="registrar_numero",
                 phone_number_id=phone_number_id,
             )
             logger.info(
@@ -411,6 +574,9 @@ class UnidadeAdmin(admin.ModelAdmin):
             return False
 
     def _desregistrar_meta_antes_de_excluir(self, request, obj):
+        if not self._desassinar_waba_antes_de_excluir(request, obj):
+            return False
+
         try:
             status, resposta = desregistrar_numero_whatsapp(obj.phone_number_id)
 
@@ -423,14 +589,16 @@ class UnidadeAdmin(admin.ModelAdmin):
                 )
                 self.message_user(
                     request,
-                    f"Erro ao remover registro do numero na Meta. Unidade mantida no banco: {resposta}",
+                    "A WABA foi desassinada, mas a Meta falhou ao "
+                    "desregistrar o numero. Unidade mantida no banco: "
+                    f"{resposta}",
                     level=messages.ERROR,
                 )
                 return False
 
             self._marcar_meta_sucesso(
                 request,
-                acao="desregistrar",
+                acao="desregistrar_numero",
                 phone_number_id=obj.phone_number_id,
             )
             logger.warning(
@@ -448,7 +616,58 @@ class UnidadeAdmin(admin.ModelAdmin):
             )
             self.message_user(
                 request,
-                f"Erro inesperado ao remover registro do numero na Meta. Unidade mantida no banco: {exc}",
+                "A WABA foi desassinada, mas ocorreu um erro ao "
+                "desregistrar o numero. Unidade mantida no banco: "
+                f"{exc}",
+                level=messages.ERROR,
+            )
+            return False
+
+    def _desassinar_waba_antes_de_excluir(self, request, obj):
+        try:
+            status, resposta = desativar_waba_id(obj.waba_id)
+
+            if not self._meta_resposta_sucesso(status, resposta):
+                logger.error(
+                    "whatsapp_waba_desassinar_falhou | "
+                    "acao=bloquear_delete waba_id=%s status=%s "
+                    "resposta=%s",
+                    short_value(obj.waba_id),
+                    status,
+                    resposta,
+                )
+                self.message_user(
+                    request,
+                    "Erro ao remover a assinatura da WABA na Meta. "
+                    f"Unidade mantida no banco: {resposta}",
+                    level=messages.ERROR,
+                )
+                return False
+
+            self._marcar_meta_sucesso(
+                request,
+                acao="desativar_waba",
+                waba_id=obj.waba_id,
+            )
+            logger.warning(
+                "whatsapp_waba_desassinada | acao=continuar_delete "
+                "waba_id=%s status=%s",
+                short_value(obj.waba_id),
+                status,
+            )
+            return True
+
+        except Exception as exc:
+            logger.exception(
+                "whatsapp_waba_desassinar_erro | "
+                "acao=bloquear_delete waba_id=%s erro=%s",
+                short_value(obj.waba_id),
+                exc,
+            )
+            self.message_user(
+                request,
+                "Erro inesperado ao remover a assinatura da WABA. "
+                f"Unidade mantida no banco: {exc}",
                 level=messages.ERROR,
             )
             return False
@@ -457,12 +676,19 @@ class UnidadeAdmin(admin.ModelAdmin):
         self,
         request,
         acao,
-        phone_number_id,
+        **identificadores,
     ):
-        request._unidade_meta_sucesso = {
+        operacoes = list(
+            getattr(request, "_unidade_meta_sucesso", [])
+        )
+        operacoes.append({
             "acao": acao,
-            "phone_number_id": str(phone_number_id),
-        }
+            **{
+                nome: str(valor)
+                for nome, valor in identificadores.items()
+            },
+        })
+        request._unidade_meta_sucesso = operacoes
 
     @staticmethod
     def _meta_sucesso_nesta_requisicao(request):
@@ -583,7 +809,7 @@ class UnidadeAdmin(admin.ModelAdmin):
             return (
                 "A Meta concluiu a operação com sucesso, mas o banco "
                 "falhou. A alteração da Meta foi mantida; banco e "
-                "cache local não foram confirmados. Faça uma "
+                "cache de unidades no Redis não foram confirmados. Faça uma "
                 "conferência manual."
             )
 

@@ -24,7 +24,11 @@ logger = logging.getLogger("worker.funil")
 
 def funil_worker():
     """Mantem o Funil ativo e recupera falhas operacionais esperadas."""
-    logger.info("funil_worker_iniciado")
+    logger.info(
+        "funil_worker_iniciado | intervalo_segundos=%s limite_por_ciclo=%s",
+        FUNIL_INTERVALO_SEGUNDOS,
+        FUNIL_LIMITE_POR_CICLO,
+    )
     retry_conexao = 5
 
     while True:
@@ -36,14 +40,15 @@ def funil_worker():
             logger.info(
                 "funil_ciclo_concluido | acao=aguardar_proximo "
                 "materializados=%s processados=%s enviados=%s falhas=%s "
-                "aguardar=%ss",
+                "limite_por_ciclo=%s aguardar=%ss",
                 resumo["materializados"],
                 resumo["processados"],
                 resumo["enviados"],
                 resumo["falhas"],
+                FUNIL_LIMITE_POR_CICLO,
                 FUNIL_INTERVALO_SEGUNDOS,
             )
-            print("PROXIMO CICLO EM 1 HORA")
+            print("PROXIMO CICLO EM 30 MINUTOS")
             time.sleep(FUNIL_INTERVALO_SEGUNDOS)
 
         except KeyboardInterrupt:

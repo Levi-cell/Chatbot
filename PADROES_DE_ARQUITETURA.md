@@ -166,7 +166,7 @@ Não agrupe operações apenas pelo verbo SQL. Uma mesma entidade pode concentra
 consultas, inserções, atualizações e exclusões relacionadas ao seu contrato.
 
 DDL, criação de funções PostgreSQL e preparação de ambiente pertencem a
-`core/database/deploy/`, não aos repositórios de runtime.
+`core/database/deploy_database/`, não aos repositórios de runtime.
 
 ### Contrato das funções SQL
 
@@ -512,9 +512,12 @@ Na PyWa utilizada pelo projeto, `header` e `footer` só são enviados quando a
 mensagem possui botões e se torna interativa. Em mensagens de texto simples,
 esses argumentos são ignorados.
 
-O fluxo atual restringe cabeçalhos à introdução e às perguntas da triagem,
-etapas 9 a 15. As demais etapas não devem passar `header` para a Meta nem
-simular cabeçalho dentro do corpo da mensagem.
+O WhatsApp aplica estilos diferentes ao `header` nativo conforme o tipo da
+mensagem interativa e não oferece controle do tamanho da fonte. Por isso, os
+cabeçalhos textuais do fluxo — etapas 9 a 15, 17 e 18 — são incorporados ao
+início do corpo, em negrito, por `montar_texto_com_cabecalho`. Os senders não
+devem passar `header` para a Meta. Novos cabeçalhos textuais devem reutilizar
+esse helper para manter a apresentação uniforme entre listas e botões.
 
 Rodapés continuam permitidos nos pontos definidos pelo produto e devem aparecer
 em itálico. Como o Markdown não produz efeito no campo `footer` de uma mensagem
@@ -631,7 +634,7 @@ desenvolvimento já delimitadas.
 
 - não adicionar novos tokens ou credenciais diretamente no código;
 - usar `core/config_env.py` para leitura e validação de variáveis de ambiente;
-- manter `.env.example` sem segredos reais;
+- documentar apenas os nomes das variáveis, nunca seus valores secretos;
 - manter `.env` fora do Git;
 - IDs públicos e limites podem ser constantes quando não forem segredos;
 - mudanças de configuração não devem alterar fluxo, fila, histórico ou regra de

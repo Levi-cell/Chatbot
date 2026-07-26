@@ -35,8 +35,8 @@ Ja esta aplicado no codigo da V1:
 - registro da resposta do bot no historico apos envio real da Meta;
 - `last_message_from` semantico, ficando `cliente` apos mensagem do cliente e
   `bot` apos resposta do bot persistida;
-- configuracao por ambiente via `core/config_env.py`, `.env.example` e `.env`
-  local ignorado pelo Git;
+- configuracao por ambiente via `core/config_env.py` e `.env` local ignorado
+  pelo Git;
 - commits, rollbacks e close concentrados em `worker_flow.py`;
 - worker ainda como funcao, com apenas uma instancia prevista para a V1.
 
@@ -775,8 +775,8 @@ Na AWS:
 ## Desafio 13 - Segredos e criptografia
 
 Na V1, os principais segredos ja foram removidos do codigo e carregados por
-variaveis de ambiente via `core/config_env.py`. O `.env.example` fica sem
-segredos reais e o `.env` local deve permanecer fora do Git.
+variaveis de ambiente via `core/config_env.py`. O `.env` local deve permanecer
+fora do Git.
 
 Isso resolve a seguranca basica, mas nao substitui gestao profissional de
 segredos para uma operacao maior.

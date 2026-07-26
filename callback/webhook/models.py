@@ -252,9 +252,8 @@ class Unidade(models.Model):
         null=True,
     )
     waba_id = models.CharField(
+        unique=True,
         max_length=100,
-        blank=True,
-        null=True,
     )
     phone_number_id = models.CharField(unique=True, max_length=100)
     link_agendamento = models.CharField(unique=True, max_length=400)

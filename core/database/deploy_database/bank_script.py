@@ -1,9 +1,9 @@
 import logging
 
-from core.database.deploy.transacao_deploy import transacao_deploy
+from core.database.deploy_database.transacao_deploy import transacao_deploy
 
 
-logger = logging.getLogger("db.deploy")
+logger = logging.getLogger("db.deploy_database")
 
 
 def criar_funcoes_lock():
@@ -172,7 +172,7 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
-            waba_id VARCHAR(100),
+            waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             link_instagram VARCHAR(400),

@@ -51,6 +51,41 @@ Ou seja:
 
 Essa diferenca e essencial.
 
+## O vínculo da fila não é uma nova barreira de turno
+
+Depois de resolver cliente, unidade e conversa, o worker tenta preencher
+`fila_mensagens.id_conversa`. O `UPDATE` aceita apenas vínculo vazio ou a mesma
+conversa já persistida; portanto ele nunca sobrescreve silenciosamente uma
+conversa diferente.
+
+Essa proteção pertence à integridade do vínculo. Ela não:
+
+- altera `pending`, `processing` ou `sent`;
+- adquire ou libera o lock da conversa;
+- decide se o webhook pode aceitar o próximo turno;
+- substitui `reagendar_se_houver_mensagem_anterior()`;
+- substitui a idempotência de `resposta_bot_para_mensagem_atual`.
+
+Um retorno de zero linhas não deve virar erro genérico. Existe um cenário
+recuperável em que:
+
+1. A já recebeu resposta do bot, mas ainda não chegou a `sent`;
+2. B foi aceita como primeiro evento do próximo turno e vinculada à conversa;
+3. A encerra essa conversa sem bloqueio ativo antes do retry de B;
+4. B passa intencionalmente a uma conversa nova do mesmo cliente e unidade.
+
+Isso não acontece em uma transição normal de etapa: se A não encerra o
+atendimento, B continua na mesma conversa e na etapa já atualizada. Se A
+encerra em uma etapa com bloqueio vigente, B é removida como mensagem de
+conversa bloqueada. No fluxo atual, a criação imediata de uma conversa nova
+após encerramento ocorre nos tratamentos de idade inválida, que usam
+`bloqueio_dias = 0`; também pode ocorrer depois da expiração de um bloqueio.
+
+Nesse cenário o vínculo antigo é preservado para diagnóstico, o worker registra
+`mensagem_conversa_vinculo_preservado` e continua com o contexto recalculado.
+Transformar isso em retry genérico poderia consumir as três tentativas e perder
+uma mensagem válida antes de alcançar a barreira idempotente.
+
 Se o sistema salvasse nome apenas porque `id_etapa_atual == 1`, poderia salvar
 texto invalido em tratamentos da etapa 1, como midia, pergunta financeira ou
 nome fora de contexto.

@@ -249,7 +249,7 @@ número maior de tentativas exige uma nova decisão de produto.
 
 Implementação principal:
 
-- `core/database/deploy/bank_script.py`, função `chatbot.dequeue_message()`
+- `core/database/deploy_database/bank_script.py`, função `chatbot.dequeue_message()`
 - `workers/tratamento_erros_externos/expection_process.py`
 - `core/repositories/atendimento/fila.py`
 
@@ -268,7 +268,7 @@ Implementação principal:
 
 Implementação principal:
 
-- `core/database/deploy/bank_script.py`, funções `lock_conversa()` e
+- `core/database/deploy_database/bank_script.py`, funções `lock_conversa()` e
   `unlock_conversa()`
 - `core/repositories/atendimento/conversas.py`
 - `core/repositories/atendimento/fila.py`
@@ -296,7 +296,7 @@ Implementação principal:
 
 Implementação principal:
 
-- `core/database/deploy/bank_script.py`
+- `core/database/deploy_database/bank_script.py`
 - `core/repositories/atendimento/conversas.py`
 - `core/repositories/fluxo/politicas.py`
 - `workers/worker_flow/valida_banco.py`
@@ -804,11 +804,16 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 
 ### 19.3. Unidades
 
-- A criação de uma unidade registra primeiro o número na Meta.
+- Cada unidade possui um `waba_id` único e obrigatório e um
+  `phone_number_id` único e obrigatório.
+- A criação valida primeiro, pela Graph API, se o `phone_number_id` pertence
+  ao `waba_id` informado.
+- Depois da validação, o App assina a WABA e registra o número na Meta.
 - Se a Meta falhar, a unidade não será criada no banco.
 - Antes da alteração no banco, o Redis deverá passar pelo preflight.
 - Depois do save, a versão das unidades será incrementada e o cache recarregado.
-- A exclusão desregistra primeiro o número na Meta.
+- A exclusão desassina a WABA e desregistra o número na Meta antes de remover
+  a unidade do banco.
 - Se a Meta falhar durante a exclusão, a unidade permanecerá no banco.
 - Se o Redis falhar depois de a Meta responder, o banco deverá permanecer sem
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
@@ -835,9 +840,11 @@ e não uma lacuna.
 
 Para encerrar o vínculo de uma unidade com o sistema:
 
-1. remover o número do `waba_id` pela conta oficial na plataforma da Meta;
-2. excluir a unidade individualmente pelo Django Admin;
-3. concluir a exclusão no banco e a atualização do cache de unidades.
+1. solicitar a exclusão individualmente pelo Django Admin;
+2. o sistema remove a assinatura do App na WABA;
+3. o sistema desregistra o `phone_number_id`;
+4. somente após as duas confirmações Meta conclui a exclusão no banco e
+   atualiza o cache de unidades.
 
 A exclusão administrativa continua protegida pela validação Meta-first do código
 e pelo preflight do Redis. A exclusão em massa permanece proibida.
@@ -845,6 +852,9 @@ e pelo preflight do Redis. A exclusão em massa permanece proibida.
 Implementação principal:
 
 - `callback/webhook/admin.py`
+- `core/integrations/whatsapp/tools/validando_phone_waba.py`
+- `core/integrations/whatsapp/tools/ativando_waba_id.py`
+- `core/integrations/whatsapp/tools/desativa_waba_id.py`
 - `core/integrations/whatsapp/tools/ativando_numero.py`
 - `core/integrations/whatsapp/tools/desativando_numero.py`
 

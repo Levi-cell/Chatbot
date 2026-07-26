@@ -12,7 +12,7 @@ from core.cache.cache_unidade import (
     REDIS_KEY,
     recarregar_cache_unidades,
 )
-from core.cache.redis_client import get_redis_safe
+from core.cache.redis_client import get_redis_safe, validar_redis_remoto
 
 
 logger = logging.getLogger("cache.reset")
@@ -48,6 +48,7 @@ def resetar_cache_operacional(redis_client=None):
         if redis_client is not None
         else get_redis_safe(retries=1, delay=0)
     )
+    destino = validar_redis_remoto(r)
     removidas_por_padrao = {}
 
     for padrao in PADROES_OPERACIONAIS_RESET:
@@ -56,12 +57,41 @@ def resetar_cache_operacional(redis_client=None):
     total_removido = sum(removidas_por_padrao.values())
     logger.warning(
         "cache_operacional_resetado | acao=limpar_clientes_conversas_flood "
-        "total=%s por_padrao=%s",
+        "destino=%s total=%s por_padrao=%s",
+        destino,
         total_removido,
         removidas_por_padrao,
     )
     return {
+        "destino": destino,
         "chaves_por_padrao": removidas_por_padrao,
+        "total_removido": total_removido,
+    }
+
+
+def resetar_bloqueios_conversa(redis_client=None):
+    """
+    Remove somente os bloqueios temporarios de conversa, em lotes.
+    """
+
+    r = (
+        redis_client
+        if redis_client is not None
+        else get_redis_safe(retries=1, delay=0)
+    )
+    destino = validar_redis_remoto(r)
+    padrao = f"{CONVERSA_BLOQUEADA_PREFIX}:*"
+    total_removido = _remover_por_padrao(r, padrao)
+    logger.warning(
+        "cache_bloqueios_resetado | acao=limpar_bloqueios_conversa "
+        "destino=%s total=%s padrao=%s",
+        destino,
+        total_removido,
+        padrao,
+    )
+    return {
+        "destino": destino,
+        "padrao": padrao,
         "total_removido": total_removido,
     }
 
@@ -131,7 +161,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Utilitarios controlados de manutencao do cache Redis.",
     )
-    parser.add_argument(
+    modos = parser.add_mutually_exclusive_group(required=True)
+    modos.add_argument(
         "--operacional",
         action="store_true",
         help=(
@@ -139,10 +170,39 @@ def main(argv=None):
             "contadores de flood"
         ),
     )
+    modos.add_argument(
+        "--bloqueios",
+        action="store_true",
+        help="remove somente os bloqueios temporarios de conversa",
+    )
+    parser.add_argument(
+        "--confirmar",
+        action="store_true",
+        help="confirma a exclusao solicitada",
+    )
     args = parser.parse_args(argv)
 
-    if not args.operacional:
-        parser.error("informe explicitamente --operacional")
+    if args.bloqueios and not args.confirmar:
+        parser.error("--bloqueios exige --confirmar")
+
+    if args.bloqueios:
+        try:
+            resultado = resetar_bloqueios_conversa()
+        except Exception as exc:
+            logger.exception(
+                "cache_bloqueios_reset_falhou | acao=abortar erro=%s",
+                exc,
+            )
+            print(f"RESET_CACHE_BLOQUEIOS_FALHOU: {exc}", file=sys.stderr)
+            return 1
+
+        print(
+            "RESET_CACHE_BLOQUEIOS_OK "
+            f"total_removido={resultado['total_removido']} "
+            f"destino={resultado['destino']} "
+            f"padrao={resultado['padrao']}"
+        )
+        return 0
 
     try:
         resultado = resetar_cache_operacional()
@@ -157,6 +217,7 @@ def main(argv=None):
     print(
         "RESET_CACHE_OPERACIONAL_OK "
         f"total_removido={resultado['total_removido']} "
+        f"destino={resultado['destino']} "
         f"por_padrao={resultado['chaves_por_padrao']}"
     )
     return 0

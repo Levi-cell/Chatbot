@@ -1,8 +1,7 @@
 [Unit]
 Description=Chatbot - worker principal do fluxo de atendimento
 Wants=network-online.target
-Requires=redis-server.service
-After=network-online.target redis-server.service
+After=network-online.target
 
 [Service]
 Type=simple

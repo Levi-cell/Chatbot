@@ -74,7 +74,7 @@ tests             testes, fakes, mocks e contratos
 - PostgreSQL acessível;
 - Redis acessível;
 - credenciais Meta/PyWa para envios reais;
-- arquivo `.env` local baseado em [`.env.example`](.env.example);
+- arquivo `.env` local privado, ignorado pelo Git e alinhado com o ambiente;
 - dependências de [`requirements.txt`](requirements.txt).
 
 Não adicione segredos ao código. A configuração atual é carregada por
@@ -88,10 +88,11 @@ gerenciador de segredos.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-Copy-Item .env.example .env
+# Crie/preencha o .env privado com as variáveis do ambiente autorizado.
+notepad .env
 ```
 
-Depois de copiar o arquivo, preencha `.env` com os valores reais do ambiente. O
+Depois de criar o arquivo, preencha `.env` com os valores reais do ambiente. O
 arquivo `.env` é ignorado pelo Git e não deve ser enviado para repositório,
 print, documentação ou conversa.
 
@@ -119,8 +120,6 @@ META_ACCESS_TOKEN
 META_WEBHOOK_VERIFY_TOKEN
 META_APP_SECRET
 META_WEBHOOK_SIGNATURE_REQUIRED
-META_WABA_ID
-META_PHONE_NUMBER_ID_DEV
 WEBHOOK_MAX_BODY_BYTES
 FUNIL_WORKER_ENABLED
 FUNIL_INTERVALO_SEGUNDOS
@@ -139,7 +138,7 @@ documentação.
 O setup é executado a partir da raiz:
 
 ```powershell
-python -m core.database.deploy.setup_database
+python -m core.database.deploy_database.setup_database
 ```
 
 Os scripts são organizados por responsabilidade e podem ser executados novamente

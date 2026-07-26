@@ -205,11 +205,9 @@ Arquivo: `core/database/deploy/povoar_etapas.py`
 ```python
 import logging
 
-from core.database.deploy.transacao_deploy import transacao_deploy
-
+from core.database.deploy_database.transacao_deploy import transacao_deploy
 
 logger = logging.getLogger("db.seed")
-
 
 ETAPAS = (
     (1, "Retorno do cliente veterano", False, 0, False),
@@ -289,11 +287,9 @@ Arquivo: `core/database/deploy/etapa_transicao_script.py`
 ```python
 import logging
 
-from core.database.deploy.transacao_deploy import transacao_deploy
-
+from core.database.deploy_database.transacao_deploy import transacao_deploy
 
 logger = logging.getLogger("db.etapa_transicao")
-
 
 TRANSICOES_INICIAIS = (
     (1, "atualizar_nome", 2),
@@ -6150,8 +6146,8 @@ Arquivo: `tests/unit/test_fluxo_24_etapas.py`
 import unittest
 from unittest.mock import patch
 
-from core.database.deploy.etapa_transicao_script import TRANSICOES_INICIAIS
-from core.database.deploy.povoar_etapas import ETAPAS
+from core.database.deploy_database.etapa_transicao_script import TRANSICOES_INICIAIS
+from core.database.deploy_database.povoar_etapas import ETAPAS
 from workers.worker_flow import valida_historico
 from workers.worker_flow.response_flow import flow_sender
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import validar_etapa3
@@ -6267,9 +6263,9 @@ class Fluxo24EtapasTests(unittest.TestCase):
         }
         esperado = {"enviou": True, "id_etapa_resultante": 5}
         with patch.object(
-            flow_sender,
-            "resolve_etapa5",
-            return_value=esperado,
+                flow_sender,
+                "resolve_etapa5",
+                return_value=esperado,
         ) as resolver:
             resultado = flow_sender.flow_sender(contexto)
         resolver.assert_called_once_with(contexto)
@@ -6296,6 +6292,7 @@ class Fluxo24EtapasTests(unittest.TestCase):
         resultado = flow_sender.flow_sender(contexto)
         self.assertFalse(resultado["enviou"])
         self.assertTrue(resultado["resposta_ja_existia"])
+
 
 if __name__ == "__main__":
     unittest.main()

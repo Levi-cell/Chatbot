@@ -2,14 +2,18 @@ import fnmatch
 import io
 import unittest
 from contextlib import redirect_stderr
+from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.cache import cache_reset
+from core.cache import cache_reset, redis_client
 
 
 class FakeRedis:
-    def __init__(self, chaves):
+    def __init__(self, chaves, host="203.0.113.10"):
         self.chaves = set(chaves)
+        self.connection_pool = SimpleNamespace(
+            connection_kwargs={"host": host}
+        )
 
     def scan_iter(self, match, count):
         del count
@@ -53,6 +57,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
                 "webhook_flood_rate:*": 1,
             },
         )
+        self.assertEqual(resultado["destino"], "203.0.113.10")
 
     def test_reset_operacional_e_idempotente(self):
         redis = FakeRedis({"cliente_cache:5511999999999"})
@@ -62,6 +67,79 @@ class CacheResetOperacionalTests(unittest.TestCase):
 
         self.assertEqual(primeiro["total_removido"], 1)
         self.assertEqual(segundo["total_removido"], 0)
+
+    def test_reset_operacional_recusa_redis_local(self):
+        redis = FakeRedis(
+            {"cliente_cache:5511999999999"},
+            host="127.0.0.1",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Redis local recusado"):
+            cache_reset.resetar_cache_operacional(redis)
+
+        self.assertEqual(redis.chaves, {"cliente_cache:5511999999999"})
+
+    def test_cliente_central_recusa_redis_local_antes_do_ping(self):
+        redis = FakeRedis(set(), host="127.0.0.1")
+
+        with patch.object(
+            redis_client.redis,
+            "Redis",
+            return_value=redis,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Redis local recusado"):
+                redis_client._create_client()
+
+    def test_reset_bloqueios_preserva_demais_chaves_operacionais(self):
+        redis = FakeRedis(
+            {
+                "cliente_cache:5511999999999",
+                "conversa_bloqueada:hash-conversa",
+                "webhook_flood_rate:60:janela:hash",
+                "unidades_cache",
+            }
+        )
+
+        resultado = cache_reset.resetar_bloqueios_conversa(redis)
+
+        self.assertEqual(resultado["total_removido"], 1)
+        self.assertEqual(resultado["destino"], "203.0.113.10")
+        self.assertEqual(
+            redis.chaves,
+            {
+                "cliente_cache:5511999999999",
+                "webhook_flood_rate:60:janela:hash",
+                "unidades_cache",
+            },
+        )
+
+    def test_reset_bloqueios_recusa_redis_local(self):
+        redis = FakeRedis(
+            {"conversa_bloqueada:hash-conversa"},
+            host="127.0.0.1",
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "Redis local recusado"):
+            cache_reset.resetar_bloqueios_conversa(redis)
+
+        self.assertEqual(
+            redis.chaves,
+            {"conversa_bloqueada:hash-conversa"},
+        )
+
+    def test_reset_bloqueios_processa_mais_de_quinhentas_chaves(self):
+        redis = FakeRedis(
+            {
+                f"conversa_bloqueada:hash-{indice}"
+                for indice in range(501)
+            }
+            | {"cliente_cache:preservado"}
+        )
+
+        resultado = cache_reset.resetar_bloqueios_conversa(redis)
+
+        self.assertEqual(resultado["total_removido"], 501)
+        self.assertEqual(redis.chaves, {"cliente_cache:preservado"})
 
     def test_processa_mais_de_quinhentas_chaves_em_lotes(self):
         redis = FakeRedis(
@@ -74,7 +152,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
         self.assertEqual(resultado["total_removido"], 501)
         self.assertEqual(redis.chaves, {"unidades_cache"})
 
-    def test_cli_exige_confirmacao_operacional_explicita(self):
+    def test_cli_exige_modo_de_reset_explicito(self):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit) as erro:
                 cache_reset.main([])
@@ -87,12 +165,34 @@ class CacheResetOperacionalTests(unittest.TestCase):
             "resetar_cache_operacional",
             return_value={
                 "total_removido": 2,
+                "destino": "203.0.113.10",
                 "chaves_por_padrao": {"cliente_cache:*": 2},
             },
         ), patch("builtins.print"):
             codigo = cache_reset.main(["--operacional"])
 
         self.assertEqual(codigo, 0)
+
+    def test_cli_bloqueios_retorna_sucesso(self):
+        with patch.object(
+            cache_reset,
+            "resetar_bloqueios_conversa",
+            return_value={
+                "total_removido": 2,
+                "destino": "203.0.113.10",
+                "padrao": "conversa_bloqueada:*",
+            },
+        ), patch("builtins.print"):
+            codigo = cache_reset.main(["--bloqueios", "--confirmar"])
+
+        self.assertEqual(codigo, 0)
+
+    def test_cli_bloqueios_exige_confirmacao(self):
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as erro:
+                cache_reset.main(["--bloqueios"])
+
+        self.assertEqual(erro.exception.code, 2)
 
     def test_cli_retorna_erro_se_redis_falhar(self):
         with patch.object(

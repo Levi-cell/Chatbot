@@ -2,8 +2,6 @@ from core.config_env import env_int, env_optional, env_required
 
 
 TOKEN_USUARIO_META = env_required("META_ACCESS_TOKEN")
-WABA_ID = env_optional("META_WABA_ID")
-PHONE_NUMBER_ID_DEV = env_optional("META_PHONE_NUMBER_ID_DEV")
 PHONE_REGISTRATION_PIN = env_optional("META_PHONE_REGISTRATION_PIN")
 
 META_HTTP_TIMEOUT = (
@@ -14,25 +12,6 @@ META_HTTP_TIMEOUT = (
 
 def get_token_usuario_meta():
     return TOKEN_USUARIO_META
-
-
-def get_waba_id():
-    if not WABA_ID:
-        raise RuntimeError(
-            "Variavel de ambiente obrigatoria ausente: META_WABA_ID"
-        )
-
-    return WABA_ID
-
-
-def get_phone_number_id_dev():
-    if not PHONE_NUMBER_ID_DEV:
-        raise RuntimeError(
-            "Variavel de ambiente obrigatoria ausente: "
-            "META_PHONE_NUMBER_ID_DEV"
-        )
-
-    return PHONE_NUMBER_ID_DEV
 
 
 def get_phone_registration_pin():

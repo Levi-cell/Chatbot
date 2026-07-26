@@ -13,7 +13,7 @@ core/database/
 ├── connection_aws.py
 ├── connection_check.py
 ├── criar_particao.py
-└── deploy/
+└── deploy_database/
     ├── setup_database.py
     ├── bank_script.py
     ├── transacao_deploy.py
@@ -28,7 +28,7 @@ core/database/
 
 - `connection_aws.py` fornece conexões para os orquestradores;
 - `connection_check.py` valida acesso ao PostgreSQL;
-- `deploy/` cria schema, tabelas, índices e funções;
+- `deploy_database/` cria schema, tabelas, índices e funções;
 - `criar_particao.py` é ferramenta manual para partições futuras do histórico;
 - SQL de negócio executado durante atendimento fica em `core/repositories`.
 
@@ -37,7 +37,7 @@ core/database/
 A partir da raiz:
 
 ```powershell
-python -m core.database.deploy.setup_database
+python -m core.database.deploy_database.setup_database
 ```
 
 Ordem atual:
@@ -127,9 +127,9 @@ local. Em produção, use `DB_SSLMODE=verify-full`, aponte
 do servidor, necessário para a validação do certificado.
 
 Novas credenciais não devem ser adicionadas ao código, README, logs ou prints.
-Em desenvolvimento, use `.env` local baseado em `.env.example`. Em produção, use
-variáveis do serviço, arquivo de ambiente com permissão restrita ou gerenciador
-de segredos.
+Em desenvolvimento, use o `.env` local privado e ignorado pelo Git. Em produção,
+use variáveis do serviço, arquivo de ambiente com permissão restrita ou
+gerenciador de segredos.
 
 ## Testes relacionados
 

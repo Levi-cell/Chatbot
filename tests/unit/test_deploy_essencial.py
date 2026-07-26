@@ -3,7 +3,7 @@ import logging
 import unittest
 from unittest.mock import patch
 
-from core.database.deploy import (
+from core.database.deploy_database import (
     bank_script,
     etapa_transicao_script,
     povoar_etapas,
@@ -112,7 +112,7 @@ class DeployEssencialTests(unittest.TestCase):
         ):
             with transacao_deploy_module.transacao_deploy(
                 "teste_sucesso",
-                logging.getLogger("tests.deploy"),
+                logging.getLogger("tests.deploy_database"),
             ):
                 pass
 
@@ -130,7 +130,7 @@ class DeployEssencialTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "falha controlada"):
                 with transacao_deploy_module.transacao_deploy(
                     "teste_falha",
-                    logging.getLogger("tests.deploy"),
+                    logging.getLogger("tests.deploy_database"),
                 ):
                     raise RuntimeError("falha controlada")
 

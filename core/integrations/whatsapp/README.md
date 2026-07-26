@@ -82,8 +82,10 @@ Os senders devolvem contexto simples para o worker. Falhas são encadeadas com
 Ferramentas administrativas ou relatórios executados conscientemente:
 
 - registrar/desregistrar número;
-- ativar inscrição WABA;
-- comparar bloqueios Meta e banco.
+- validar o vínculo entre WABA e phone ID;
+- ativar/desativar a inscrição WABA;
+- comparar bloqueios Meta e banco;
+- reconciliar registros Cloud API percorrendo todas as WABAs das unidades;
 - bloquear, desbloquear e listar usuários na Meta.
 
 `tools` não deve conter implementação duplicada usada pelo runtime. Uma operação
@@ -94,12 +96,10 @@ os valores são lidos por `core/config_env.py` a partir de variáveis de ambient
 
 ```text
 META_ACCESS_TOKEN
-META_WABA_ID
-META_PHONE_NUMBER_ID_DEV
 ```
 
-Não adicione token, WABA ID, phone number ID ou outro valor sensível diretamente
-nesse arquivo.
+Não adicione token ou outro valor sensível diretamente nesse arquivo. WABA ID e
+phone number ID são dados por unidade e devem vir do banco/cache.
 
 ## Limites
 

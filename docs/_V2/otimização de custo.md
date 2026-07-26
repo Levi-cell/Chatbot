@@ -22,7 +22,6 @@ A V1 já possui configuração por ambiente via:
 
 ```text
 core/config_env.py
-.env.example
 .env local ignorado pelo Git
 ```
 
@@ -45,7 +44,7 @@ de custo agora é principalmente uma decisão de infraestrutura e deploy.
 
 ## Configuração Externa
 
-Em desenvolvimento, use o `.env` local baseado em `.env.example`.
+Em desenvolvimento, use o `.env` local privado e ignorado pelo Git.
 
 Em produção econômica, uma alternativa simples é usar um arquivo fora do
 repositório:
@@ -89,8 +88,6 @@ META_ACCESS_TOKEN
 META_WEBHOOK_VERIFY_TOKEN
 META_APP_SECRET
 META_WEBHOOK_SIGNATURE_REQUIRED
-META_WABA_ID
-META_PHONE_NUMBER_ID_DEV
 
 WEBHOOK_MAX_BODY_BYTES
 ```

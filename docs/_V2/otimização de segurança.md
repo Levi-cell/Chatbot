@@ -33,7 +33,7 @@ Mesmo assim, existem melhorias importantes para produção.
 ## Estado atual da V1
 
 A V1 já externalizou os principais segredos e configurações operacionais por
-meio de `core/config_env.py`, `.env.example` e variáveis de ambiente.
+meio de `core/config_env.py`, `.env` privado e variáveis de ambiente.
 
 Valores que não devem voltar para o código:
 
@@ -60,8 +60,6 @@ META_ACCESS_TOKEN
 META_WEBHOOK_VERIFY_TOKEN
 META_APP_SECRET
 META_WEBHOOK_SIGNATURE_REQUIRED
-META_WABA_ID
-META_PHONE_NUMBER_ID_DEV
 WEBHOOK_MAX_BODY_BYTES
 ```
 

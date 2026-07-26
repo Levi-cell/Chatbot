@@ -6,6 +6,7 @@ from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     CABECALHO_PESQUISA_SATISFACAO,
     RODAPE_OPCAO_UNICA,
+    montar_texto_com_cabecalho,
     montar_texto_com_rodape,
 )
 from core.integrations.whatsapp.messages.etapa17_messages import (
@@ -75,15 +76,17 @@ def _enviar_lista_etapa17(
         cliente_wa = conta_wa(phone_id_unidade)
         sent_message = cliente_wa.send_message(
             to=cliente_telefone,
-            text=mensagem_bot,
-            header=CABECALHO_PESQUISA_SATISFACAO,
+            text=montar_texto_com_cabecalho(
+                mensagem_bot,
+                CABECALHO_PESQUISA_SATISFACAO,
+            ),
             buttons=_montar_lista_pywa_etapa17(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
         logger.info(
             "%s_ok | acao=enviar_meta cliente=%s phone_number_id=%s "
-            "id_hash_msg_bot=%s tratamento=%s",
+            "id_hash_msg_bot=%s tratamento=%s cabecalho=corpo_negrito",
             evento,
             short_value(cliente_telefone),
             short_value(phone_id_unidade),

@@ -91,7 +91,7 @@ Efeito: salvar dependente.nome_dependente
 Adicionar a etapa a:
 
 ```text
-core/database/deploy/povoar_etapas.py
+core/database/deploy_database/povoar_etapas.py
 ```
 
 O ID deve ser estável e o nome deve explicar o estado:
@@ -134,7 +134,7 @@ ETAPA_<NÚMERO>_<SIGNIFICADO>
 Registrar a aresta em:
 
 ```text
-core/database/deploy/etapa_transicao_script.py
+core/database/deploy_database/etapa_transicao_script.py
 ```
 
 Exemplo:

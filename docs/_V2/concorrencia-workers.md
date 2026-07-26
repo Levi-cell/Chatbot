@@ -19,6 +19,23 @@ possui proteções importantes contra concorrência:
 - idempotência por histórico do bot vinculado à mensagem da fila;
 - `sent` como última etapa do ciclo.
 
+### Limite aceito na V1: retomada da mesma mensagem
+
+O lock lógico da conversa pode ser retomado após 110 segundos, enquanto uma
+mensagem em `processing` volta a ser elegível no dequeue após 2 minutos. Essa
+diferença permite recuperação automática quando um worker morre sem executar o
+unlock.
+
+Existe, porém, uma janela residual já aceita na V1: se o worker antigo não
+morreu e apenas ficou suspenso por mais de 2 minutos, outro worker pode retomar
+a mesma mensagem e adquirir uma nova versão do lock. O `lock_version` impede o
+worker antigo de liberar o lock novo, mas ainda não funciona como *fencing
+token* para impedir todas as escritas ou um envio tardio do worker antigo.
+
+A implantação V1 reduz esse risco mantendo apenas um worker ativo. Antes de
+habilitar múltiplos workers, avaliar um token de posse da fila, heartbeat,
+fencing nas escritas ou lock de sessão.
+
 ## Ideia Central para V2
 
 A V2 pode ter múltiplos workers, mas a regra por conversa continua simples:
