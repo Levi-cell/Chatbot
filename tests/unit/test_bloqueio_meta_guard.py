@@ -112,7 +112,12 @@ class BloqueioMetaGuardTests(unittest.TestCase):
         bloquear_meta.assert_not_called()
 
     def test_mesmo_wa_id_em_outro_phone_id_nao_bloqueia(self):
-        def consultar(_wa_id, phone_id):
+        def consultar(
+            _wa_id,
+            phone_id,
+            nome_cliente=None,
+        ):
+            del nome_cliente
             return {
                 "banco_ok": True,
                 "marcado": phone_id == PHONE_ID,
@@ -223,6 +228,151 @@ class BloqueioMetaGuardTests(unittest.TestCase):
         ), patch.object(
             bloqueio_meta_guard,
             "cliente_bloqueado_meta_existe_banco",
+            side_effect=RuntimeError("banco caiu"),
+        ), patch.object(
+            bloqueio_meta_guard.logger,
+            "exception",
+        ):
+            resultado = (
+                bloqueio_meta_guard
+                ._consultar_cliente_marcado_para_bloqueio(
+                    WA_ID,
+                    PHONE_ID,
+                )
+            )
+
+        self.assertEqual(
+            resultado,
+            {
+                "banco_ok": False,
+                "marcado": False,
+            },
+        )
+        self.assertEqual(conn.commits, 0)
+        self.assertEqual(conn.rollbacks, 1)
+        self.assertTrue(conn.closed)
+
+    def test_limite_promove_para_denylist_antes_da_meta(self):
+        conn = FakeConn()
+        suspeita = {
+            "id_conversa": 10,
+            "id_cliente": 20,
+            "nome_cliente": "Cliente Persistido",
+            "id_unidade": 30,
+            "phone_id_unidade": PHONE_ID,
+            "turnos_sem_avanco": 12,
+        }
+
+        with patch.object(
+            bloqueio_meta_guard,
+            "get_conn",
+            return_value=conn,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "cliente_bloqueado_meta_existe_banco",
+            return_value=False,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "buscar_conversa_no_limite_sem_avanco",
+            return_value=suspeita,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "registrar_cliente_bloqueado_meta_banco",
+            return_value=99,
+        ) as registrar:
+            resultado = (
+                bloqueio_meta_guard
+                ._consultar_cliente_marcado_para_bloqueio(
+                    WA_ID,
+                    PHONE_ID,
+                    nome_cliente="Nome Meta",
+                )
+            )
+
+        self.assertEqual(
+            resultado,
+            {
+                "banco_ok": True,
+                "marcado": True,
+            },
+        )
+        registrar.assert_called_once_with(
+            20,
+            WA_ID,
+            30,
+            PHONE_ID,
+            conn.cursor(),
+            nome_cliente="Cliente Persistido",
+        )
+        self.assertEqual(conn.commits, 1)
+        self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
+
+    def test_nome_do_profile_e_fallback_da_promocao(self):
+        conn = FakeConn()
+        suspeita = {
+            "id_conversa": 10,
+            "id_cliente": 20,
+            "nome_cliente": None,
+            "id_unidade": 30,
+            "phone_id_unidade": PHONE_ID,
+            "turnos_sem_avanco": 12,
+        }
+
+        with patch.object(
+            bloqueio_meta_guard,
+            "get_conn",
+            return_value=conn,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "cliente_bloqueado_meta_existe_banco",
+            return_value=False,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "buscar_conversa_no_limite_sem_avanco",
+            return_value=suspeita,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "registrar_cliente_bloqueado_meta_banco",
+            return_value=99,
+        ) as registrar:
+            bloqueio_meta_guard._consultar_cliente_marcado_para_bloqueio(
+                WA_ID,
+                PHONE_ID,
+                nome_cliente="Nome Meta",
+            )
+
+        self.assertEqual(
+            registrar.call_args.kwargs["nome_cliente"],
+            "Nome Meta",
+        )
+
+    def test_falha_ao_persistir_promocao_faz_rollback(self):
+        conn = FakeConn()
+        suspeita = {
+            "id_conversa": 10,
+            "id_cliente": 20,
+            "nome_cliente": "Cliente",
+            "id_unidade": 30,
+            "phone_id_unidade": PHONE_ID,
+            "turnos_sem_avanco": 12,
+        }
+
+        with patch.object(
+            bloqueio_meta_guard,
+            "get_conn",
+            return_value=conn,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "cliente_bloqueado_meta_existe_banco",
+            return_value=False,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "buscar_conversa_no_limite_sem_avanco",
+            return_value=suspeita,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "registrar_cliente_bloqueado_meta_banco",
             side_effect=RuntimeError("banco caiu"),
         ), patch.object(
             bloqueio_meta_guard.logger,

@@ -950,6 +950,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "cliente_link",
         "id_unidade",
         "id_etapa_atual",
+        "turnos_sem_avanco",
         "status_ativa",
         "motivo_encerramento",
         "last_message_from",
@@ -968,6 +969,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     list_filter = (
         "status_ativa",
         "motivo_encerramento",
+        "turnos_sem_avanco",
         "lead_no_funil",
         "last_message_from",
         "followup_stage",
@@ -1284,11 +1286,21 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
         return super().delete_view(request, object_id, extra_context)
 
     def delete_model(self, request, obj):
+        conversas_resetadas = Conversa.objects.filter(
+            id_cliente_id=obj.id_cliente_id,
+            id_unidade_id=obj.id_unidade_id,
+            status_ativa=True,
+        ).update(turnos_sem_avanco=0)
+
         logger.warning(
-            "admin_bloqueio_meta_excluido | acao=excluir_registro usuario=%s wa_id_cliente=%s phone_id_unidade=%s",
+            "admin_bloqueio_meta_excluido | "
+            "acao=resetar_contador_e_excluir_registro "
+            "usuario=%s wa_id_cliente=%s phone_id_unidade=%s "
+            "conversas_resetadas=%s",
             request.user,
             short_value(obj.wa_id_cliente),
             short_value(obj.phone_id_unidade),
+            conversas_resetadas,
         )
         super().delete_model(request, obj)
 

@@ -93,6 +93,7 @@ def bloquear_cliente_se_flood(
     rate_redis = avaliar_flood_redis(
         wa_id_cliente,
         phone_id_unidade,
+        id_hash_msg,
         regras=REGRAS_FLOOD,
     )
 
@@ -135,6 +136,7 @@ def bloquear_cliente_se_flood(
         rate_memoria = avaliar_flood_memoria(
             wa_id_cliente,
             phone_id_unidade,
+            id_hash_msg,
             regras=REGRAS_FLOOD,
         )
 

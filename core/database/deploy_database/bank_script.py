@@ -251,6 +251,7 @@ def criar_tabelas():
             processing BOOLEAN DEFAULT FALSE,
             processing_started_at TIMESTAMPTZ NULL,
             lock_version INTEGER DEFAULT 0,
+            turnos_sem_avanco INTEGER NOT NULL DEFAULT 0,
 
             iniciou_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             finalizou_em TIMESTAMPTZ,
@@ -264,6 +265,9 @@ def criar_tabelas():
                         'foi_agendado'
                     )
                 ),
+
+            CONSTRAINT ck_conversa_turnos_sem_avanco
+                CHECK (turnos_sem_avanco BETWEEN 0 AND 12),
 
             FOREIGN KEY (id_cliente)
                 REFERENCES chatbot.cliente(id_cliente)

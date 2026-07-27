@@ -1,6 +1,10 @@
 import logging
 
 from core.repositories.atendimento.historico import inserir_historico_mensagem_bot
+from core.repositories.seguranca.suspeita_bot import (
+    incrementar_turnos_sem_avanco,
+    resetar_turnos_sem_avanco,
+)
 from workers.worker_flow.transacoes.encerramento_atendimento import (
     resolver_intencao_encerramento,
 )
@@ -9,6 +13,7 @@ from workers.worker_flow.transacoes.efeitos_transicao import (
 )
 from workers.worker_flow.transacoes.movimento_conversa import (
     MOVIMENTO_SEM_AVANCO,
+    MOVIMENTO_TRANSICAO,
     persistir_movimento_conversa,
 )
 
@@ -41,8 +46,9 @@ def atualizar_banco_com_contexto_final(
     Ordem preservada:
     1. registrar ou recuperar a resposta do bot;
     2. persistir inicialização, transição ou permanência;
-    3. aplicar os efeitos específicos da aresta;
-    4. devolver o contexto final para a finalização da fila.
+    3. incrementar ou zerar a suspeita de bot;
+    4. aplicar os efeitos específicos da aresta;
+    5. devolver o contexto final para a finalização da fila.
     """
     id_conversa = contexto_historico["id_conversa"]
     id_etapa_resultante = contexto_envio.get("id_etapa_resultante")
@@ -67,6 +73,14 @@ def atualizar_banco_com_contexto_final(
         cursor,
     )
 
+    turnos_sem_avanco = _persistir_turnos_sem_avanco(
+        id_conversa=id_conversa,
+        movimento=movimento,
+        tratamento=bool(contexto_envio.get("tratamento")),
+        historico_bot_inserido=historico_bot_inserido,
+        cursor=cursor,
+    )
+
     efeitos_transicao = atualizar_banco_conforme_transicao_de_etapa(
         contexto_historico,
         contexto_envio,
@@ -79,7 +93,10 @@ def atualizar_banco_com_contexto_final(
     )
 
     logger.info(
-        "resposta_bot_persistida | acao=registrar_historico_e_contexto id_conversa=%s id_historico_bot=%s inserido=%s resposta_ja_existia=%s movimento=%s etapa=%s evento=%s id_hash_msg_bot=%s",
+        "resposta_bot_persistida | acao=registrar_historico_e_contexto "
+        "id_conversa=%s id_historico_bot=%s inserido=%s "
+        "resposta_ja_existia=%s movimento=%s etapa=%s evento=%s "
+        "id_hash_msg_bot=%s turnos_sem_avanco=%s",
         id_conversa,
         id_historico_bot,
         historico_bot_inserido,
@@ -88,6 +105,7 @@ def atualizar_banco_com_contexto_final(
         id_etapa_resultante,
         contexto_envio.get("evento_transicao"),
         contexto_envio.get("id_hash_msg_bot"),
+        turnos_sem_avanco,
     )
 
     contexto_final = {
@@ -101,6 +119,9 @@ def atualizar_banco_com_contexto_final(
         "intencao_encerramento": intencao_encerramento,
     }
 
+    if turnos_sem_avanco is not None:
+        contexto_final["turnos_sem_avanco"] = turnos_sem_avanco
+
     if id_historico_bot is not None:
         contexto_final.update(
             {
@@ -113,6 +134,27 @@ def atualizar_banco_com_contexto_final(
         contexto_final["efeitos_transicao"] = efeitos_transicao
 
     return contexto_final
+
+
+def _persistir_turnos_sem_avanco(
+    *,
+    id_conversa,
+    movimento,
+    tratamento,
+    historico_bot_inserido,
+    cursor,
+):
+    if movimento == MOVIMENTO_TRANSICAO:
+        return resetar_turnos_sem_avanco(id_conversa, cursor)
+
+    if (
+        movimento == MOVIMENTO_SEM_AVANCO
+        and tratamento
+        and historico_bot_inserido
+    ):
+        return incrementar_turnos_sem_avanco(id_conversa, cursor)
+
+    return None
 
 
 def _persistir_ou_recuperar_resposta_bot(

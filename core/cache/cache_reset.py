@@ -3,6 +3,9 @@ import logging
 import sys
 
 from core.cache.runtime.cache_flood_redis import RATE_PREFIX
+from core.cache.runtime.cache_webhook_erro_inesperado import (
+    REDIS_PREFIX as ERRO_INESPERADO_PREFIX,
+)
 from core.cache.runtime.cache_cliente import REDIS_PREFIX as CLIENTE_PREFIX
 from core.cache.runtime.cache_conversas_bloqueadas import REDIS_PREFIX as CONVERSA_BLOQUEADA_PREFIX
 from core.cache.cache_unidade import (
@@ -28,6 +31,7 @@ PADROES_OPERACIONAIS_RESET = (
     f"{CLIENTE_PREFIX}*",
     f"{CONVERSA_BLOQUEADA_PREFIX}:*",
     f"{RATE_PREFIX}:*",
+    f"{ERRO_INESPERADO_PREFIX}:*",
 )
 
 # Compatibilidade com o reset completo de desenvolvimento.

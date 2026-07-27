@@ -7,6 +7,10 @@ from core.integrations.whatsapp.tools.usuarios import bloquear_usuario_meta
 from core.logging_config import short_value
 from core.repositories.seguranca.bloqueio_meta import (
     cliente_bloqueado_meta_existe_banco,
+    registrar_cliente_bloqueado_meta_banco,
+)
+from core.repositories.seguranca.suspeita_bot import (
+    buscar_conversa_no_limite_sem_avanco,
 )
 
 
@@ -16,14 +20,14 @@ logger = logging.getLogger("webhook.bloqueio_meta_guard")
 def responder_se_cliente_marcado_para_bloqueio(
     wa_id_cliente,
     phone_id_unidade,
+    nome_cliente=None,
 ):
     """
-    Reaplica o bloqueio desejado antes de admitir a mensagem no sistema.
+    Intercepta a denylist existente ou promove uma conversa no limite.
 
-    A linha em ``cliente_bloqueado_meta`` funciona como intenção persistente
-    de bloqueio. A consulta ao banco é encerrada antes da chamada externa à
-    Meta. Se a Meta recusar o bloqueio, a mensagem continua sendo ignorada e
-    uma nova mensagem provocará outra tentativa.
+    O banco é confirmado antes da chamada externa à Meta. Se a Meta recusar,
+    a mensagem continua sendo ignorada e a próxima mensagem fará nova
+    tentativa.
     """
     if not wa_id_cliente or not phone_id_unidade:
         return None
@@ -31,6 +35,7 @@ def responder_se_cliente_marcado_para_bloqueio(
     consulta = _consultar_cliente_marcado_para_bloqueio(
         wa_id_cliente,
         phone_id_unidade,
+        nome_cliente=nome_cliente,
     )
 
     if not consulta["banco_ok"]:
@@ -83,17 +88,57 @@ def responder_se_cliente_marcado_para_bloqueio(
 def _consultar_cliente_marcado_para_bloqueio(
     wa_id_cliente,
     phone_id_unidade,
+    nome_cliente=None,
 ):
     conn = None
 
     try:
         conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
+
         marcado = cliente_bloqueado_meta_existe_banco(
             wa_id_cliente,
             phone_id_unidade,
             cursor,
         )
+
+        if not marcado:
+            suspeita = buscar_conversa_no_limite_sem_avanco(
+                wa_id_cliente,
+                phone_id_unidade,
+                cursor,
+            )
+
+            if suspeita:
+                id_bloqueio = registrar_cliente_bloqueado_meta_banco(
+                    suspeita["id_cliente"],
+                    wa_id_cliente,
+                    suspeita["id_unidade"],
+                    suspeita["phone_id_unidade"],
+                    cursor,
+                    nome_cliente=(
+                        suspeita["nome_cliente"] or nome_cliente
+                    ),
+                )
+
+                if not id_bloqueio:
+                    raise RuntimeError(
+                        "Promoção de suspeita não retornou id_bloqueio"
+                    )
+
+                marcado = True
+                logger.warning(
+                    "suspeita_bot_promovida | "
+                    "acao=registrar_denylist_antes_da_meta "
+                    "id_bloqueio=%s id_conversa=%s turnos_sem_avanco=%s "
+                    "wa_id_cliente=%s phone_id_unidade=%s",
+                    id_bloqueio,
+                    suspeita["id_conversa"],
+                    suspeita["turnos_sem_avanco"],
+                    short_value(wa_id_cliente),
+                    short_value(phone_id_unidade),
+                )
+
         conn.commit()
         return {
             "banco_ok": True,

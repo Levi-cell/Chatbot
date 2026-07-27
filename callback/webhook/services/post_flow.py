@@ -8,6 +8,10 @@ from core.cache.runtime.cache_conversas_bloqueadas import (
     ValidacaoBloqueioConversaIndisponivel,
     conversa_esta_bloqueada_cache,
 )
+from core.cache.runtime.cache_webhook_erro_inesperado import (
+    MAX_RESPOSTAS_503_POR_WAMID,
+    registrar_tentativa_erro_inesperado,
+)
 from core.cache.cache_unidade import (
     ValidacaoUnidadeIndisponivel,
     unidade_esta_ativa,
@@ -49,7 +53,7 @@ def responder_post_webhook(request):
     try:
         data = json.loads(request.body.decode("utf-8"))
 
-    except json.JSONDecodeError as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.warning(
             "mensagem_ignorada | motivo=json_invalido acao=nao_enfileirar erro=%s",
             exc,
@@ -59,24 +63,29 @@ def responder_post_webhook(request):
             "reason": "invalid_json",
         })
 
-    tipo_evento = _classificar_evento_meta(data)
-
-    if tipo_evento == TIPO_EVENTO_STATUS:
-        return _responder_status_meta_sem_processar(data)
-
-    if tipo_evento != TIPO_EVENTO_MENSAGEM:
-        logger.info(
-            "evento_meta_ignorado | motivo=evento_sem_messages_ou_statuses acao=retornar_200",
-        )
-        return JsonResponse({"status": "ok"})
+    phone_number_id = None
+    cliente_telefone = None
 
     try:
+        tipo_evento = _classificar_evento_meta(data)
+
+        if tipo_evento == TIPO_EVENTO_STATUS:
+            return _responder_status_meta_sem_processar(data)
+
+        if tipo_evento != TIPO_EVENTO_MENSAGEM:
+            logger.info(
+                "evento_meta_ignorado | motivo=evento_sem_messages_ou_statuses acao=retornar_200",
+            )
+            return JsonResponse({"status": "ok"})
+
         phone_number_id = _extrair_phone_number_id(data)
         cliente_telefone = _extrair_cliente_telefone(data)
+        nome_cliente = _extrair_nome_cliente(data)
 
         if resposta_bloqueio := responder_se_cliente_marcado_para_bloqueio(
             cliente_telefone,
             phone_number_id,
+            nome_cliente=nome_cliente,
         ):
             return resposta_bloqueio
 
@@ -167,12 +176,59 @@ def responder_post_webhook(request):
             "reason": "conversation_block_validation_unavailable",
         }, status=503)
 
-    except Exception:
-        logger.exception(
-            "request_erro | acao=retornar_ok metodo=%s path=%s",
+    except Exception as exc:
+        id_hash_msg = _extrair_id_hash_msg_seguro(data)
+        tentativa = registrar_tentativa_erro_inesperado(
+            id_hash_msg,
+        )
+
+        if tentativa["retornar_503"]:
+            logger.exception(
+                "request_erro | "
+                "acao=retornar_503_para_reentrega "
+                "metodo=%s path=%s id_hash_msg=%s "
+                "tentativa=%s limite_503=%s",
+                request.method,
+                request.path,
+                short_value(id_hash_msg),
+                tentativa["tentativa"],
+                MAX_RESPOSTAS_503_POR_WAMID,
+            )
+            return JsonResponse(
+                {
+                    "status": "unavailable",
+                    "reason": "unexpected_error_retry",
+                    "attempt": tentativa["tentativa"],
+                },
+                status=503,
+            )
+
+        logger.error(
+            "request_erro | "
+            "acao=retornar_200_e_ignorar "
+            "metodo=%s path=%s id_hash_msg=%s "
+            "tentativa=%s motivo=%s",
             request.method,
             request.path,
+            short_value(id_hash_msg),
+            tentativa["tentativa"],
+            tentativa["motivo"],
+            exc_info=(
+                type(exc),
+                exc,
+                exc.__traceback__,
+            ),
         )
+        reason = (
+            "unexpected_error_retry_exhausted"
+            if tentativa["motivo"]
+            == "limite_503_esgotado"
+            else "unexpected_error_retry_unavailable"
+        )
+        return JsonResponse({
+            "status": "ignored",
+            "reason": reason,
+        })
 
     return JsonResponse({"status": "ok"})
 
@@ -312,3 +368,44 @@ def _extrair_phone_number_id(data):
 def _extrair_cliente_telefone(data):
     contacts = _extrair_value(data).get("contacts", [{}])
     return contacts[0].get("wa_id") if contacts else None
+
+
+
+def _extrair_id_hash_msg_seguro(data):
+    try:
+        value = _extrair_value(data)
+        messages = value.get("messages")
+
+        if (
+            not isinstance(messages, list)
+            or not messages
+            or not isinstance(messages[0], dict)
+        ):
+            return None
+
+        id_hash_msg = messages[0].get("id")
+
+        if id_hash_msg is None:
+            return None
+
+        id_hash_msg = str(id_hash_msg).strip()
+        return id_hash_msg or None
+
+    except Exception:
+        return None
+
+
+def _extrair_nome_cliente(data):
+    contacts = _extrair_value(data).get("contacts") or []
+
+    if not contacts or not isinstance(contacts[0], dict):
+        return None
+
+    profile = contacts[0].get("profile") or {}
+    nome_cliente = profile.get("name")
+
+    if nome_cliente is None:
+        return None
+
+    nome_cliente = str(nome_cliente).strip()
+    return nome_cliente[:200] or None

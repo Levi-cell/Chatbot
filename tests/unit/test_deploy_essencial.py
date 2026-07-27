@@ -6,6 +6,7 @@ from unittest.mock import patch
 from core.database.deploy_database import (
     bank_script,
     etapa_transicao_script,
+    floodscript,
     povoar_etapas,
     transacao_deploy as transacao_deploy_module,
 )
@@ -62,6 +63,16 @@ class DeployEssencialTests(unittest.TestCase):
             source.index("CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens"),
             source.index("CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens"),
         )
+
+        flood_source = inspect.getsource(
+            floodscript.criar_tabelas_bloqueio_flood
+        )
+        self.assertIn(
+            "CREATE TABLE IF NOT EXISTS chatbot.cliente_bloqueado_meta",
+            flood_source,
+        )
+        self.assertIn("nome VARCHAR(200) NULL", flood_source)
+        self.assertNotIn("ALTER TABLE", flood_source)
 
         etapa_16 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)
         etapa_17 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 17)

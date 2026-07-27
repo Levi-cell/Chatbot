@@ -89,7 +89,14 @@ class PersistenciaEssencialTests(unittest.TestCase):
             movimento,
             "atualizar_conversa_resposta_bot_sem_avancar",
             return_value=1,
-        ) as manter:
+        ) as manter, patch.object(
+            persistencia,
+            "incrementar_turnos_sem_avanco",
+            return_value=1,
+        ) as incrementar, patch.object(
+            persistencia,
+            "resetar_turnos_sem_avanco",
+        ) as resetar:
             resultado = persistencia.atualizar_banco_com_contexto_final(
                 contexto_historico_base(id_etapa_atual=1),
                 {
@@ -108,8 +115,56 @@ class PersistenciaEssencialTests(unittest.TestCase):
 
         avancar.assert_not_called()
         manter.assert_called_once_with(10, DATA_BOT, cursor)
+        incrementar.assert_called_once_with(10, cursor)
+        resetar.assert_not_called()
+        self.assertEqual(resultado["turnos_sem_avanco"], 1)
         self.assertFalse(resultado["atualizar_conversa"])
         self.assertTrue(resultado["atualizar_last_from_bot"])
+
+    def test_transicao_valida_reseta_turnos_sem_avanco(self):
+        cursor = object()
+
+        with patch.object(
+            persistencia,
+            "inserir_historico_mensagem_bot",
+            return_value=(302, DATA_BOT, True),
+        ), patch.object(
+            persistencia,
+            "persistir_movimento_conversa",
+            return_value="transicao",
+        ), patch.object(
+            persistencia,
+            "resetar_turnos_sem_avanco",
+            return_value=0,
+        ) as resetar, patch.object(
+            persistencia,
+            "incrementar_turnos_sem_avanco",
+        ) as incrementar, patch.object(
+            persistencia,
+            "atualizar_banco_conforme_transicao_de_etapa",
+            return_value=None,
+        ), patch.object(
+            persistencia,
+            "resolver_intencao_encerramento",
+            return_value=None,
+        ):
+            resultado = persistencia.atualizar_banco_com_contexto_final(
+                contexto_historico_base(id_etapa_atual=1),
+                {
+                    "enviou": True,
+                    "resposta_ja_existia": False,
+                    "mensagem_bot": "Avancou",
+                    "id_hash_msg_bot": "wamid.bot.transicao",
+                    "id_etapa_resultante": 2,
+                    "evento_transicao": EVENTO_NOME_CLIENTE_VALIDO,
+                    "tipo_mensagem": "text",
+                },
+                cursor,
+            )
+
+        resetar.assert_called_once_with(10, cursor)
+        incrementar.assert_not_called()
+        self.assertEqual(resultado["turnos_sem_avanco"], 0)
 
     def test_resposta_existente_nao_e_enviada_nem_inserida_novamente(self):
         cursor = object()

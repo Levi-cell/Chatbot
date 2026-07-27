@@ -36,6 +36,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
             "cliente_cache:5511999999999",
             "conversa_bloqueada:hash-conversa",
             "webhook_flood_rate:60:janela:hash",
+            "webhook_erro_inesperado:hash-wamid",
         }
         chaves_preservadas = {
             *cache_reset.CHAVES_EXATAS_RESET,
@@ -47,7 +48,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
 
         resultado = cache_reset.resetar_cache_operacional(redis)
 
-        self.assertEqual(resultado["total_removido"], 3)
+        self.assertEqual(resultado["total_removido"], 4)
         self.assertEqual(redis.chaves, chaves_preservadas)
         self.assertEqual(
             resultado["chaves_por_padrao"],
@@ -55,6 +56,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
                 "cliente_cache:*": 1,
                 "conversa_bloqueada:*": 1,
                 "webhook_flood_rate:*": 1,
+                "webhook_erro_inesperado:*": 1,
             },
         )
         self.assertEqual(resultado["destino"], "203.0.113.10")
@@ -96,6 +98,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
                 "cliente_cache:5511999999999",
                 "conversa_bloqueada:hash-conversa",
                 "webhook_flood_rate:60:janela:hash",
+                "webhook_erro_inesperado:hash-wamid",
                 "unidades_cache",
             }
         )
@@ -109,6 +112,7 @@ class CacheResetOperacionalTests(unittest.TestCase):
             {
                 "cliente_cache:5511999999999",
                 "webhook_flood_rate:60:janela:hash",
+                "webhook_erro_inesperado:hash-wamid",
                 "unidades_cache",
             },
         )

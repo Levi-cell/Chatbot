@@ -96,6 +96,33 @@ class WebhookPostFlowTests(unittest.TestCase):
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
+    def test_utf8_invalido_retorna_ignored(self):
+        request = FakeRequest(b"\xff")
+
+        with patch.object(
+            post_flow,
+            "validar_assinatura_meta",
+            return_value=True,
+        ), patch.object(post_flow, "get_conn") as get_conn:
+            response = post_flow.responder_post_webhook(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json_response_payload(response)["reason"], "invalid_json")
+        self.bloqueio_guard.assert_not_called()
+        get_conn.assert_not_called()
+
+    def test_nome_cliente_e_limitado_ao_tamanho_do_banco(self):
+        payload = payload_texto_meta()
+        payload["entry"][0]["changes"][0]["value"]["contacts"][0][
+            "profile"
+        ]["name"] = f"  {'A' * 250}  "
+
+        self.assertEqual(
+            post_flow._extrair_nome_cliente(payload),
+            "A" * 200,
+        )
+
+    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
     def test_cliente_marcado_ignora_antes_de_flood_unidade_e_fila(self):
         request = FakeRequest(payload_texto_meta())
         self.bloqueio_guard.return_value = JsonResponse({
@@ -130,6 +157,7 @@ class WebhookPostFlowTests(unittest.TestCase):
         self.bloqueio_guard.assert_called_once_with(
             "5571999999999",
             "123456",
+            nome_cliente="Cliente Teste",
         )
         flood.assert_not_called()
         unidade.assert_not_called()

@@ -37,12 +37,6 @@ def criar_tabelas_bloqueio_flood():
                     UNIQUE (wa_id_cliente, id_unidade)
             );
 
-            -- Mantém bancos existentes compatíveis com o estado final acima.
-            -- A coluna é opcional para não quebrar bloqueios automáticos que
-            -- ainda não conheçam um nome amigável para o WA ID.
-            ALTER TABLE chatbot.cliente_bloqueado_meta
-            ADD COLUMN IF NOT EXISTS nome VARCHAR(200) NULL;
-
             CREATE INDEX IF NOT EXISTS idx_cliente_bloqueado_meta_id_cliente
             ON chatbot.cliente_bloqueado_meta (id_cliente)
             WHERE id_cliente IS NOT NULL;

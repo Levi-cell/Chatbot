@@ -63,6 +63,7 @@ class Conversa(models.Model):
     processing = models.BooleanField(blank=True, null=True, default=False)
     processing_started_at = models.DateTimeField(blank=True, null=True)
     lock_version = models.IntegerField(blank=True, null=True, default=0)
+    turnos_sem_avanco = models.IntegerField(default=0)
     iniciou_em = models.DateTimeField()
     finalizou_em = models.DateTimeField(blank=True, null=True)
     motivo_encerramento = models.CharField(

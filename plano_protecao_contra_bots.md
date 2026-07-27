@@ -2344,7 +2344,7 @@ def responder_post_webhook(request):
     try:
         data = json.loads(request.body.decode("utf-8"))
 
-    except json.JSONDecodeError as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.warning(
             "mensagem_ignorada | motivo=json_invalido acao=nao_enfileirar erro=%s",
             exc,
@@ -6031,7 +6031,7 @@ def responder_post_webhook(request):
     try:
         data = json.loads(request.body.decode("utf-8"))
 
-    except json.JSONDecodeError as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         logger.warning(
             "mensagem_ignorada | motivo=json_invalido acao=nao_enfileirar erro=%s",
             exc,
@@ -6386,7 +6386,7 @@ def _extrair_nome_cliente(data):
         return None
 
     nome_cliente = str(nome_cliente).strip()
-    return nome_cliente or None
+    return nome_cliente[:200] or None
 ```
 
 A seção 0B permanece intacta.

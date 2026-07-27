@@ -9,14 +9,65 @@ from core.logging_config import short_value
 logger = logging.getLogger("cache.bloqueio_meta")
 
 RATE_PREFIX = "webhook_flood_rate"
+DEDUPLICACAO_TTL_SEGUNDOS = 2 * 60 * 60
+
+_AVALIAR_FLOOD_LUA = """
+local dedupe_key = KEYS[1]
+local dedupe_ttl = tonumber(ARGV[1])
+local evento_novo = redis.call(
+    "SET",
+    dedupe_key,
+    "1",
+    "NX",
+    "EX",
+    dedupe_ttl
+)
+local resposta = {}
+
+if evento_novo then
+    table.insert(resposta, 1)
+else
+    table.insert(resposta, 0)
+end
+
+for indice = 2, #KEYS do
+    local total
+
+    if evento_novo then
+        total = redis.call("INCR", KEYS[indice])
+
+        if total == 1 then
+            redis.call(
+                "EXPIRE",
+                KEYS[indice],
+                tonumber(ARGV[indice])
+            )
+        end
+    else
+        total = tonumber(
+            redis.call("GET", KEYS[indice]) or "0"
+        )
+    end
+
+    table.insert(resposta, total)
+end
+
+return resposta
+"""
 
 
 def avaliar_flood_redis(
     wa_id_cliente,
     phone_id_unidade,
+    id_hash_msg,
     regras,
 ):
-    if not wa_id_cliente or not phone_id_unidade:
+    if (
+        not wa_id_cliente
+        or not phone_id_unidade
+        or not id_hash_msg
+        or not regras
+    ):
         return {
             "redis_ok": True,
             "bloqueado": False,
@@ -24,33 +75,59 @@ def avaliar_flood_redis(
             "total": 0,
             "motivo": "dados_invalidos",
             "regra": None,
+            "evento_novo": False,
         }
 
     try:
-        r = get_redis_safe(retries=1, delay=0, validate=False)
+        redis = get_redis_safe(
+            retries=1,
+            delay=0,
+            validate=False,
+        )
         agora = time.time()
-        pipe = r.pipeline()
+        digest_par = _digest_par(
+            wa_id_cliente,
+            phone_id_unidade,
+        )
+        digest_wamid = _digest_wamid(id_hash_msg)
+        chaves = [
+            _dedupe_key(digest_par, digest_wamid),
+        ]
+        argumentos = [
+            DEDUPLICACAO_TTL_SEGUNDOS,
+        ]
 
         for regra in regras:
             janela_segundos = regra["janela_segundos"]
             janela = int(agora // janela_segundos)
-            key = _rate_key(
-                wa_id_cliente,
-                phone_id_unidade,
-                janela_segundos,
-                janela,
+            chaves.append(
+                _rate_key(
+                    digest_par,
+                    janela_segundos,
+                    janela,
+                )
             )
-            pipe.incr(key)
-            pipe.expire(key, janela_segundos + 10)
+            argumentos.append(
+                janela_segundos + 10,
+            )
 
-        resultados = pipe.execute()
-
+        # A deduplicação e todos os incrementos são uma única operação
+        # atômica. Duas entregas concorrentes do mesmo WAMID não conseguem
+        # vencer o SET NX ao mesmo tempo.
+        resultados = redis.eval(
+            _AVALIAR_FLOOD_LUA,
+            len(chaves),
+            *chaves,
+            *argumentos,
+        )
         maior_total = 0
-        indice = 0
+        evento_novo = bool(resultados[0])
 
-        for regra in regras:
+        for indice, regra in enumerate(
+            regras,
+            start=1,
+        ):
             total = int(resultados[indice])
-            indice += 2
             maior_total = max(maior_total, total)
 
             if total >= regra["limite"]:
@@ -63,6 +140,7 @@ def avaliar_flood_redis(
                     "janela_segundos": regra["janela_segundos"],
                     "motivo": "redis",
                     "regra": regra["nome"],
+                    "evento_novo": evento_novo,
                 }
 
         return {
@@ -72,13 +150,17 @@ def avaliar_flood_redis(
             "total": maior_total,
             "motivo": "redis",
             "regra": None,
+            "evento_novo": evento_novo,
         }
 
     except Exception as exc:
         logger.warning(
-            "rate_limit_redis_falhou | acao=fallback_banco wa_id_cliente=%s phone_id_unidade=%s erro=%s",
+            "rate_limit_redis_falhou | "
+            "acao=fallback_banco wa_id_cliente=%s "
+            "phone_id_unidade=%s id_hash_msg=%s erro=%s",
             short_value(wa_id_cliente),
             short_value(phone_id_unidade),
+            short_value(id_hash_msg),
             exc,
         )
         return {
@@ -88,15 +170,25 @@ def avaliar_flood_redis(
             "total": 0,
             "motivo": "redis_indisponivel",
             "regra": None,
+            "evento_novo": False,
         }
 
 
-def _rate_key(wa_id_cliente, phone_id_unidade, janela_segundos, janela):
-    digest = _digest(wa_id_cliente, phone_id_unidade)
-    return f"{RATE_PREFIX}:{janela_segundos}:{janela}:{digest}"
+def _dedupe_key(digest_par, digest_wamid):
+    return (
+        f"{RATE_PREFIX}:{{{digest_par}}}:"
+        f"wamid:{digest_wamid}"
+    )
 
 
-def _digest(wa_id_cliente, phone_id_unidade):
+def _rate_key(digest_par, janela_segundos, janela):
+    return (
+        f"{RATE_PREFIX}:{{{digest_par}}}:"
+        f"contador:{janela_segundos}:{janela}"
+    )
+
+
+def _digest_par(wa_id_cliente, phone_id_unidade):
     wa_id_cliente = _normalizar(wa_id_cliente)
     phone_id_unidade = _normalizar(phone_id_unidade)
 
@@ -105,6 +197,17 @@ def _digest(wa_id_cliente, phone_id_unidade):
 
     raw = f"{phone_id_unidade}:{wa_id_cliente}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _digest_wamid(id_hash_msg):
+    id_hash_msg = _normalizar(id_hash_msg)
+
+    if not id_hash_msg:
+        return None
+
+    return hashlib.sha256(
+        id_hash_msg.encode("utf-8")
+    ).hexdigest()
 
 
 def _normalizar(valor):
