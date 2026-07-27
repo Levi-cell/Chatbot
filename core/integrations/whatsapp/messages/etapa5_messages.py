@@ -1,7 +1,7 @@
 # ENTRADA NA ETAPA 5 - CLIENTE
 
 MENSAGEM_OFERTA_CLIENTE_ETAPA5 = (
-    "Que notícia Maravilhosa! 😍\n\n"
+    "Maravilha! ☺️\n\n"
     "Quero te presentear com uma experiência que pode fazer toda a diferença "
     "no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
@@ -19,7 +19,7 @@ def montar_mensagem_oferta_cliente_etapa5(nome):
 # ENTRADA NA ETAPA 5 - DEPENDENTE
 
 MENSAGEM_OFERTA_DEPENDENTE_ETAPA5 = (
-    "Que notícia Maravilhosa! 😍\n\n"
+    "Maravilha! ☺️\n\n"
     "Quero presentear {nome} com uma experiência que pode fazer toda a "
     "diferença no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "

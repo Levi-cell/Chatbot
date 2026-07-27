@@ -83,11 +83,18 @@ def _montar_conteudo(
     id_hash_msg,
     erro_meta,
 ):
-    acao_recomendada = (
-        "executar job_reconciliacao_bloqueios_meta() quando o banco voltar"
-        if meta_ok
-        else "verificar falha da Meta e acompanhar novas tentativas de bloqueio"
-    )
+    if meta_ok is True:
+        acao_recomendada = (
+            "executar job_reconciliacao_bloqueios_meta() quando o banco voltar"
+        )
+    elif meta_ok is False:
+        acao_recomendada = (
+            "acompanhar novas tentativas; a denylist local deve permanecer ativa"
+        )
+    else:
+        acao_recomendada = (
+            "restabelecer o banco; o webhook retornou 503 para reentrega"
+        )
 
     linhas = [
         "================================================================",
@@ -110,7 +117,8 @@ def _montar_conteudo(
         "- Redis falhou antes de detectar o flood.",
         "- Banco falhou como fallback do rate limit.",
         "- Memoria local detectou o flood e o webhook ignorou a mensagem.",
-        "- Como o banco estava indisponivel, pode existir divergencia temporaria Meta x banco.",
+        "- A intencao local precisa ser persistida antes da tentativa na Meta.",
+        "- Se o banco permaneceu indisponivel, o webhook pediu reentrega.",
         "",
     ]
     return "\n".join(linhas) + "\n"

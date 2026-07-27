@@ -100,6 +100,24 @@ class CacheEssencialTests(unittest.TestCase):
             "123456",
         )
 
+    def test_redis_e_banco_indisponiveis_nao_liberam_conversa(self):
+        with patch.object(
+            cache_conversas_bloqueadas,
+            "get_redis_safe",
+            side_effect=ConnectionError("redis caiu"),
+        ), patch.object(
+            cache_conversas_bloqueadas,
+            "get_conn",
+            side_effect=ConnectionError("banco caiu"),
+        ):
+            with self.assertRaises(
+                cache_conversas_bloqueadas.ValidacaoBloqueioConversaIndisponivel
+            ):
+                cache_conversas_bloqueadas.conversa_esta_bloqueada_cache(
+                    "5571999999999",
+                    "123456",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

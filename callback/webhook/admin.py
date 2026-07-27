@@ -1232,12 +1232,14 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
     list_display = (
         "id_bloqueio",
         "cliente_link",
+        "nome",
         "wa_id_cliente",
         "id_unidade",
         "phone_id_unidade",
     )
 
     search_fields = (
+        "nome",
         "wa_id_cliente",
         "phone_id_unidade",
         "id_cliente__waid_telefone",

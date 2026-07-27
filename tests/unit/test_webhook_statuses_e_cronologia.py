@@ -73,6 +73,9 @@ class WebhookStatusesTests(unittest.TestCase):
             return_value=True,
         ), patch.object(
             post_flow,
+            "responder_se_cliente_marcado_para_bloqueio",
+        ) as bloqueio_meta, patch.object(
+            post_flow,
             "responder_se_flood",
         ) as flood, patch.object(
             post_flow,
@@ -88,6 +91,7 @@ class WebhookStatusesTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json_response_payload(response), {"status": "ok"})
+        bloqueio_meta.assert_not_called()
         flood.assert_not_called()
         unidade.assert_not_called()
         bloqueio.assert_not_called()

@@ -10,7 +10,7 @@ from core.integrations.whatsapp.tools.usuarios import (
 )
 from core.logging_config import short_value
 from core.repositories.seguranca.bloqueio_meta import (
-    buscar_id_cliente_por_wa_id,
+    buscar_cliente_por_wa_id,
     buscar_unidade_bloqueio_por_phone_id,
     contar_eventos_flood_banco,
     limpar_eventos_flood_antigos,
@@ -35,25 +35,39 @@ def responder_se_flood(data):
     phone_id_unidade = _extrair_phone_number_id(data)
     wa_id_cliente = _extrair_cliente_telefone(data)
     id_hash_msg = _extrair_id_hash_msg(data)
+    nome_cliente = _extrair_nome_cliente(data)
 
     flood = bloquear_cliente_se_flood(
         wa_id_cliente,
         phone_id_unidade,
         id_hash_msg,
+        nome_cliente=nome_cliente,
     )
 
     if not flood["bloqueado"]:
         return None
 
     logger.warning(
-        "mensagem_ignorada | motivo=%s regra=%s acao=bloqueio_meta_nao_enfileirar cliente=%s phone_number_id=%s total=%s meta_ok=%s",
+        "mensagem_ignorada | motivo=%s regra=%s "
+        "acao=bloqueio_local_nao_enfileirar cliente=%s phone_number_id=%s "
+        "total=%s persistencia_ok=%s meta_ok=%s",
         flood["motivo"],
         flood.get("regra"),
         short_value(wa_id_cliente),
         short_value(phone_id_unidade),
         flood["total"],
+        flood.get("persistencia_ok"),
         flood.get("meta_ok"),
     )
+
+    if flood.get("reentregar"):
+        return JsonResponse(
+            {
+                "status": "unavailable",
+                "reason": flood["motivo"],
+            },
+            status=503,
+        )
 
     return JsonResponse({
         "status": "ignored",
@@ -61,7 +75,12 @@ def responder_se_flood(data):
     })
 
 
-def bloquear_cliente_se_flood(wa_id_cliente, phone_id_unidade, id_hash_msg):
+def bloquear_cliente_se_flood(
+    wa_id_cliente,
+    phone_id_unidade,
+    id_hash_msg,
+    nome_cliente=None,
+):
     if not wa_id_cliente or not phone_id_unidade or not id_hash_msg:
         return {
             "bloqueado": False,
@@ -85,6 +104,7 @@ def bloquear_cliente_se_flood(wa_id_cliente, phone_id_unidade, id_hash_msg):
                 origem="redis",
                 total=rate_redis["total"],
                 regra=rate_redis["regra"],
+                nome_cliente=nome_cliente,
             )
 
         return {
@@ -108,6 +128,7 @@ def bloquear_cliente_se_flood(wa_id_cliente, phone_id_unidade, id_hash_msg):
             origem="banco",
             total=rate_banco["total"],
             regra=rate_banco["regra"],
+            nome_cliente=nome_cliente,
         )
 
     if not rate_banco["banco_ok"]:
@@ -124,6 +145,7 @@ def bloquear_cliente_se_flood(wa_id_cliente, phone_id_unidade, id_hash_msg):
                 total=rate_memoria["total"],
                 regra=rate_memoria["regra"],
                 id_hash_msg=id_hash_msg,
+                nome_cliente=nome_cliente,
             )
 
         return {
@@ -215,26 +237,16 @@ def _bloquear_via_memoria_e_alertar(
     total,
     regra,
     id_hash_msg,
+    nome_cliente=None,
 ):
-    meta_ok = False
-    erro_meta = None
-    motivo = "flood_memoria"
-
-    try:
-        bloquear_usuario_meta(wa_id_cliente, phone_id_unidade)
-        meta_ok = True
-
-    except Exception as exc:
-        erro_meta = str(exc)
-        motivo = "flood_memoria_meta_falhou"
-        logger.exception(
-            "bloqueio_meta_falhou | motivo=meta_indisponivel acao=ignorar_sem_registrar origem=memoria regra=%s wa_id_cliente=%s phone_id_unidade=%s total=%s erro=%s",
-            regra,
-            short_value(wa_id_cliente),
-            short_value(phone_id_unidade),
-            total,
-            exc,
-        )
+    resultado = _bloquear_e_registrar(
+        wa_id_cliente,
+        phone_id_unidade,
+        origem="memoria",
+        total=total,
+        regra=regra,
+        nome_cliente=nome_cliente,
+    )
 
     registrar_alerta_flood_memoria(
         wa_id_cliente=wa_id_cliente,
@@ -242,43 +254,55 @@ def _bloquear_via_memoria_e_alertar(
         origem="memoria",
         regra=regra,
         total=total,
-        meta_ok=meta_ok,
-        motivo=motivo,
+        meta_ok=resultado.get("meta_ok"),
+        motivo=resultado["motivo"],
         id_hash_msg=id_hash_msg,
-        erro_meta=erro_meta,
+        erro_meta=resultado.get("erro_meta"),
     )
 
     logger.warning(
-        "flood_bloqueado_memoria | acao=ignorar_alertar regra=%s wa_id_cliente=%s phone_id_unidade=%s total=%s meta_ok=%s",
+        "flood_bloqueado_memoria | acao=alertar regra=%s "
+        "wa_id_cliente=%s phone_id_unidade=%s total=%s "
+        "persistencia_ok=%s meta_ok=%s reentregar=%s",
         regra,
         short_value(wa_id_cliente),
         short_value(phone_id_unidade),
         total,
-        meta_ok,
+        resultado.get("persistencia_ok"),
+        resultado.get("meta_ok"),
+        resultado.get("reentregar"),
     )
-
-    return {
-        "bloqueado": True,
-        "motivo": motivo,
-        "total": total,
-        "regra": regra,
-        "id_bloqueio": None,
-        "id_cliente": None,
-        "id_unidade": None,
-        "meta_ok": meta_ok,
-    }
+    return resultado
 
 
-def _bloquear_e_registrar(wa_id_cliente, phone_id_unidade, origem, total, regra):
+def _bloquear_e_registrar(
+    wa_id_cliente,
+    phone_id_unidade,
+    origem,
+    total,
+    regra,
+    nome_cliente=None,
+):
     dados_bloqueio = _buscar_dados_bloqueio(
         wa_id_cliente,
         phone_id_unidade,
+        nome_cliente=nome_cliente,
     )
 
     if not dados_bloqueio["id_unidade"]:
+        banco_indisponivel = (
+            dados_bloqueio["motivo"] == "flood_banco_indisponivel"
+        )
+        motivo = (
+            f"flood_{origem}_banco_indisponivel"
+            if banco_indisponivel
+            else f"flood_{origem}_unidade_nao_cadastrada"
+        )
         logger.warning(
-            "flood_detectado_sem_bloqueio_meta | motivo=%s acao=ignorar_sem_registrar origem=%s regra=%s wa_id_cliente=%s phone_id_unidade=%s total=%s",
-            dados_bloqueio["motivo"],
+            "flood_detectado_sem_bloqueio_local | motivo=%s acao=%s "
+            "origem=%s regra=%s wa_id_cliente=%s phone_id_unidade=%s total=%s",
+            motivo,
+            "retornar_503" if banco_indisponivel else "ignorar_phone_desconhecido",
             origem,
             regra,
             short_value(wa_id_cliente),
@@ -287,41 +311,21 @@ def _bloquear_e_registrar(wa_id_cliente, phone_id_unidade, origem, total, regra)
         )
         return {
             "bloqueado": True,
-            "motivo": dados_bloqueio["motivo"],
-            "total": total,
-            "regra": regra,
-            "id_bloqueio": None,
-            "id_cliente": None,
-            "id_unidade": None,
-            "meta_ok": False,
-        }
-
-    try:
-        bloquear_usuario_meta(wa_id_cliente, phone_id_unidade)
-
-    except Exception as exc:
-        logger.exception(
-            "bloqueio_meta_falhou | motivo=meta_indisponivel acao=ignorar_sem_registrar origem=%s regra=%s wa_id_cliente=%s phone_id_unidade=%s total=%s erro=%s",
-            origem,
-            regra,
-            short_value(wa_id_cliente),
-            short_value(phone_id_unidade),
-            total,
-            exc,
-        )
-        return {
-            "bloqueado": True,
-            "motivo": f"flood_{origem}_meta_falhou",
+            "motivo": motivo,
             "total": total,
             "regra": regra,
             "id_bloqueio": None,
             "id_cliente": dados_bloqueio["id_cliente"],
-            "id_unidade": dados_bloqueio["id_unidade"],
-            "meta_ok": False,
+            "id_unidade": None,
+            "persistencia_ok": False,
+            "meta_ok": None,
+            "erro_meta": None,
+            "reentregar": banco_indisponivel,
         }
 
-    id_bloqueio = _registrar_bloqueio_banco_apos_meta(
+    id_bloqueio = _registrar_intencao_bloqueio_banco(
         dados_bloqueio["id_cliente"],
+        dados_bloqueio["nome_cliente"],
         wa_id_cliente,
         dados_bloqueio["id_unidade"],
         dados_bloqueio["phone_id_unidade"],
@@ -329,15 +333,62 @@ def _bloquear_e_registrar(wa_id_cliente, phone_id_unidade, origem, total, regra)
 
     if not id_bloqueio:
         logger.critical(
-            "bloqueio_meta_registro_pos_meta_falhou | motivo=meta_ok_banco_falhou acao=investigar_reconciliacao wa_id_cliente=%s id_cliente=%s id_unidade=%s phone_id_unidade=%s",
+            "bloqueio_local_registro_falhou | "
+            "motivo=banco_falhou acao=retornar_503_sem_chamar_meta "
+            "wa_id_cliente=%s id_cliente=%s id_unidade=%s "
+            "phone_id_unidade=%s",
             short_value(wa_id_cliente),
             dados_bloqueio["id_cliente"],
             dados_bloqueio["id_unidade"],
             short_value(dados_bloqueio["phone_id_unidade"]),
         )
+        return {
+            "bloqueado": True,
+            "motivo": f"flood_{origem}_persistencia_local_falhou",
+            "total": total,
+            "regra": regra,
+            "id_bloqueio": None,
+            "id_cliente": dados_bloqueio["id_cliente"],
+            "id_unidade": dados_bloqueio["id_unidade"],
+            "persistencia_ok": False,
+            "meta_ok": None,
+            "erro_meta": None,
+            "reentregar": True,
+        }
+
+    meta_ok = False
+    erro_meta = None
+
+    try:
+        bloquear_usuario_meta(wa_id_cliente, phone_id_unidade)
+        meta_ok = True
+
+    except Exception as exc:
+        erro_meta = str(exc)
+        logger.exception(
+            "bloqueio_meta_falhou | motivo=meta_indisponivel "
+            "acao=manter_bloqueio_local_e_repetir_em_nova_mensagem "
+            "origem=%s regra=%s wa_id_cliente=%s phone_id_unidade=%s "
+            "total=%s id_bloqueio=%s erro=%s",
+            origem,
+            regra,
+            short_value(wa_id_cliente),
+            short_value(phone_id_unidade),
+            total,
+            id_bloqueio,
+            exc,
+        )
+
+    motivo = (
+        f"flood_{origem}"
+        if meta_ok
+        else f"flood_{origem}_meta_falhou"
+    )
 
     logger.warning(
-        "flood_bloqueado | acao=registrar_resultado origem=%s regra=%s wa_id_cliente=%s id_cliente=%s id_unidade=%s phone_id_unidade=%s total=%s id_bloqueio=%s meta_ok=%s",
+        "flood_bloqueado | acao=registrar_resultado origem=%s regra=%s "
+        "wa_id_cliente=%s id_cliente=%s id_unidade=%s phone_id_unidade=%s "
+        "total=%s id_bloqueio=%s meta_ok=%s erro_meta=%s",
         origem,
         regra,
         short_value(wa_id_cliente),
@@ -346,25 +397,34 @@ def _bloquear_e_registrar(wa_id_cliente, phone_id_unidade, origem, total, regra)
         short_value(dados_bloqueio["phone_id_unidade"]),
         total,
         id_bloqueio,
-        True,
+        meta_ok,
+        erro_meta,
     )
 
     return {
         "bloqueado": True,
-        "motivo": f"flood_{origem}",
+        "motivo": motivo,
         "total": total,
         "regra": regra,
         "id_bloqueio": id_bloqueio,
         "id_cliente": dados_bloqueio["id_cliente"],
         "id_unidade": dados_bloqueio["id_unidade"],
-        "meta_ok": True,
+        "persistencia_ok": True,
+        "meta_ok": meta_ok,
+        "erro_meta": erro_meta,
+        "reentregar": False,
     }
 
 
-def _buscar_dados_bloqueio(wa_id_cliente, phone_id_unidade):
+def _buscar_dados_bloqueio(
+    wa_id_cliente,
+    phone_id_unidade,
+    nome_cliente=None,
+):
     conn = None
     dados_vazios = {
         "id_cliente": None,
+        "nome_cliente": _normalizar_nome_cliente(nome_cliente),
         "id_unidade": None,
         "phone_id_unidade": phone_id_unidade,
         "motivo": "dados_bloqueio_indisponiveis",
@@ -374,7 +434,13 @@ def _buscar_dados_bloqueio(wa_id_cliente, phone_id_unidade):
         conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
 
-        id_cliente = buscar_id_cliente_por_wa_id(wa_id_cliente, cursor)
+        cliente = buscar_cliente_por_wa_id(wa_id_cliente, cursor)
+        id_cliente = cliente[0] if cliente else None
+        nome_cliente_banco = cliente[1] if cliente else None
+        nome_bloqueio = (
+            _normalizar_nome_cliente(nome_cliente_banco)
+            or dados_vazios["nome_cliente"]
+        )
         unidade = buscar_unidade_bloqueio_por_phone_id(
             phone_id_unidade,
             cursor,
@@ -389,13 +455,15 @@ def _buscar_dados_bloqueio(wa_id_cliente, phone_id_unidade):
             return {
                 **dados_vazios,
                 "id_cliente": id_cliente,
-                "motivo": "flood_sem_unidade_ativa",
+                "nome_cliente": nome_bloqueio,
+                "motivo": "flood_sem_unidade_cadastrada",
             }
 
         id_unidade, phone_id_cadastrado = unidade
 
         return {
             "id_cliente": id_cliente,
+            "nome_cliente": nome_bloqueio,
             "id_unidade": id_unidade,
             "phone_id_unidade": phone_id_cadastrado,
             "motivo": "ok",
@@ -418,8 +486,9 @@ def _buscar_dados_bloqueio(wa_id_cliente, phone_id_unidade):
             conn.close()
 
 
-def _registrar_bloqueio_banco_apos_meta(
+def _registrar_intencao_bloqueio_banco(
     id_cliente,
+    nome_cliente,
     wa_id_cliente,
     id_unidade,
     phone_id_unidade,
@@ -436,6 +505,7 @@ def _registrar_bloqueio_banco_apos_meta(
             id_unidade,
             phone_id_unidade,
             cursor,
+            nome_cliente=nome_cliente,
         )
 
         conn.commit()
@@ -446,7 +516,9 @@ def _registrar_bloqueio_banco_apos_meta(
             conn.rollback()
 
         logger.exception(
-            "bloqueio_meta_registro_banco_falhou | motivo=meta_ok_banco_falhou acao=nao_registrado wa_id_cliente=%s id_cliente=%s id_unidade=%s phone_id_unidade=%s erro=%s",
+            "bloqueio_local_registro_banco_falhou | motivo=banco_indisponivel "
+            "acao=nao_registrado wa_id_cliente=%s id_cliente=%s "
+            "id_unidade=%s phone_id_unidade=%s erro=%s",
             short_value(wa_id_cliente),
             id_cliente,
             id_unidade,
@@ -470,6 +542,32 @@ def _extrair_cliente_telefone(data):
     value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
     contacts = value.get("contacts", [{}])
     return contacts[0].get("wa_id") if contacts else None
+
+
+def _extrair_nome_cliente(data):
+    value = data.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {})
+    contacts = value.get("contacts")
+
+    if (
+        not isinstance(contacts, list)
+        or not contacts
+        or not isinstance(contacts[0], dict)
+    ):
+        return None
+
+    profile = contacts[0].get("profile")
+    if not isinstance(profile, dict):
+        return None
+
+    return _normalizar_nome_cliente(profile.get("name"))
+
+
+def _normalizar_nome_cliente(nome_cliente):
+    if nome_cliente is None:
+        return None
+
+    nome_normalizado = str(nome_cliente).strip()
+    return nome_normalizado[:200] or None
 
 
 def _extrair_id_hash_msg(data):

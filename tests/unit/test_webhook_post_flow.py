@@ -15,6 +15,13 @@ class WebhookPostFlowTests(unittest.TestCase):
         self.print_patcher = patch("builtins.print")
         self.print_patcher.start()
         self.addCleanup(self.print_patcher.stop)
+        self.bloqueio_guard_patcher = patch.object(
+            post_flow,
+            "responder_se_cliente_marcado_para_bloqueio",
+            return_value=None,
+        )
+        self.bloqueio_guard = self.bloqueio_guard_patcher.start()
+        self.addCleanup(self.bloqueio_guard_patcher.stop)
 
     def test_content_type_invalido_retorna_415_antes_de_assinatura(self):
         request = FakeRequest(
@@ -34,6 +41,7 @@ class WebhookPostFlowTests(unittest.TestCase):
             "unsupported_media_type",
         )
         assinatura.assert_not_called()
+        self.bloqueio_guard.assert_not_called()
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=10)
@@ -52,6 +60,7 @@ class WebhookPostFlowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 413)
         self.assertEqual(json_response_payload(response)["status"], "payload_too_large")
         assinatura.assert_not_called()
+        self.bloqueio_guard.assert_not_called()
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
@@ -67,6 +76,7 @@ class WebhookPostFlowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(json_response_payload(response)["status"], "forbidden")
+        self.bloqueio_guard.assert_not_called()
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
@@ -82,7 +92,85 @@ class WebhookPostFlowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json_response_payload(response)["reason"], "invalid_json")
+        self.bloqueio_guard.assert_not_called()
         get_conn.assert_not_called()
+
+    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
+    def test_cliente_marcado_ignora_antes_de_flood_unidade_e_fila(self):
+        request = FakeRequest(payload_texto_meta())
+        self.bloqueio_guard.return_value = JsonResponse({
+            "status": "ignored",
+            "reason": "cliente_marcado_bloqueio_meta",
+        })
+
+        with patch.object(
+            post_flow,
+            "validar_assinatura_meta",
+            return_value=True,
+        ), patch.object(
+            post_flow,
+            "responder_se_flood",
+        ) as flood, patch.object(
+            post_flow,
+            "unidade_esta_ativa",
+        ) as unidade, patch.object(
+            post_flow,
+            "povoando_fila",
+        ) as fila, patch.object(
+            post_flow,
+            "get_conn",
+        ) as get_conn:
+            response = post_flow.responder_post_webhook(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json_response_payload(response)["reason"],
+            "cliente_marcado_bloqueio_meta",
+        )
+        self.bloqueio_guard.assert_called_once_with(
+            "5571999999999",
+            "123456",
+        )
+        flood.assert_not_called()
+        unidade.assert_not_called()
+        fila.assert_not_called()
+        get_conn.assert_not_called()
+
+    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
+    def test_lista_bloqueio_indisponivel_retorna_503_sem_seguir_fluxo(self):
+        request = FakeRequest(payload_texto_meta())
+        self.bloqueio_guard.return_value = JsonResponse(
+            {
+                "status": "unavailable",
+                "reason": "blocklist_validation_unavailable",
+            },
+            status=503,
+        )
+
+        with patch.object(
+            post_flow,
+            "validar_assinatura_meta",
+            return_value=True,
+        ), patch.object(
+            post_flow,
+            "responder_se_flood",
+        ) as flood, patch.object(
+            post_flow,
+            "unidade_esta_ativa",
+        ) as unidade, patch.object(
+            post_flow,
+            "povoando_fila",
+        ) as fila:
+            response = post_flow.responder_post_webhook(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json_response_payload(response)["reason"],
+            "blocklist_validation_unavailable",
+        )
+        flood.assert_not_called()
+        unidade.assert_not_called()
+        fila.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
     def test_flood_bloqueia_antes_de_unidade_e_fila(self):
@@ -134,6 +222,48 @@ class WebhookPostFlowTests(unittest.TestCase):
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
+    def test_validacao_bloqueio_conversa_indisponivel_retorna_503_sem_abrir_fila(self):
+        request = FakeRequest(payload_texto_meta())
+
+        with patch.object(
+            post_flow,
+            "validar_assinatura_meta",
+            return_value=True,
+        ), patch.object(
+            post_flow,
+            "responder_se_flood",
+            return_value=None,
+        ), patch.object(
+            post_flow,
+            "unidade_esta_ativa",
+            return_value=True,
+        ), patch.object(
+            post_flow,
+            "conversa_esta_bloqueada_cache",
+            side_effect=post_flow.ValidacaoBloqueioConversaIndisponivel(
+                "redis e banco indisponiveis"
+            ),
+        ), patch.object(
+            post_flow,
+            "preparar_dados_fila",
+        ) as preparar_fila, patch.object(
+            post_flow,
+            "get_conn",
+        ) as get_conn:
+            response = post_flow.responder_post_webhook(request)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json_response_payload(response),
+            {
+                "status": "unavailable",
+                "reason": "conversation_block_validation_unavailable",
+            },
+        )
+        preparar_fila.assert_not_called()
+        get_conn.assert_not_called()
+
+    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
     def test_evento_sem_mensagem_nao_abre_transacao(self):
         request = FakeRequest(payload_sem_mensagem())
 
@@ -150,6 +280,7 @@ class WebhookPostFlowTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json_response_payload(response)["status"], "ok")
+        self.bloqueio_guard.assert_not_called()
         get_conn.assert_not_called()
 
     @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)

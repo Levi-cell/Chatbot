@@ -344,6 +344,7 @@ class ClienteBloqueadoMeta(models.Model):
         null=True,
         related_name='bloqueios_meta',
     )
+    nome = models.CharField(max_length=200, blank=True, null=True)
     wa_id_cliente = models.CharField(max_length=50)
     id_unidade = models.ForeignKey(
         Unidade,

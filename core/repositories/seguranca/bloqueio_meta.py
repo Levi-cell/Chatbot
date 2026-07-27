@@ -71,22 +71,21 @@ def limpar_eventos_flood_antigos(cursor, horas=2):
     return cursor.rowcount
 
 
-def buscar_id_cliente_por_wa_id(wa_id_cliente, cursor):
+def buscar_cliente_por_wa_id(wa_id_cliente, cursor):
     cursor.execute("""
-        SELECT id_cliente
+        SELECT id_cliente, nome
         FROM chatbot.cliente
         WHERE waid_telefone = %s
         LIMIT 1;
     """, (wa_id_cliente,))
 
     resultado = cursor.fetchone()
-    id_cliente = resultado[0] if resultado else None
     logger.debug(
         "cliente_consulta | acao=buscar_por_wa_id wa_id_cliente=%s encontrado=%s",
         short_value(wa_id_cliente),
-        bool(id_cliente),
+        bool(resultado),
     )
-    return id_cliente
+    return resultado
 
 
 def buscar_unidade_bloqueio_por_phone_id(phone_id_unidade, cursor):
@@ -94,7 +93,6 @@ def buscar_unidade_bloqueio_por_phone_id(phone_id_unidade, cursor):
         SELECT id_unidade, phone_number_id
         FROM chatbot.unidade
         WHERE phone_number_id = %s
-          AND status_pagamento = TRUE
         LIMIT 1;
     """, (phone_id_unidade,))
 
@@ -113,22 +111,26 @@ def registrar_cliente_bloqueado_meta_banco(
     id_unidade,
     phone_id_unidade,
     cursor,
+    nome_cliente=None,
 ):
     cursor.execute("""
         INSERT INTO chatbot.cliente_bloqueado_meta (
             id_cliente,
+            nome,
             wa_id_cliente,
             id_unidade,
             phone_id_unidade
         )
-        VALUES (%s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (wa_id_cliente, id_unidade) DO UPDATE
         SET
             id_cliente = COALESCE(EXCLUDED.id_cliente, chatbot.cliente_bloqueado_meta.id_cliente),
+            nome = COALESCE(EXCLUDED.nome, chatbot.cliente_bloqueado_meta.nome),
             phone_id_unidade = EXCLUDED.phone_id_unidade
         RETURNING id_bloqueio;
     """, (
         id_cliente,
+        nome_cliente,
         wa_id_cliente,
         id_unidade,
         phone_id_unidade,

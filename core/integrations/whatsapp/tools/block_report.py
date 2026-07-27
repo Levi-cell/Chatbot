@@ -91,7 +91,7 @@ def job_reconciliacao_bloqueios_cliente_unidades_meta():
     print("===== RECONCILIACAO BLOQUEIOS META X BANCO =====")
     print(f"bloqueios_sincronizados: {len(sincronizados)}")
     print(f"somente_na_meta: {len(somente_meta)}")
-    print(f"somente_no_banco: {len(somente_banco)}")
+    print(f"pendentes_de_confirmacao_na_meta: {len(somente_banco)}")
     print()
 
     if somente_meta:
@@ -106,12 +106,13 @@ def job_reconciliacao_bloqueios_cliente_unidades_meta():
         print()
 
     if somente_banco:
-        print("SOMENTE NO BANCO:")
+        print("PENDENTES DE CONFIRMACAO NA META:")
         for phone_id_unidade, wa_id_cliente in somente_banco:
             bloqueio = banco_por_chave[(phone_id_unidade, wa_id_cliente)]
             print(
-                f"   - wa_id {wa_id_cliente} registrado no banco, "
-                f"mas ausente na Meta | bloqueio {bloqueio['id_bloqueio']} "
+                f"   - wa_id {wa_id_cliente} na denylist local e ainda "
+                f"ausente na Meta | nova mensagem sera ignorada e provocara "
+                f"outra tentativa | bloqueio {bloqueio['id_bloqueio']} "
                 f"unidade {bloqueio['id_unidade']} {bloqueio['nome_unidade']} "
                 f"phone id ({phone_id_unidade})"
             )

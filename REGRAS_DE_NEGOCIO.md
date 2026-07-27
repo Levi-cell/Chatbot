@@ -790,17 +790,36 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 
 ### 19.2. Clientes bloqueados na Meta
 
-- O administrador não poderá criar manualmente um bloqueio.
-- O bloqueio será decidido pelo sistema e executado diretamente na Meta.
-- Isso também evita tentar bloquear pessoas que nunca iniciaram contato, operação
-  que a Meta não permite nesse fluxo.
+- `cliente_bloqueado_meta` representa a intenção persistente de bloquear o par
+  `wa_id_cliente + phone_id_unidade`, além dos bloqueios já confirmados pela
+  Meta.
+- Um contato identificado manualmente pode ser registrado nessa tabela mesmo
+  quando a janela da Meta ainda não permite confirmar o bloqueio.
+- Toda nova mensagem desse par é interceptada antes do flood, da validação da
+  unidade e da fila.
+- O webhook tenta bloquear novamente na Meta e sempre ignora a mensagem, tanto
+  no sucesso quanto na falha. Uma mensagem futura provoca uma nova tentativa.
+- Falha ao consultar a lista retorna HTTP 503 para a Meta reenviar o evento;
+  nenhuma mensagem é enfileirada sem que essa validação seja concluída.
+- A consulta sempre inclui `wa_id_cliente` e `phone_id_unidade`, preservando o
+  isolamento multi-WABA.
+- Bloqueios automáticos detectados pelo sistema registram e confirmam primeiro
+  a intenção local no banco; somente depois do commit tentam o bloqueio na
+  Meta, sem manter transação aberta durante a chamada externa.
+- Se a Meta recusar o bloqueio, a linha local permanece autoritativa: a
+  mensagem atual é ignorada e uma mensagem futura provoca nova tentativa.
+- Se a intenção local não puder ser persistida por indisponibilidade do banco,
+  o webhook não chama a Meta, não enfileira a mensagem e retorna HTTP 503 para
+  permitir reentrega.
+- O Django Admin continua sem permitir a criação livre de registros enquanto
+  não existir uma interface específica para classificar bots manualmente.
 - O administrador poderá somente desbloquear, removendo individualmente um
   registro existente.
 - Desbloqueio em massa é proibido.
-- A ordem obrigatória é Meta primeiro, banco depois.
+- No desbloqueio, a ordem obrigatória é Meta primeiro, banco depois.
 - Se o desbloqueio na Meta falhar, o registro deverá permanecer no banco.
-- Como esse bloqueio impede o contato na própria Meta, não existe atualmente uma
-  chave Redis equivalente para ser removida nessa operação administrativa.
+- Não existe chave Redis equivalente: a própria tabela é consultada de forma
+  autoritativa pelo webhook.
 
 ### 19.3. Unidades
 

@@ -17,6 +17,7 @@ def criar_tabelas_bloqueio_flood():
             CREATE TABLE IF NOT EXISTS chatbot.cliente_bloqueado_meta (
                 id_bloqueio SERIAL PRIMARY KEY,
                 id_cliente INT NULL,
+                nome VARCHAR(200) NULL,
                 wa_id_cliente VARCHAR(50) NOT NULL,
                 id_unidade INT NOT NULL,
                 phone_id_unidade VARCHAR(100) NOT NULL,
@@ -35,6 +36,12 @@ def criar_tabelas_bloqueio_flood():
                 CONSTRAINT uq_cliente_bloqueado_meta_wa_unidade
                     UNIQUE (wa_id_cliente, id_unidade)
             );
+
+            -- Mantém bancos existentes compatíveis com o estado final acima.
+            -- A coluna é opcional para não quebrar bloqueios automáticos que
+            -- ainda não conheçam um nome amigável para o WA ID.
+            ALTER TABLE chatbot.cliente_bloqueado_meta
+            ADD COLUMN IF NOT EXISTS nome VARCHAR(200) NULL;
 
             CREATE INDEX IF NOT EXISTS idx_cliente_bloqueado_meta_id_cliente
             ON chatbot.cliente_bloqueado_meta (id_cliente)

@@ -15,6 +15,10 @@ logger = logging.getLogger("cache.bloqueia_conversa")
 REDIS_PREFIX = "conversa_bloqueada"
 
 
+class ValidacaoBloqueioConversaIndisponivel(Exception):
+    pass
+
+
 def conversa_esta_bloqueada_cache(cliente_telefone, id_phone_unidade):
     key = _cache_key(cliente_telefone, id_phone_unidade)
 
@@ -155,12 +159,14 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
 
     except Exception as exc:
         logger.exception(
-            "fallback_banco_bloqueio_falhou | acao=liberar_por_falha cliente=%s phone_number_id=%s erro=%s",
+            "fallback_banco_bloqueio_falhou | acao=levantar_indisponibilidade cliente=%s phone_number_id=%s erro=%s",
             short_value(cliente_telefone),
             short_value(id_phone_unidade),
             exc,
         )
-        return False
+        raise ValidacaoBloqueioConversaIndisponivel(
+            "Nao foi possivel validar o bloqueio da conversa no Redis nem no banco"
+        ) from exc
 
     finally:
         if conn:

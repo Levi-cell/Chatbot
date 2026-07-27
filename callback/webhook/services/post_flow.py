@@ -4,13 +4,19 @@ import logging
 from django.conf import settings
 from django.http import JsonResponse
 
-from core.cache.runtime.cache_conversas_bloqueadas import conversa_esta_bloqueada_cache
+from core.cache.runtime.cache_conversas_bloqueadas import (
+    ValidacaoBloqueioConversaIndisponivel,
+    conversa_esta_bloqueada_cache,
+)
 from core.cache.cache_unidade import (
     ValidacaoUnidadeIndisponivel,
     unidade_esta_ativa,
 )
 from core.database.connection_aws import get_conn
 from core.logging_config import short_value
+from .bloqueio_meta_guard import (
+    responder_se_cliente_marcado_para_bloqueio,
+)
 from .flood_guard import responder_se_flood
 from .meta_signature import validar_assinatura_meta
 from .populating_fila_mensagens import preparar_dados_fila, povoando_fila
@@ -67,6 +73,12 @@ def responder_post_webhook(request):
     try:
         phone_number_id = _extrair_phone_number_id(data)
         cliente_telefone = _extrair_cliente_telefone(data)
+
+        if resposta_bloqueio := responder_se_cliente_marcado_para_bloqueio(
+            cliente_telefone,
+            phone_number_id,
+        ):
+            return resposta_bloqueio
 
         if resposta_flood := responder_se_flood(data):
             return resposta_flood
@@ -141,6 +153,18 @@ def responder_post_webhook(request):
         return JsonResponse({
             "status": "unavailable",
             "reason": "unit_validation_unavailable",
+        }, status=503)
+
+    except ValidacaoBloqueioConversaIndisponivel as exc:
+        logger.error(
+            "request_indisponivel | motivo=validacao_bloqueio_conversa_indisponivel acao=retornar_503_para_reentrega cliente=%s phone_number_id=%s erro=%s",
+            short_value(cliente_telefone),
+            short_value(phone_number_id),
+            exc,
+        )
+        return JsonResponse({
+            "status": "unavailable",
+            "reason": "conversation_block_validation_unavailable",
         }, status=503)
 
     except Exception:
