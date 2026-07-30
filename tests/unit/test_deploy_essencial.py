@@ -12,6 +12,8 @@ from core.database.deploy_database import (
 )
 from tests.helpers import FakeConn
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_EMAIL_VALIDO,
@@ -81,18 +83,22 @@ class DeployEssencialTests(unittest.TestCase):
         etapa_18 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 18)
         etapa_19 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 19)
         etapa_20 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 20)
+        etapa_21 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 21)
         self.assertFalse(
             next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)[4]
         )
         self.assertTrue(etapa_17[4])
         self.assertTrue(etapa_18[4])
         self.assertTrue(etapa_19[4])
-        self.assertEqual(etapa_20[2:], (True, 30, True))
+        self.assertTrue(etapa_20[4])
+        self.assertEqual(etapa_21[2:], (True, 30, True))
 
     def test_etapas_e_transicoes_formam_um_mapa_valido_e_contiguo(self):
         ids_etapa = [etapa[0] for etapa in povoar_etapas.ETAPAS]
         transicoes = etapa_transicao_script.TRANSICOES_INICIAIS
 
+        self.assertEqual(len(ids_etapa), 21)
+        self.assertEqual(len(transicoes), 24)
         self.assertEqual(ids_etapa, list(range(1, len(ids_etapa) + 1)))
         self.assertEqual(
             len({(origem, evento) for origem, evento, _ in transicoes}),
@@ -117,7 +123,9 @@ class DeployEssencialTests(unittest.TestCase):
             (16, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 17),
             (17, "agendamento_confirmado", 18),
             (18, EVENTO_SATISFACAO_AVALIADA, 19),
-            (19, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 20),
+            (19, EVENTO_COMENTARIO_SATISFACAO_ACEITO, 20),
+            (19, EVENTO_COMENTARIO_SATISFACAO_RECUSADO, 21),
+            (20, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 21),
         }
         self.assertTrue(arestas_criticas.issubset(set(transicoes)))
 

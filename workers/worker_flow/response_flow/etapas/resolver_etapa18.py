@@ -12,7 +12,7 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa1
     validar_etapa18,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_19_COMENTARIO_SATISFACAO,
+    ETAPA_19_DECISAO_COMENTARIO,
     EVENTO_SATISFACAO_AVALIADA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -25,7 +25,7 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
 - VALIDAR UMA UNICA NOTA DA PESQUISA DE SATISFACAO
-- ENCAMINHAR PARA O COMENTARIO AUTORIZADO PELO MAPA
+- ENCAMINHAR PARA A DECISAO DE COMENTARIO AUTORIZADA PELO MAPA
 """
 
 
@@ -53,7 +53,7 @@ def resolve_etapa18(contexto_historico):
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_SATISFACAO_AVALIADA,
-        destinos_esperados={ETAPA_19_COMENTARIO_SATISFACAO},
+        destinos_esperados={ETAPA_19_DECISAO_COMENTARIO},
     )
 
     logger.info(

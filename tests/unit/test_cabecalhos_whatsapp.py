@@ -12,6 +12,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders import (
     etapa10,
     etapa18,
     etapa19,
+    etapa20,
     triagem_base,
 )
 
@@ -105,7 +106,7 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
         self.assertEqual(contexto["tipo_mensagem"], "interactive_list")
         self._assert_log_cabecalho_no_corpo(log_info)
 
-    def test_comentario_da_pesquisa_nao_usa_header_nativo(self):
+    def test_decisao_de_comentario_usa_cabecalho_e_botoes_validos(self):
         cliente = _ClienteWhatsAppFake()
 
         with (
@@ -126,6 +127,41 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
             CABECALHO_PESQUISA_SATISFACAO,
         )
         self.assertEqual(contexto["tipo_mensagem"], "interactive_button")
+        titulos = [
+            botao.title
+            for botao in cliente.ultimo_envio["buttons"]
+        ]
+        self.assertEqual(
+            titulos,
+            ["Sim, quero comentar", "Prefiro não comentar"],
+        )
+        self.assertTrue(all(len(titulo) <= 20 for titulo in titulos))
+        self._assert_log_cabecalho_no_corpo(log_info)
+
+    def test_captura_do_comentario_usa_cabecalho_no_corpo(self):
+        cliente = _ClienteWhatsAppFake()
+
+        with (
+            patch.object(etapa20, "conta_wa", return_value=cliente),
+            patch.object(etapa20.logger, "info") as log_info,
+        ):
+            contexto = etapa20.enviar_etapa20(
+                "5511999999999",
+                "phone-id",
+            )
+
+        self.assertNotIn("header", cliente.ultimo_envio)
+        self.assertNotIn("buttons", cliente.ultimo_envio)
+        self.assertTrue(
+            cliente.ultimo_envio["text"].startswith(
+                f"*{CABECALHO_PESQUISA_SATISFACAO}*\n\n"
+            )
+        )
+        self.assertEqual(
+            contexto["cabecalho_mensagem"],
+            CABECALHO_PESQUISA_SATISFACAO,
+        )
+        self.assertEqual(contexto["tipo_mensagem"], "text")
         self._assert_log_cabecalho_no_corpo(log_info)
 
     def _assert_cabecalho_padronizado(self, cliente, cabecalho):

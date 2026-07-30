@@ -7,12 +7,18 @@ from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     prever_etapa_resposta,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_19_DECISAO_COMENTARIO,
+    ETAPA_20_COMENTARIO_SATISFACAO,
+    ETAPA_21_FINALIZACAO,
     ETAPA_2_DESTINO_ATENDIMENTO,
     ETAPA_3_PROFISSAO,
     ETAPA_4_NOME_DEPENDENTE,
     ETAPA_5_IDADE_ALUNO,
     ETAPA_6_OFERTA_AULA,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
+    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
@@ -59,6 +65,27 @@ def contexto_transicao_etapa5():
         "id_etapa_origem_transicao": ETAPA_5_IDADE_ALUNO,
         "transicoes_permitidas": {
             EVENTO_IDADE_VALIDA: ETAPA_6_OFERTA_AULA,
+        },
+    }
+
+
+def contexto_transicao_etapa19():
+    return {
+        "id_etapa_origem_transicao": ETAPA_19_DECISAO_COMENTARIO,
+        "transicoes_permitidas": {
+            EVENTO_COMENTARIO_SATISFACAO_ACEITO: (
+                ETAPA_20_COMENTARIO_SATISFACAO
+            ),
+            EVENTO_COMENTARIO_SATISFACAO_RECUSADO: ETAPA_21_FINALIZACAO,
+        },
+    }
+
+
+def contexto_transicao_etapa20():
+    return {
+        "id_etapa_origem_transicao": ETAPA_20_COMENTARIO_SATISFACAO,
+        "transicoes_permitidas": {
+            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO: ETAPA_21_FINALIZACAO,
         },
     }
 
@@ -177,6 +204,36 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(destino, ETAPA_6_OFERTA_AULA)
 
+    def test_decisao_de_comentario_resolve_os_dois_ramos(self):
+        casos = (
+            (
+                EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+                ETAPA_20_COMENTARIO_SATISFACAO,
+            ),
+            (
+                EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+                ETAPA_21_FINALIZACAO,
+            ),
+        )
+
+        for evento, destino_esperado in casos:
+            with self.subTest(evento=evento):
+                destino = resolver_destino_transicao(
+                    contexto_transicao_etapa19(),
+                    evento,
+                    destinos_esperados={destino_esperado},
+                )
+                self.assertEqual(destino, destino_esperado)
+
+    def test_comentario_recebido_resolve_finalizacao(self):
+        destino = resolver_destino_transicao(
+            contexto_transicao_etapa20(),
+            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+            destinos_esperados={ETAPA_21_FINALIZACAO},
+        )
+
+        self.assertEqual(destino, ETAPA_21_FINALIZACAO)
+
     def test_evento_ausente_e_recusado_antes_do_envio(self):
         with self.assertRaises(TransicaoEtapaInvalida):
             resolver_destino_transicao(
@@ -243,6 +300,26 @@ class TransicoesEtapaTests(unittest.TestCase):
             with self.subTest(destino=destino):
                 evento = identificar_evento_por_destino(
                     contexto_transicao_etapa3(),
+                    destino,
+                )
+                self.assertEqual(evento, esperado)
+
+    def test_retry_da_decisao_reconstroi_evento_por_destino(self):
+        casos = (
+            (
+                ETAPA_20_COMENTARIO_SATISFACAO,
+                EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+            ),
+            (
+                ETAPA_21_FINALIZACAO,
+                EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+            ),
+        )
+
+        for destino, esperado in casos:
+            with self.subTest(destino=destino):
+                evento = identificar_evento_por_destino(
+                    contexto_transicao_etapa19(),
                     destino,
                 )
                 self.assertEqual(evento, esperado)

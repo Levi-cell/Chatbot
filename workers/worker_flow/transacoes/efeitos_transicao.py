@@ -23,8 +23,9 @@ from core.repositories.fluxo.pesquisa_satisfacao import (
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
     validar_etapa18,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
-    normalizar_comentario_etapa19,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
+    normalizar_comentario_etapa20,
+    recusou_comentario_etapa20,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
@@ -64,10 +65,13 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_16_TRIAGEM_PERGUNTA_6,
     ETAPA_17_AGENDAMENTO,
     ETAPA_18_PESQUISA_SATISFACAO,
-    ETAPA_19_COMENTARIO_SATISFACAO,
-    ETAPA_20_FINALIZACAO,
+    ETAPA_19_DECISAO_COMENTARIO,
+    ETAPA_20_COMENTARIO_SATISFACAO,
+    ETAPA_21_FINALIZACAO,
     EVENTO_AGENDAMENTO_CONFIRMADO,
     EVENTO_CLIENTE_RETORNOU,
+    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_EMAIL_VALIDO,
@@ -438,7 +442,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_19_COMENTARIO_SATISFACAO,
+                ETAPA_19_DECISAO_COMENTARIO,
             )
             return _persistir_nota_satisfacao_da_etapa18(
                 contexto_historico,
@@ -447,16 +451,45 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 19
-    if etapa_origem == ETAPA_19_COMENTARIO_SATISFACAO:
-        # 19 -> 20: registra o comentario opcional antes da finalizacao.
+    if etapa_origem == ETAPA_19_DECISAO_COMENTARIO:
+        # 19 -> 20: confirma que o cliente deseja escrever um comentario.
+        if evento == EVENTO_COMENTARIO_SATISFACAO_ACEITO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_20_COMENTARIO_SATISFACAO,
+            )
+            return _confirmar_decisao_comentario_da_etapa19(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+        # 19 -> 21: registra a recusa explicita e encerra o atendimento.
+        if evento == EVENTO_COMENTARIO_SATISFACAO_RECUSADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_21_FINALIZACAO,
+            )
+            return _persistir_recusa_comentario_da_etapa19(
+                contexto_historico,
+                cursor,
+            )
+
+    # ETAPA 20
+    if etapa_origem == ETAPA_20_COMENTARIO_SATISFACAO:
+        # 20 -> 21: registra o comentario livre antes da finalizacao.
         if evento == EVENTO_COMENTARIO_SATISFACAO_RECEBIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_20_FINALIZACAO,
+                ETAPA_21_FINALIZACAO,
             )
-            return _persistir_comentario_satisfacao_da_etapa19(
+            return _persistir_comentario_satisfacao_da_etapa20(
                 contexto_historico,
                 contexto_envio,
                 cursor,
@@ -1042,19 +1075,81 @@ def _persistir_nota_satisfacao_da_etapa18(
     }
 
 
-def _persistir_comentario_satisfacao_da_etapa19(
+def _confirmar_decisao_comentario_da_etapa19(
+    contexto_historico,
+    evento,
+    etapa_destino,
+):
+    """Confirma a escolha sem criar dado antes do comentário efetivo."""
+    logger.info(
+        "decisao_comentario_persistida | acao=confirmar_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
+        evento,
+        contexto_historico["id_etapa_origem_transicao"],
+        etapa_destino,
+        contexto_historico["id_conversa"],
+    )
+
+    return {
+        "decisao_comentario_persistida": True,
+        "decisao_comentario": evento,
+    }
+
+
+def _persistir_recusa_comentario_da_etapa19(
+    contexto_historico,
+    cursor,
+):
+    """Registra NULL de forma idempotente para a recusa explícita."""
+    resultado = salvar_comentario_satisfacao(
+        contexto_historico["id_conversa"],
+        None,
+        cursor,
+    )
+
+    logger.info(
+        "recusa_comentario_satisfacao_persistida | "
+        "acao=salvar_comentario_nulo evento=%s etapa_origem=%s "
+        "etapa_resultante=%s id_conversa=%s inserido=%s",
+        EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+        contexto_historico["id_etapa_origem_transicao"],
+        ETAPA_21_FINALIZACAO,
+        contexto_historico["id_conversa"],
+        resultado["inserido"],
+    )
+
+    return {
+        "comentario_satisfacao_persistido": True,
+        **resultado,
+    }
+
+
+def _persistir_comentario_satisfacao_da_etapa20(
     contexto_historico,
     contexto_envio,
     cursor,
 ):
-    """Persiste texto integral ou NULL para mídia e recusa explícita."""
+    """Persiste o texto; em retry, reconstrói a mensagem original."""
     if "comentario_satisfacao" in contexto_envio:
         comentario_satisfacao = contexto_envio["comentario_satisfacao"]
     else:
-        comentario_satisfacao = normalizar_comentario_etapa19(
-            contexto_historico.get("texto_cliente_atual") or "",
-            contexto_historico.get("tipo_mensagem_atual"),
+        texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
+        tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
+        desistiu = recusou_comentario_etapa20(
+            texto_cliente,
+            tipo_mensagem,
         )
+        comentario_satisfacao = normalizar_comentario_etapa20(
+            texto_cliente,
+            tipo_mensagem,
+        )
+
+        if comentario_satisfacao is None and not desistiu:
+            raise ValueError(
+                "Comentario de satisfacao nao reconstruido na "
+                "transicao 20 -> 21 "
+                f"(id_conversa={contexto_historico['id_conversa']})"
+            )
 
     resultado = salvar_comentario_satisfacao(
         contexto_historico["id_conversa"],

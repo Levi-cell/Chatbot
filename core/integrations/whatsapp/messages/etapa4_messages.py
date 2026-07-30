@@ -3,7 +3,7 @@
 ### MENSAGEM DE INICIO PERGUNTANDO O NOME
 
 MENSAGEM_ETAPA4 = (
-    "Qual o primeiro nome da pessoa?"
+    "Certo, agora me diz, qual nome da pessoa que receberá o atendimento?"
 )
 
 

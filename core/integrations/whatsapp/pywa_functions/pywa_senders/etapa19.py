@@ -9,7 +9,10 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
 )
 from core.integrations.whatsapp.messages.etapa19_messages import (
     montar_botoes_etapa19,
+    montar_mensagem_contexto_invalido_etapa19,
     montar_mensagem_etapa19,
+    montar_mensagem_financeiro_etapa19,
+    montar_mensagem_midia_etapa19,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -22,14 +25,65 @@ logger = logging.getLogger("whatsapp.etapa19")
 
 ID_ETAPA19 = 19
 
+TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
+TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_comentario_invalida"
 
-# CENARIO NORMAL: SOLICITA UM COMENTARIO OPCIONAL SOBRE O ATENDIMENTO
+
+# CENARIO NORMAL: SOLICITA A DECISAO SOBRE COMENTAR OU NAO
 def enviar_etapa19(
     cliente_telefone,
     phone_id_unidade,
 ):
-    mensagem_bot = montar_mensagem_etapa19()
+    return _enviar_botoes_etapa19(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_etapa19(),
+        evento="enviar_etapa19",
+    )
 
+
+def enviar_etapa19_midia(cliente_telefone, phone_id_unidade):
+    return _enviar_botoes_etapa19(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_midia_etapa19(),
+        evento="enviar_etapa19_midia",
+        tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
+    )
+
+
+def enviar_etapa19_financeiro(cliente_telefone, phone_id_unidade):
+    return _enviar_botoes_etapa19(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_financeiro_etapa19(),
+        evento="enviar_etapa19_financeiro",
+        tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+def enviar_etapa19_contexto_invalido(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    return _enviar_botoes_etapa19(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_contexto_invalido_etapa19(),
+        evento="enviar_etapa19_contexto_invalido",
+        tipo_tratamento=TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
+    )
+
+
+def _enviar_botoes_etapa19(
+    cliente_telefone,
+    phone_id_unidade,
+    mensagem_bot,
+    *,
+    evento,
+    tipo_tratamento=None,
+):
     try:
         cliente_wa = conta_wa(phone_id_unidade)
         sent_message = cliente_wa.send_message(
@@ -43,15 +97,17 @@ def enviar_etapa19(
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
         logger.info(
-            "enviar_etapa19_ok | acao=enviar_meta cliente=%s "
+            "%s_ok | acao=enviar_meta cliente=%s "
             "phone_number_id=%s id_hash_msg_bot=%s "
-            "cabecalho=corpo_negrito",
+            "tratamento=%s cabecalho=corpo_negrito",
+            evento,
             short_value(cliente_telefone),
             short_value(phone_id_unidade),
             id_hash_msg_bot,
+            tipo_tratamento,
         )
 
-        return {
+        contexto_envio = {
             "enviou": True,
             "resposta_ja_existia": False,
             "mensagem_bot": mensagem_bot,
@@ -64,10 +120,17 @@ def enviar_etapa19(
             "atualizar_last_from_bot": True,
         }
 
+        if tipo_tratamento:
+            contexto_envio["tratamento"] = True
+            contexto_envio["tipo_tratamento"] = tipo_tratamento
+
+        return contexto_envio
+
     except Exception as erro:
         logger.exception(
-            "enviar_etapa19_erro | motivo=meta_falhou "
+            "%s_erro | motivo=meta_falhou "
             "acao=levantar_erro cliente=%s phone_number_id=%s erro=%s",
+            evento,
             short_value(cliente_telefone),
             short_value(phone_id_unidade),
             erro,

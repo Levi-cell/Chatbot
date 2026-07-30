@@ -81,7 +81,7 @@ class RoteamentoEssencialTests(unittest.TestCase):
         self.assertEqual(resultado, esperado)
 
     def test_cada_etapa_implementada_chama_seu_resolver(self):
-        for etapa_atual in (None, *range(1, 20)):
+        for etapa_atual in (None, *range(1, 21)):
             etapa_resolver = 1 if etapa_atual is None else etapa_atual
             esperado = {
                 "enviou": True,
@@ -101,10 +101,10 @@ class RoteamentoEssencialTests(unittest.TestCase):
             resolver.assert_called_once()
             self.assertEqual(resultado, esperado)
 
-    def test_etapa_20_e_terminal_e_nao_possui_resolver(self):
+    def test_etapa_21_e_terminal_e_nao_possui_resolver(self):
         with self.assertRaises(NotImplementedError):
             flow_sender_module.flow_sender(
-                contexto_base(etapa_atual=20)
+                contexto_base(etapa_atual=21)
             )
 
 

@@ -23,7 +23,10 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa1
     validar_etapa18,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
-    normalizar_comentario_etapa19,
+    validar_decisao_comentario_etapa19,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
+    normalizar_comentario_etapa20,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa3 import (
     validar_pergunta_financeira_etapa3,
@@ -44,6 +47,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_t
     validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_OFERTA_ACEITA,
     EVENTO_OFERTA_ADIADA,
     EVENTO_RETORNO_ADIADO,
@@ -303,23 +308,80 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             with self.subTest(texto=texto):
                 self.assertIsNone(validar_etapa18(texto))
 
-    def test_comentario_preserva_texto_e_usa_null_para_recusa_ou_midia(self):
+    def test_decisao_de_comentar_aceita_intencoes_claras(self):
+        positivos = (
+            "Sim",
+            "Quero comentar",
+            "Quero sugerir",
+            "Sim, quero comentar",
+            "SIM!!!",
+        )
+        negativos = (
+            "Não",
+            "Nao quero comentar",
+            "Não quero sugerir",
+            "Prefiro não comentar",
+            "PREFIRO NAO COMENTAR!!!",
+        )
+
+        for texto in positivos:
+            with self.subTest(texto=texto):
+                self.assertEqual(
+                    validar_decisao_comentario_etapa19(texto, "text"),
+                    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+                )
+
+        for texto in negativos:
+            with self.subTest(texto=texto):
+                self.assertEqual(
+                    validar_decisao_comentario_etapa19(
+                        texto,
+                        "interactive",
+                    ),
+                    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+                )
+
         self.assertEqual(
-            normalizar_comentario_etapa19(
+            validar_decisao_comentario_etapa19(
+                "Sim, quero comentar",
+                "button",
+            ),
+            EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+        )
+
+    def test_decisao_de_comentar_rejeita_ambiguidade_conteudo_e_midia(self):
+        for texto, tipo in (
+            ("Talvez", "text"),
+            ("Não sei", "text"),
+            ("Sim, mas não quero comentar", "text"),
+            ("Quero comentar, mas não agora", "text"),
+            ("O atendimento foi ótimo", "text"),
+            ("", "text"),
+            ("Sim", "image"),
+        ):
+            with self.subTest(texto=texto, tipo=tipo):
+                self.assertIsNone(
+                    validar_decisao_comentario_etapa19(texto, tipo)
+                )
+
+    def test_comentario_da_etapa20_preserva_texto_e_rejeita_vazio_ou_midia(self):
+        self.assertEqual(
+            normalizar_comentario_etapa20(
                 "  Atendimento muito atencioso!  ",
                 "text",
             ),
             "Atendimento muito atencioso!",
         )
-        self.assertIsNone(
-            normalizar_comentario_etapa19(
-                "Prefiro não comentar",
-                "interactive",
-            )
-        )
-        self.assertIsNone(
-            normalizar_comentario_etapa19("legenda ignorada", "image")
-        )
+
+        for texto, tipo in (
+            ("", "text"),
+            ("   ", "text"),
+            ("legenda ignorada", "image"),
+        ):
+            with self.subTest(texto=texto, tipo=tipo):
+                self.assertIsNone(
+                    normalizar_comentario_etapa20(texto, tipo)
+                )
 
 
 if __name__ == "__main__":

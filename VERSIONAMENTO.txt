@@ -1,0 +1,28 @@
+REGISTRO DE VERSIONAMENTO
+=========================
+
+V1.0.0 - Proteção contra bots
+Commit: 9d34c6b920e92cb2f759e7ae3148b5a6e69a66f7
+
+V1.0.1 - Profissão no atendimento
+Commit: 75975180e4bf85ce80da571df6844f10977c2df0
+
+V1.0.2 - Decisão de comentário
+Commit: PENDENTE - preencher depois de criar o commit da V1.0.2
+
+
+
+
+
+
+REGRA PARA AS PRÓXIMAS VERSÕES
+==============================
+
+1. Antes do commit, adicionar a versão e uma descrição curta neste arquivo.
+2. Criar o commit da versão.
+3. Copiar o hash gerado pelo Git para a entrada correspondente.
+4. Registrar a atualização do hash em um pequeno commit de versionamento.
+
+O hash de um commit não pode ser gravado dentro do próprio commit antes de ele
+existir. Por isso, a versão entra primeiro como PENDENTE e recebe o hash logo
+após a criação do commit principal.

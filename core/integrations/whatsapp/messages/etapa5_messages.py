@@ -12,7 +12,7 @@ def montar_mensagem_idade_etapa5():
 ### ENTRADA NA ETAPA 5 - DEPENDENTE
 
 MENSAGEM_IDADE_DEPENDENTE_ETAPA5 = (
-    "Certo, agora me fala, qual é a idade de {nome}?"
+    "Certo, qual é a idade de {nome}?"
 )
 
 

@@ -288,10 +288,12 @@ Implementação principal:
 - A etapa 10 introduz a triagem, as etapas 11 a 16 fazem as seis perguntas e a
   etapa 17 apresenta o agendamento. A etapa 17 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
-- A etapa 18 registra uma nota de satisfação de 1 a 5 e a etapa 19 registra o
-  comentário opcional. Esses dados são internos, não compõem o payload do
-  Funil e não encerram nem bloqueiam o atendimento.
-- A etapa 20 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+- A etapa 18 registra uma nota de satisfação de 1 a 5. Na etapa 19, o cliente
+  escolhe se deseja comentar: a aceitação segue para a etapa 20 e a recusa
+  salta diretamente para a etapa 21. A etapa 20 coleta o comentário. Nota e
+  comentário são internos, não compõem o payload do Funil e não encerram nem
+  bloqueiam o atendimento.
+- A etapa 21 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
   30 dias.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
@@ -309,7 +311,7 @@ Implementação principal:
 ### 6.1 Oportunidade no Funil de Vendas
 
 - Uma conversa torna-se elegível ao entrar na etapa 17.
-- As etapas 17, 18, 19 e 20 permanecem elegíveis. Assim, avançar na pesquisa
+- As etapas 17 a 21 permanecem elegíveis. Assim, avançar na pesquisa
   antes do próximo ciclo horário não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
@@ -404,7 +406,7 @@ Implementação principal:
   uma única transição.
 - A etapa nunca poderá retroceder.
 - Saltos numéricos são permitidos somente quando existir uma aresta explícita,
-  como `2 + para_mim -> 4`.
+  como `19 + comentario_satisfacao_recusado -> 21`.
 - A atualização utilizará a origem persistida no histórico da mensagem e será
   revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do
@@ -951,7 +953,7 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
-| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 17–20, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 17–21, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
 

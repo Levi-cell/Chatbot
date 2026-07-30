@@ -1,4 +1,4 @@
-MENSAGEM_ETAPA3 = "Certo, me fala qual sua profissão hoje?"
+MENSAGEM_ETAPA3 = "Antes de prosseguirmos com o atendimento, me fala, qual sua profissão hoje?"
 
 
 def montar_mensagem_etapa3():

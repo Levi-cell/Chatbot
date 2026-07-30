@@ -25,8 +25,9 @@ ETAPAS = (
     (16, "Triagem cognitiva - pergunta 6", False, 0, False),
     (17, "Agendamento após a triagem cognitiva", False, 0, True),
     (18, "Pesquisa de satisfação - nota", False, 0, True),
-    (19, "Pesquisa de satisfação - comentário", False, 0, True),
-    (20, "Finalização do atendimento", True, 30, True),
+    (19, "Pesquisa de satisfação - opção de comentário", False, 0, True),
+    (20, "Pesquisa de satisfação - comentário", False, 0, True),
+    (21, "Finalização do atendimento", True, 30, True),
 )
 
 SINCRONIZAR_ETAPA_SQL = """
@@ -58,7 +59,7 @@ def _recusar_catalogo_legado(cursor):
             bloqueio_dias,
             elegivel_funil
         FROM chatbot.etapa
-        WHERE id_etapa BETWEEN 3 AND 20
+        WHERE id_etapa BETWEEN 3 AND 21
         ORDER BY id_etapa;
         """
     )
@@ -92,7 +93,8 @@ def _recusar_catalogo_legado(cursor):
     if divergencias:
         raise RuntimeError(
             "Catalogo de etapas legado detectado. Aplique primeiro a "
-            "migracao SQL de renumeracao 3..19 para 4..20 "
+            "migracao SQL que adiciona a coleta de comentario e move a "
+            "finalizacao da etapa 20 para a 21 "
             f"(etapas_divergentes={divergencias})"
         )
 

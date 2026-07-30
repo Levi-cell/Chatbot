@@ -1,25 +1,70 @@
+import re
+
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
+    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+)
 
 
-RESPOSTA_SEM_COMENTARIO_ETAPA19 = "prefiro nao comentar"
+TIPOS_MENSAGEM_ACEITOS_ETAPA19 = {
+    "text",
+    "interactive",
+    "button",
+}
+
+RESPOSTAS_COMENTARIO_ACEITO = {
+    "sim",
+    "sim quero comentar",
+    "sim quero sugerir",
+    "quero comentar",
+    "quero sugerir",
+    "quero deixar um comentario",
+    "quero deixar uma sugestao",
+    "eu quero comentar",
+    "eu quero sugerir",
+    "gostaria de comentar",
+    "gostaria de sugerir",
+}
+
+RESPOSTAS_COMENTARIO_RECUSADO = {
+    "nao",
+    "nao quero comentar",
+    "nao quero sugerir",
+    "prefiro nao comentar",
+    "prefiro nao sugerir",
+}
 
 
-def normalizar_comentario_etapa19(conteudo_texto, tipo_mensagem):
-    """Retorna texto util ou None para midia e recusa explicita em comentar."""
-    if tipo_mensagem not in {"text", "interactive", "button"}:
+def validar_decisao_comentario_etapa19(
+    conteudo_texto,
+    tipo_mensagem,
+):
+    """Traduz somente intenções inequívocas em eventos da etapa 19."""
+    if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA19:
         return None
 
     if not isinstance(conteudo_texto, str):
         return None
 
-    comentario = conteudo_texto.strip()
+    resposta = normalizar_resposta_comentario(conteudo_texto)
 
-    if not comentario:
-        return None
+    if resposta in RESPOSTAS_COMENTARIO_ACEITO:
+        return EVENTO_COMENTARIO_SATISFACAO_ACEITO
 
-    if normalizar_texto(comentario) == RESPOSTA_SEM_COMENTARIO_ETAPA19:
-        return None
+    if resposta in RESPOSTAS_COMENTARIO_RECUSADO:
+        return EVENTO_COMENTARIO_SATISFACAO_RECUSADO
 
-    return comentario
+    return None
+
+
+def normalizar_resposta_comentario(texto):
+    texto_sem_acento = normalizar_texto(texto)
+    texto_sem_pontuacao = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        texto_sem_acento,
+    )
+    return " ".join(texto_sem_pontuacao.split())
