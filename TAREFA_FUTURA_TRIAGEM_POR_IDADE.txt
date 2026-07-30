@@ -1,0 +1,48 @@
+TAREFA FUTURA — TRIAGEM POR FAIXA ETÁRIA
+
+Status: aguardando o time fornecer as seis perguntas da triagem infantil.
+
+DECISÃO DE ARQUITETURA
+
+- Não criar um novo mapa de transição.
+- Não criar novas etapas nem renumerar as etapas atuais.
+- Reutilizar as seis etapas de triagem existentes (etapas 11 a 16).
+- As duas triagens terão seis perguntas, as mesmas opções de resposta
+  (Nunca, Às vezes e Frequentemente), a mesma sequência e o mesmo destino.
+- Os arquivos da triagem devem obter a idade persistida no banco e selecionar
+  centralmente a variante correta da mensagem, sem duplicar a regra nos seis
+  senders.
+
+REGRA DE SELEÇÃO
+
+- Atendimento para o próprio cliente:
+  usar a triagem adulta. Um titular menor de 18 anos já tem o atendimento
+  encerrado na validação de idade e, portanto, não alcança a triagem.
+- Atendimento para dependente:
+  - dependente.idade < 18: triagem infantil;
+  - dependente.idade >= 18: triagem adulta.
+- A idade mínima aceita continua sendo validada antes da triagem:
+  - unidade com BPA ativo: 4 anos;
+  - unidade sem BPA ativo: 5 anos.
+- Se a idade necessária estiver ausente ou inconsistente, não escolher uma
+  variante silenciosamente; tratar como inconsistência de dados.
+
+PRESERVAÇÕES
+
+- Manter o mapa de transição atual.
+- Manter os IDs das etapas 11 a 16.
+- Manter a persistência idempotente das seis respostas.
+- Manter as regras transacionais e de retry do worker.
+- Manter a consulta do Funil esperando exatamente seis respostas.
+- O histórico continuará registrando o texto exato da pergunta enviada.
+
+CUIDADO NO FUTURO DEPLOY
+
+- Antes do deploy, consultar conversas ativas nas etapas 10 a 16 para evitar
+  que uma conversa em andamento misture versões diferentes das perguntas.
+
+ORDEM DAS PRÓXIMAS TAREFAS
+
+3. Centralizar e fixar explicitamente a Graph API v26.0 por configuração.
+4. Atualizar o PyWa separadamente e tratar compatibilidade.
+5. Implementar a triagem infantil/adulta descrita neste arquivo.

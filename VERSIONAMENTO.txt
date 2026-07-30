@@ -8,11 +8,7 @@ V1.0.1 - Profissão no atendimento
 Commit: 75975180e4bf85ce80da571df6844f10977c2df0
 
 V1.0.2 - Decisão de comentário
-Commit: PENDENTE - preencher depois de criar o commit da V1.0.2
-
-
-
-
+Commit: df8b014c8efbcbd2e1b2f8a3a57e39498b47fb62
 
 
 REGRA PARA AS PRÓXIMAS VERSÕES
@@ -20,9 +16,13 @@ REGRA PARA AS PRÓXIMAS VERSÕES
 
 1. Antes do commit, adicionar a versão e uma descrição curta neste arquivo.
 2. Criar o commit da versão.
-3. Copiar o hash gerado pelo Git para a entrada correspondente.
-4. Registrar a atualização do hash em um pequeno commit de versionamento.
+3. Copiar o hash gerado pelo Git para a entrada correspondente no arquivo local.
+4. Enviar essa atualização do hash junto com o commit da versão seguinte.
 
 O hash de um commit não pode ser gravado dentro do próprio commit antes de ele
-existir. Por isso, a versão entra primeiro como PENDENTE e recebe o hash logo
+existir. Por isso, a versão entra no Git como PENDENTE e recebe o hash localmente
 após a criação do commit principal.
+
+É normal o VERSIONAMENTO.txt local ficar uma atualização à frente do arquivo que
+está no Git. Por exemplo: o commit da V1.0.3 levará o hash definitivo da V1.0.2
+e deixará a própria V1.0.3 como PENDENTE até a versão seguinte.
