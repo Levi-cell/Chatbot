@@ -173,7 +173,7 @@ não altera os serviços ativos:
 ```bash
 sudo -u chatbot env \
   PYTHONPATH=/opt/chatbot/app \
-  /opt/chatbot/venv/bin/python -c "import os,sys; sys.path.insert(0,'/opt/chatbot/app/callback'); from dotenv import dotenv_values; os.environ.update({k:v for k,v in dotenv_values('/etc/chatbot/chatbot.env.new').items() if v is not None}); from core.database.connection_aws import get_conn; from core.cache.redis_client import confirmar_conexao_redis; conn=get_conn('env_preflight'); assert conn.execute('SELECT 1').fetchone()[0] == 1; conn.close(); assert confirmar_conexao_redis(); os.environ.setdefault('DJANGO_SETTINGS_MODULE','callback.settings'); import django; django.setup(); from django.core.management import call_command; call_command('check', deploy=True); print('PREFLIGHT_ENV_RDS_REDIS_OK')"
+  /opt/chatbot/venv/bin/python -c "import os,sys; sys.path.insert(0,'/opt/chatbot/app/callback'); from dotenv import dotenv_values; os.environ.update({k:v for k,v in dotenv_values('/etc/chatbot/chatbot.env.new').items() if v is not None}); from core.database.connection_aws import get_conn; from operations.monitoring.infrastructure import verificar_redis; conn=get_conn('env_preflight'); assert conn.execute('SELECT 1').fetchone()[0] == 1; conn.close(); assert verificar_redis()['ok']; os.environ.setdefault('DJANGO_SETTINGS_MODULE','callback.settings'); import django; django.setup(); from django.core.management import call_command; call_command('check', deploy=True); print('PREFLIGHT_ENV_RDS_REDIS_OK')"
 ```
 
 Não instale o arquivo se esse preflight terminar com erro.
@@ -636,7 +636,7 @@ Depois do `COMMIT`, execute uma vez na Lightsail:
 ```bash
 cd /opt/chatbot/app
 sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
-  /opt/chatbot/venv/bin/python -m core.cache.cache_reset --operacional
+  /opt/chatbot/venv/bin/python -m operations.maintenance.cache_reset --operacional
 ```
 
 Esse comando remove somente cache de cliente, bloqueios temporários de conversa

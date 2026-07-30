@@ -7,4 +7,5 @@ callback/staticfiles/
 
 .env
 .env.*
+operations/local_settings.py
 

@@ -173,35 +173,6 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
             conn.close()
 
 
-# EXCLUSIVO PARA DEV
-def limpar_cache_conversas_bloqueadas_dev():
-    # Exclusivo para DEV: use ao recriar o banco para remover bloqueios antigos do Redis.
-    try:
-        r = get_redis_safe()
-        total_removido = 0
-        lote = []
-
-        for key in r.scan_iter(match=f"{REDIS_PREFIX}:*", count=500):
-            lote.append(key)
-
-            if len(lote) >= 500:
-                total_removido += r.delete(*lote)
-                lote = []
-
-        if lote:
-            total_removido += r.delete(*lote)
-
-        logger.warning(
-            "cache_bloqueio_dev_limpo | chaves_removidas=%s",
-            total_removido,
-        )
-        return total_removido
-
-    except Exception as exc:
-        logger.warning("cache_bloqueio_dev_limpeza_falhou | erro=%s", exc)
-        return 0
-
-
 def _cache_key(cliente_telefone, id_phone_unidade):
     cliente = _normalizar(cliente_telefone)
     unidade = _normalizar(id_phone_unidade)

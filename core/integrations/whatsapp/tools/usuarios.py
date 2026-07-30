@@ -47,8 +47,3 @@ def desbloquear_usuario_meta(wa_id_cliente, phone_id_unidade):
     )
 
     return resultado
-
-
-def listar_usuarios_bloqueados_meta(phone_id_unidade):
-    cliente_wa = conta_wa(phone_id_unidade)
-    return cliente_wa.get_blocked_users().all(sleep=0.2)

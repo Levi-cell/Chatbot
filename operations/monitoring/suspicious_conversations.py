@@ -1,4 +1,4 @@
-"""Relatório manual e somente leitura de conversas potencialmente automatizadas."""
+"""Relatório operacional e somente leitura de conversas suspeitas de automação."""
 
 from __future__ import annotations
 
@@ -11,9 +11,13 @@ import statistics
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from core.database.connection_aws import get_conn
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
+from operations.bootstrap import configure_local_operations
 
 MAX_CONVERSAS = 2000
 MAX_MENSAGENS_POR_CONVERSA = 1000
@@ -657,7 +661,13 @@ def _buscar_mensagens(cursor, ids_conversa, args, inicio, fim):
     return por_conversa, totais
 
 
-def gerar_relatorio(args, *, connection_factory=get_conn):
+def gerar_relatorio(args, *, connection_factory=None):
+    if connection_factory is None:
+        configure_local_operations()
+        from core.database.connection_aws import get_conn
+
+        connection_factory = get_conn
+
     inicio, fim = resolver_janela(args)
     conn = connection_factory(
         application_name="relatorio_conversas_suspeitas_readonly"
@@ -981,4 +991,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    argumentos = sys.argv[1:] or [
+        "--todas-unidades",
+        "--ultimas-horas",
+        "24",
+        "--formato",
+        "texto",
+    ]
+    raise SystemExit(main(argumentos))

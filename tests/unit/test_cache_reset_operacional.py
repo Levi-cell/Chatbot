@@ -5,7 +5,8 @@ from contextlib import redirect_stderr
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from core.cache import cache_reset, redis_client
+from core.cache import redis_client
+from operations.maintenance import cache_reset
 
 
 class FakeRedis:

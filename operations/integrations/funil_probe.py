@@ -1,9 +1,16 @@
-"""Ferramentas manuais para validar a integração sem consultar o chatbot."""
+"""Sondas manuais para validar a integração do Funil sem usar o chatbot."""
 
+import argparse
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 
 import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.integrations.funil.cliente import enviar_oportunidade
 from core.integrations.funil.oportunidades import (
@@ -154,6 +161,61 @@ def _imprimir_resultado(resultado):
     print(json.dumps(resultado, ensure_ascii=False, indent=2))
 
 
+def criar_parser():
+    parser = argparse.ArgumentParser(
+        description="Consulta e testa a integração externa do Funil.",
+    )
+    subparsers = parser.add_subparsers(dest="comando", required=True)
+    catalogo = subparsers.add_parser(
+        "catalog",
+        help="consulta a integração de uma unidade pelo widget",
+    )
+    catalogo.add_argument("--widget", default=WIDGET_UNIDADE_SAJ)
+    subparsers.add_parser(
+        "payload",
+        help="mostra o payload fictício sem executar POST",
+    )
+    envio = subparsers.add_parser(
+        "send-test",
+        help="insere uma oportunidade fictícia real no CRM",
+    )
+    envio.add_argument(
+        "--confirm-real-send",
+        action="store_true",
+        help="confirma conscientemente o POST real no CRM",
+    )
+    return parser
 
 
-print(criar_oportunidade_teste(confirmar_envio_real=True))
+def main(argv=None):
+    parser = criar_parser()
+    args = parser.parse_args(argv)
+
+    try:
+        if args.comando == "catalog":
+            _imprimir_resultado(
+                consultar_integracao_unidade(widget=args.widget)
+            )
+            return 0
+
+        if args.comando == "payload":
+            _imprimir_resultado(montar_payload_oportunidade_teste())
+            return 0
+
+        if not args.confirm_real_send:
+            parser.error("send-test exige --confirm-real-send")
+
+        _imprimir_resultado(
+            criar_oportunidade_teste(confirmar_envio_real=True)
+        )
+        return 0
+    except (requests.RequestException, RuntimeError, ValueError) as exc:
+        print(
+            f"FUNIL_PROBE_FALHOU: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -12,7 +12,6 @@ Conexão PostgreSQL, verificação, DDL, funções SQL e preparação do ambient
 core/database/
 ├── connection_aws.py
 ├── connection_check.py
-├── criar_particao.py
 └── deploy_database/
     ├── setup_database.py
     ├── bank_script.py
@@ -29,7 +28,8 @@ core/database/
 - `connection_aws.py` fornece conexões para os orquestradores;
 - `connection_check.py` valida acesso ao PostgreSQL;
 - `deploy_database/` cria schema, tabelas, índices e funções;
-- `criar_particao.py` é ferramenta manual para partições futuras do histórico;
+- partições mensais são mantidas pelo comando manual
+  `operations.maintenance.message_partitions`;
 - SQL de negócio executado durante atendimento fica em `core/repositories`.
 
 ## Setup

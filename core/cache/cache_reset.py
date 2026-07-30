@@ -1,6 +1,4 @@
-import argparse
 import logging
-import sys
 
 from core.cache.runtime.cache_flood_redis import RATE_PREFIX
 from core.cache.runtime.cache_webhook_erro_inesperado import (
@@ -15,7 +13,7 @@ from core.cache.cache_unidade import (
     REDIS_KEY,
     recarregar_cache_unidades,
 )
-from core.cache.redis_client import get_redis_safe, validar_redis_remoto
+from core.cache.redis_client import get_redis_safe
 
 
 logger = logging.getLogger("cache.reset")
@@ -27,78 +25,12 @@ CHAVES_EXATAS_RESET = (
     CACHE_TEMP_KEY,
 )
 
-PADROES_OPERACIONAIS_RESET = (
+PADROES_RESET = (
     f"{CLIENTE_PREFIX}*",
     f"{CONVERSA_BLOQUEADA_PREFIX}:*",
     f"{RATE_PREFIX}:*",
     f"{ERRO_INESPERADO_PREFIX}:*",
 )
-
-# Compatibilidade com o reset completo de desenvolvimento.
-PADROES_RESET = PADROES_OPERACIONAIS_RESET
-
-
-def resetar_cache_operacional(redis_client=None):
-    """
-    Remove apenas estado operacional ligado a clientes e conversas.
-
-    O cache de unidades e suas chaves de versao permanecem intactos. A funcao
-    aceita um client apenas para facilitar testes; em producao usa a conexao
-    configurada no ambiente da aplicacao.
-    """
-
-    r = (
-        redis_client
-        if redis_client is not None
-        else get_redis_safe(retries=1, delay=0)
-    )
-    destino = validar_redis_remoto(r)
-    removidas_por_padrao = {}
-
-    for padrao in PADROES_OPERACIONAIS_RESET:
-        removidas_por_padrao[padrao] = _remover_por_padrao(r, padrao)
-
-    total_removido = sum(removidas_por_padrao.values())
-    logger.warning(
-        "cache_operacional_resetado | acao=limpar_clientes_conversas_flood "
-        "destino=%s total=%s por_padrao=%s",
-        destino,
-        total_removido,
-        removidas_por_padrao,
-    )
-    return {
-        "destino": destino,
-        "chaves_por_padrao": removidas_por_padrao,
-        "total_removido": total_removido,
-    }
-
-
-def resetar_bloqueios_conversa(redis_client=None):
-    """
-    Remove somente os bloqueios temporarios de conversa, em lotes.
-    """
-
-    r = (
-        redis_client
-        if redis_client is not None
-        else get_redis_safe(retries=1, delay=0)
-    )
-    destino = validar_redis_remoto(r)
-    padrao = f"{CONVERSA_BLOQUEADA_PREFIX}:*"
-    total_removido = _remover_por_padrao(r, padrao)
-    logger.warning(
-        "cache_bloqueios_resetado | acao=limpar_bloqueios_conversa "
-        "destino=%s total=%s padrao=%s",
-        destino,
-        total_removido,
-        padrao,
-    )
-    return {
-        "destino": destino,
-        "padrao": padrao,
-        "total_removido": total_removido,
-    }
-
 
 def resetar_cache_redis_dev():
     try:
@@ -159,73 +91,3 @@ def _remover_por_padrao(redis_client, padrao):
         total_removido += int(redis_client.delete(*lote))
 
     return total_removido
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Utilitarios controlados de manutencao do cache Redis.",
-    )
-    modos = parser.add_mutually_exclusive_group(required=True)
-    modos.add_argument(
-        "--operacional",
-        action="store_true",
-        help=(
-            "remove somente cache de clientes, bloqueios de conversa e "
-            "contadores de flood"
-        ),
-    )
-    modos.add_argument(
-        "--bloqueios",
-        action="store_true",
-        help="remove somente os bloqueios temporarios de conversa",
-    )
-    parser.add_argument(
-        "--confirmar",
-        action="store_true",
-        help="confirma a exclusao solicitada",
-    )
-    args = parser.parse_args(argv)
-
-    if args.bloqueios and not args.confirmar:
-        parser.error("--bloqueios exige --confirmar")
-
-    if args.bloqueios:
-        try:
-            resultado = resetar_bloqueios_conversa()
-        except Exception as exc:
-            logger.exception(
-                "cache_bloqueios_reset_falhou | acao=abortar erro=%s",
-                exc,
-            )
-            print(f"RESET_CACHE_BLOQUEIOS_FALHOU: {exc}", file=sys.stderr)
-            return 1
-
-        print(
-            "RESET_CACHE_BLOQUEIOS_OK "
-            f"total_removido={resultado['total_removido']} "
-            f"destino={resultado['destino']} "
-            f"padrao={resultado['padrao']}"
-        )
-        return 0
-
-    try:
-        resultado = resetar_cache_operacional()
-    except Exception as exc:
-        logger.exception(
-            "cache_operacional_reset_falhou | acao=abortar erro=%s",
-            exc,
-        )
-        print(f"RESET_CACHE_OPERACIONAL_FALHOU: {exc}", file=sys.stderr)
-        return 1
-
-    print(
-        "RESET_CACHE_OPERACIONAL_OK "
-        f"total_removido={resultado['total_removido']} "
-        f"destino={resultado['destino']} "
-        f"por_padrao={resultado['chaves_por_padrao']}"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

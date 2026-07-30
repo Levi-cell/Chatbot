@@ -59,14 +59,3 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
-
-
-def _imprimir_resultado(status, resposta):
-    sucesso = (
-        200 <= status < 300
-        and resposta.get("success") is True
-    )
-    resultado = "SUCESSO" if sucesso else "FALHA"
-    print(
-        f"[{resultado}] status={status} resposta={resposta}"
-    )

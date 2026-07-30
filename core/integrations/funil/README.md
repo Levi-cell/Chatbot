@@ -10,8 +10,7 @@ o ciclo do worker.
 core/integrations/funil/
 ├── cliente.py             POST, URL e validação da resposta lógica
 ├── oportunidades.py       payload e texto de observações
-├── exceptions.py          falhas conhecidas da integração
-└── testes_requests.py      ferramentas manuais, nunca executadas por import
+└── exceptions.py          falhas conhecidas da integração
 ```
 
 `cliente.py` exige simultaneamente:
@@ -29,11 +28,9 @@ A API pode devolver HTTP 200 com `response = failure`; esse caso não confirma
 
 O teste completo usa dados fictícios e só envia com confirmação explícita:
 
-```python
-from core.integrations.funil.testes_requests import criar_oportunidade_teste
-
-resultado = criar_oportunidade_teste(confirmar_envio_real=True)
-print(resultado)
+```bash
+python -m operations.integrations.funil_probe payload
+python -m operations.integrations.funil_probe send-test --confirm-real-send
 ```
 
 Ele cria uma oportunidade claramente marcada como teste. Antes de ativar o
@@ -42,4 +39,5 @@ Os dois últimos são enviados pelo mecanismo `personalizados` com os títulos
 exatos `Observações` e `Origem do lead`; a unidade precisa possuir campos
 compatíveis no ApiCarrossel.
 
-O teste nunca consulta dados reais do chatbot e não é chamado pelo worker.
+O teste nunca consulta dados reais do chatbot, não é chamado pelo worker e
+jamais envia apenas por importar o módulo.

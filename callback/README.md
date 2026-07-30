@@ -108,17 +108,18 @@ fallbacks é Redis, banco e memória local. O bloqueio utiliza
 `core/integrations/whatsapp/pywa_functions/usuarios.py` e segue Meta-first.
 
 Relatórios e reconciliação manual ficam em
-`core/integrations/whatsapp/tools/block_report.py`.
+`operations/monitoring/blocked_users.py`.
 
 O relatório é somente leitura e possui duas conferências distintas:
 
-- bloqueios: compara `(phone_id_unidade, wa_id_cliente)` entre a lista da Meta
-  e `chatbot.cliente_bloqueado_meta`;
+- bloqueios: compara
+  `(waba_id, phone_id_unidade, wa_id_cliente)` entre a lista da Meta e
+  `chatbot.cliente_bloqueado_meta`;
 - registros Cloud API: percorre o `waba_id` de cada unidade e compara os
   `phone_number_id` retornados pela Meta com `chatbot.unidade`.
 
-Ele apenas informa `sincronizados`, `somente_na_meta` e `somente_no_banco`; não
-bloqueia, desbloqueia, registra ou remove dados automaticamente.
+Ele também separa falhas de coleta e vínculos divergentes; não bloqueia,
+desbloqueia, registra ou remove dados automaticamente.
 
 ## Transações
 

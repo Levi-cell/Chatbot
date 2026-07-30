@@ -37,19 +37,6 @@ class ValidacaoUnidadeIndisponivel(Exception):
     pass
 
 
-def carregar_unidades_redis_primeira_vez():
-    conn = None
-
-    try:
-        conn = get_conn(application_name="cache_chatbot")
-        cursor = conn.cursor()
-        return carregar_cache_redis(cursor)
-
-    finally:
-        if conn:
-            conn.close()
-
-
 def recarregar_cache_unidades():
     conn = None
 
@@ -176,23 +163,6 @@ def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
         raise UnidadeNaoEncontrada(f"Unidade nao encontrada: {phone_key}")
 
     return int(id_unidade)
-
-
-def garantir_cache_unidades_se_necessario(cursor):
-    try:
-        r = get_redis_safe(retries=1, delay=0, validate=False)
-        _sincronizar_cache_unidades_por_versao(r, origem="manual", cursor=cursor)
-
-        if not _cache_valido(r):
-            logger.info("cache_invalido | acao=recarregar origem=manual")
-            return carregar_cache_redis(cursor, redis_retries=1, redis_delay=0)
-
-        return None
-
-    except Exception as exc:
-        _marcar_redis_falhou()
-        logger.warning("cache_validacao_falhou | origem=manual acao=manter_cache_atual erro=%s", exc)
-        return None
 
 
 def unidade_esta_ativa(phone_number_id):

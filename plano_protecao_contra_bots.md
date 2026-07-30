@@ -7133,7 +7133,7 @@ Para impedir varreduras acidentais, a CLI exige ao menos um
 mensagens por conversa e mensagens totais; e usa uma janela temporal
 obrigatória, derivada de `--ultimas-horas` ou de `--inicio`/`--fim`.
 
-### Arquivo completo: `relatorio_conversas_suspeitas.py`
+### Arquivo completo: `operations/monitoring/suspicious_conversations.py`
 
 Criar na raiz do projeto:
 
@@ -8127,9 +8127,9 @@ if __name__ == "__main__":
 Exemplos manuais:
 
 ```bash
-python relatorio_conversas_suspeitas.py --id-conversa 123 --formato texto
-python relatorio_conversas_suspeitas.py --id-unidade 2 --id-unidade 7 --ultimas-horas 6 --formato json
-python relatorio_conversas_suspeitas.py --todas-unidades --inicio 2025-01-15T00:00:00Z --fim 2025-01-16T00:00:00Z --limiar 65 --formato csv --saida suspeitas.csv
+python -m operations.monitoring.suspicious_conversations --id-conversa 123 --formato texto
+python -m operations.monitoring.suspicious_conversations --id-unidade 2 --id-unidade 7 --ultimas-horas 6 --formato json
+python -m operations.monitoring.suspicious_conversations --todas-unidades --inicio 2025-01-15T00:00:00Z --fim 2025-01-16T00:00:00Z --limiar 65 --formato csv --saida suspeitas.csv
 ```
 
 ### Arquivo completo: `tests/unit/test_relatorio_conversas_suspeitas.py`
@@ -8145,7 +8145,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import relatorio_conversas_suspeitas as relatorio
+from operations.monitoring import suspicious_conversations as relatorio
 
 
 UTC = timezone.utc
@@ -8787,7 +8787,7 @@ Validação planejada para este passo, sem conexão com o RDS:
 
 ```bash
 python -m unittest tests.unit.test_relatorio_conversas_suspeitas
-python -m py_compile relatorio_conversas_suspeitas.py tests/unit/test_relatorio_conversas_suspeitas.py
+python -m py_compile operations/monitoring/suspicious_conversations.py tests/unit/test_relatorio_conversas_suspeitas.py
 git diff --check
 ```
 

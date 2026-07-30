@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-import relatorio_conversas_suspeitas as relatorio
+from operations.monitoring import suspicious_conversations as relatorio
 
 
 UTC = timezone.utc

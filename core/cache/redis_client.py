@@ -185,19 +185,3 @@ def get_redis_safe(retries=3, delay=2, validate=True):
             time.sleep(delay)
 
     raise ConnectionError("Redis indisponivel apos multiplas tentativas")
-
-
-def confirmar_conexao_redis():
-    """
-    Healthcheck simples para uso externo.
-    """
-
-    try:
-        client = get_redis_safe()
-        resultado = client.ping()
-        logger.info("redis_healthcheck_ok | ping=%s", resultado)
-        return resultado
-
-    except Exception as e:
-        logger.error("redis_healthcheck_falhou | erro=%s", e)
-        return False

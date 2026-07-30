@@ -25,7 +25,6 @@ core/integrations/whatsapp/
 └── tools/
     ├── ativando_numero.py
     ├── ativando_waba_id.py
-    ├── block_report.py
     ├── config.py
     ├── desativando_numero.py
     └── usuarios.py
@@ -79,14 +78,17 @@ Os senders devolvem contexto simples para o worker. Falhas são encadeadas com
 
 ## Tools
 
-Ferramentas administrativas ou relatórios executados conscientemente:
+Ferramentas administrativas usadas pelo Django Admin:
 
 - registrar/desregistrar número;
 - validar o vínculo entre WABA e phone ID;
 - ativar/desativar a inscrição WABA;
-- comparar bloqueios Meta e banco;
-- reconciliar registros Cloud API percorrendo todas as WABAs das unidades;
-- bloquear, desbloquear e listar usuários na Meta.
+- bloquear e desbloquear usuários na Meta.
+
+Relatórios conscientes e somente leitura ficam em
+[`operations/monitoring/blocked_users.py`](../../../operations/monitoring/blocked_users.py).
+Eles comparam bloqueios pela chave completa
+`(waba_id, phone_id_unidade, wa_id_cliente)` e reconciliam registros Cloud API.
 
 `tools` não deve conter implementação duplicada usada pelo runtime. Uma operação
 compartilhada deve morar em `pywa_functions` e ser chamada pela ferramenta.
