@@ -13,12 +13,14 @@ from core.database.deploy_database import (
 from tests.helpers import FakeConn
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
+    EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_OFERTA_ACEITA,
     EVENTO_OFERTA_ADIADA,
-    EVENTO_PARA_MIM,
-    EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+    EVENTO_PROFISSAO_TITULAR_VALIDA,
     EVENTO_SATISFACAO_AVALIADA,
     EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
@@ -42,6 +44,7 @@ class DeployEssencialTests(unittest.TestCase):
             "numero_comercial",
             "bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE",
             "motivo_encerramento VARCHAR(30)",
+            "profissao VARCHAR(100) NULL",
             "encerra_automaticamente BOOLEAN",
             "bloqueio_dias INTEGER",
             "elegivel_funil BOOLEAN",
@@ -74,14 +77,17 @@ class DeployEssencialTests(unittest.TestCase):
         self.assertIn("nome VARCHAR(200) NULL", flood_source)
         self.assertNotIn("ALTER TABLE", flood_source)
 
-        etapa_16 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)
         etapa_17 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 17)
         etapa_18 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 18)
         etapa_19 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 19)
-        self.assertTrue(etapa_16[4])
+        etapa_20 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 20)
+        self.assertFalse(
+            next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)[4]
+        )
         self.assertTrue(etapa_17[4])
         self.assertTrue(etapa_18[4])
-        self.assertEqual(etapa_19[2:], (True, 30, True))
+        self.assertTrue(etapa_19[4])
+        self.assertEqual(etapa_20[2:], (True, 30, True))
 
     def test_etapas_e_transicoes_formam_um_mapa_valido_e_contiguo(self):
         ids_etapa = [etapa[0] for etapa in povoar_etapas.ETAPAS]
@@ -101,15 +107,17 @@ class DeployEssencialTests(unittest.TestCase):
 
         arestas_criticas = {
             (1, EVENTO_NOME_CLIENTE_VALIDO, 2),
-            (2, EVENTO_PARA_MIM, 4),
-            (2, EVENTO_PARA_OUTRA_PESSOA, 3),
-            (5, EVENTO_OFERTA_ACEITA, 8),
-            (5, EVENTO_OFERTA_ADIADA, 6),
-            (8, EVENTO_EMAIL_VALIDO, 9),
-            (15, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 16),
-            (16, "agendamento_confirmado", 17),
-            (17, EVENTO_SATISFACAO_AVALIADA, 18),
-            (18, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 19),
+            (2, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO, 3),
+            (3, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 4),
+            (3, EVENTO_PROFISSAO_TITULAR_VALIDA, 5),
+            (4, EVENTO_NOME_DEPENDENTE_VALIDO, 5),
+            (6, EVENTO_OFERTA_ACEITA, 9),
+            (6, EVENTO_OFERTA_ADIADA, 7),
+            (9, EVENTO_EMAIL_VALIDO, 10),
+            (16, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 17),
+            (17, "agendamento_confirmado", 18),
+            (18, EVENTO_SATISFACAO_AVALIADA, 19),
+            (19, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 20),
         }
         self.assertTrue(arestas_criticas.issubset(set(transicoes)))
 

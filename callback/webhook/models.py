@@ -50,6 +50,7 @@ class Conversa(models.Model):
     id_etapa_atual = models.ForeignKey('Etapa', models.DO_NOTHING, db_column='id_etapa_atual', blank=True, null=True)
     status_ativa = models.BooleanField(default=True)
     status_dependente = models.BooleanField(blank=True, null=True, default=False)
+    profissao = models.CharField(max_length=100, blank=True, null=True)
     last_interaction_at = models.DateTimeField(blank=True, null=True)
     last_message_from = models.CharField(
         max_length=10,

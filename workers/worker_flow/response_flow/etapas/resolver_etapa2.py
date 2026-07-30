@@ -8,10 +8,12 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
     enviar_etapa3,
 )
-from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
-    enviar_etapa4_cliente,
-)
 from core.logging_config import short_value
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
+    OPCAO_PARA_OUTRA_PESSOA,
+    TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
+    validar_etapa2,
+)
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
     validar_pergunta_financeira,
@@ -19,15 +21,9 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
-    OPCAO_PARA_MIM,
-    OPCAO_PARA_OUTRA_PESSOA,
-    TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
-    validar_etapa2,
-)
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_3_NOME_DEPENDENTE,
-    ETAPA_4_IDADE_ALUNO,
+    ETAPA_3_PROFISSAO,
+    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -35,154 +31,99 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 )
 
 
-"""
-ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
-
-- VALIDAR A SEGUNDA ETAPA
-- ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA, QUE É a 3 ou 4
-"""
-
-
 logger = logging.getLogger("worker.etapa2")
 
 
 def resolve_etapa2(contexto_historico):
-    """
-    Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
-
-    para_mim resolve 2 -> 4.
-    para_outra_pessoa resolve 2 -> 3.
-
-    As etapas 3 e 4 possuem senders reais.
-    """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
-    cliente_telefone = mensagem_cliente_atual["cliente_telefone"]
-    phone_id_unidade = mensagem_cliente_atual["id_phone_unidade"]
-
-    ## CAMPOS QUE VALIDAM MIDIA NA ETAPA 2
+    mensagem = contexto_historico["mensagem_cliente_atual"]
+    cliente_telefone = mensagem["cliente_telefone"]
+    phone_id_unidade = mensagem["id_phone_unidade"]
 
     if validar_midia(tipo_mensagem):
-        _logar_tipo_nao_suportado(contexto_historico)
-
+        _logar_tratamento(
+            contexto_historico,
+            "tipo_mensagem_nao_suportado",
+        )
         return enviar_etapa2_midia(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    ## CAMPOS QUE VALIDAM FINANCEIRO NA ETAPA 2
-
     if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento_texto(
+        _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
         )
-
         return enviar_etapa2_financeiro(
             cliente_telefone,
             phone_id_unidade,
         )
 
+    opcao_atendimento = validar_etapa2(texto_cliente)
 
-    ### VALIDANDO OPCOES
-    evento_transicao = validar_etapa2(texto_cliente)
-
-    if evento_transicao is None:
-        _logar_tratamento_texto(
+    if opcao_atendimento is None:
+        _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
         )
-
         return enviar_etapa2_contexto_opcao_invalida(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    # VALIDANDO DESTINO(S)
-    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
-
-    destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        evento_transicao,
-        destinos_esperados=destinos_esperados,
+        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
+        destinos_esperados={ETAPA_3_PROFISSAO},
     )
     status_dependente = (
-        evento_transicao == OPCAO_PARA_OUTRA_PESSOA
+        opcao_atendimento == OPCAO_PARA_OUTRA_PESSOA
     )
 
-    # O mapa autoriza o destino antes de qualquer envio externo.
-    if evento_transicao == OPCAO_PARA_OUTRA_PESSOA:
-        contexto_envio = enviar_etapa3(
-            cliente_telefone,
-            phone_id_unidade,
-        )
-        contexto_envio["opcao_atendimento"] = evento_transicao
-        contexto_envio["status_dependente"] = status_dependente
-    else:
-        contexto_envio = enviar_etapa4_cliente(
-            cliente_telefone,
-            phone_id_unidade,
-        )
-        contexto_envio["opcao_atendimento"] = evento_transicao
-        contexto_envio["status_dependente"] = status_dependente
+    contexto_envio = enviar_etapa3(
+        cliente_telefone,
+        phone_id_unidade,
+    )
+    contexto_envio.update(
+        {
+            "opcao_atendimento": opcao_atendimento,
+            "status_dependente": status_dependente,
+        }
+    )
+
+    logger.info(
+        "etapa2_destino_validado | acao=enviar_etapa3 id_conversa=%s "
+        "id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "opcao_atendimento=%s status_dependente=%s",
+        contexto_historico["id_conversa"],
+        mensagem["id_mensagem_fila"],
+        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
+        etapa_destino,
+        opcao_atendimento,
+        status_dependente,
+    )
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        evento_transicao,
+        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
         etapa_destino,
     )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-def _destinos_esperados_por_evento(evento_transicao):
-    if evento_transicao == OPCAO_PARA_MIM:
-        return {ETAPA_4_IDADE_ALUNO}
-
-    if evento_transicao == OPCAO_PARA_OUTRA_PESSOA:
-        return {ETAPA_3_NOME_DEPENDENTE}
-
-    return set()
-
-
-def _logar_tipo_nao_suportado(contexto_historico):
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
+def _logar_tratamento(contexto_historico, motivo):
+    mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
-        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
-        contexto_historico["id_conversa"],
-        mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(mensagem_cliente_atual["cliente_telefone"]),
-        short_value(mensagem_cliente_atual["id_phone_unidade"]),
-        contexto_historico.get("tipo_mensagem_atual"),
-        contexto_historico["id_etapa_cliente"],
-    )
-
-
-def _logar_tratamento_texto(contexto_historico, motivo):
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
-
-    logger.info(
-        "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s etapa_cliente=%s",
+        "resposta_cliente_tratamento | motivo=%s "
+        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
+        "cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
-        None,
         contexto_historico["id_conversa"],
-        mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(mensagem_cliente_atual["cliente_telefone"]),
-        short_value(mensagem_cliente_atual["id_phone_unidade"]),
+        mensagem["id_mensagem_fila"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
         contexto_historico["id_etapa_cliente"],
     )

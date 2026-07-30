@@ -7,6 +7,7 @@ from core.repositories.atendimento.clientes import (
     atualizar_nome_cliente_por_telefone,
 )
 from core.repositories.atendimento.conversas import (
+    atualizar_profissao_conversa,
     atualizar_status_dependente_conversa,
 )
 from core.repositories.atendimento.dependentes import (
@@ -19,11 +20,11 @@ from core.repositories.fluxo.pesquisa_satisfacao import (
     salvar_comentario_satisfacao,
     salvar_nota_satisfacao,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa17 import (
-    validar_etapa17,
-)
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
-    normalizar_comentario_etapa18,
+    validar_etapa18,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
+    normalizar_comentario_etapa19,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
@@ -31,43 +32,52 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
     validar_resposta_triagem,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
     validar_idade,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
-    validar_etapa8,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
+    OPCAO_PARA_OUTRA_PESSOA,
+    validar_etapa2,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
+    validar_profissao_etapa3,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
+    validar_etapa9,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_1_NOME_CLIENTE,
     ETAPA_2_DESTINO_ATENDIMENTO,
-    ETAPA_3_NOME_DEPENDENTE,
-    ETAPA_4_IDADE_ALUNO,
-    ETAPA_5_OFERTA_AULA,
-    ETAPA_6_OFERTA_ADIADA,
-    ETAPA_7_RETORNO_OFERTA,
-    ETAPA_8_EMAIL,
-    ETAPA_9_INTRODUCAO_TRIAGEM,
-    ETAPA_10_TRIAGEM_PERGUNTA_1,
-    ETAPA_11_TRIAGEM_PERGUNTA_2,
-    ETAPA_12_TRIAGEM_PERGUNTA_3,
-    ETAPA_13_TRIAGEM_PERGUNTA_4,
-    ETAPA_14_TRIAGEM_PERGUNTA_5,
-    ETAPA_15_TRIAGEM_PERGUNTA_6,
-    ETAPA_16_AGENDAMENTO,
-    ETAPA_17_PESQUISA_SATISFACAO,
-    ETAPA_18_COMENTARIO_SATISFACAO,
-    ETAPA_19_FINALIZACAO,
+    ETAPA_3_PROFISSAO,
+    ETAPA_4_NOME_DEPENDENTE,
+    ETAPA_5_IDADE_ALUNO,
+    ETAPA_6_OFERTA_AULA,
+    ETAPA_7_OFERTA_ADIADA,
+    ETAPA_8_RETORNO_OFERTA,
+    ETAPA_9_EMAIL,
+    ETAPA_10_INTRODUCAO_TRIAGEM,
+    ETAPA_11_TRIAGEM_PERGUNTA_1,
+    ETAPA_12_TRIAGEM_PERGUNTA_2,
+    ETAPA_13_TRIAGEM_PERGUNTA_3,
+    ETAPA_14_TRIAGEM_PERGUNTA_4,
+    ETAPA_15_TRIAGEM_PERGUNTA_5,
+    ETAPA_16_TRIAGEM_PERGUNTA_6,
+    ETAPA_17_AGENDAMENTO,
+    ETAPA_18_PESQUISA_SATISFACAO,
+    ETAPA_19_COMENTARIO_SATISFACAO,
+    ETAPA_20_FINALIZACAO,
     EVENTO_AGENDAMENTO_CONFIRMADO,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_NOME_DEPENDENTE_VALIDO,
     EVENTO_OFERTA_ACEITA,
     EVENTO_OFERTA_ADIADA,
-    EVENTO_PARA_MIM,
-    EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+    EVENTO_PROFISSAO_TITULAR_VALIDA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
     EVENTO_SATISFACAO_AVALIADA,
@@ -123,203 +133,200 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 2
     if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
-        # 2 -> 4: o atendimento será para o próprio cliente.
-        if evento == EVENTO_PARA_MIM:
+        # 2 -> 3: a opção foi validada; a profissão vem antes da bifurcação.
+        if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_4_IDADE_ALUNO,
+                ETAPA_3_PROFISSAO,
             )
             return _persistir_destino_atendimento_da_etapa2(
                 contexto_historico,
-                evento,
+                contexto_envio,
                 etapa_destino,
-                status_dependente=False,
-                cursor=cursor,
-            )
-
-        # 2 -> 3: o atendimento será para um dependente.
-        if evento == EVENTO_PARA_OUTRA_PESSOA:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_3_NOME_DEPENDENTE,
-            )
-            return _persistir_destino_atendimento_da_etapa2(
-                contexto_historico,
-                evento,
-                etapa_destino,
-                status_dependente=True,
                 cursor=cursor,
             )
 
     # ETAPA 3
-    if etapa_origem == ETAPA_3_NOME_DEPENDENTE:
-        # 3 -> 4: o cliente informou o nome do dependente.
+    if etapa_origem == ETAPA_3_PROFISSAO:
+        if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_4_NOME_DEPENDENTE,
+            )
+            return _persistir_profissao_capturada_na_etapa3(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+                status_dependente_esperado=True,
+            )
+
+        if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_5_IDADE_ALUNO,
+            )
+            return _persistir_profissao_capturada_na_etapa3(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+                status_dependente_esperado=False,
+            )
+
+    # ETAPA 4
+    if etapa_origem == ETAPA_4_NOME_DEPENDENTE:
+        # 4 -> 5: o cliente informou o nome do dependente.
         if evento == EVENTO_NOME_DEPENDENTE_VALIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_4_IDADE_ALUNO,
+                ETAPA_5_IDADE_ALUNO,
             )
-            return _persistir_nome_dependente_capturado_na_etapa3(
-                contexto_historico,
-                contexto_envio,
-                cursor,
-            )
-
-    # ETAPA 4
-    if etapa_origem == ETAPA_4_IDADE_ALUNO:
-        # 4 -> 5: a idade do aluno foi validada.
-        if evento == EVENTO_IDADE_VALIDA:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_5_OFERTA_AULA,
-            )
-            return _persistir_idade_capturada_na_etapa4(
+            return _persistir_nome_dependente_capturado_na_etapa4(
                 contexto_historico,
                 contexto_envio,
                 cursor,
             )
 
     # ETAPA 5
-    if etapa_origem == ETAPA_5_OFERTA_AULA:
-        # 5 -> 8: o cliente aceitou agendar.
+    if etapa_origem == ETAPA_5_IDADE_ALUNO:
+        # 5 -> 6: a idade do aluno foi validada.
+        if evento == EVENTO_IDADE_VALIDA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_6_OFERTA_AULA,
+            )
+            return _persistir_idade_capturada_na_etapa5(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 6
+    if etapa_origem == ETAPA_6_OFERTA_AULA:
+        # 6 -> 9: o cliente aceitou agendar.
         if evento == EVENTO_OFERTA_ACEITA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_8_EMAIL,
+                ETAPA_9_EMAIL,
             )
-            return _confirmar_decisao_oferta_da_etapa5(
+            return _confirmar_decisao_oferta_da_etapa6(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
-        # 5 -> 6: o cliente preferiu adiar.
+        # 6 -> 7: o cliente preferiu adiar.
         if evento == EVENTO_OFERTA_ADIADA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_6_OFERTA_ADIADA,
+                ETAPA_7_OFERTA_ADIADA,
             )
-            return _confirmar_decisao_oferta_da_etapa5(
-                contexto_historico,
-                evento,
-                etapa_destino,
-            )
-
-    # ETAPA 6
-    if etapa_origem == ETAPA_6_OFERTA_ADIADA:
-        # 6 -> 7: o cliente enviou uma nova mensagem após adiar a oferta.
-        if evento == EVENTO_CLIENTE_RETORNOU:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_7_RETORNO_OFERTA,
-            )
-            return _confirmar_retorno_cliente_da_etapa6(
+            return _confirmar_decisao_oferta_da_etapa6(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
     # ETAPA 7
-    if etapa_origem == ETAPA_7_RETORNO_OFERTA:
-        # 7 -> 8: o cliente retomou e confirmou o agendamento.
-        if evento == EVENTO_RETORNO_CONFIRMADO:
+    if etapa_origem == ETAPA_7_OFERTA_ADIADA:
+        # 7 -> 8: o cliente enviou uma nova mensagem após adiar a oferta.
+        if evento == EVENTO_CLIENTE_RETORNOU:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_8_EMAIL,
+                ETAPA_8_RETORNO_OFERTA,
             )
-            return _confirmar_decisao_retorno_da_etapa7(
-                contexto_historico,
-                evento,
-                etapa_destino,
-            )
-
-        # 7 -> 6: o cliente preferiu adiar novamente.
-        if evento == EVENTO_RETORNO_ADIADO:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_6_OFERTA_ADIADA,
-            )
-            return _confirmar_decisao_retorno_da_etapa7(
+            return _confirmar_retorno_cliente_da_etapa7(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
     # ETAPA 8
-    if etapa_origem == ETAPA_8_EMAIL:
-        # 8 -> 9: o cliente informou um email estruturalmente válido.
+    if etapa_origem == ETAPA_8_RETORNO_OFERTA:
+        # 8 -> 9: o cliente retomou e confirmou o agendamento.
+        if evento == EVENTO_RETORNO_CONFIRMADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_9_EMAIL,
+            )
+            return _confirmar_decisao_retorno_da_etapa8(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+        # 8 -> 7: o cliente preferiu adiar novamente.
+        if evento == EVENTO_RETORNO_ADIADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_7_OFERTA_ADIADA,
+            )
+            return _confirmar_decisao_retorno_da_etapa8(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
+    # ETAPA 9
+    if etapa_origem == ETAPA_9_EMAIL:
+        # 9 -> 10: o cliente informou um email estruturalmente válido.
         if evento == EVENTO_EMAIL_VALIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_9_INTRODUCAO_TRIAGEM,
+                ETAPA_10_INTRODUCAO_TRIAGEM,
             )
-            return _persistir_email_capturado_na_etapa8(
+            return _persistir_email_capturado_na_etapa9(
                 contexto_historico,
                 contexto_envio,
                 cursor,
             )
 
-    # ETAPA 9
-    if etapa_origem == ETAPA_9_INTRODUCAO_TRIAGEM:
-        # 9 -> 10: o cliente iniciou a triagem cognitiva.
+    # ETAPA 10
+    if etapa_origem == ETAPA_10_INTRODUCAO_TRIAGEM:
+        # 10 -> 11: o cliente iniciou a triagem cognitiva.
         if evento == EVENTO_TRIAGEM_INICIADA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_10_TRIAGEM_PERGUNTA_1,
+                ETAPA_11_TRIAGEM_PERGUNTA_1,
             )
-            return _confirmar_inicio_triagem_da_etapa9(
+            return _confirmar_inicio_triagem_da_etapa10(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
-    # ETAPA 10
-    if etapa_origem == ETAPA_10_TRIAGEM_PERGUNTA_1:
-        # 10 -> 11: registra a resposta da pergunta 1.
+    # ETAPA 11
+    if etapa_origem == ETAPA_11_TRIAGEM_PERGUNTA_1:
+        # 11 -> 12: registra a resposta da pergunta 1.
         if evento == EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_11_TRIAGEM_PERGUNTA_2,
-            )
-            return _persistir_resposta_triagem(
-                contexto_historico,
-                contexto_envio,
-                cursor,
-            )
-
-    # ETAPA 11
-    if etapa_origem == ETAPA_11_TRIAGEM_PERGUNTA_2:
-        # 11 -> 12: registra a resposta da pergunta 2.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_12_TRIAGEM_PERGUNTA_3,
+                ETAPA_12_TRIAGEM_PERGUNTA_2,
             )
             return _persistir_resposta_triagem(
                 contexto_historico,
@@ -328,14 +335,14 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 12
-    if etapa_origem == ETAPA_12_TRIAGEM_PERGUNTA_3:
-        # 12 -> 13: registra a resposta da pergunta 3.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA:
+    if etapa_origem == ETAPA_12_TRIAGEM_PERGUNTA_2:
+        # 12 -> 13: registra a resposta da pergunta 2.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_13_TRIAGEM_PERGUNTA_4,
+                ETAPA_13_TRIAGEM_PERGUNTA_3,
             )
             return _persistir_resposta_triagem(
                 contexto_historico,
@@ -344,14 +351,14 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 13
-    if etapa_origem == ETAPA_13_TRIAGEM_PERGUNTA_4:
-        # 13 -> 14: registra a resposta da pergunta 4.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA:
+    if etapa_origem == ETAPA_13_TRIAGEM_PERGUNTA_3:
+        # 13 -> 14: registra a resposta da pergunta 3.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_14_TRIAGEM_PERGUNTA_5,
+                ETAPA_14_TRIAGEM_PERGUNTA_4,
             )
             return _persistir_resposta_triagem(
                 contexto_historico,
@@ -360,14 +367,14 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 14
-    if etapa_origem == ETAPA_14_TRIAGEM_PERGUNTA_5:
-        # 14 -> 15: registra a resposta da pergunta 5.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA:
+    if etapa_origem == ETAPA_14_TRIAGEM_PERGUNTA_4:
+        # 14 -> 15: registra a resposta da pergunta 4.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_15_TRIAGEM_PERGUNTA_6,
+                ETAPA_15_TRIAGEM_PERGUNTA_5,
             )
             return _persistir_resposta_triagem(
                 contexto_historico,
@@ -376,14 +383,14 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 15
-    if etapa_origem == ETAPA_15_TRIAGEM_PERGUNTA_6:
-        # 15 -> 16: registra a resposta da pergunta 6.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA:
+    if etapa_origem == ETAPA_15_TRIAGEM_PERGUNTA_5:
+        # 15 -> 16: registra a resposta da pergunta 5.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_16_AGENDAMENTO,
+                ETAPA_16_TRIAGEM_PERGUNTA_6,
             )
             return _persistir_resposta_triagem(
                 contexto_historico,
@@ -392,48 +399,64 @@ def atualizar_banco_conforme_transicao_de_etapa(
             )
 
     # ETAPA 16
-    if etapa_origem == ETAPA_16_AGENDAMENTO:
-        # 16 -> 17: o cliente confirmou o agendamento e inicia a pesquisa.
-        if evento == EVENTO_AGENDAMENTO_CONFIRMADO:
+    if etapa_origem == ETAPA_16_TRIAGEM_PERGUNTA_6:
+        # 16 -> 17: registra a resposta da pergunta 6.
+        if evento == EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_17_PESQUISA_SATISFACAO,
+                ETAPA_17_AGENDAMENTO,
             )
-            return _confirmar_agendamento_da_etapa16(
-                contexto_historico,
-                evento,
-                etapa_destino,
-            )
-
-    # ETAPA 17
-    if etapa_origem == ETAPA_17_PESQUISA_SATISFACAO:
-        # 17 -> 18: registra a nota normalizada da pesquisa de satisfacao.
-        if evento == EVENTO_SATISFACAO_AVALIADA:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_18_COMENTARIO_SATISFACAO,
-            )
-            return _persistir_nota_satisfacao_da_etapa17(
+            return _persistir_resposta_triagem(
                 contexto_historico,
                 contexto_envio,
                 cursor,
             )
 
+    # ETAPA 17
+    if etapa_origem == ETAPA_17_AGENDAMENTO:
+        # 17 -> 18: o cliente confirmou o agendamento e inicia a pesquisa.
+        if evento == EVENTO_AGENDAMENTO_CONFIRMADO:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_18_PESQUISA_SATISFACAO,
+            )
+            return _confirmar_agendamento_da_etapa17(
+                contexto_historico,
+                evento,
+                etapa_destino,
+            )
+
     # ETAPA 18
-    if etapa_origem == ETAPA_18_COMENTARIO_SATISFACAO:
-        # 18 -> 19: registra o comentario opcional antes da finalizacao.
+    if etapa_origem == ETAPA_18_PESQUISA_SATISFACAO:
+        # 18 -> 19: registra a nota normalizada da pesquisa de satisfacao.
+        if evento == EVENTO_SATISFACAO_AVALIADA:
+            _exigir_destino(
+                etapa_origem,
+                evento,
+                etapa_destino,
+                ETAPA_19_COMENTARIO_SATISFACAO,
+            )
+            return _persistir_nota_satisfacao_da_etapa18(
+                contexto_historico,
+                contexto_envio,
+                cursor,
+            )
+
+    # ETAPA 19
+    if etapa_origem == ETAPA_19_COMENTARIO_SATISFACAO:
+        # 19 -> 20: registra o comentario opcional antes da finalizacao.
         if evento == EVENTO_COMENTARIO_SATISFACAO_RECEBIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_19_FINALIZACAO,
+                ETAPA_20_FINALIZACAO,
             )
-            return _persistir_comentario_satisfacao_da_etapa18(
+            return _persistir_comentario_satisfacao_da_etapa19(
                 contexto_historico,
                 contexto_envio,
                 cursor,
@@ -515,13 +538,27 @@ def _persistir_nome_cliente_capturado_na_etapa1(
 
 def _persistir_destino_atendimento_da_etapa2(
     contexto_historico,
-    evento,
+    contexto_envio,
     etapa_destino,
     *,
-    status_dependente,
     cursor,
 ):
     id_conversa = contexto_historico["id_conversa"]
+    opcao_atendimento = contexto_envio.get("opcao_atendimento")
+
+    if opcao_atendimento is None:
+        opcao_atendimento = validar_etapa2(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+
+    if opcao_atendimento is None:
+        raise ValueError(
+            "Destino do atendimento nao reconstruido na transicao 2 -> 3"
+        )
+
+    status_dependente = (
+        opcao_atendimento == OPCAO_PARA_OUTRA_PESSOA
+    )
 
     atualizar_status_dependente_conversa(
         id_conversa,
@@ -532,7 +569,7 @@ def _persistir_destino_atendimento_da_etapa2(
     contexto_persistido = {
         "status_dependente_atualizado": True,
         "status_dependente": status_dependente,
-        "opcao_atendimento": evento,
+        "opcao_atendimento": opcao_atendimento,
         "dependente_criado": False,
     }
 
@@ -551,7 +588,7 @@ def _persistir_destino_atendimento_da_etapa2(
 
     logger.info(
         "destino_atendimento_persistido | acao=salvar_efeitos_transicao evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s status_dependente=%s dependente_criado=%s",
-        evento,
+        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
         contexto_historico.get("id_etapa_origem_transicao"),
         etapa_destino,
         id_conversa,
@@ -562,7 +599,63 @@ def _persistir_destino_atendimento_da_etapa2(
     return contexto_persistido
 
 
-def _persistir_nome_dependente_capturado_na_etapa3(
+def _persistir_profissao_capturada_na_etapa3(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+    *,
+    status_dependente_esperado,
+):
+    status_dependente = bool(
+        contexto_historico.get("status_dependente")
+    )
+
+    if status_dependente != status_dependente_esperado:
+        raise ValueError(
+            "Evento da profissao incompativel com o destino do atendimento "
+            f"(id_conversa={contexto_historico['id_conversa']}, "
+            f"status_dependente={status_dependente})"
+        )
+
+    profissao = contexto_envio.get("profissao")
+
+    if profissao is None:
+        resultado = validar_profissao_etapa3(
+            contexto_historico.get("texto_cliente_atual") or "",
+            contexto_historico.get("tipo_mensagem_atual"),
+        )
+        if resultado.valida:
+            profissao = resultado.profissao
+
+    if not profissao:
+        raise ValueError(
+            "Profissao nao reconstruida na transicao da etapa 3"
+        )
+
+    atualizar_profissao_conversa(
+        contexto_historico["id_conversa"],
+        profissao,
+        cursor,
+    )
+
+    logger.info(
+        "profissao_persistida | acao=salvar_efeito_transicao "
+        "evento=%s etapa_origem=%s etapa_resultante=%s "
+        "id_conversa=%s profissao=%s",
+        contexto_envio.get("evento_transicao"),
+        contexto_historico["id_etapa_origem_transicao"],
+        contexto_envio["id_etapa_resultante"],
+        contexto_historico["id_conversa"],
+        short_value(profissao),
+    )
+
+    return {
+        "profissao_atualizada": True,
+        "profissao": profissao,
+    }
+
+
+def _persistir_nome_dependente_capturado_na_etapa4(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -575,13 +668,13 @@ def _persistir_nome_dependente_capturado_na_etapa3(
 
     if not primeiro_nome:
         logger.critical(
-            "dependente_nome_anomalia_critica | motivo=nome_vazio_na_transicao_3_4 acao=rollback_e_retry id_conversa=%s etapa_origem=%s etapa_resultante=%s",
+            "dependente_nome_anomalia_critica | motivo=nome_vazio_na_transicao_4_5 acao=rollback_e_retry id_conversa=%s etapa_origem=%s etapa_resultante=%s",
             contexto_historico["id_conversa"],
             contexto_historico.get("id_etapa_origem_transicao"),
             contexto_envio.get("id_etapa_resultante"),
         )
         raise ValueError(
-            "Nome do dependente nao foi resolvido na transicao 3 -> 4"
+            "Nome do dependente nao foi resolvido na transicao 4 -> 5"
         )
 
     id_conversa = contexto_historico["id_conversa"]
@@ -625,7 +718,7 @@ def _resolver_primeiro_nome_capturado(
     return None
 
 
-def _persistir_idade_capturada_na_etapa4(
+def _persistir_idade_capturada_na_etapa5(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -641,7 +734,7 @@ def _persistir_idade_capturada_na_etapa4(
 
     if idade is None:
         raise ValueError(
-            "Idade não reconstruída na transição 4 -> 5"
+            "Idade não reconstruída na transição 5 -> 6"
         )
 
     if contexto_historico.get("status_dependente"):
@@ -678,7 +771,7 @@ def _persistir_idade_capturada_na_etapa4(
     }
 
 
-def _confirmar_decisao_oferta_da_etapa5(
+def _confirmar_decisao_oferta_da_etapa6(
     contexto_historico,
     evento,
     etapa_destino,
@@ -704,7 +797,7 @@ def _confirmar_decisao_oferta_da_etapa5(
     }
 
 
-def _confirmar_retorno_cliente_da_etapa6(
+def _confirmar_retorno_cliente_da_etapa7(
     contexto_historico,
     evento,
     etapa_destino,
@@ -713,7 +806,7 @@ def _confirmar_retorno_cliente_da_etapa6(
     Confirma a continuidade sem criar dado de negócio adicional.
 
     A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
-    conversa. Esta etapa apenas torna explícita a aresta 6 -> 7.
+    conversa. Esta etapa apenas torna explícita a aresta 7 -> 8.
     """
     logger.info(
         "retorno_cliente_persistido | acao=confirmar_transicao "
@@ -730,7 +823,7 @@ def _confirmar_retorno_cliente_da_etapa6(
     }
 
 
-def _confirmar_decisao_retorno_da_etapa7(
+def _confirmar_decisao_retorno_da_etapa8(
     contexto_historico,
     evento,
     etapa_destino,
@@ -739,7 +832,7 @@ def _confirmar_decisao_retorno_da_etapa7(
     Torna explícita a decisão do retorno sem duplicar persistência.
 
     A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
-    conversa. Esta função confirma apenas as arestas 7 -> 8 e 7 -> 6.
+    conversa. Esta função confirma apenas as arestas 8 -> 9 e 8 -> 7.
     """
     logger.info(
         "decisao_retorno_persistida | acao=confirmar_transicao "
@@ -756,13 +849,13 @@ def _confirmar_decisao_retorno_da_etapa7(
     }
 
 
-def _persistir_email_capturado_na_etapa8(
+def _persistir_email_capturado_na_etapa9(
     contexto_historico,
     contexto_envio,
     cursor,
 ):
     """
-    Persiste somente o email extraído e validado na etapa 8.
+    Persiste somente o email extraído e validado na etapa 9.
 
     Em reaplicação idempotente, o contexto de envio não carrega o email.
     Nesse caso, o dado é revalidado na mensagem original do cliente.
@@ -770,13 +863,13 @@ def _persistir_email_capturado_na_etapa8(
     email = contexto_envio.get("email_cliente")
 
     if email is None:
-        resultado_email = validar_etapa8(
+        resultado_email = validar_etapa9(
             contexto_historico.get("texto_cliente_atual") or ""
         )
 
         if not resultado_email.valido:
             raise ValueError(
-                "Email nao reconstruido na transicao 8 -> 9"
+                "Email nao reconstruido na transicao 9 -> 10"
             )
 
         email = resultado_email.email
@@ -807,7 +900,7 @@ def _persistir_email_capturado_na_etapa8(
     }
 
 
-def _confirmar_inicio_triagem_da_etapa9(
+def _confirmar_inicio_triagem_da_etapa10(
     contexto_historico,
     evento,
     etapa_destino,
@@ -816,7 +909,7 @@ def _confirmar_inicio_triagem_da_etapa9(
     Confirma a continuidade sem criar dado de negócio adicional.
 
     A mudança de id_etapa_atual já foi persistida pelo movimento genérico da
-    conversa. Esta função torna explícita somente a aresta 9 -> 10.
+    conversa. Esta função torna explícita somente a aresta 10 -> 11.
     """
     logger.info(
         "inicio_triagem_persistido | acao=confirmar_transicao "
@@ -885,12 +978,12 @@ def _persistir_resposta_triagem(
     }
 
 
-def _confirmar_agendamento_da_etapa16(
+def _confirmar_agendamento_da_etapa17(
     contexto_historico,
     evento,
     etapa_destino,
 ):
-    """Confirma a aresta 16 -> 17 sem criar dado de negocio adicional."""
+    """Confirma a aresta 17 -> 18 sem criar dado de negocio adicional."""
     logger.info(
         "agendamento_confirmado_persistido | acao=confirmar_transicao "
         "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
@@ -906,7 +999,7 @@ def _confirmar_agendamento_da_etapa16(
     }
 
 
-def _persistir_nota_satisfacao_da_etapa17(
+def _persistir_nota_satisfacao_da_etapa18(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -915,13 +1008,13 @@ def _persistir_nota_satisfacao_da_etapa17(
     nota_satisfacao = contexto_envio.get("nota_satisfacao")
 
     if nota_satisfacao is None:
-        nota_satisfacao = validar_etapa17(
+        nota_satisfacao = validar_etapa18(
             contexto_historico.get("texto_cliente_atual") or ""
         )
 
     if nota_satisfacao is None:
         raise ValueError(
-            "Nota de satisfacao ausente na transicao 17 -> 18 "
+            "Nota de satisfacao ausente na transicao 18 -> 19 "
             f"(id_conversa={contexto_historico['id_conversa']})"
         )
 
@@ -949,7 +1042,7 @@ def _persistir_nota_satisfacao_da_etapa17(
     }
 
 
-def _persistir_comentario_satisfacao_da_etapa18(
+def _persistir_comentario_satisfacao_da_etapa19(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -958,7 +1051,7 @@ def _persistir_comentario_satisfacao_da_etapa18(
     if "comentario_satisfacao" in contexto_envio:
         comentario_satisfacao = contexto_envio["comentario_satisfacao"]
     else:
-        comentario_satisfacao = normalizar_comentario_etapa18(
+        comentario_satisfacao = normalizar_comentario_etapa19(
             contexto_historico.get("texto_cliente_atual") or "",
             contexto_historico.get("tipo_mensagem_atual"),
         )

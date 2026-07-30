@@ -1,43 +1,16 @@
-# ETAPA 10 - TESTE COGNITIVO, PERGUNTA 1
+# ENTRADA NA ETAPA 10
 
-CABECALHO_ETAPA10 = "Pergunta 1"
-
-MENSAGEM_CLIENTE_ETAPA10 = (
-    "Com que frequência você esquece de acontecimentos recentes, "
-    "como o que fez no final de semana?"
+MENSAGEM_TRIAGEM_COGNITIVA_ETAPA10 = (
+    "Antes de continuarmos o agendamento, vamos realizar uma pequena triagem "
+    "cognitiva com 6 perguntas objetivas de seleção única, ok?"
 )
 
-MENSAGEM_DEPENDENTE_ETAPA10 = (
-    "Com que frequência {nome} esquece de acontecimentos recentes, "
-    "como o que fez no final de semana?"
-)
-
-MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA10 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_CLIENTE_ETAPA10
-)
-
-MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA10 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_DEPENDENTE_ETAPA10
-)
+BOTAO_ETAPA10_INICIAR_TRIAGEM = "Iniciar triagem"
 
 
-def montar_cabecalho_etapa10():
-    return CABECALHO_ETAPA10
+def montar_mensagem_triagem_cognitiva_etapa10():
+    return MENSAGEM_TRIAGEM_COGNITIVA_ETAPA10
 
 
-def montar_mensagem_cliente_etapa10():
-    return MENSAGEM_CLIENTE_ETAPA10
-
-
-def montar_mensagem_dependente_etapa10(nome):
-    return MENSAGEM_DEPENDENTE_ETAPA10.format(nome=nome)
-
-
-def montar_mensagem_cliente_contexto_invalido_etapa10():
-    return MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA10
-
-
-def montar_mensagem_dependente_contexto_invalido_etapa10(nome):
-    return MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA10.format(nome=nome)
+def montar_botoes_etapa10():
+    return (BOTAO_ETAPA10_INICIAR_TRIAGEM,)

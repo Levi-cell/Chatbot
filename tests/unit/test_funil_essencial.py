@@ -14,6 +14,7 @@ from core.repositories.funil.envios import (
     reivindicar_proximo_envio,
     sincronizar_envios_elegiveis,
 )
+from core.repositories.funil.leads import buscar_dados_lead_funil
 from tests.helpers import FakeConn, FakeCursor
 from workers.worker_funil import funil_worker as executor_funil
 from workers.worker_funil import iniciar_worker_funil as supervisor_funil
@@ -156,7 +157,69 @@ class FunilEssencialTests(unittest.TestCase):
         )
         self.assertEqual(personalizados["Origem do lead"], "Meta Chatbot")
         self.assertIn("Nome do dependente: Enzo Teste", personalizados["Observações"])
+        self.assertIn(
+            "- Profissão: Engenheiro",
+            personalizados["Observações"],
+        )
         self.assertIn("Às vezes: 3", personalizados["Observações"])
+        self.assertLess(
+            personalizados["Observações"].index(
+                "- Idade do dependente: 12"
+            ),
+            personalizados["Observações"].index(
+                "- Profissão: Engenheiro"
+            ),
+        )
+        self.assertLess(
+            personalizados["Observações"].index(
+                "- Profissão: Engenheiro"
+            ),
+            personalizados["Observações"].index(
+                "Resultado do teste de triagem"
+            ),
+        )
+
+    def test_snapshot_funil_inclui_profissao_da_conversa(self):
+        cursor = FakeCursor(
+            fetchone_result=(
+                123,
+                1,
+                "Supera Teste",
+                False,
+                "Maria",
+                "5571999999999",
+                "maria@example.com",
+                30,
+                "Analista financeira",
+                None,
+                None,
+                6,
+                1,
+                2,
+                3,
+                0,
+            )
+        )
+
+        dados = buscar_dados_lead_funil(123, cursor)
+
+        sql, parametros = cursor.calls[0]
+        self.assertIn("c.profissao", sql)
+        self.assertEqual(parametros, (123,))
+        self.assertEqual(dados["profissao"], "Analista financeira")
+
+    def test_payload_legado_exibe_profissao_nao_informada(self):
+        dados = montar_dados_lead_teste()
+        dados["profissao"] = None
+
+        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
+        observacoes = oportunidade["personalizados"][0]["valor"]
+
+        self.assertIn("- Profissão: Não informada", observacoes)
+        self.assertLess(
+            observacoes.index("- Profissão: Não informada"),
+            observacoes.index("Resultado do teste de triagem"),
+        )
 
     def test_payload_adiciona_nono_digito_ao_telefone_brasileiro(self):
         dados = montar_dados_lead_teste()
@@ -198,6 +261,7 @@ class FunilEssencialTests(unittest.TestCase):
             "- Idade do dependente: 12\n\n"
             "O cliente possui um número internacional fora do padrão brasileiro, "
             "por isso o campo Telefone 1 não foi preenchido.\n\n"
+            "- Profissão: Engenheiro\n\n"
             "Resultado do teste de triagem",
             observacoes,
         )

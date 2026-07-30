@@ -1,15 +1,15 @@
-# ETAPA 12 - TESTE COGNITIVO, PERGUNTA 3
+# ETAPA 12 - TESTE COGNITIVO, PERGUNTA 2
 
-CABECALHO_ETAPA12 = "Pergunta 3"
+CABECALHO_ETAPA12 = "Pergunta 2"
 
 MENSAGEM_CLIENTE_ETAPA12 = (
-    "Com que frequência você esquece nomes de pessoas conhecidas "
-    "ou familiares?"
+    "Com que frequência você esquece o que foi fazer ou procurar "
+    "em outro lugar?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA12 = (
-    "Com que frequência {nome} esquece nomes de pessoas conhecidas "
-    "ou familiares?"
+    "Com que frequência {nome} esquece o que foi fazer ou procurar "
+    "em outro lugar?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA12 = (

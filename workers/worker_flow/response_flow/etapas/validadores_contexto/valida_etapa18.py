@@ -1,25 +1,52 @@
+import re
+
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
 
 
-RESPOSTA_SEM_COMENTARIO_ETAPA18 = "prefiro nao comentar"
+TIPO_TRATAMENTO_SATISFACAO_INVALIDA = "satisfacao_invalida"
+
+_NOTAS_POR_RESPOSTA = {
+    "1": 1,
+    "muito ruim": 1,
+    "1 muito ruim": 1,
+    "2": 2,
+    "ruim": 2,
+    "2 ruim": 2,
+    "3": 3,
+    "regular": 3,
+    "3 regular": 3,
+    "4": 4,
+    "muito bom": 4,
+    "4 muito bom": 4,
+    "5": 5,
+    "excelente": 5,
+    "5 excelente": 5,
+}
 
 
-def normalizar_comentario_etapa18(conteudo_texto, tipo_mensagem):
-    """Retorna texto util ou None para midia e recusa explicita em comentar."""
-    if tipo_mensagem not in {"text", "interactive", "button"}:
-        return None
-
+def validar_etapa18(conteudo_texto):
+    """Traduz uma unica opcao coerente da pesquisa para uma nota de 1 a 5."""
     if not isinstance(conteudo_texto, str):
         return None
 
-    comentario = conteudo_texto.strip()
+    texto_normalizado = _normalizar_resposta(conteudo_texto)
 
-    if not comentario:
-        return None
+    # Suporta o callback_data caso algum payload nao traga o titulo da linha.
+    if texto_normalizado.startswith("satisfacao "):
+        texto_normalizado = texto_normalizado.removeprefix(
+            "satisfacao "
+        )
 
-    if normalizar_texto(comentario) == RESPOSTA_SEM_COMENTARIO_ETAPA18:
-        return None
+    return _NOTAS_POR_RESPOSTA.get(texto_normalizado)
 
-    return comentario
+
+def _normalizar_resposta(texto):
+    texto_sem_acento = normalizar_texto(texto)
+    texto_sem_pontuacao = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        texto_sem_acento,
+    )
+    return " ".join(texto_sem_pontuacao.split())

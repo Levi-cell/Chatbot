@@ -54,6 +54,9 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa17 import (
 from workers.worker_flow.response_flow.etapas.resolver_etapa18 import (
     resolve_etapa18,
 )
+from workers.worker_flow.response_flow.etapas.resolver_etapa19 import (
+    resolve_etapa19,
+)
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
@@ -172,7 +175,10 @@ def flow_sender(contexto_historico):
     if id_etapa_atual == 18:
         return resolve_etapa18(contexto_historico)
 
-    # A etapa 19 é terminal e não possui resolver. Conversas encerradas são
+    if id_etapa_atual == 19:
+        return resolve_etapa19(contexto_historico)
+
+    # A etapa 20 é terminal e não possui resolver. Conversas encerradas são
     # barradas pelo cache/webhook e pelo fallback transacional do worker.
 
     logger.warning(

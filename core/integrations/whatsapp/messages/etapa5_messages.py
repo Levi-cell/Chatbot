@@ -1,161 +1,153 @@
-# ENTRADA NA ETAPA 5 - CLIENTE
+### ENTRADA NA ETAPA 5 - CLIENTE
 
-MENSAGEM_OFERTA_CLIENTE_ETAPA5 = (
-    "Maravilha! ☺️\n\n"
-    "Quero te presentear com uma experiência que pode fazer toda a diferença "
-    "no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
-    "uma avaliação que vai mostrar como estão habilidades importantes para o "
-    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
-    "\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_ETAPA5 = (
+    "Certo, agora me fala, qual é a sua idade?"
 )
 
 
-def montar_mensagem_oferta_cliente_etapa5(nome):
-    return MENSAGEM_OFERTA_CLIENTE_ETAPA5.format(nome=nome)
+def montar_mensagem_idade_etapa5():
+    return MENSAGEM_IDADE_ETAPA5
 
 
-# ENTRADA NA ETAPA 5 - DEPENDENTE
+### ENTRADA NA ETAPA 5 - DEPENDENTE
 
-MENSAGEM_OFERTA_DEPENDENTE_ETAPA5 = (
-    "Maravilha! ☺️\n\n"
-    "Quero presentear {nome} com uma experiência que pode fazer toda a "
-    "diferença no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
-    "fará uma avaliação que vai mostrar como estão habilidades importantes "
-    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
-    "lógico.\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_DEPENDENTE_ETAPA5 = (
+    "Certo, agora me fala, qual é a idade de {nome}?"
 )
 
 
-def montar_mensagem_oferta_dependente_etapa5(nome):
-    return MENSAGEM_OFERTA_DEPENDENTE_ETAPA5.format(nome=nome)
+def montar_mensagem_idade_dependente_etapa5(nome):
+    return MENSAGEM_IDADE_DEPENDENTE_ETAPA5.format(nome=nome)
 
 
-# CLIENTE RESPONDE À OFERTA COM MÍDIA
+### CLIENTE RESPONDE À IDADE COM MÍDIA
 
-MENSAGEM_OFERTA_CLIENTE_MIDIA_ETAPA5 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
-    "no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
-    "uma avaliação que vai mostrar como estão habilidades importantes para o "
-    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
-    "\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_ETAPA5_MIDIA = (
+    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
+    "Me diz, qual é a sua idade?"
 )
 
 
-def montar_mensagem_oferta_cliente_midia_etapa5():
-    return MENSAGEM_OFERTA_CLIENTE_MIDIA_ETAPA5
+def montar_mensagem_idade_etapa5_midia():
+    return MENSAGEM_IDADE_ETAPA5_MIDIA
 
 
-# CLIENTE RESPONDE À OFERTA DO DEPENDENTE COM MÍDIA
+### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MÍDIA
 
-MENSAGEM_OFERTA_DEPENDENTE_MIDIA_ETAPA5 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
-    "diferença no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
-    "fará uma avaliação que vai mostrar como estão habilidades importantes "
-    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
-    "lógico.\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_DEPENDENTE_ETAPA5_MIDIA = (
+    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
+    "Me diz, qual é a idade de {nome}?"
 )
 
 
-def montar_mensagem_oferta_dependente_midia_etapa5(nome):
-    return MENSAGEM_OFERTA_DEPENDENTE_MIDIA_ETAPA5.format(nome=nome)
+def montar_mensagem_idade_dependente_etapa5_midia(nome):
+    return MENSAGEM_IDADE_DEPENDENTE_ETAPA5_MIDIA.format(nome=nome)
 
 
-# CLIENTE RESPONDE À OFERTA COM PERGUNTA FINANCEIRA
+### CLIENTE RESPONDE À IDADE COM PERGUNTA FINANCEIRA
 
-MENSAGEM_OFERTA_CLIENTE_FINANCEIRO_ETAPA5 = (
-    "Olha, demais informações, como valores, são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
-    "no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
-    "uma avaliação que vai mostrar como estão habilidades importantes para o "
-    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
-    "\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_ETAPA5_FINANCEIRO = (
+    "Olha, demais informações como valores são apresentadas no atendimento "
+    "presencial após a aula *gratuita*.\n"
+    "Me diz, qual é a sua idade?"
 )
 
 
-def montar_mensagem_oferta_cliente_financeiro_etapa5():
-    return MENSAGEM_OFERTA_CLIENTE_FINANCEIRO_ETAPA5
+def montar_mensagem_idade_etapa5_financeiro():
+    return MENSAGEM_IDADE_ETAPA5_FINANCEIRO
 
 
-# CLIENTE RESPONDE À OFERTA DO DEPENDENTE COM PERGUNTA FINANCEIRA
+### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM PERGUNTA FINANCEIRA
 
-MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA5 = (
-    "Olha, demais informações, como valores, são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
-    "diferença no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
-    "fará uma avaliação que vai mostrar como estão habilidades importantes "
-    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
-    "lógico.\n\n"
-    "Vamos agendar?"
+MENSAGEM_IDADE_DEPENDENTE_ETAPA5_FINANCEIRO = (
+    "Olha, demais informações como valores são apresentadas no atendimento "
+    "presencial após a aula *gratuita*.\n"
+    "Me diz, qual é a idade de {nome}?"
 )
 
 
-def montar_mensagem_oferta_dependente_financeiro_etapa5(nome):
-    return MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA5.format(nome=nome)
+def montar_mensagem_idade_dependente_etapa5_financeiro(nome):
+    return MENSAGEM_IDADE_DEPENDENTE_ETAPA5_FINANCEIRO.format(nome=nome)
 
 
-# CLIENTE RESPONDE À OFERTA COM MENSAGEM FORA DE CONTEXTO
+### CLIENTE RESPONDE À IDADE COM MENSAGEM FORA DE CONTEXTO
 
-MENSAGEM_OFERTA_CLIENTE_CONTEXTO_INVALIDO_ETAPA5 = (
-    "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
-    "no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
-    "uma avaliação que vai mostrar como estão habilidades importantes para o "
-    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
-    "\n\n"
-    "Vamos agendar?"
+MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA5 = (
+    "Não consegui entender a sua idade. Digite apenas o número, exemplo: 25.\n"
+    "Me diz, qual é a sua idade?"
 )
 
 
-def montar_mensagem_oferta_cliente_contexto_invalido_etapa5():
-    return MENSAGEM_OFERTA_CLIENTE_CONTEXTO_INVALIDO_ETAPA5
+def montar_mensagem_contexto_idade_invalida_etapa5():
+    return MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA5
 
 
-# CLIENTE RESPONDE À OFERTA DO DEPENDENTE COM MENSAGEM FORA DE CONTEXTO
+### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MENSAGEM FORA DE CONTEXTO
 
-MENSAGEM_OFERTA_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA5 = (
-    "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
-    "diferença no seu desenvolvimento.\n\n"
-    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
-    "fará uma avaliação que vai mostrar como estão habilidades importantes "
-    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
-    "lógico.\n\n"
-    "Vamos agendar?"
+MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA5 = (
+    "Não consegui entender a idade de {nome}. Digite apenas o número, "
+    "exemplo: 10.\n"
+    "Me diz, qual é a idade de {nome}?"
 )
 
 
-def montar_mensagem_oferta_dependente_contexto_invalido_etapa5(nome):
-    return MENSAGEM_OFERTA_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA5.format(
+def montar_mensagem_contexto_idade_dependente_invalida_etapa5(nome):
+    return MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA5.format(
         nome=nome,
     )
 
 
-# BOTOES DA ETAPA 5
+### CLIENTE COM MENOS DE 18 ANOS
 
-BOTAO_ETAPA5_QUERO_AGENDAR = "Quero agendar"
-BOTAO_ETAPA5_TALVEZ_MAIS_TARDE = "Talvez mais tarde"
-
-BOTOES_ETAPA5 = (
-    BOTAO_ETAPA5_QUERO_AGENDAR,
-    BOTAO_ETAPA5_TALVEZ_MAIS_TARDE,
+MENSAGEM_CLIENTE_MENOR_18_ETAPA5 = (
+    "Como você tem menos de 18 anos, este atendimento precisa ser realizado "
+    "por um adulto responsável.\n\n"
+    "Peça a um adulto para retornar nosso atendimento.\n"
+    "Um abraço e até logo! 👋☺️"
 )
 
 
-def montar_botoes_etapa5():
-    return BOTOES_ETAPA5
+def montar_mensagem_cliente_menor_18_etapa5():
+    return MENSAGEM_CLIENTE_MENOR_18_ETAPA5
+
+
+### DEPENDENTE ABAIXO DA IDADE MINIMA DA UNIDADE
+
+MENSAGEM_DEPENDENTE_MENOR_5_ETAPA5 = (
+    "No momento, esta unidade do Supera realiza treinamentos com crianças a "
+    "partir de {idade_minima} anos. Quando {nome} completar {idade_minima} "
+    "anos, você poderá entrar em contato "
+    "novamente.\n\n"
+    "Um abraço e até logo! 👋☺️"
+
+)
+
+
+def montar_mensagem_dependente_menor_5_etapa5(
+    nome,
+    idade_minima=5,
+):
+    return MENSAGEM_DEPENDENTE_MENOR_5_ETAPA5.format(
+        nome=nome,
+        idade_minima=idade_minima,
+    )
+
+
+### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
+
+MENSAGEM_IDADE_ACIMA_99_ETAPA5 = (
+    "Entendi. Olha, para idades muito avançadas, é melhor falar com nossa "
+    "consultora especializada. Vou te passar o contato dela para continuar "
+    "o atendimento, tudo bem?\n\n"
+    "Basta clicar no botão abaixo."
+)
+
+BOTAO_FALAR_COM_CONSULTORA_ETAPA5 = "Falar com Consultora"
+
+
+def montar_mensagem_idade_acima_99_etapa5():
+    return MENSAGEM_IDADE_ACIMA_99_ETAPA5
+
+
+def montar_botao_idade_acima_99_etapa5():
+    return BOTAO_FALAR_COM_CONSULTORA_ETAPA5

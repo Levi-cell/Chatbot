@@ -1,10 +1,10 @@
 import logging
 
 
-logger = logging.getLogger("db.contexto_etapa16")
+logger = logging.getLogger("db.contexto_etapa17")
 
 
-def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
+def buscar_contexto_etapa17(id_conversa, id_unidade, cursor):
     """Carrega o agendamento e o cliente vinculados à conversa."""
     cursor.execute(
         """
@@ -27,7 +27,7 @@ def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
 
     if not resultado:
         raise ValueError(
-            "Contexto da etapa 16 não encontrado "
+            "Contexto da etapa 17 não encontrado "
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
@@ -46,7 +46,7 @@ def buscar_contexto_etapa16(id_conversa, id_unidade, cursor):
         )
 
     logger.debug(
-        "contexto_etapa16_consultado | id_conversa=%s id_unidade=%s "
+        "contexto_etapa17_consultado | id_conversa=%s id_unidade=%s "
         "link_agendamento_configurado=%s nome_cliente_configurado=%s",
         id_conversa,
         id_unidade,

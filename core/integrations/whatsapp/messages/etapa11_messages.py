@@ -1,15 +1,15 @@
-# ETAPA 11 - TESTE COGNITIVO, PERGUNTA 2
+# ETAPA 11 - TESTE COGNITIVO, PERGUNTA 1
 
-CABECALHO_ETAPA11 = "Pergunta 2"
+CABECALHO_ETAPA11 = "Pergunta 1"
 
 MENSAGEM_CLIENTE_ETAPA11 = (
-    "Com que frequência você esquece o que foi fazer ou procurar "
-    "em outro lugar?"
+    "Com que frequência você esquece de acontecimentos recentes, "
+    "como o que fez no final de semana?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA11 = (
-    "Com que frequência {nome} esquece o que foi fazer ou procurar "
-    "em outro lugar?"
+    "Com que frequência {nome} esquece de acontecimentos recentes, "
+    "como o que fez no final de semana?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA11 = (

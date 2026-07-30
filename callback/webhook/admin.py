@@ -950,6 +950,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "cliente_link",
         "id_unidade",
         "id_etapa_atual",
+        "profissao",
         "turnos_sem_avanco",
         "status_ativa",
         "motivo_encerramento",
@@ -964,6 +965,7 @@ class ConversaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     search_fields = (
         "id_cliente__waid_telefone",
         "id_cliente__nome",
+        "profissao",
     )
 
     list_filter = (

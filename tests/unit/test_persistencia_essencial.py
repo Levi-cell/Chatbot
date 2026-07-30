@@ -3,9 +3,12 @@ from unittest.mock import patch
 
 from core.repositories.fluxo.politicas import PoliticaEtapa
 from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_PARA_MIM,
     EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+    EVENTO_PROFISSAO_TITULAR_VALIDA,
 )
 from workers.worker_flow.transacoes import efeitos_transicao as efeitos
 from workers.worker_flow.transacoes import encerramento_atendimento as encerramento
@@ -21,6 +24,7 @@ def contexto_historico_base(
     *,
     id_etapa_atual=None,
     texto_cliente="Ola",
+    status_dependente=False,
 ):
     return {
         "resposta_bot_para_mensagem_atual": resposta_bot,
@@ -30,6 +34,9 @@ def contexto_historico_base(
             id_etapa_atual if id_etapa_atual is not None else 1
         ),
         "texto_cliente_atual": texto_cliente,
+        "tipo_mensagem_atual": "text",
+        "status_dependente": status_dependente,
+        "id_cliente": 5,
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
             "id_hash_msg": "wamid.cliente",
@@ -226,12 +233,12 @@ class PersistenciaEssencialTests(unittest.TestCase):
 
     def test_etapa_dois_persiste_corretamente_os_dois_ramos(self):
         casos = (
-            (EVENTO_PARA_MIM, 4, False, False),
-            (EVENTO_PARA_OUTRA_PESSOA, 3, True, True),
+            (EVENTO_PARA_MIM, False, False),
+            (EVENTO_PARA_OUTRA_PESSOA, True, True),
         )
 
-        for evento, destino, status_dependente, cria_dependente in casos:
-            with self.subTest(evento=evento):
+        for opcao, status_dependente, cria_dependente in casos:
+            with self.subTest(opcao=opcao):
                 dependente = {
                     "id_dependente": 30,
                     "id_cliente": 5,
@@ -252,8 +259,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
                         efeitos.atualizar_banco_conforme_transicao_de_etapa(
                             contexto_historico_base(id_etapa_atual=2),
                             {
-                                "id_etapa_resultante": destino,
-                                "evento_transicao": evento,
+                                "id_etapa_resultante": 3,
+                                "evento_transicao": (
+                                    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO
+                                ),
+                                "opcao_atendimento": opcao,
                             },
                             object(),
                         )
@@ -274,10 +284,85 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 else:
                     inserir_dependente.assert_not_called()
 
-    def test_somente_etapa_19_encerra_e_aplica_bloqueio_de_30_dias(self):
-        contexto = contexto_historico_base(id_etapa_atual=18)
+    def test_etapa_tres_persiste_profissao_e_respeita_os_dois_ramos(self):
+        casos = (
+            (
+                False,
+                EVENTO_PROFISSAO_TITULAR_VALIDA,
+                5,
+            ),
+            (
+                True,
+                EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+                4,
+            ),
+        )
 
-        for id_etapa in (17, 18):
+        for status_dependente, evento, destino in casos:
+            with self.subTest(evento=evento), patch.object(
+                efeitos,
+                "atualizar_profissao_conversa",
+                return_value=1,
+            ) as atualizar_profissao:
+                cursor = object()
+                resultado = (
+                    efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                        contexto_historico_base(
+                            id_etapa_atual=3,
+                            texto_cliente="Sou engenheiro",
+                            status_dependente=status_dependente,
+                        ),
+                        {
+                            "id_etapa_resultante": destino,
+                            "evento_transicao": evento,
+                            "profissao": "Sou engenheiro",
+                        },
+                        cursor,
+                    )
+                )
+
+            atualizar_profissao.assert_called_once_with(
+                10,
+                "Sou engenheiro",
+                cursor,
+            )
+            self.assertTrue(resultado["profissao_atualizada"])
+            self.assertEqual(resultado["profissao"], "Sou engenheiro")
+
+    def test_retry_da_profissao_reconstroi_texto_original(self):
+        cursor = object()
+
+        with patch.object(
+            efeitos,
+            "atualizar_profissao_conversa",
+            return_value=1,
+        ) as atualizar_profissao:
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=3,
+                    texto_cliente="Trabalho com finanças",
+                    status_dependente=False,
+                ),
+                {
+                    "id_etapa_resultante": 5,
+                    "evento_transicao": (
+                        EVENTO_PROFISSAO_TITULAR_VALIDA
+                    ),
+                },
+                cursor,
+            )
+
+        atualizar_profissao.assert_called_once_with(
+            10,
+            "Trabalho com finanças",
+            cursor,
+        )
+        self.assertEqual(resultado["profissao"], "Trabalho com finanças")
+
+    def test_somente_etapa_20_encerra_e_aplica_bloqueio_de_30_dias(self):
+        contexto = contexto_historico_base(id_etapa_atual=19)
+
+        for id_etapa in (18, 19):
             with self.subTest(id_etapa=id_etapa), patch.object(
                 encerramento,
                 "buscar_politica_etapa",
@@ -303,7 +388,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
             encerramento,
             "buscar_politica_etapa",
             return_value=PoliticaEtapa(
-                id_etapa=19,
+                id_etapa=20,
                 encerra_automaticamente=True,
                 bloqueio_dias=30,
                 elegivel_funil=True,
@@ -313,7 +398,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 contexto,
                 {
                     "evento_transicao": "comentario_satisfacao_recebido",
-                    "id_etapa_resultante": 19,
+                    "id_etapa_resultante": 20,
                 },
                 object(),
             )

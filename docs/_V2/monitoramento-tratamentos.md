@@ -65,7 +65,7 @@ Tratamentos sao eventos de negocio, mas nao sao eventos transicionais.
 
 ```text
 Transicao:
-etapa 2 + para_mim -> etapa 4
+etapa 2 + destino_atendimento_definido -> etapa 3
 
 Tratamento:
 etapa 2 + mensagem de midia -> permanece na etapa 2

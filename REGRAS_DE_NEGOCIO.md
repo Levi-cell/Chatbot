@@ -281,13 +281,17 @@ Implementação principal:
 - Essa garantia é protegida pelo índice parcial `idx_conversa_unica_ativa`.
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
   bloqueada pelo prazo declarado na política.
-- A etapa 9 introduz a triagem, as etapas 10 a 15 fazem as seis perguntas e a
-  etapa 16 apresenta o agendamento. A etapa 16 torna a conversa elegível ao
+- A etapa 3 coleta, em texto livre, a profissão informada pelo cliente pagador.
+  Mídia, pergunta financeira inequívoca e resposta genérica recebem tratamento
+  sem avanço. A escolha entre titular e dependente somente define o próximo
+  destino depois dessa coleta.
+- A etapa 10 introduz a triagem, as etapas 11 a 16 fazem as seis perguntas e a
+  etapa 17 apresenta o agendamento. A etapa 17 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
-- A etapa 17 registra uma nota de satisfação de 1 a 5 e a etapa 18 registra o
+- A etapa 18 registra uma nota de satisfação de 1 a 5 e a etapa 19 registra o
   comentário opcional. Esses dados são internos, não compõem o payload do
   Funil e não encerram nem bloqueiam o atendimento.
-- A etapa 19 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+- A etapa 20 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
   30 dias.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
@@ -304,14 +308,15 @@ Implementação principal:
 
 ### 6.1 Oportunidade no Funil de Vendas
 
-- Uma conversa torna-se elegível ao entrar na etapa 16.
-- As etapas 16, 17, 18 e 19 permanecem elegíveis. Assim, avançar na pesquisa
+- Uma conversa torna-se elegível ao entrar na etapa 17.
+- As etapas 17, 18, 19 e 20 permanecem elegíveis. Assim, avançar na pesquisa
   antes do próximo ciclo horário não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
 - O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
-  respostas canônicas da triagem.
+  respostas canônicas da triagem. A profissão da conversa é exibida nas
+  observações; conversas legadas podem apresentá-la como não informada.
 - Em atendimento para dependente, a oportunidade mantém o cliente pagante como
   contato e inclui nome e idade do dependente nas observações.
 - A resposta só é confirmada quando o HTTP não falha e o JSON contém
@@ -946,7 +951,7 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
-| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 16–19, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 17–20, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
 

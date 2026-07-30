@@ -13,12 +13,12 @@ from workers.worker_flow.transacoes import efeitos_transicao as efeitos
 
 
 CASOS_TRIAGEM = (
-    (10, 11, EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA),
-    (11, 12, EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA),
-    (12, 13, EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA),
-    (13, 14, EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA),
-    (14, 15, EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA),
-    (15, 16, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA),
+    (11, 12, EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA),
+    (12, 13, EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA),
+    (13, 14, EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA),
+    (14, 15, EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA),
+    (15, 16, EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA),
+    (16, 17, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA),
 )
 
 
@@ -84,9 +84,9 @@ class EfeitosTriagemTests(unittest.TestCase):
             },
         ) as repositorio:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico(10, texto="Frequentemente"),
+                contexto_historico(11, texto="Frequentemente"),
                 {
-                    "id_etapa_resultante": 11,
+                    "id_etapa_resultante": 12,
                     "evento_transicao": (
                         EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA
                     ),
@@ -96,9 +96,9 @@ class EfeitosTriagemTests(unittest.TestCase):
 
         repositorio.assert_called_once_with(
             10,
-            10,
+            11,
             "frequentemente",
-            910,
+            911,
             ANY,
         )
         self.assertFalse(resultado["inserido"])
@@ -110,9 +110,9 @@ class EfeitosTriagemTests(unittest.TestCase):
         ) as repositorio:
             with self.assertRaises(ValueError):
                 efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                    contexto_historico(10),
+                    contexto_historico(11),
                     {
-                        "id_etapa_resultante": 12,
+                        "id_etapa_resultante": 13,
                         "evento_transicao": (
                             EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA
                         ),

@@ -3,15 +3,15 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    CABECALHO_ETAPA9_TRIAGEM,
+    CABECALHO_ETAPA10_TRIAGEM,
     CABECALHO_PESQUISA_SATISFACAO,
     RODAPE_OPCAO_UNICA,
     montar_texto_com_cabecalho,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa9,
-    etapa17,
+    etapa10,
     etapa18,
+    etapa19,
     triagem_base,
 )
 
@@ -36,18 +36,21 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
         cliente = _ClienteWhatsAppFake()
 
         with (
-            patch.object(etapa9, "conta_wa", return_value=cliente),
-            patch.object(etapa9.logger, "info") as log_info,
+            patch.object(etapa10, "conta_wa", return_value=cliente),
+            patch.object(etapa10.logger, "info") as log_info,
         ):
-            contexto = etapa9.enviar_etapa9("5511999999999", "phone-id")
+            contexto = etapa10.enviar_etapa10(
+                "5511999999999",
+                "phone-id",
+            )
 
         self._assert_cabecalho_padronizado(
             cliente,
-            CABECALHO_ETAPA9_TRIAGEM,
+            CABECALHO_ETAPA10_TRIAGEM,
         )
         self.assertEqual(
             contexto["cabecalho_mensagem"],
-            CABECALHO_ETAPA9_TRIAGEM,
+            CABECALHO_ETAPA10_TRIAGEM,
         )
         self.assertEqual(contexto["tipo_mensagem"], "interactive_button")
         self._assert_log_cabecalho_no_corpo(log_info)
@@ -62,7 +65,7 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
             contexto = triagem_base.enviar_pergunta_triagem(
                 "5511999999999",
                 "phone-id",
-                id_etapa=10,
+                id_etapa=11,
                 cabecalho="Pergunta 1",
                 mensagem_bot="Texto da pergunta",
                 evento_log="teste_triagem",
@@ -82,10 +85,10 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
         cliente = _ClienteWhatsAppFake()
 
         with (
-            patch.object(etapa17, "conta_wa", return_value=cliente),
-            patch.object(etapa17.logger, "info") as log_info,
+            patch.object(etapa18, "conta_wa", return_value=cliente),
+            patch.object(etapa18.logger, "info") as log_info,
         ):
-            contexto = etapa17.enviar_etapa17(
+            contexto = etapa18.enviar_etapa18(
                 "5511999999999",
                 "phone-id",
                 "Edcarlos",
@@ -106,10 +109,10 @@ class CabecalhosWhatsAppTests(unittest.TestCase):
         cliente = _ClienteWhatsAppFake()
 
         with (
-            patch.object(etapa18, "conta_wa", return_value=cliente),
-            patch.object(etapa18.logger, "info") as log_info,
+            patch.object(etapa19, "conta_wa", return_value=cliente),
+            patch.object(etapa19.logger, "info") as log_info,
         ):
-            contexto = etapa18.enviar_etapa18(
+            contexto = etapa19.enviar_etapa19(
                 "5511999999999",
                 "phone-id",
             )

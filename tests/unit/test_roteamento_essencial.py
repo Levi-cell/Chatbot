@@ -3,8 +3,7 @@ from unittest.mock import patch
 
 import workers.worker_flow.response_flow.flow_sender as flow_sender_module
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_PARA_MIM,
-    EVENTO_PARA_OUTRA_PESSOA,
+    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
 )
 
 
@@ -38,19 +37,18 @@ def contexto_base(
 
 class RoteamentoEssencialTests(unittest.TestCase):
     def test_resposta_ja_existente_impede_novo_envio(self):
-        with patch.object(flow_sender_module, "resolve_etapa4") as resolver:
+        with patch.object(flow_sender_module, "resolve_etapa2") as resolver:
             resultado = flow_sender_module.flow_sender(
                 contexto_base(
-                    etapa_atual=4,
+                    etapa_atual=2,
                     retry=2,
                     resposta_bot={
                         "id_mensagem": 99,
                         "id_hash_msg": "wamid.bot.existente",
-                        "id_etapa": 4,
+                        "id_etapa": 3,
                     },
                     transicoes={
-                        EVENTO_PARA_MIM: 4,
-                        EVENTO_PARA_OUTRA_PESSOA: 3,
+                        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: 3,
                     },
                 )
             )
@@ -58,7 +56,10 @@ class RoteamentoEssencialTests(unittest.TestCase):
         resolver.assert_not_called()
         self.assertFalse(resultado["enviou"])
         self.assertTrue(resultado["resposta_ja_existia"])
-        self.assertEqual(resultado["evento_transicao"], EVENTO_PARA_MIM)
+        self.assertEqual(
+            resultado["evento_transicao"],
+            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
+        )
 
     def test_retry_sem_resposta_existente_continua_no_resolver(self):
         esperado = {
@@ -80,7 +81,7 @@ class RoteamentoEssencialTests(unittest.TestCase):
         self.assertEqual(resultado, esperado)
 
     def test_cada_etapa_implementada_chama_seu_resolver(self):
-        for etapa_atual in (None, *range(1, 19)):
+        for etapa_atual in (None, *range(1, 20)):
             etapa_resolver = 1 if etapa_atual is None else etapa_atual
             esperado = {
                 "enviou": True,
@@ -99,6 +100,12 @@ class RoteamentoEssencialTests(unittest.TestCase):
 
             resolver.assert_called_once()
             self.assertEqual(resultado, esperado)
+
+    def test_etapa_20_e_terminal_e_nao_possui_resolver(self):
+        with self.assertRaises(NotImplementedError):
+            flow_sender_module.flow_sender(
+                contexto_base(etapa_atual=20)
+            )
 
 
 if __name__ == "__main__":

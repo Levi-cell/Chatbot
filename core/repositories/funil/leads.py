@@ -2,7 +2,7 @@
 
 
 def buscar_dados_lead_funil(id_conversa, cursor):
-    """Retorna cliente, dependente e resumo das seis respostas da triagem."""
+    """Retorna cliente, profissão, dependente e resumo da triagem."""
     cursor.execute(
         """
         SELECT
@@ -14,6 +14,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             cl.waid_telefone AS telefone_cliente,
             cl.email AS email_cliente,
             cl.idade AS idade_cliente,
+            c.profissao,
             d.nome_dependente,
             d.idade AS idade_dependente,
             triagem.total,
@@ -78,11 +79,12 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         "telefone_cliente": resultado[5],
         "email_cliente": resultado[6],
         "idade_cliente": resultado[7],
-        "nome_dependente": resultado[8],
-        "idade_dependente": resultado[9],
-        "triagem_total": resultado[10],
-        "triagem_nunca": resultado[11],
-        "triagem_as_vezes": resultado[12],
-        "triagem_frequentemente": resultado[13],
-        "triagem_desconhecida": resultado[14],
+        "profissao": resultado[8],
+        "nome_dependente": resultado[9],
+        "idade_dependente": resultado[10],
+        "triagem_total": resultado[11],
+        "triagem_nunca": resultado[12],
+        "triagem_as_vezes": resultado[13],
+        "triagem_frequentemente": resultado[14],
+        "triagem_desconhecida": resultado[15],
     }

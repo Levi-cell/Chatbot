@@ -237,6 +237,7 @@ def criar_tabelas():
 
             status_ativa BOOLEAN NOT NULL DEFAULT TRUE,
             status_dependente BOOLEAN DEFAULT FALSE,
+            profissao VARCHAR(100) NULL,
 
             last_interaction_at TIMESTAMPTZ,
 

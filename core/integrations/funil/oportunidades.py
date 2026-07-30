@@ -86,6 +86,8 @@ def montar_observacoes_lead(dados_lead):
     """Produz o resumo humano exibido pela oportunidade no CRM."""
     nome_cliente = dados_lead["nome_cliente"].strip()
     telefone_cliente = dados_lead["telefone_cliente"].strip()
+    profissao = str(dados_lead.get("profissao") or "").strip()
+    profissao = profissao or "Não informada"
     aviso_telefone = ""
 
     if not _normalizar_telefone_brasileiro(telefone_cliente):
@@ -121,7 +123,15 @@ def montar_observacoes_lead(dados_lead):
         f"- Frequentemente: {dados_lead['triagem_frequentemente']}"
     )
 
-    return cabecalho + dados_pessoa + aviso_telefone + triagem
+    dados_profissao = f"\n- Profissão: {profissao}\n"
+
+    return (
+        cabecalho
+        + dados_pessoa
+        + aviso_telefone
+        + dados_profissao
+        + triagem
+    )
 
 
 def _montar_nome_destaque(dados_lead):
@@ -169,6 +179,7 @@ def montar_dados_lead_teste():
         "telefone_cliente": "5571994111866",
         "email_cliente": "edcaspfilho+teste@gmail.com",
         "idade_cliente": None,
+        "profissao": "Engenheiro",
         "nome_dependente": "Enzo Teste",
         "idade_dependente": 12,
         "triagem_total": 6,

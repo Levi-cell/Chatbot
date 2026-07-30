@@ -5,12 +5,12 @@ from core.repositories.atendimento.dependentes import (
     excluir_dependente_da_conversa,
 )
 from core.repositories.fluxo.politicas import buscar_politica_etapa
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
     obter_idade_minima_dependente,
     validar_idade,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_4_IDADE_ALUNO,
+    ETAPA_5_IDADE_ALUNO,
 )
 
 
@@ -41,9 +41,9 @@ def resolver_intencao_encerramento(
         }
 
     # No retry, a resposta já existe e a decisão é reconstruída pela mesma
-    # mensagem original da etapa 4, sem consultar conversas anteriores.
+    # mensagem original da etapa 5, sem consultar conversas anteriores.
     if contexto_envio.get("resposta_ja_existia"):
-        intencao_reconstruida = _reconstruir_encerramento_etapa4(
+        intencao_reconstruida = _reconstruir_encerramento_etapa5(
             contexto_historico
         )
         if intencao_reconstruida:
@@ -69,10 +69,10 @@ def resolver_intencao_encerramento(
     }
 
 
-def _reconstruir_encerramento_etapa4(contexto_historico):
+def _reconstruir_encerramento_etapa5(contexto_historico):
     if (
         contexto_historico.get("id_etapa_origem_transicao")
-        != ETAPA_4_IDADE_ALUNO
+        != ETAPA_5_IDADE_ALUNO
     ):
         return None
 

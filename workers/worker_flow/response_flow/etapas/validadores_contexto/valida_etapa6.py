@@ -4,8 +4,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
     normalizar_texto,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_RETORNO_ADIADO,
-    EVENTO_RETORNO_CONFIRMADO,
+    EVENTO_OFERTA_ACEITA,
+    EVENTO_OFERTA_ADIADA,
 )
 
 
@@ -69,12 +69,12 @@ PADRAO_RESPOSTA_POSITIVA = re.compile(
 )
 
 
-def validar_etapa7(conteudo_texto):
+def validar_etapa6(conteudo_texto):
     """
-    Converte a resposta do retorno diretamente no evento da etapa 7.
+    Converte a resposta da oferta diretamente no evento da etapa 6.
 
     O adiamento é estrito. Respostas negativas livres recebem tratamento,
-    enquanto diferentes confirmações positivas produzem retorno_confirmado.
+    enquanto diferentes confirmações positivas produzem oferta_aceita.
     """
     if not isinstance(conteudo_texto, str):
         return None
@@ -85,17 +85,17 @@ def validar_etapa7(conteudo_texto):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_TALVEZ_MAIS_TARDE:
-        return EVENTO_RETORNO_ADIADO
+        return EVENTO_OFERTA_ADIADA
 
     # A negação prevalece mesmo quando a frase também contém termo positivo.
     if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_QUERO_AGENDAR:
-        return EVENTO_RETORNO_CONFIRMADO
+        return EVENTO_OFERTA_ACEITA
 
     if PADRAO_RESPOSTA_POSITIVA.search(texto_normalizado):
-        return EVENTO_RETORNO_CONFIRMADO
+        return EVENTO_OFERTA_ACEITA
 
     return None
 

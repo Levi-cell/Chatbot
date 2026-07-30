@@ -420,6 +420,51 @@ def atualizar_status_dependente_conversa(
     return cursor.rowcount
 
 
+def atualizar_profissao_conversa(id_conversa, profissao, cursor):
+    if not id_conversa:
+        raise ValueError(
+            "id_conversa nao informado para atualizar profissao"
+        )
+
+    if not isinstance(profissao, str):
+        raise ValueError("profissao deve ser um texto")
+
+    profissao_normalizada = profissao.strip()
+
+    if (
+        not profissao_normalizada
+        or len(profissao_normalizada) > 100
+        or "\n" in profissao_normalizada
+        or "\r" in profissao_normalizada
+    ):
+        raise ValueError(
+            "profissao deve conter uma unica linha entre 1 e 100 caracteres"
+        )
+
+    cursor.execute(
+        """
+        UPDATE chatbot.conversa
+        SET profissao = %s
+        WHERE id_conversa = %s;
+        """,
+        (profissao_normalizada, id_conversa),
+    )
+
+    logger.debug(
+        "conversa_update | acao=atualizar_profissao id_conversa=%s linhas=%s",
+        id_conversa,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Conversa nao foi atualizada com profissao "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount
+
+
 def encerrar_conversa(id_conversa, motivo_encerramento, cursor):
     if motivo_encerramento not in MOTIVOS_ENCERRAMENTO_VALIDOS:
         raise ValueError(

@@ -2,12 +2,11 @@ import logging
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.etapa3_messages import (
-    montar_mensagem_contexto_nome_invalido_etapa3,
+    montar_mensagem_contexto_profissao_invalida_etapa3,
     montar_mensagem_etapa3,
     montar_mensagem_financeiro_etapa3,
     montar_mensagem_midia_etapa3,
 )
-
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
     extrair_id_hash_msg_bot,
@@ -21,61 +20,51 @@ ID_ETAPA3 = 3
 
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
-TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
+TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
 
 
-# CENARIO NORMAL: ATENDIMENTO PARA OUTRA PESSOA
 def enviar_etapa3(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_etapa3()
-
     return _enviar_texto_etapa3(
         cliente_telefone,
         phone_id_unidade,
-        mensagem_bot,
+        montar_mensagem_etapa3(),
         evento="enviar_etapa3",
     )
 
 
-# CLIENTE RESPONDE A ETAPA 3 COM MIDIA
 def enviar_etapa3_midia(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_midia_etapa3()
-
     return _enviar_texto_etapa3(
         cliente_telefone,
         phone_id_unidade,
-        mensagem_bot,
+        montar_mensagem_midia_etapa3(),
         evento="enviar_etapa3_midia",
         tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
     )
 
 
-# CLIENTE RESPONDE A ETAPA 3 COM PERGUNTA FINANCEIRA
 def enviar_etapa3_financeiro(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_financeiro_etapa3()
-
     return _enviar_texto_etapa3(
         cliente_telefone,
         phone_id_unidade,
-        mensagem_bot,
+        montar_mensagem_financeiro_etapa3(),
         evento="enviar_etapa3_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
     )
 
 
-# CLIENTE RESPONDE A ETAPA 3 COM NOME INVALIDO
-def enviar_etapa3_contexto_nome_invalido(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_contexto_nome_invalido_etapa3()
-
+def enviar_etapa3_contexto_profissao_invalida(
+    cliente_telefone,
+    phone_id_unidade,
+):
     return _enviar_texto_etapa3(
         cliente_telefone,
         phone_id_unidade,
-        mensagem_bot,
-        evento="enviar_etapa3_contexto_nome_invalido",
-        tipo_tratamento=TIPO_TRATAMENTO_NOME_INVALIDO,
+        montar_mensagem_contexto_profissao_invalida_etapa3(),
+        evento="enviar_etapa3_contexto_profissao_invalida",
+        tipo_tratamento=TIPO_TRATAMENTO_PROFISSAO_INVALIDA,
     )
 
 
-# CONSTRUTOR DE ENVIO DE TEXTO DA ETAPA 3
 def _enviar_texto_etapa3(
     cliente_telefone,
     phone_id_unidade,
@@ -93,7 +82,8 @@ def _enviar_texto_etapa3(
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
         logger.info(
-            "%s_ok | acao=enviar_meta cliente=%s phone_number_id=%s id_hash_msg_bot=%s tratamento=%s",
+            "%s_ok | acao=enviar_meta cliente=%s phone_number_id=%s "
+            "id_hash_msg_bot=%s tratamento=%s",
             evento,
             short_value(cliente_telefone),
             short_value(phone_id_unidade),
@@ -121,7 +111,8 @@ def _enviar_texto_etapa3(
 
     except Exception as erro:
         logger.exception(
-            "%s_erro | motivo=meta_falhou acao=levantar_erro cliente=%s phone_number_id=%s erro=%s",
+            "%s_erro | motivo=meta_falhou acao=levantar_erro cliente=%s "
+            "phone_number_id=%s erro=%s",
             evento,
             short_value(cliente_telefone),
             short_value(phone_id_unidade),

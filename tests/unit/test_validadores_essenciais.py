@@ -1,25 +1,32 @@
 import unittest
 
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
+    TAMANHO_MAXIMO_PROFISSAO,
+    validar_profissao_etapa3,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
     STATUS_IDADE_ACIMA_LIMITE,
     STATUS_IDADE_INVALIDA,
     obter_idade_minima_dependente,
     validar_idade,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
-    validar_etapa5,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7 import (
-    validar_etapa7,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa6 import (
+    validar_etapa6,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
     validar_etapa8,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa17 import (
-    validar_etapa17,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
+    validar_etapa9,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
-    normalizar_comentario_etapa18,
+    validar_etapa18,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
+    normalizar_comentario_etapa19,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa3 import (
+    validar_pergunta_financeira_etapa3,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais import (
     validador_nome,
@@ -121,15 +128,99 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         self.assertEqual(obter_idade_minima_dependente(False), 5)
         self.assertEqual(obter_idade_minima_dependente(True), 4)
 
-    def test_decisoes_das_etapas_cinco_e_sete_traduzem_eventos(self):
+    def test_profissao_aceita_textos_livres_reais_e_siglas(self):
+        profissoes = (
+            "PJ",
+            "MEI",
+            "TI",
+            "call center",
+            "telemarketing",
+            "autônomo",
+            "Sou analista de custos",
+            "Trabalho com finanças",
+        )
+
+        for texto in profissoes:
+            with self.subTest(texto=texto):
+                resultado = validar_profissao_etapa3(texto, "text")
+                self.assertTrue(resultado.valida)
+                self.assertEqual(resultado.profissao, texto)
+
+    def test_profissao_rejeita_contextos_minimos_invalidos(self):
+        entradas = (
+            "",
+            "!!!",
+            "12345",
+            "sim",
+            "sim 👍",
+            "Não",
+            "ok",
+            "ok ✅",
+            "Prefiro não informar",
+            "Prefiro não informar 🙏",
+            "Prefiro não responder",
+            "Não quero responder",
+            "a" * (TAMANHO_MAXIMO_PROFISSAO + 1),
+            "TI" + (" " * TAMANHO_MAXIMO_PROFISSAO) + "PJ",
+        )
+
+        for texto in entradas:
+            with self.subTest(texto=texto):
+                resultado = validar_profissao_etapa3(texto, "text")
+                self.assertFalse(resultado.valida)
+                self.assertIsNone(resultado.profissao)
+                self.assertIsNotNone(resultado.motivo)
+
+        resultado_interativo = validar_profissao_etapa3(
+            "Para mim",
+            "interactive",
+        )
+        self.assertFalse(resultado_interativo.valida)
+
+    def test_financeiro_da_profissao_distingue_preco_de_ocupacao(self):
+        perguntas_financeiras = (
+            "Qual o valor?",
+            "Quanto custa?",
+            "Custo",
+            "valor",
+            "Qual a mensalidade?",
+            "O investimento é de R$ 100?",
+            "Tem mensalidade?",
+            "Aceita pix?",
+            "Qual seria o valor?",
+            "Quanto vou investir?",
+            "Quanto vai ser?",
+            "100 reais",
+        )
+
+        for texto in perguntas_financeiras:
+            with self.subTest(texto=texto):
+                self.assertTrue(
+                    validar_pergunta_financeira_etapa3(texto)
+                )
+
+        profissoes = (
+            "Sou analista de custos",
+            "Trabalho com finanças",
+            "Analista de crédito",
+            "Consultor de investimentos",
+            "Analista de valores mobiliários",
+        )
+        for texto in profissoes:
+            with self.subTest(texto=texto):
+                self.assertFalse(
+                    validar_pergunta_financeira_etapa3(texto)
+                )
+
+    def test_decisoes_das_etapas_seis_e_oito_traduzem_eventos(self):
         validadores = (
             (
-                validar_etapa5,
+                validar_etapa6,
                 EVENTO_OFERTA_ACEITA,
                 EVENTO_OFERTA_ADIADA,
             ),
             (
-                validar_etapa7,
+                validar_etapa8,
                 EVENTO_RETORNO_CONFIRMADO,
                 EVENTO_RETORNO_ADIADO,
             ),
@@ -144,7 +235,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
                 self.assertIsNone(validador("qualquer coisa"))
 
     def test_email_exige_um_arroba_e_um_ponto_no_dominio(self):
-        resultado = validar_etapa8("Meu email é Ed@Gmail.com.")
+        resultado = validar_etapa9("Meu email é Ed@Gmail.com.")
         self.assertTrue(resultado.valido)
         self.assertEqual(resultado.email, "Ed@gmail.com")
 
@@ -156,7 +247,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             "nome@@gmail.com",
         ):
             with self.subTest(texto=texto):
-                self.assertFalse(validar_etapa8(texto).valido)
+                self.assertFalse(validar_etapa9(texto).valido)
 
     def test_triagem_aceita_somente_o_conteudo_exato_das_opcoes(self):
         casos = (
@@ -198,7 +289,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
 
         for texto, nota in casos:
             with self.subTest(texto=texto):
-                self.assertEqual(validar_etapa17(texto), nota)
+                self.assertEqual(validar_etapa18(texto), nota)
 
         for texto in (
             "2 - Bom",
@@ -210,24 +301,24 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             "",
         ):
             with self.subTest(texto=texto):
-                self.assertIsNone(validar_etapa17(texto))
+                self.assertIsNone(validar_etapa18(texto))
 
     def test_comentario_preserva_texto_e_usa_null_para_recusa_ou_midia(self):
         self.assertEqual(
-            normalizar_comentario_etapa18(
+            normalizar_comentario_etapa19(
                 "  Atendimento muito atencioso!  ",
                 "text",
             ),
             "Atendimento muito atencioso!",
         )
         self.assertIsNone(
-            normalizar_comentario_etapa18(
+            normalizar_comentario_etapa19(
                 "Prefiro não comentar",
                 "interactive",
             )
         )
         self.assertIsNone(
-            normalizar_comentario_etapa18("legenda ignorada", "image")
+            normalizar_comentario_etapa19("legenda ignorada", "image")
         )
 
 

@@ -39,8 +39,9 @@ origem + evento -> destino
 Exemplo:
 
 ```text
-2 + para_mim          -> 4
-2 + para_outra_pessoa -> 3
+2 + destino_atendimento_definido -> 3
+3 + profissao_dependente_valida  -> 4
+3 + profissao_titular_valida     -> 5
 ```
 
 Os tratamentos não produzem aresta:
@@ -80,10 +81,10 @@ Exemplo:
 
 ```text
 Origem: etapa 3
-Pergunta: qual o nome do dependente?
-Evento válido: nome_dependente_valido
-Destino: etapa 4
-Efeito: salvar dependente.nome_dependente
+Pergunta: qual sua profissão?
+Eventos válidos: profissao_dependente_valida ou profissao_titular_valida
+Destinos: etapa 4 ou etapa 5
+Efeito: salvar conversa.profissao
 ```
 
 ### 2. Cadastrar a etapa no deploy
@@ -97,7 +98,7 @@ core/database/deploy_database/povoar_etapas.py
 O ID deve ser estável e o nome deve explicar o estado:
 
 ```python
-(3, "Nome do dependente")
+(3, "Profissão do cliente")
 ```
 
 Não reutilizar um ID antigo para outro significado.
@@ -113,7 +114,7 @@ workers/worker_flow/response_flow/transicoes/eventos.py
 Exemplo:
 
 ```python
-EVENTO_NOME_DEPENDENTE_VALIDO = "nome_dependente_valido"
+EVENTO_PROFISSAO_TITULAR_VALIDA = "profissao_titular_valida"
 ```
 
 As constantes de etapa devem incluir número e significado:
@@ -121,8 +122,9 @@ As constantes de etapa devem incluir número e significado:
 ```python
 ETAPA_1_NOME_CLIENTE = 1
 ETAPA_2_DESTINO_ATENDIMENTO = 2
-ETAPA_3_NOME_DEPENDENTE = 3
-ETAPA_4_IDADE_ALUNO = 4
+ETAPA_3_PROFISSAO = 3
+ETAPA_4_NOME_DEPENDENTE = 4
+ETAPA_5_IDADE_ALUNO = 5
 ```
 
 Para novas etapas, seguir obrigatoriamente:
@@ -140,7 +142,7 @@ core/database/deploy_database/etapa_transicao_script.py
 Exemplo:
 
 ```python
-(3, "nome_dependente_valido", 4)
+(3, "profissao_titular_valida", 5)
 ```
 
 Uma origem e um evento possuem somente um destino. Uma origem e um destino
@@ -226,7 +228,7 @@ O worker acrescenta depois:
 ```python
 {
     "id_etapa_origem_transicao": 2,
-    "evento_transicao": "para_outra_pessoa",
+    "evento_transicao": "destino_atendimento_definido",
 }
 ```
 
@@ -354,23 +356,27 @@ def resolve_etapa3(contexto_historico):
     if validar_pergunta_financeira(texto_cliente):
         return enviar_etapa3_financeiro(...)
 
-    resultado = validar_nome_cliente(texto_cliente)
+    resultado = validar_profissao_etapa3(
+        texto_cliente,
+        tipo_mensagem,
+    )
 
-    if not resultado.valido:
-        return enviar_etapa3_contexto_nome_invalido(...)
+    if not resultado.valida:
+        return enviar_etapa3_contexto_profissao_invalida(...)
 
     destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_NOME_DEPENDENTE_VALIDO,
-        destinos_esperados={ETAPA_4_IDADE_ALUNO},
+        EVENTO_PROFISSAO_TITULAR_VALIDA,
+        destinos_esperados={ETAPA_5_IDADE_ALUNO},
     )
 
-    contexto_envio = enviar_quarta_etapa(...)
+    contexto_envio = enviar_etapa5_cliente(...)
+    contexto_envio["profissao"] = resultado.profissao
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_NOME_DEPENDENTE_VALIDO,
+        EVENTO_PROFISSAO_TITULAR_VALIDA,
         destino,
     )
 ```
@@ -423,11 +429,16 @@ específicos da aresta e deve deixar cada ponte visualmente explícita:
 ```python
 # ETAPA 2
 if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
-    if evento == EVENTO_PARA_MIM:
-        # 2 -> 4
+    if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
+        # 2 -> 3: persiste a escolha antes de perguntar a profissão.
 
-    if evento == EVENTO_PARA_OUTRA_PESSOA:
-        # 2 -> 3
+# ETAPA 3
+if etapa_origem == ETAPA_3_PROFISSAO:
+    if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
+        # 3 -> 4
+
+    if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
+        # 3 -> 5
 ```
 
 Exemplos:
@@ -436,12 +447,17 @@ Exemplos:
 nome_cliente_valido
 -> salvar cliente.nome
 
-para_mim
--> status_dependente=False
+destino_atendimento_definido
+-> salvar status_dependente
+-> criar dependente quando o atendimento for para outra pessoa
 
-para_outra_pessoa
--> status_dependente=True
--> criar dependente
+profissao_dependente_valida
+-> salvar conversa.profissao
+-> seguir para o nome do dependente
+
+profissao_titular_valida
+-> salvar conversa.profissao
+-> seguir diretamente para a idade
 
 nome_dependente_valido
 -> salvar dependente.nome_dependente
@@ -547,10 +563,10 @@ O contexto histórico carrega somente a fotografia da origem:
 
 ```python
 {
-    "id_etapa_origem_transicao": 2,
+    "id_etapa_origem_transicao": 3,
     "transicoes_permitidas": {
-        "para_mim": 4,
-        "para_outra_pessoa": 3,
+        "profissao_dependente_valida": 4,
+        "profissao_titular_valida": 5,
     },
 }
 ```
@@ -559,9 +575,9 @@ O contexto de envio carrega a decisão exata:
 
 ```python
 {
-    "id_etapa_origem_transicao": 2,
-    "evento_transicao": "para_mim",
-    "id_etapa_resultante": 4,
+    "id_etapa_origem_transicao": 3,
+    "evento_transicao": "profissao_titular_valida",
+    "id_etapa_resultante": 5,
 }
 ```
 

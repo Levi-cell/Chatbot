@@ -8,18 +8,19 @@ def buscar_contexto_etapa5(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
+            u.numero_comercial,
+            u.bpa_ativo,
             cl.nome,
-            d.nome_dependente,
-            u.link_instagram
-        FROM chatbot.conversa c
+            d.nome_dependente
+        FROM chatbot.unidade u
+        JOIN chatbot.conversa c
+          ON c.id_conversa = %s
+         AND c.id_unidade = u.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u
-          ON u.id_unidade = c.id_unidade
         LEFT JOIN chatbot.dependente d
           ON d.id_conversa = c.id_conversa
-        WHERE c.id_conversa = %s
-          AND c.id_unidade = %s
+        WHERE u.id_unidade = %s
         LIMIT 1;
         """,
         (id_conversa, id_unidade),
@@ -33,21 +34,28 @@ def buscar_contexto_etapa5(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    nome_cliente, nome_dependente, link_instagram = resultado
+    (
+        numero_comercial,
+        bpa_ativo,
+        nome_cliente,
+        nome_dependente,
+    ) = resultado
 
     logger.debug(
         "contexto_etapa5_consultado | id_conversa=%s id_unidade=%s "
-        "cliente_nomeado=%s dependente_nomeado=%s "
-        "instagram_configurado=%s",
+        "numero_comercial_configurado=%s bpa_ativo=%s "
+        "cliente_nomeado=%s dependente_nomeado=%s",
         id_conversa,
         id_unidade,
+        bool(numero_comercial),
+        bool(bpa_ativo),
         bool(nome_cliente),
         bool(nome_dependente),
-        bool(link_instagram),
     )
 
     return {
+        "numero_comercial_unidade": numero_comercial,
+        "bpa_ativo_unidade": bool(bpa_ativo),
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
-        "link_instagram_unidade": link_instagram,
     }
