@@ -75,6 +75,7 @@ DB_SSLMODE=verify-full
 DB_SSLROOTCERT=/etc/ssl/certs/aws-rds-global-bundle.pem
 PGSSLCERTMODE=disable
 REDIS_HOST=ENDPOINT_DO_REDIS_REMOTO
+META_GRAPH_API_VERSION=26.0
 FUNIL_WORKER_ENABLED=True
 ```
 
@@ -160,7 +161,7 @@ O segundo comando não deve produzir saída.
 Valide a presença das configurações essenciais:
 
 ```bash
-sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new'); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
+sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new'); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_GRAPH_API_VERSION','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
 ```
 
 O comando deve imprimir `AMBIENTE_OK`.

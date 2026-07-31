@@ -98,7 +98,13 @@ os valores são lidos por `core/config_env.py` a partir de variáveis de ambient
 
 ```text
 META_ACCESS_TOKEN
+META_GRAPH_API_VERSION
 ```
+
+`META_GRAPH_API_VERSION` usa o formato `26.0`, sem o prefixo `v`. Essa versão é
+aplicada ao cliente PyWa e a todas as URLs diretas da Graph API. Se uma versão
+nova apresentar incompatibilidade, a variável pode retornar manualmente para a
+última versão estável validada.
 
 Não adicione token ou outro valor sensível diretamente nesse arquivo. WABA ID e
 phone number ID são dados por unidade e devem vir do banco/cache.

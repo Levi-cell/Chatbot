@@ -360,6 +360,7 @@ def listar_numeros_waba_meta(waba_id, *, request_get=None):
     """Lista todos os números de uma WABA conhecida pelo banco."""
     configure_local_operations()
     from core.integrations.whatsapp.tools.config import (
+        construir_url_graph_api,
         get_meta_http_timeout,
         get_token_usuario_meta,
     )
@@ -369,7 +370,7 @@ def listar_numeros_waba_meta(waba_id, *, request_get=None):
         raise ValueError("waba_id não informado")
 
     request_get = request_get or requests.get
-    url = f"https://graph.facebook.com/v25.0/{waba_id}/phone_numbers"
+    url = construir_url_graph_api(f"{waba_id}/phone_numbers")
     headers = {"Authorization": f"Bearer {get_token_usuario_meta()}"}
     params = {
         "fields": (

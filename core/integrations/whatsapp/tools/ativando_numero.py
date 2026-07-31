@@ -4,6 +4,7 @@ import logging
 import requests
 
 from core.integrations.whatsapp.tools.config import (
+    construir_url_graph_api,
     get_meta_http_timeout,
     get_phone_registration_pin,
     get_token_usuario_meta,
@@ -15,7 +16,7 @@ logger = logging.getLogger("whatsapp.registro")
 
 
 def registrar_numero_whatsapp(phone_number_id, pin=None):
-    url = f"https://graph.facebook.com/v25.0/{phone_number_id}/register"
+    url = construir_url_graph_api(f"{phone_number_id}/register")
 
     headers = {
         "Authorization": f"Bearer {get_token_usuario_meta()}",

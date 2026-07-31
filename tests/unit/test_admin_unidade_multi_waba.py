@@ -54,7 +54,7 @@ class AdminUnidadeMultiWabaTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(corpo, {"success": True})
         post.assert_called_once_with(
-            "https://graph.facebook.com/v25.0/"
+            "https://graph.facebook.com/v26.0/"
             "waba-cliente-b/subscribed_apps",
             headers={
                 "Authorization": "Bearer token-unico",
@@ -112,6 +112,10 @@ class AdminUnidadeMultiWabaTests(unittest.TestCase):
         self.assertTrue(corpo["success"])
         self.assertTrue(corpo["belongs"])
         self.assertEqual(get.call_count, 2)
+        self.assertEqual(
+            get.call_args_list[0].args[0],
+            "https://graph.facebook.com/v26.0/waba-b/phone_numbers",
+        )
         self.assertEqual(
             get.call_args_list[0].kwargs["params"],
             {"fields": "id", "limit": 100},
@@ -287,7 +291,7 @@ class AdminUnidadeMultiWabaTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(corpo, {"success": True})
         delete.assert_called_once_with(
-            "https://graph.facebook.com/v25.0/"
+            "https://graph.facebook.com/v26.0/"
             "waba-a/subscribed_apps",
             headers={
                 "Authorization": "Bearer token-unico",

@@ -10,6 +10,9 @@ Commit: 75975180e4bf85ce80da571df6844f10977c2df0
 V1.0.2 - Decisão de comentário
 Commit: df8b014c8efbcbd2e1b2f8a3a57e39498b47fb62
 
+V1.0.3 - Graph API centralizada
+Commit: PENDENTE
+
 
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================

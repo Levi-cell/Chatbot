@@ -1,6 +1,9 @@
 from pywa import WhatsApp
 
-from core.integrations.whatsapp.tools.config import TOKEN_USUARIO_META
+from core.integrations.whatsapp.tools.config import (
+    TOKEN_USUARIO_META,
+    get_meta_graph_api_version,
+)
 
 
 def conta_wa(phone_id, token=TOKEN_USUARIO_META):
@@ -9,6 +12,7 @@ def conta_wa(phone_id, token=TOKEN_USUARIO_META):
     return WhatsApp(
         token=token,
         phone_id=phone_id,
+        api_version=get_meta_graph_api_version(),
     )
 
 

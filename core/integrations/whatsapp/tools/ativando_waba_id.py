@@ -3,6 +3,7 @@ import logging
 import requests
 
 from core.integrations.whatsapp.tools.config import (
+    construir_url_graph_api,
     get_meta_http_timeout,
     get_token_usuario_meta,
 )
@@ -26,7 +27,7 @@ def ativar_waba_id(waba_id):
     if not waba_id:
         raise ValueError("waba_id nao informado para ativacao")
 
-    url = f"https://graph.facebook.com/v25.0/{waba_id}/subscribed_apps"
+    url = construir_url_graph_api(f"{waba_id}/subscribed_apps")
 
     headers = {
         "Authorization": f"Bearer {get_token_usuario_meta()}",

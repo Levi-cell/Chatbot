@@ -25,6 +25,7 @@ TEST_ENV = {
     "REDIS_PASSWORD": "",
     "REDIS_SSL": "False",
     "META_ACCESS_TOKEN": "test-meta-token",
+    "META_GRAPH_API_VERSION": "26.0",
     "META_WEBHOOK_VERIFY_TOKEN": "test-verify-token",
     "META_WEBHOOK_SIGNATURE_REQUIRED": "False",
 }

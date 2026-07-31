@@ -3,6 +3,7 @@ import logging
 import requests
 
 from core.integrations.whatsapp.tools.config import (
+    construir_url_graph_api,
     get_meta_http_timeout,
     get_token_usuario_meta,
 )
@@ -23,10 +24,7 @@ def validar_phone_number_id_da_waba(waba_id, phone_number_id):
     if not phone_number_id:
         raise ValueError("phone_number_id nao informado para validacao")
 
-    url = (
-        f"https://graph.facebook.com/v25.0/"
-        f"{waba_id}/phone_numbers"
-    )
+    url = construir_url_graph_api(f"{waba_id}/phone_numbers")
     headers = {
         "Authorization": f"Bearer {get_token_usuario_meta()}",
     }
