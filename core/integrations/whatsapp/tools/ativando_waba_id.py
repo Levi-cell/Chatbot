@@ -40,8 +40,6 @@ def ativar_waba_id(waba_id):
         timeout=get_meta_http_timeout(),
     )
     resposta = _normalizar_resposta(response)
-    print(response)
-    print(resposta)
 
     logger.info(
         "whatsapp_waba_subscribe_resposta | acao=subscribe_apps "
@@ -71,6 +69,3 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
-
-
-ativar_waba_id(1334896588725096)
