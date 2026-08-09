@@ -1,15 +1,13 @@
-# ETAPA 15 - TESTE COGNITIVO, PERGUNTA 5
+# ETAPA 15 - TESTE COGNITIVO, PERGUNTA 4
 
-CABECALHO_ETAPA15 = "Pergunta 5"
+CABECALHO_ETAPA15 = "Pergunta 4"
 
 MENSAGEM_CLIENTE_ETAPA15 = (
-    "Com que frequência você perde a atenção/foco na atividade "
-    "que está fazendo?"
+    "Com que frequência você esquece de levar suas coisas com você?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA15 = (
-    "Com que frequência {nome} perde a atenção/foco na atividade "
-    "que está fazendo?"
+    "Com que frequência {nome} esquece de levar as próprias coisas?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA15 = (

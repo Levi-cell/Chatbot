@@ -92,6 +92,13 @@ mas precisa receber `HUP` depois do `git pull`: o Gunicorn de producao nao possu
 auto-reload. Alteracao de `.env` ou da unit do webhook exige `restart` e segue
 [`modificando_env_e_banco_em_prod.md`](../regras_deploy/modificando_env_e_banco_em_prod.md).
 
+## Migracoes incrementais do banco de negocio
+
+Os scripts SQL revisáveis para o RDS existente ficam em `deploy/migrations/`.
+Eles não são executados por `manage.py migrate` nem pelo setup de instalação
+limpa. Siga os pré-requisitos, as validações e a orientação de rollback do
+próprio arquivo antes de publicar o código que depende do novo estado.
+
 ## Operacao dos servicos e do Redis remoto
 
 Os comandos individuais para iniciar e parar cada processo, limpar somente os

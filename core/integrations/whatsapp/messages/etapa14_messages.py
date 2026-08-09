@@ -1,13 +1,15 @@
-# ETAPA 14 - TESTE COGNITIVO, PERGUNTA 4
+# ETAPA 14 - TESTE COGNITIVO, PERGUNTA 3
 
-CABECALHO_ETAPA14 = "Pergunta 4"
+CABECALHO_ETAPA14 = "Pergunta 3"
 
 MENSAGEM_CLIENTE_ETAPA14 = (
-    "Com que frequência você esquece de levar suas coisas com você?"
+    "Com que frequência você esquece nomes de pessoas conhecidas "
+    "ou familiares?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA14 = (
-    "Com que frequência {nome} esquece de levar as próprias coisas?"
+    "Com que frequência {nome} esquece nomes de pessoas conhecidas "
+    "ou familiares?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA14 = (

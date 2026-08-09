@@ -1,5 +1,5 @@
 """
-Contrato PyWa compartilhado exclusivamente pelas etapas 11 a 16.
+Contrato PyWa compartilhado exclusivamente pelas etapas 12 a 17.
 
 Este helper monta os componentes interativos, envia a pergunta pela Meta,
 extrai o id_hash da resposta e devolve o contexto de envio. Ele não valida a
@@ -41,7 +41,7 @@ def enviar_pergunta_triagem(
     evento_log,
     tipo_tratamento=None,
 ):
-    """Envia uma pergunta da triagem com o contrato comum das etapas 11–16."""
+    """Envia uma pergunta da triagem com o contrato comum das etapas 12–17."""
     try:
         rodape = montar_rodape_triagem()
         mensagem_enviada = montar_texto_com_rodape(

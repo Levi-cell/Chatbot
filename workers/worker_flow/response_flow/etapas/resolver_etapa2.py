@@ -22,7 +22,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_3_PROFISSAO,
+    ETAPA_3_CONFIRMACAO_DESTINO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -76,7 +76,7 @@ def resolve_etapa2(contexto_historico):
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-        destinos_esperados={ETAPA_3_PROFISSAO},
+        destinos_esperados={ETAPA_3_CONFIRMACAO_DESTINO},
     )
     status_dependente = (
         opcao_atendimento == OPCAO_PARA_OUTRA_PESSOA
@@ -85,6 +85,7 @@ def resolve_etapa2(contexto_historico):
     contexto_envio = enviar_etapa3(
         cliente_telefone,
         phone_id_unidade,
+        status_dependente,
     )
     contexto_envio.update(
         {

@@ -1,13 +1,17 @@
 import logging
 
+from pywa.types import Button
+
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     CABECALHO_PESQUISA_SATISFACAO,
     montar_texto_com_cabecalho,
 )
 from core.integrations.whatsapp.messages.etapa20_messages import (
+    montar_botoes_etapa20,
     montar_mensagem_contexto_invalido_etapa20,
     montar_mensagem_etapa20,
+    montar_mensagem_financeiro_etapa20,
     montar_mensagem_midia_etapa20,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
@@ -20,14 +24,17 @@ from core.logging_config import short_value
 logger = logging.getLogger("whatsapp.etapa20")
 
 ID_ETAPA20 = 20
-
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
-TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "comentario_satisfacao_invalido"
+TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_comentario_invalida"
 
 
-# CENARIO NORMAL: SOLICITA O TEXTO DO COMENTARIO
-def enviar_etapa20(cliente_telefone, phone_id_unidade):
-    return _enviar_texto_etapa20(
+# CENARIO NORMAL: SOLICITA A DECISAO SOBRE COMENTAR OU NAO
+def enviar_etapa20(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    return _enviar_botoes_etapa20(
         cliente_telefone,
         phone_id_unidade,
         montar_mensagem_etapa20(),
@@ -36,7 +43,7 @@ def enviar_etapa20(cliente_telefone, phone_id_unidade):
 
 
 def enviar_etapa20_midia(cliente_telefone, phone_id_unidade):
-    return _enviar_texto_etapa20(
+    return _enviar_botoes_etapa20(
         cliente_telefone,
         phone_id_unidade,
         montar_mensagem_midia_etapa20(),
@@ -45,11 +52,21 @@ def enviar_etapa20_midia(cliente_telefone, phone_id_unidade):
     )
 
 
+def enviar_etapa20_financeiro(cliente_telefone, phone_id_unidade):
+    return _enviar_botoes_etapa20(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_financeiro_etapa20(),
+        evento="enviar_etapa20_financeiro",
+        tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
 def enviar_etapa20_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
 ):
-    return _enviar_texto_etapa20(
+    return _enviar_botoes_etapa20(
         cliente_telefone,
         phone_id_unidade,
         montar_mensagem_contexto_invalido_etapa20(),
@@ -58,7 +75,7 @@ def enviar_etapa20_contexto_invalido(
     )
 
 
-def _enviar_texto_etapa20(
+def _enviar_botoes_etapa20(
     cliente_telefone,
     phone_id_unidade,
     mensagem_bot,
@@ -74,6 +91,7 @@ def _enviar_texto_etapa20(
                 mensagem_bot,
                 CABECALHO_PESQUISA_SATISFACAO,
             ),
+            buttons=_montar_botoes_pywa_etapa20(),
         )
         id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
 
@@ -95,7 +113,7 @@ def _enviar_texto_etapa20(
             "cabecalho_mensagem": CABECALHO_PESQUISA_SATISFACAO,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": ID_ETAPA20,
-            "tipo_mensagem": "text",
+            "tipo_mensagem": "interactive_button",
             "canal": "meta_whatsapp",
             "atualizar_conversa": True,
             "atualizar_last_from_bot": True,
@@ -122,3 +140,13 @@ def _enviar_texto_etapa20(
             phone_id_unidade=phone_id_unidade,
             cliente_telefone=cliente_telefone,
         ) from erro
+
+
+def _montar_botoes_pywa_etapa20():
+    return [
+        Button(
+            title=titulo,
+            callback_data=titulo,
+        )
+        for titulo in montar_botoes_etapa20()
+    ]

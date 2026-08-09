@@ -1,110 +1,256 @@
 import re
-
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    normalizar_texto,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_OFERTA_ACEITA,
-    EVENTO_OFERTA_ADIADA,
-)
+import unicodedata
+from dataclasses import dataclass
 
 
-TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
+STATUS_IDADE_VALIDA = "idade_valida"
+STATUS_IDADE_INVALIDA = "idade_invalida"
+STATUS_IDADE_ACIMA_LIMITE = "idade_acima_limite"
 
-TEXTO_BOTAO_QUERO_AGENDAR = "quero agendar"
-TEXTO_BOTAO_TALVEZ_MAIS_TARDE = "talvez mais tarde"
+MOTIVO_SEM_IDADE = "sem_idade"
+MOTIVO_MULTIPLAS_IDADES = "multiplas_idades"
+MOTIVO_FORA_INTERVALO = "fora_intervalo"
+MOTIVO_FORMATO_INVALIDO = "formato_invalido"
 
-PADRAO_RESPOSTA_NEGATIVA = re.compile(
-    r"(?:"
-    r"\bnao\b|"
-    r"\bnunca\b|"
-    r"\bjamais\b|"
-    r"\bnem\s+pensar\b|"
-    r"\bde\s+jeito\s+nenhum\b|"
-    r"\bsem\s+interesse\b|"
-    r"\bnao\s+tenho\s+interesse\b|"
-    r"\bdispenso\b|"
-    r"\brecuso\b"
-    r")"
-)
+IDADE_MINIMA_DEPENDENTE_PADRAO = 5
+IDADE_MINIMA_DEPENDENTE_BPA = 4
 
-PADRAO_RESPOSTA_POSITIVA = re.compile(
-    r"(?:"
-    r"\bsim\b|"
-    r"\bsimbora\b|"
-    r"\bbora(?:\s+la)?\b|"
-    r"\bpartiu\b|"
-    r"\bclaro\b|"
-    r"\bcom\s+certeza\b|"
-    r"\bfechado\b|"
-    r"\bcombinado\b|"
-    r"\bdemorou\b|"
-    r"\bbeleza\b|"
-    r"\bblz\b|"
-    r"\bok(?:ay)?\b|"
-    r"\btopo\b|"
-    r"\baceito\b|"
-    r"\bquero\b|"
-    r"\beu\s+quero\b|"
-    r"\bquero\s+muito\b|"
-    r"\bquero\s+agendar\b|"
-    r"\bquero\s+participar\b|"
-    r"\bquero\s+experimentar\b|"
-    r"\bquero\s+conhecer\b|"
-    r"\bquero\s+fazer\b|"
-    r"\bgostaria\b|"
-    r"\badoraria\b|"
-    r"\bdesejo\b|"
-    r"\bpretendo\b|"
-    r"\btenho\s+interesse\b|"
-    r"\bestou\s+interessad[oa]\b|"
-    r"\bme\s+interessa\b|"
-    r"\bvamos(?:\s+sim|\s+agendar|\s+marcar|\s+nessa|\s+la)?\b|"
-    r"\bvamo(?:\s+agendar|\s+marcar|\s+nessa|\s+la)?\b|"
-    r"\bpode(?:m)?\s+(?:agendar|marcar|ser|continuar)\b|"
-    r"\bagende\b|"
-    r"\bmarque\b|"
-    r"\bmarca\s+pra\s+mim\b"
-    r")"
-)
+UNIDADES = {
+    "um": 1,
+    "uma": 1,
+    "dois": 2,
+    "duas": 2,
+    "tres": 3,
+    "quatro": 4,
+    "cinco": 5,
+    "seis": 6,
+    "sete": 7,
+    "oito": 8,
+    "nove": 9,
+}
 
+ATE_DEZENOVE = {
+    **UNIDADES,
+    "dez": 10,
+    "onze": 11,
+    "doze": 12,
+    "treze": 13,
+    "quatorze": 14,
+    "catorze": 14,
+    "quinze": 15,
+    "dezesseis": 16,
+    "dezasseis": 16,
+    "dezessete": 17,
+    "dezassete": 17,
+    "dezoito": 18,
+    "dezenove": 19,
+}
 
-def validar_etapa6(conteudo_texto):
-    """
-    Converte a resposta da oferta diretamente no evento da etapa 6.
+DEZENAS = {
+    "vinte": 20,
+    "trinta": 30,
+    "quarenta": 40,
+    "cinquenta": 50,
+    "sessenta": 60,
+    "setenta": 70,
+    "oitenta": 80,
+    "noventa": 90,
+}
 
-    O adiamento é estrito. Respostas negativas livres recebem tratamento,
-    enquanto diferentes confirmações positivas produzem oferta_aceita.
-    """
-    if not isinstance(conteudo_texto, str):
-        return None
+CENTENAS = {
+    "cem": 100,
+    "cento": 100,
+    "duzentos": 200,
+    "duzentas": 200,
+    "trezentos": 300,
+    "trezentas": 300,
+    "quatrocentos": 400,
+    "quatrocentas": 400,
+    "quinhentos": 500,
+    "quinhentas": 500,
+    "seiscentos": 600,
+    "seiscentas": 600,
+    "setecentos": 700,
+    "setecentas": 700,
+    "oitocentos": 800,
+    "oitocentas": 800,
+    "novecentos": 900,
+    "novecentas": 900,
+    "mil": 1000,
+}
 
-    texto_normalizado = _normalizar_resposta(conteudo_texto)
-
-    if not texto_normalizado:
-        return None
-
-    if texto_normalizado == TEXTO_BOTAO_TALVEZ_MAIS_TARDE:
-        return EVENTO_OFERTA_ADIADA
-
-    # A negação prevalece mesmo quando a frase também contém termo positivo.
-    if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):
-        return None
-
-    if texto_normalizado == TEXTO_BOTAO_QUERO_AGENDAR:
-        return EVENTO_OFERTA_ACEITA
-
-    if PADRAO_RESPOSTA_POSITIVA.search(texto_normalizado):
-        return EVENTO_OFERTA_ACEITA
-
-    return None
+PADRAO_NUMERO = re.compile(r"\d+")
+PADRAO_TOKEN = re.compile(r"[a-z]+", re.IGNORECASE)
 
 
-def _normalizar_resposta(texto):
-    texto_sem_acento = normalizar_texto(texto)
-    texto_sem_pontuacao = re.sub(
-        r"[^a-z0-9\s]",
-        " ",
-        texto_sem_acento,
+@dataclass(frozen=True)
+class ResultadoValidacaoIdade:
+    status: str
+    idade: int | None = None
+    motivo: str | None = None
+
+    @property
+    def valida(self):
+        return self.status == STATUS_IDADE_VALIDA
+
+    @property
+    def acima_limite(self):
+        return self.status == STATUS_IDADE_ACIMA_LIMITE
+
+
+def validar_idade(texto):
+    texto_original = str(texto or "").strip()
+
+    if not texto_original:
+        return _resultado_invalido(MOTIVO_SEM_IDADE)
+
+    texto_normalizado = _normalizar_texto(texto_original)
+
+    if _tem_formato_numerico_invalido(texto_normalizado):
+        return _resultado_invalido(MOTIVO_FORMATO_INVALIDO)
+
+    candidatos = [
+        int(valor)
+        for valor in PADRAO_NUMERO.findall(texto_normalizado)
+    ]
+    candidatos.extend(_extrair_numeros_por_extenso(texto_normalizado))
+
+    if not candidatos:
+        return _resultado_invalido(MOTIVO_SEM_IDADE)
+
+    if len(candidatos) != 1:
+        return _resultado_invalido(MOTIVO_MULTIPLAS_IDADES)
+
+    idade = candidatos[0]
+
+    if idade <= 0:
+        return _resultado_invalido(MOTIVO_FORA_INTERVALO)
+
+    if idade >= 100:
+        return ResultadoValidacaoIdade(
+            status=STATUS_IDADE_ACIMA_LIMITE,
+            idade=idade,
+        )
+
+    return ResultadoValidacaoIdade(
+        status=STATUS_IDADE_VALIDA,
+        idade=idade,
     )
-    return " ".join(texto_sem_pontuacao.split())
+
+
+def obter_idade_minima_dependente(bpa_ativo):
+    """Resolve o corte da unidade sem alterar a validação da idade informada."""
+    if bpa_ativo:
+        return IDADE_MINIMA_DEPENDENTE_BPA
+
+    return IDADE_MINIMA_DEPENDENTE_PADRAO
+
+
+def _tem_formato_numerico_invalido(texto):
+    if re.search(
+        r"(?:^|\s)(?:-|menos(?:\s+de)?)\s*\d",
+        texto,
+    ):
+        return True
+
+    if re.search(
+        r"\bmenos(?:\s+de)?\s+(?:"
+        r"um|uma|dois|duas|tres|quatro|cinco|seis|sete|oito|nove|"
+        r"dez|onze|doze|treze|quatorze|catorze|quinze|"
+        r"dezesseis|dezasseis|dezessete|dezassete|dezoito|"
+        r"dezenove|vinte|trinta|quarenta|cinquenta|sessenta|"
+        r"setenta|oitenta|noventa|cem|cento"
+        r")\b",
+        texto,
+    ):
+        return True
+
+    if re.search(r"\d+\s*[,\.]\s*\d+", texto):
+        return True
+
+    if re.search(r"\b(?:virgula|ponto|meio|meia)\b", texto):
+        return True
+
+    return False
+
+
+def _extrair_numeros_por_extenso(texto):
+    tokens = PADRAO_TOKEN.findall(texto)
+    resultados = []
+    indice = 0
+
+    while indice < len(tokens):
+        valor, consumidos = _ler_numero_por_extenso(tokens, indice)
+
+        if consumidos:
+            resultados.append(valor)
+            indice += consumidos
+            continue
+
+        indice += 1
+
+    return resultados
+
+
+def _ler_numero_por_extenso(tokens, indice):
+    token = tokens[indice]
+
+    if token in CENTENAS:
+        valor = CENTENAS[token]
+        consumidos = 1
+
+        if _token_em(tokens, indice + 1) == "e":
+            restante, usados = _ler_ate_noventa_e_nove(
+                tokens,
+                indice + 2,
+            )
+            if usados:
+                valor += restante
+                consumidos += usados + 1
+
+        return valor, consumidos
+
+    return _ler_ate_noventa_e_nove(tokens, indice)
+
+
+def _ler_ate_noventa_e_nove(tokens, indice):
+    token = _token_em(tokens, indice)
+
+    if token in ATE_DEZENOVE:
+        return ATE_DEZENOVE[token], 1
+
+    if token not in DEZENAS:
+        return None, 0
+
+    valor = DEZENAS[token]
+
+    if (
+        _token_em(tokens, indice + 1) == "e"
+        and _token_em(tokens, indice + 2) in UNIDADES
+    ):
+        return valor + UNIDADES[tokens[indice + 2]], 3
+
+    return valor, 1
+
+
+def _token_em(tokens, indice):
+    if indice < 0 or indice >= len(tokens):
+        return None
+
+    return tokens[indice]
+
+
+def _normalizar_texto(texto):
+    texto_decomposto = unicodedata.normalize("NFD", texto.lower())
+    return "".join(
+        caractere
+        for caractere in texto_decomposto
+        if unicodedata.category(caractere) != "Mn"
+    )
+
+
+def _resultado_invalido(motivo):
+    return ResultadoValidacaoIdade(
+        status=STATUS_IDADE_INVALIDA,
+        motivo=motivo,
+    )

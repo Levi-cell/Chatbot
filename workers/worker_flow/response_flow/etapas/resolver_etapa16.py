@@ -5,7 +5,8 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa16 import (
     enviar_etapa16_dependente_contexto_invalido,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa17 import (
-    enviar_etapa17,
+    enviar_etapa17_cliente,
+    enviar_etapa17_dependente,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
@@ -13,8 +14,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_t
     validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_17_AGENDAMENTO,
-    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
+    ETAPA_17_TRIAGEM_PERGUNTA_6,
+    EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -25,8 +26,8 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 """
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-- VALIDAR A RESPOSTA DA PERGUNTA 6
-- ENCAMINHAR PARA O AGENDAMENTO AUTORIZADO PELO MAPA
+- VALIDAR A RESPOSTA DA PERGUNTA 5
+- ENCAMINHAR PARA A PERGUNTA 6 AUTORIZADA PELO MAPA
 """
 
 
@@ -38,14 +39,11 @@ def resolve_etapa16(contexto_historico):
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     status_dependente = bool(contexto_historico.get("status_dependente"))
     nome_dependente = contexto_historico.get("nome_dependente")
-    link_agendamento = contexto_historico.get(
-        "link_agendamento_unidade"
-    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    # VALIDANDO A OPCAO DA PERGUNTA 6
+    # VALIDANDO A OPCAO DA PERGUNTA 5
     resposta_triagem = validar_resposta_triagem(
         texto_cliente,
         tipo_mensagem,
@@ -71,8 +69,8 @@ def resolve_etapa16(contexto_historico):
     # explícito; _destinos_esperados_por_evento é usado com múltiplos eventos.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-        destinos_esperados={ETAPA_17_AGENDAMENTO},
+        EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
+        destinos_esperados={ETAPA_17_TRIAGEM_PERGUNTA_6},
     )
 
     logger.info(
@@ -81,23 +79,30 @@ def resolve_etapa16(contexto_historico):
         "etapa_destino=%s resposta=%s status_dependente=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
+        EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
         etapa_destino,
         resposta_triagem,
         status_dependente,
     )
 
-    contexto_envio = enviar_etapa17(
-        cliente_telefone,
-        phone_id_unidade,
-        link_agendamento,
-    )
+    if status_dependente:
+        contexto_envio = enviar_etapa17_dependente(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+    else:
+        contexto_envio = enviar_etapa17_cliente(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
     contexto_envio["resposta_triagem"] = resposta_triagem
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
+        EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
         etapa_destino,
     )
 

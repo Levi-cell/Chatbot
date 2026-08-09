@@ -3,64 +3,46 @@ import re
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-)
 
 
-TIPOS_MENSAGEM_ACEITOS_ETAPA19 = {
-    "text",
-    "interactive",
-    "button",
-}
+TIPO_TRATAMENTO_SATISFACAO_INVALIDA = "satisfacao_invalida"
 
-RESPOSTAS_COMENTARIO_ACEITO = {
-    "sim",
-    "sim quero comentar",
-    "sim quero sugerir",
-    "quero comentar",
-    "quero sugerir",
-    "quero deixar um comentario",
-    "quero deixar uma sugestao",
-    "eu quero comentar",
-    "eu quero sugerir",
-    "gostaria de comentar",
-    "gostaria de sugerir",
-}
-
-RESPOSTAS_COMENTARIO_RECUSADO = {
-    "nao",
-    "nao quero comentar",
-    "nao quero sugerir",
-    "prefiro nao comentar",
-    "prefiro nao sugerir",
+_NOTAS_POR_RESPOSTA = {
+    "1": 1,
+    "muito ruim": 1,
+    "1 muito ruim": 1,
+    "2": 2,
+    "ruim": 2,
+    "2 ruim": 2,
+    "3": 3,
+    "regular": 3,
+    "3 regular": 3,
+    "4": 4,
+    "muito bom": 4,
+    "4 muito bom": 4,
+    "5": 5,
+    "excelente": 5,
+    "5 excelente": 5,
 }
 
 
-def validar_decisao_comentario_etapa19(
-    conteudo_texto,
-    tipo_mensagem,
-):
-    """Traduz somente intenções inequívocas em eventos da etapa 19."""
-    if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA19:
-        return None
-
+def validar_etapa19(conteudo_texto):
+    """Traduz uma unica opcao coerente da pesquisa para uma nota de 1 a 5."""
     if not isinstance(conteudo_texto, str):
         return None
 
-    resposta = normalizar_resposta_comentario(conteudo_texto)
+    texto_normalizado = _normalizar_resposta(conteudo_texto)
 
-    if resposta in RESPOSTAS_COMENTARIO_ACEITO:
-        return EVENTO_COMENTARIO_SATISFACAO_ACEITO
+    # Suporta o callback_data caso algum payload nao traga o titulo da linha.
+    if texto_normalizado.startswith("satisfacao "):
+        texto_normalizado = texto_normalizado.removeprefix(
+            "satisfacao "
+        )
 
-    if resposta in RESPOSTAS_COMENTARIO_RECUSADO:
-        return EVENTO_COMENTARIO_SATISFACAO_RECUSADO
-
-    return None
+    return _NOTAS_POR_RESPOSTA.get(texto_normalizado)
 
 
-def normalizar_resposta_comentario(texto):
+def _normalizar_resposta(texto):
     texto_sem_acento = normalizar_texto(texto)
     texto_sem_pontuacao = re.sub(
         r"[^a-z0-9\s]",

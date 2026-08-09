@@ -1,15 +1,15 @@
-# ETAPA 16 - TESTE COGNITIVO, PERGUNTA 6
+# ETAPA 16 - TESTE COGNITIVO, PERGUNTA 5
 
-CABECALHO_ETAPA16 = "Pergunta 6"
+CABECALHO_ETAPA16 = "Pergunta 5"
 
 MENSAGEM_CLIENTE_ETAPA16 = (
-    "Com que frequência você esquece o que aconteceu em um filme, "
-    "desenho, série ou novela?"
+    "Com que frequência você perde a atenção/foco na atividade "
+    "que está fazendo?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA16 = (
-    "Com que frequência {nome} esquece o que aconteceu em um filme, "
-    "desenho, série ou novela?"
+    "Com que frequência {nome} perde a atenção/foco na atividade "
+    "que está fazendo?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA16 = (

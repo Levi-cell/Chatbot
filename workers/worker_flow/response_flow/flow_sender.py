@@ -60,8 +60,15 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa19 import (
 from workers.worker_flow.response_flow.etapas.resolver_etapa20 import (
     resolve_etapa20,
 )
+from workers.worker_flow.response_flow.etapas.resolver_etapa21 import (
+    resolve_etapa21,
+)
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
 )
 
 
@@ -112,6 +119,20 @@ def flow_sender(contexto_historico):
 
         if evento_transicao:
             contexto_envio["evento_transicao"] = evento_transicao
+
+        # A confirmação da etapa 3 precisa permanecer idempotente quando a
+        # resposta do bot já existe. O evento recuperado expressa o estado
+        # final absoluto; nunca reconstruímos uma ordem de inversão.
+        if (
+            evento_transicao
+            == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+        ):
+            contexto_envio["status_dependente_final"] = True
+        elif (
+            evento_transicao
+            == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR
+        ):
+            contexto_envio["status_dependente_final"] = False
 
         return contexto_envio
 
@@ -184,7 +205,10 @@ def flow_sender(contexto_historico):
     if id_etapa_atual == 20:
         return resolve_etapa20(contexto_historico)
 
-    # A etapa 21 é terminal e não possui resolver. Conversas encerradas são
+    if id_etapa_atual == 21:
+        return resolve_etapa21(contexto_historico)
+
+    # A etapa 22 é terminal e não possui resolver. Conversas encerradas são
     # barradas pelo cache/webhook e pelo fallback transacional do worker.
 
     logger.warning(

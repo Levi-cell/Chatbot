@@ -281,19 +281,22 @@ Implementação principal:
 - Essa garantia é protegida pelo índice parcial `idx_conversa_unica_ativa`.
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
   bloqueada pelo prazo declarado na política.
-- A etapa 3 coleta, em texto livre, a profissão informada pelo cliente pagador.
-  Mídia, pergunta financeira inequívoca e resposta genérica recebem tratamento
-  sem avanço. A escolha entre titular e dependente somente define o próximo
-  destino depois dessa coleta.
-- A etapa 10 introduz a triagem, as etapas 11 a 16 fazem as seis perguntas e a
-  etapa 17 apresenta o agendamento. A etapa 17 torna a conversa elegível ao
+- A etapa 2 registra a escolha inicial entre titular e dependente. A etapa 3
+  confirma ou inverte essa escolha: titular segue para a etapa 4 e dependente
+  para a etapa 5. Mídia, pergunta financeira inequívoca, resposta fora do
+  contexto ou sinais logicamente contraditórios repetem a confirmação.
+- A etapa 4 coleta, em texto livre, a profissão quando o fluxo passa por ela.
+  Ela preserva as duas saídas para que conversas existentes, remapeadas da
+  antiga etapa 3, continuem conforme `status_dependente`.
+- A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
+  etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
-- A etapa 18 registra uma nota de satisfação de 1 a 5. Na etapa 19, o cliente
-  escolhe se deseja comentar: a aceitação segue para a etapa 20 e a recusa
-  salta diretamente para a etapa 21. A etapa 20 coleta o comentário. Nota e
+- A etapa 19 registra uma nota de satisfação de 1 a 5. Na etapa 20, o cliente
+  escolhe se deseja comentar: a aceitação segue para a etapa 21 e a recusa
+  salta diretamente para a etapa 22. A etapa 21 coleta o comentário. Nota e
   comentário são internos, não compõem o payload do Funil e não encerram nem
   bloqueiam o atendimento.
-- A etapa 21 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+- A etapa 22 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
   30 dias.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
@@ -310,8 +313,8 @@ Implementação principal:
 
 ### 6.1 Oportunidade no Funil de Vendas
 
-- Uma conversa torna-se elegível ao entrar na etapa 17.
-- As etapas 17 a 21 permanecem elegíveis. Assim, avançar na pesquisa
+- Uma conversa torna-se elegível ao entrar na etapa 18.
+- As etapas 18 a 22 permanecem elegíveis. Assim, avançar na pesquisa
   antes do próximo ciclo horário não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
@@ -953,7 +956,7 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
-| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 17–21, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
 

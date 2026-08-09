@@ -1,6 +1,7 @@
 import inspect
 import logging
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from core.database.deploy_database import (
@@ -79,26 +80,26 @@ class DeployEssencialTests(unittest.TestCase):
         self.assertIn("nome VARCHAR(200) NULL", flood_source)
         self.assertNotIn("ALTER TABLE", flood_source)
 
-        etapa_17 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 17)
         etapa_18 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 18)
         etapa_19 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 19)
         etapa_20 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 20)
         etapa_21 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 21)
+        etapa_22 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 22)
         self.assertFalse(
-            next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 16)[4]
+            next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 17)[4]
         )
-        self.assertTrue(etapa_17[4])
         self.assertTrue(etapa_18[4])
         self.assertTrue(etapa_19[4])
         self.assertTrue(etapa_20[4])
-        self.assertEqual(etapa_21[2:], (True, 30, True))
+        self.assertTrue(etapa_21[4])
+        self.assertEqual(etapa_22[2:], (True, 30, True))
 
     def test_etapas_e_transicoes_formam_um_mapa_valido_e_contiguo(self):
         ids_etapa = [etapa[0] for etapa in povoar_etapas.ETAPAS]
         transicoes = etapa_transicao_script.TRANSICOES_INICIAIS
 
-        self.assertEqual(len(ids_etapa), 21)
-        self.assertEqual(len(transicoes), 24)
+        self.assertEqual(len(ids_etapa), 22)
+        self.assertEqual(len(transicoes), 26)
         self.assertEqual(ids_etapa, list(range(1, len(ids_etapa) + 1)))
         self.assertEqual(
             len({(origem, evento) for origem, evento, _ in transicoes}),
@@ -114,20 +115,53 @@ class DeployEssencialTests(unittest.TestCase):
         arestas_criticas = {
             (1, EVENTO_NOME_CLIENTE_VALIDO, 2),
             (2, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO, 3),
-            (3, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 4),
-            (3, EVENTO_PROFISSAO_TITULAR_VALIDA, 5),
-            (4, EVENTO_NOME_DEPENDENTE_VALIDO, 5),
-            (6, EVENTO_OFERTA_ACEITA, 9),
-            (6, EVENTO_OFERTA_ADIADA, 7),
-            (9, EVENTO_EMAIL_VALIDO, 10),
-            (16, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 17),
-            (17, "agendamento_confirmado", 18),
-            (18, EVENTO_SATISFACAO_AVALIADA, 19),
-            (19, EVENTO_COMENTARIO_SATISFACAO_ACEITO, 20),
-            (19, EVENTO_COMENTARIO_SATISFACAO_RECUSADO, 21),
-            (20, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 21),
+            (3, "destino_atendimento_confirmado_titular", 4),
+            (3, "destino_atendimento_confirmado_dependente", 5),
+            (4, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 5),
+            (4, EVENTO_PROFISSAO_TITULAR_VALIDA, 6),
+            (5, EVENTO_NOME_DEPENDENTE_VALIDO, 6),
+            (7, EVENTO_OFERTA_ACEITA, 10),
+            (7, EVENTO_OFERTA_ADIADA, 8),
+            (10, EVENTO_EMAIL_VALIDO, 11),
+            (17, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 18),
+            (18, "agendamento_confirmado", 19),
+            (19, EVENTO_SATISFACAO_AVALIADA, 20),
+            (20, EVENTO_COMENTARIO_SATISFACAO_ACEITO, 21),
+            (20, EVENTO_COMENTARIO_SATISFACAO_RECUSADO, 22),
+            (21, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 22),
         }
         self.assertTrue(arestas_criticas.issubset(set(transicoes)))
+
+    def test_migracao_etapa3_remapeia_referencias_e_valida_politicas(self):
+        caminho = (
+            Path(__file__).resolve().parents[2]
+            / "deploy"
+            / "migrations"
+            / "20260809_adicionar_confirmacao_etapa3.sql"
+        )
+        sql = caminho.read_text(encoding="utf-8")
+
+        contratos = (
+            "BEGIN;",
+            "LOCK TABLE",
+            "FOR v_id_origem IN REVERSE 21..3 LOOP",
+            "UPDATE chatbot.conversa",
+            "UPDATE chatbot.historico_mensagens",
+            "UPDATE chatbot.respostas_desafios",
+            "(id_etapa BETWEEN 18 AND 22)",
+            "CASE WHEN id_etapa = 22 THEN 30 ELSE 0 END",
+            "destino_atendimento_confirmado_titular",
+            "destino_atendimento_confirmado_dependente",
+            "COMMIT;",
+        )
+
+        for contrato in contratos:
+            with self.subTest(contrato=contrato):
+                self.assertIn(contrato, sql)
+
+        self.assertNotIn("CASCADE", sql.upper())
+        self.assertNotIn("TRUNCATE", sql.upper())
+        self.assertNotIn("DROP TABLE", sql.upper())
 
     def test_executor_transacional_confirma_ou_reverte_e_propaga(self):
         conn_sucesso = FakeConn()

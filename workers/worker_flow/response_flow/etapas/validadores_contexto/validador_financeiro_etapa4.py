@@ -48,7 +48,7 @@ _PADROES_PERGUNTA_FINANCEIRA = (
 )
 
 
-def validar_pergunta_financeira_etapa3(conteudo_texto):
+def validar_pergunta_financeira_etapa4(conteudo_texto):
     if not isinstance(conteudo_texto, str):
         return False
 

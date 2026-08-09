@@ -1,27 +1,20 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa17 import (
-    enviar_etapa17_contexto_invalido,
-    enviar_etapa17_financeiro,
-    enviar_etapa17_midia,
+    enviar_etapa17_cliente_contexto_invalido,
+    enviar_etapa17_dependente_contexto_invalido,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa18 import (
     enviar_etapa18,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa17 import (
-    TIPO_TRATAMENTO_AGENDAMENTO_NAO_CONFIRMADO,
-    validar_etapa17,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    TIPO_TRATAMENTO_FINANCEIRO,
-    validar_pergunta_financeira,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
-    validar_midia,
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
+    TIPO_TRATAMENTO_RESPOSTA_TRIAGEM_INVALIDA,
+    validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_18_PESQUISA_SATISFACAO,
+    ETAPA_18_AGENDAMENTO,
+    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -32,8 +25,8 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 """
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-- APLICAR OS TRATAMENTOS DA ETAPA 17
-- ENCAMINHAR PARA A PESQUISA DE SATISFACAO AUTORIZADA PELO MAPA
+- VALIDAR A RESPOSTA DA PERGUNTA 6
+- ENCAMINHAR PARA O AGENDAMENTO AUTORIZADO PELO MAPA
 """
 
 
@@ -43,110 +36,84 @@ logger = logging.getLogger("worker.etapa17")
 def resolve_etapa17(contexto_historico):
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
+    status_dependente = bool(contexto_historico.get("status_dependente"))
+    nome_dependente = contexto_historico.get("nome_dependente")
     link_agendamento = contexto_historico.get(
         "link_agendamento_unidade"
     )
-    nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-# VALIDANDO MIDIA NA ETAPA 17
-    if validar_midia(tipo_mensagem):
-        _logar_tipo_nao_suportado(contexto_historico)
+    # VALIDANDO A OPCAO DA PERGUNTA 6
+    resposta_triagem = validar_resposta_triagem(
+        texto_cliente,
+        tipo_mensagem,
+    )
 
-        return enviar_etapa17_midia(
+    if resposta_triagem is None:
+        _logar_tratamento_contexto(contexto_historico)
+
+        if status_dependente:
+            return enviar_etapa17_dependente_contexto_invalido(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa17_cliente_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
-            link_agendamento,
-        )
-
-# VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 17
-    if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento_texto(
-            contexto_historico,
-            TIPO_TRATAMENTO_FINANCEIRO,
-        )
-
-        return enviar_etapa17_financeiro(
-            cliente_telefone,
-            phone_id_unidade,
-            link_agendamento,
-        )
-
-    # VALIDANDO A CONFIRMACAO DE AGENDAMENTO
-    evento_transicao = validar_etapa17(texto_cliente)
-
-    if evento_transicao is None:
-        _logar_tratamento_texto(
-            contexto_historico,
-            TIPO_TRATAMENTO_AGENDAMENTO_NAO_CONFIRMADO,
-        )
-
-        return enviar_etapa17_contexto_invalido(
-            cliente_telefone,
-            phone_id_unidade,
-            link_agendamento,
         )
 
     # VALIDANDO DESTINO
-    # A etapa 17 produz um único evento e um único destino.
+    # Esta etapa produz um único evento e um único destino. O conjunto fica
+    # explícito; _destinos_esperados_por_evento é usado com múltiplos eventos.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        evento_transicao,
-        destinos_esperados={ETAPA_18_PESQUISA_SATISFACAO},
+        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
+        destinos_esperados={ETAPA_18_AGENDAMENTO},
     )
 
     logger.info(
-        "etapa17_agendamento_confirmado | acao=enviar_etapa18 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s",
+        "etapa17_resposta_validada | acao=enviar_etapa18 "
+        "id_conversa=%s id_mensagem_fila=%s evento=%s "
+        "etapa_destino=%s resposta=%s status_dependente=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        evento_transicao,
+        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
         etapa_destino,
+        resposta_triagem,
+        status_dependente,
     )
 
     contexto_envio = enviar_etapa18(
         cliente_telefone,
         phone_id_unidade,
-        nome_cliente,
+        link_agendamento,
     )
+    contexto_envio["resposta_triagem"] = resposta_triagem
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        evento_transicao,
+        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
         etapa_destino,
     )
 
 
-def _logar_tipo_nao_suportado(contexto_historico):
-    mensagem = contexto_historico["mensagem_cliente_atual"]
-
-    logger.info(
-        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado "
-        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
-        "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
-        contexto_historico["id_conversa"],
-        mensagem["id_mensagem_fila"],
-        short_value(mensagem["cliente_telefone"]),
-        short_value(mensagem["id_phone_unidade"]),
-        contexto_historico.get("tipo_mensagem_atual"),
-        contexto_historico["id_etapa_cliente"],
-    )
-
-
-def _logar_tratamento_texto(contexto_historico, motivo):
+def _logar_tratamento_contexto(contexto_historico):
     mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
         "resposta_cliente_tratamento | motivo=%s "
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
-        "cliente=%s phone_number_id=%s etapa_cliente=%s",
-        motivo,
+        "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
+        TIPO_TRATAMENTO_RESPOSTA_TRIAGEM_INVALIDA,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),
         short_value(mensagem["id_phone_unidade"]),
+        contexto_historico.get("tipo_mensagem_atual"),
         contexto_historico["id_etapa_cliente"],
     )

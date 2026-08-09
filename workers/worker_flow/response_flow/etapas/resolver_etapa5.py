@@ -1,25 +1,14 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
-    enviar_etapa5_cliente_contexto_idade_invalida,
-    enviar_etapa5_cliente_financeiro,
-    enviar_etapa5_cliente_menor_18,
-    enviar_etapa5_cliente_midia,
-    enviar_etapa5_dependente_contexto_idade_invalida,
-    enviar_etapa5_dependente_financeiro,
-    enviar_etapa5_dependente_menor_5,
-    enviar_etapa5_dependente_midia,
-    enviar_etapa5_idade_acima_99,
+    enviar_etapa5_contexto_nome_invalido,
+    enviar_etapa5_financeiro,
+    enviar_etapa5_midia,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
-    enviar_etapa6_cliente,
     enviar_etapa6_dependente,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
-    obter_idade_minima_dependente,
-    validar_idade,
-)
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
     validar_pergunta_financeira,
@@ -27,9 +16,13 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
 )
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
+    TIPO_TRATAMENTO_NOME_INVALIDO,
+    validar_nome_cliente,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_6_OFERTA_AULA,
-    EVENTO_IDADE_VALIDA,
+    ETAPA_6_IDADE_ALUNO,
+    EVENTO_NOME_DEPENDENTE_VALIDO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -37,248 +30,143 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 )
 
 
-logger = logging.getLogger("worker.etapa5")
+"""
+ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
-MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
-MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+- VALIDAR A ETAPA 5
+- ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA
+"""
+
+
+logger = logging.getLogger("worker.etapa5")
 
 
 def resolve_etapa5(contexto_historico):
     """
-    Valida a idade do aluno e decide tratamento, encerramento ou 4 -> 5.
+    Mídia, financeiro e nome inválido recebem tratamento sem avançar.
+
+    Nome válido resolve 5 -> 6, envia a etapa 6 e carrega o primeiro nome do
+    dependente para a persistência transacional.
     """
+    id_conversa = contexto_historico["id_conversa"]
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente = bool(
-        contexto_historico.get("status_dependente")
-    )
-    bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
-    nome_dependente = contexto_historico.get("nome_dependente")
-    nome_cliente = contexto_historico.get("nome_cliente")
-    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
-    cliente_telefone = mensagem_cliente["cliente_telefone"]
-    phone_id_unidade = mensagem_cliente["id_phone_unidade"]
+    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
+    cliente_telefone = mensagem_cliente_atual["cliente_telefone"]
+    phone_id_unidade = mensagem_cliente_atual["id_phone_unidade"]
 
     # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
-        _logar_tratamento(
-            contexto_historico,
-            "tipo_mensagem_nao_suportado",
-        )
-        return _enviar_tratamento_midia(
-            status_dependente,
+        _logar_tipo_nao_suportado(contexto_historico)
+
+        return enviar_etapa5_midia(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
         )
 
-    # Pergunta financeira tem prioridade sobre a validação da idade.
+    # Pergunta financeira tem prioridade sobre a validação de nome.
     if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento(
+        _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
         )
-        return _enviar_tratamento_financeiro(
-            status_dependente,
+
+        return enviar_etapa5_financeiro(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
         )
 
-    resultado_idade = validar_idade(texto_cliente)
+    ### VALIDACAO DE NOME
 
-    if not resultado_idade.valida and not resultado_idade.acima_limite:
-        _logar_tratamento(
+    resultado_nome = validar_nome_cliente(texto_cliente)
+
+    if not resultado_nome.valido:
+        _logar_tratamento_texto(
             contexto_historico,
-            "idade_invalida",
-            motivo_detalhado=resultado_idade.motivo,
-        )
-        return _enviar_tratamento_idade_invalida(
-            status_dependente,
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
+            TIPO_TRATAMENTO_NOME_INVALIDO,
+            motivo_detalhado=resultado_nome.motivo,
         )
 
-    if resultado_idade.acima_limite:
-        contexto_envio = enviar_etapa5_idade_acima_99(
-            cliente_telefone,
-            phone_id_unidade,
-            contexto_historico.get("numero_comercial_unidade"),
-        )
-        return _anexar_encerramento(
-            contexto_envio,
-            resultado_idade.idade,
-            MOTIVO_IDADE_ACIMA_99,
-        )
-
-    idade = resultado_idade.idade
-
-    if not status_dependente and idade < 18:
-        contexto_envio = enviar_etapa5_cliente_menor_18(
+        return enviar_etapa5_contexto_nome_invalido(
             cliente_telefone,
             phone_id_unidade,
         )
-        return _anexar_encerramento(
-            contexto_envio,
-            idade,
-            MOTIVO_CLIENTE_MENOR_18,
-        )
 
-    idade_minima_dependente = obter_idade_minima_dependente(
-        bpa_ativo
-    )
-
-    if status_dependente and idade < idade_minima_dependente:
-        contexto_envio = enviar_etapa5_dependente_menor_5(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-            idade_minima_dependente,
-        )
-        return _anexar_encerramento(
-            contexto_envio,
-            idade,
-            MOTIVO_DEPENDENTE_MENOR_5,
-            excluir_dependente=True,
-        )
 
     # VALIDANDO DESTINO(S)
-    # A resposta passou pelos tratamentos; agora o mapa autoriza 4 -> 5.
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_IDADE_VALIDA,
-        destinos_esperados={ETAPA_6_OFERTA_AULA},
+        EVENTO_NOME_DEPENDENTE_VALIDO,
+        destinos_esperados={ETAPA_6_IDADE_ALUNO},
     )
 
     logger.info(
-        "etapa5_idade_validada | acao=enviar_etapa6 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s "
-        "etapa_destino=%s idade=%s status_dependente=%s",
-        contexto_historico["id_conversa"],
-        mensagem_cliente["id_mensagem_fila"],
-        EVENTO_IDADE_VALIDA,
+        "etapa5_nome_dependente_validado | acao=enviar_etapa6 id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s primeiro_nome=%s",
+        id_conversa,
+        mensagem_cliente_atual["id_mensagem_fila"],
+        EVENTO_NOME_DEPENDENTE_VALIDO,
         etapa_destino,
-        idade,
-        status_dependente,
+        short_value(resultado_nome.primeiro_nome),
     )
 
-    if status_dependente:
-        contexto_envio = enviar_etapa6_dependente(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-    else:
-        contexto_envio = enviar_etapa6_cliente(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_cliente,
-        )
-
-    contexto_envio["idade_aluno"] = idade
+    contexto_envio = enviar_etapa6_dependente(
+        cliente_telefone,
+        phone_id_unidade,
+        resultado_nome.primeiro_nome,
+    )
+    contexto_envio["primeiro_nome_dependente"] = resultado_nome.primeiro_nome
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_IDADE_VALIDA,
+        EVENTO_NOME_DEPENDENTE_VALIDO,
         etapa_destino,
     )
 
 
-def _enviar_tratamento_midia(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_midia(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
 
-    return enviar_etapa5_cliente_midia(
-        cliente_telefone,
-        phone_id_unidade,
+
+
+
+
+
+
+
+
+
+
+
+def _logar_tipo_nao_suportado(contexto_historico):
+    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
+
+    logger.info(
+        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
+        contexto_historico["id_conversa"],
+        mensagem_cliente_atual["id_mensagem_fila"],
+        short_value(mensagem_cliente_atual["cliente_telefone"]),
+        short_value(mensagem_cliente_atual["id_phone_unidade"]),
+        contexto_historico.get("tipo_mensagem_atual"),
+        contexto_historico["id_etapa_cliente"],
     )
 
 
-def _enviar_tratamento_financeiro(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_financeiro(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-
-    return enviar_etapa5_cliente_financeiro(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-
-
-def _enviar_tratamento_idade_invalida(
-    status_dependente,
-    cliente_telefone,
-    phone_id_unidade,
-    nome_dependente,
-):
-    if status_dependente:
-        return enviar_etapa5_dependente_contexto_idade_invalida(
-            cliente_telefone,
-            phone_id_unidade,
-            nome_dependente,
-        )
-
-    return enviar_etapa5_cliente_contexto_idade_invalida(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-
-
-def _anexar_encerramento(
-    contexto_envio,
-    idade,
-    motivo,
-    *,
-    excluir_dependente=False,
-):
-    contexto_envio.update(
-        {
-            "idade_aluno": idade,
-            "encerrar_atendimento": True,
-            "motivo_encerramento": motivo,
-            "excluir_dependente": excluir_dependente,
-        }
-    )
-    return contexto_envio
-
-
-def _logar_tratamento(
+def _logar_tratamento_texto(
     contexto_historico,
     motivo,
     *,
     motivo_detalhado=None,
 ):
-    mensagem = contexto_historico["mensagem_cliente_atual"]
+    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
-        "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s "
-        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
-        "cliente=%s phone_number_id=%s etapa_cliente=%s",
+        "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
         motivo_detalhado,
         contexto_historico["id_conversa"],
-        mensagem["id_mensagem_fila"],
-        short_value(mensagem["cliente_telefone"]),
-        short_value(mensagem["id_phone_unidade"]),
+        mensagem_cliente_atual["id_mensagem_fila"],
+        short_value(mensagem_cliente_atual["cliente_telefone"]),
+        short_value(mensagem_cliente_atual["id_phone_unidade"]),
         contexto_historico["id_etapa_cliente"],
     )

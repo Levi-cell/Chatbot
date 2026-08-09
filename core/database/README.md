@@ -78,11 +78,17 @@ estrangeiras e constraints já nasçam prontas.
 O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
 cliente naquela conversa e `pesquisa_satisfacao`, registro 1:1 de nota e
-comentário opcional da conversa. As etapas 17 a 21 são marcadas como
+comentário opcional da conversa. As etapas 18 a 22 são marcadas como
 `elegivel_funil`; os dados da pesquisa não compõem o payload do Funil. A etapa
-19 registra a decisão de comentar, a etapa 20 coleta o comentário quando aceito
-e a recusa salta diretamente da etapa 19 para a 21. Encerramento e bloqueio de
-30 dias são exclusivos da política da etapa 21.
+20 registra a decisão de comentar, a etapa 21 coleta o comentário quando aceito
+e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
+30 dias são exclusivos da política da etapa 22.
+
+A migração incremental que insere a confirmação como etapa 3 e remapeia as
+referências existentes está em
+`deploy/migrations/20260809_adicionar_confirmacao_etapa3.sql`. Ela deve ser
+executada inteira no DBeaver, em janela de manutenção e com snapshot recente;
+`setup_database.py` não substitui essa migração.
 
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
 de schema existente exige um script de migração separado ou decisão consciente

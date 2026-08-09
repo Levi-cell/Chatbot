@@ -10,10 +10,10 @@ from core.repositories.atendimento.historico import (
     inserir_historico_mensagem_cliente,
 )
 from core.repositories.fluxo.contextos.etapa1 import buscar_contexto_etapa1
-from core.repositories.fluxo.contextos.etapa5 import buscar_contexto_etapa5
 from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
-from core.repositories.fluxo.contextos.etapa8 import buscar_contexto_etapa8
-from core.repositories.fluxo.contextos.etapa17 import buscar_contexto_etapa17
+from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
+from core.repositories.fluxo.contextos.etapa9 import buscar_contexto_etapa9
+from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
 from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
 from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
@@ -21,18 +21,18 @@ from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
     prever_etapa_resposta,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_5_IDADE_ALUNO,
-    ETAPA_6_OFERTA_AULA,
-    ETAPA_7_OFERTA_ADIADA,
-    ETAPA_8_RETORNO_OFERTA,
-    ETAPA_10_INTRODUCAO_TRIAGEM,
-    ETAPA_11_TRIAGEM_PERGUNTA_1,
-    ETAPA_12_TRIAGEM_PERGUNTA_2,
-    ETAPA_13_TRIAGEM_PERGUNTA_3,
-    ETAPA_14_TRIAGEM_PERGUNTA_4,
-    ETAPA_15_TRIAGEM_PERGUNTA_5,
-    ETAPA_16_TRIAGEM_PERGUNTA_6,
-    ETAPA_17_AGENDAMENTO,
+    ETAPA_6_IDADE_ALUNO,
+    ETAPA_7_OFERTA_AULA,
+    ETAPA_8_OFERTA_ADIADA,
+    ETAPA_9_RETORNO_OFERTA,
+    ETAPA_11_INTRODUCAO_TRIAGEM,
+    ETAPA_12_TRIAGEM_PERGUNTA_1,
+    ETAPA_13_TRIAGEM_PERGUNTA_2,
+    ETAPA_14_TRIAGEM_PERGUNTA_3,
+    ETAPA_15_TRIAGEM_PERGUNTA_4,
+    ETAPA_16_TRIAGEM_PERGUNTA_5,
+    ETAPA_17_TRIAGEM_PERGUNTA_6,
+    ETAPA_18_AGENDAMENTO,
 )
 
 
@@ -41,13 +41,13 @@ logger = logging.getLogger("worker.valida_historico")
 ETAPA_INICIAL = 1
 
 ETAPAS_TRIAGEM = {
-    ETAPA_10_INTRODUCAO_TRIAGEM,
-    ETAPA_11_TRIAGEM_PERGUNTA_1,
-    ETAPA_12_TRIAGEM_PERGUNTA_2,
-    ETAPA_13_TRIAGEM_PERGUNTA_3,
-    ETAPA_14_TRIAGEM_PERGUNTA_4,
-    ETAPA_15_TRIAGEM_PERGUNTA_5,
-    ETAPA_16_TRIAGEM_PERGUNTA_6,
+    ETAPA_11_INTRODUCAO_TRIAGEM,
+    ETAPA_12_TRIAGEM_PERGUNTA_1,
+    ETAPA_13_TRIAGEM_PERGUNTA_2,
+    ETAPA_14_TRIAGEM_PERGUNTA_3,
+    ETAPA_15_TRIAGEM_PERGUNTA_4,
+    ETAPA_16_TRIAGEM_PERGUNTA_5,
+    ETAPA_17_TRIAGEM_PERGUNTA_6,
 }
 
 
@@ -116,8 +116,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
             )
         )
 
-    if id_etapa_cliente == ETAPA_5_IDADE_ALUNO:
-        contexto_especifico_etapa = buscar_contexto_etapa5(
+    if id_etapa_cliente == ETAPA_6_IDADE_ALUNO:
+        contexto_especifico_etapa = buscar_contexto_etapa6(
             id_conversa,
             contexto_banco["id_unidade"],
             cursor,
@@ -128,7 +128,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
             and not contexto_especifico_etapa["nome_dependente"]
         ):
             raise ValueError(
-                "Etapa 5 de dependente sem nome persistido"
+                "Etapa 6 de dependente sem nome persistido"
             )
 
         if (
@@ -136,11 +136,11 @@ def valida_historico(mensagem, contexto_banco, cursor):
             and not contexto_especifico_etapa["nome_cliente"]
         ):
             raise ValueError(
-                "Etapa 5 do cliente sem nome persistido"
+                "Etapa 6 do cliente sem nome persistido"
             )
 
-    if id_etapa_cliente == ETAPA_6_OFERTA_AULA:
-        contexto_especifico_etapa = buscar_contexto_etapa6(
+    if id_etapa_cliente == ETAPA_7_OFERTA_AULA:
+        contexto_especifico_etapa = buscar_contexto_etapa7(
             id_conversa,
             contexto_banco["id_unidade"],
             cursor,
@@ -153,15 +153,15 @@ def valida_historico(mensagem, contexto_banco, cursor):
         )
         if not contexto_especifico_etapa[chave_nome]:
             raise ValueError(
-                "Etapa 6 sem nome do aluno persistido "
+                "Etapa 7 sem nome do aluno persistido "
                 f"(campo={chave_nome})"
             )
 
     if id_etapa_cliente in {
-        ETAPA_7_OFERTA_ADIADA,
-        ETAPA_8_RETORNO_OFERTA,
+        ETAPA_8_OFERTA_ADIADA,
+        ETAPA_9_RETORNO_OFERTA,
     }:
-        contexto_especifico_etapa = buscar_contexto_etapa8(
+        contexto_especifico_etapa = buscar_contexto_etapa9(
             id_conversa,
             contexto_banco["id_unidade"],
             cursor,
@@ -169,7 +169,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
 
         if not contexto_especifico_etapa["nome_cliente"]:
             raise ValueError(
-                "Retorno da etapa 8 sem nome do cliente persistido "
+                "Retorno da etapa 9 sem nome do cliente persistido "
                 f"(etapa={id_etapa_cliente})"
             )
 
@@ -182,7 +182,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente})"
             )
 
-    # As etapas 10-16 compartilham o nome do dependente. O dado sempre volta
+    # As etapas 11-17 compartilham o nome do dependente. O dado sempre volta
     # do banco em cada ciclo para que retries reconstruam o contexto completo.
     if id_etapa_cliente in ETAPAS_TRIAGEM:
         contexto_especifico_etapa.update(
@@ -202,14 +202,14 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
             )
 
-    # A resposta da pergunta 6 envia a etapa 17, e os tratamentos da própria
-    # etapa 17 repetem a mensagem. Os dois ciclos precisam do link da unidade.
+    # A resposta da pergunta 6 envia a etapa 18, e os tratamentos da própria
+    # etapa 18 repetem a mensagem. Os dois ciclos precisam do link da unidade.
     if id_etapa_cliente in {
-        ETAPA_16_TRIAGEM_PERGUNTA_6,
-        ETAPA_17_AGENDAMENTO,
+        ETAPA_17_TRIAGEM_PERGUNTA_6,
+        ETAPA_18_AGENDAMENTO,
     }:
         contexto_especifico_etapa.update(
-            buscar_contexto_etapa17(
+            buscar_contexto_etapa18(
                 id_conversa,
                 contexto_banco["id_unidade"],
                 cursor,

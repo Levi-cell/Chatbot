@@ -1,16 +1,22 @@
 import logging
 
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa8 import (
+    enviar_etapa8,
+)
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa9 import (
-    enviar_etapa9_contexto_email_invalido,
-    enviar_etapa9_financeiro,
-    enviar_etapa9_midia,
+    enviar_etapa9_cliente_contexto_invalido,
+    enviar_etapa9_cliente_financeiro,
+    enviar_etapa9_cliente_midia,
+    enviar_etapa9_dependente_contexto_invalido,
+    enviar_etapa9_dependente_financeiro,
+    enviar_etapa9_dependente_midia,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa10 import (
     enviar_etapa10,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
-    TIPO_TRATAMENTO_EMAIL_INVALIDO,
+    TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
     validar_etapa9,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
@@ -21,7 +27,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_10_INTRODUCAO_TRIAGEM,
+    ETAPA_8_OFERTA_ADIADA,
+    ETAPA_10_EMAIL,
+    EVENTO_RETORNO_ADIADO,
+    EVENTO_RETORNO_CONFIRMADO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -32,8 +41,8 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 """
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-- APLICAR OS TRATAMENTOS UNIVERSAIS DA ETAPA 9
-- ENCAMINHAR PARA A ETAPA 10 AUTORIZADA PELO MAPA
+- VALIDAR A ETAPA 9
+- ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA
 """
 
 
@@ -42,12 +51,22 @@ logger = logging.getLogger("worker.etapa9")
 
 def resolve_etapa9(contexto_historico):
     """
-    Mídia, financeiro e email inválido recebem tratamento sem avançar.
+    Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
 
-    Um email estruturalmente válido produz email_valido para resolver 8 -> 9.
+    retorno_confirmado resolve 9 -> 10.
+    retorno_adiado resolve 9 -> 8.
+
+    As etapas 8 e 10 possuem senders reais.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
+    status_dependente = bool(
+        contexto_historico.get("status_dependente")
+    )
+    nome_dependente = contexto_historico.get("nome_dependente")
+    link_instagram = contexto_historico.get(
+        "link_instagram_unidade"
+    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -56,7 +75,14 @@ def resolve_etapa9(contexto_historico):
     if validar_midia(tipo_mensagem):
         _logar_tipo_nao_suportado(contexto_historico)
 
-        return enviar_etapa9_midia(
+        if status_dependente:
+            return enviar_etapa9_dependente_midia(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa9_cliente_midia(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -68,51 +94,80 @@ def resolve_etapa9(contexto_historico):
             TIPO_TRATAMENTO_FINANCEIRO,
         )
 
-        return enviar_etapa9_financeiro(
+        if status_dependente:
+            return enviar_etapa9_dependente_financeiro(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa9_cliente_financeiro(
             cliente_telefone,
             phone_id_unidade,
         )
 
-# CAMPOS QUE VALIDAM O CONTEXTO DE EMAIL NA ETAPA 9
-    # O validador extrai um único email de respostas curtas ou frases.
-    resultado_email = validar_etapa9(texto_cliente)
+    # VALIDANDO OPCOES
+    # O validador contextual já devolve o evento pertencente à etapa 9.
+    evento_transicao = validar_etapa9(texto_cliente)
 
-    if not resultado_email.valido:
+    if evento_transicao is None:
         _logar_tratamento_texto(
             contexto_historico,
-            TIPO_TRATAMENTO_EMAIL_INVALIDO,
-            motivo_detalhado=resultado_email.motivo,
+            TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
         )
 
-        return enviar_etapa9_contexto_email_invalido(
+        if status_dependente:
+            return enviar_etapa9_dependente_contexto_invalido(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa9_cliente_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
         )
-
-    evento_transicao = resultado_email.evento
 
     # VALIDANDO DESTINO(S)
     # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+    destinos_esperados = _destinos_esperados_por_evento(
+        evento_transicao
+    )
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         evento_transicao,
-        destinos_esperados={ETAPA_10_INTRODUCAO_TRIAGEM},
+        destinos_esperados=destinos_esperados,
     )
 
     logger.info(
-        "etapa9_email_recebido | acao=enviar_etapa10 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s",
+        "etapa9_retorno_validado | acao=%s "
+        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "status_dependente=%s",
+        (
+            "enviar_etapa8"
+            if evento_transicao == EVENTO_RETORNO_ADIADO
+            else "enviar_etapa10"
+        ),
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
         evento_transicao,
         etapa_destino,
+        status_dependente,
     )
 
-    contexto_envio = enviar_etapa10(
-        cliente_telefone,
-        phone_id_unidade,
-    )
-    contexto_envio["email_cliente"] = resultado_email.email
+    if evento_transicao == EVENTO_RETORNO_ADIADO:
+        contexto_envio = enviar_etapa8(
+            cliente_telefone,
+            phone_id_unidade,
+            link_instagram,
+        )
+    else:
+        contexto_envio = enviar_etapa10(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    contexto_envio["decisao_retorno"] = evento_transicao
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
@@ -120,6 +175,16 @@ def resolve_etapa9(contexto_historico):
         evento_transicao,
         etapa_destino,
     )
+
+
+def _destinos_esperados_por_evento(evento_transicao):
+    if evento_transicao == EVENTO_RETORNO_CONFIRMADO:
+        return {ETAPA_10_EMAIL}
+
+    if evento_transicao == EVENTO_RETORNO_ADIADO:
+        return {ETAPA_8_OFERTA_ADIADA}
+
+    return set()
 
 
 def _logar_tipo_nao_suportado(contexto_historico):
@@ -138,12 +203,7 @@ def _logar_tipo_nao_suportado(contexto_historico):
     )
 
 
-def _logar_tratamento_texto(
-    contexto_historico,
-    motivo,
-    *,
-    motivo_detalhado=None,
-):
+def _logar_tratamento_texto(contexto_historico, motivo):
     mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
@@ -151,7 +211,7 @@ def _logar_tratamento_texto(
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
         "cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
-        motivo_detalhado,
+        None,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),

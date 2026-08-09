@@ -1,45 +1,121 @@
-# ENTRADA NA ETAPA 9
+# ENTRADA NA ETAPA 9 - RETORNO DO PROPRIO CLIENTE
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA9 = "Qual o seu melhor email?"
+MENSAGEM_RETORNO_CLIENTE_ETAPA9 = (
+    "Que bom ver você aqui novamente, {nome_cliente}! "
+    "Vamos dar continuidade ao seu agendamento? ☺️"
+)
 
 
-def montar_mensagem_email_etapa9():
-    return MENSAGEM_PERGUNTA_EMAIL_ETAPA9
+def montar_mensagem_retorno_cliente_etapa9(nome_cliente):
+    return MENSAGEM_RETORNO_CLIENTE_ETAPA9.format(
+        nome_cliente=nome_cliente,
+    )
 
 
-# CLIENTE RESPONDE AO EMAIL COM MIDIA
+# ENTRADA NA ETAPA 9 - RETORNO PARA AGENDAMENTO DO DEPENDENTE
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA9_MIDIA = (
+MENSAGEM_RETORNO_DEPENDENTE_ETAPA9 = (
+    "Que bom ver você aqui novamente, {nome_cliente}! "
+    "Vamos dar continuidade ao agendamento de {nome_dependente}? ☺️"
+)
+
+
+def montar_mensagem_retorno_dependente_etapa9(
+    nome_cliente,
+    nome_dependente,
+):
+    return MENSAGEM_RETORNO_DEPENDENTE_ETAPA9.format(
+        nome_cliente=nome_cliente,
+        nome_dependente=nome_dependente,
+    )
+
+
+# CLIENTE RESPONDE AO RETORNO PROPRIO COM MIDIA
+
+MENSAGEM_RETORNO_CLIENTE_MIDIA_ETAPA9 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Me diz, qual o seu melhor email?"
+    "Vamos dar continuidade ao seu agendamento?"
 )
 
 
-def montar_mensagem_email_etapa9_midia():
-    return MENSAGEM_PERGUNTA_EMAIL_ETAPA9_MIDIA
+def montar_mensagem_retorno_cliente_midia_etapa9():
+    return MENSAGEM_RETORNO_CLIENTE_MIDIA_ETAPA9
 
 
-# CLIENTE RESPONDE AO EMAIL COM PERGUNTA FINANCEIRA
+# CLIENTE RESPONDE AO RETORNO DO DEPENDENTE COM MIDIA
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA9_FINANCEIRO = (
-    "Olha, demais informações, como valores, são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n\n"
-    "Me diz, qual o seu melhor email?"
+MENSAGEM_RETORNO_DEPENDENTE_MIDIA_ETAPA9 = (
+    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
+    "Vamos dar continuidade ao agendamento de {nome}?"
 )
 
 
-def montar_mensagem_email_etapa9_financeiro():
-    return MENSAGEM_PERGUNTA_EMAIL_ETAPA9_FINANCEIRO
+def montar_mensagem_retorno_dependente_midia_etapa9(nome):
+    return MENSAGEM_RETORNO_DEPENDENTE_MIDIA_ETAPA9.format(nome=nome)
 
 
-# CLIENTE RESPONDE COM EMAIL FORA DO CONTEXTO
+# CLIENTE RESPONDE AO RETORNO PROPRIO COM PERGUNTA FINANCEIRA
 
-MENSAGEM_CONTEXTO_EMAIL_INVALIDO_ETAPA9 = (
-    "Não consegui identificar um email válido.\n\n"
-    "Me diz, qual o seu melhor email?\n"
-    "Digite o email completo, por exemplo: nome@gmail.com"
+MENSAGEM_RETORNO_CLIENTE_FINANCEIRO_ETAPA9 = (
+    "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
+    "presencial após a aula *gratuita*.\n\n"
+    "Vamos dar continuidade ao seu agendamento?"
 )
 
 
-def montar_mensagem_contexto_email_invalido_etapa9():
-    return MENSAGEM_CONTEXTO_EMAIL_INVALIDO_ETAPA9
+def montar_mensagem_retorno_cliente_financeiro_etapa9():
+    return MENSAGEM_RETORNO_CLIENTE_FINANCEIRO_ETAPA9
+
+
+# CLIENTE RESPONDE AO RETORNO DO DEPENDENTE COM PERGUNTA FINANCEIRA
+
+MENSAGEM_RETORNO_DEPENDENTE_FINANCEIRO_ETAPA9 = (
+    "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
+    "presencial após a aula *gratuita*.\n\n"
+    "Vamos dar continuidade ao agendamento de {nome}?"
+)
+
+
+def montar_mensagem_retorno_dependente_financeiro_etapa9(nome):
+    return MENSAGEM_RETORNO_DEPENDENTE_FINANCEIRO_ETAPA9.format(nome=nome)
+
+
+# CLIENTE RESPONDE AO RETORNO PROPRIO FORA DO CONTEXTO
+
+MENSAGEM_RETORNO_CLIENTE_CONTEXTO_INVALIDO_ETAPA9 = (
+    "Não consegui entender a sua mensagem.\n\n"
+    "Vamos dar continuidade ao seu agendamento?"
+)
+
+
+def montar_mensagem_retorno_cliente_contexto_invalido_etapa9():
+    return MENSAGEM_RETORNO_CLIENTE_CONTEXTO_INVALIDO_ETAPA9
+
+
+# CLIENTE RESPONDE AO RETORNO DO DEPENDENTE FORA DO CONTEXTO
+
+MENSAGEM_RETORNO_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA9 = (
+    "Não consegui entender a sua mensagem.\n\n"
+    "Vamos dar continuidade ao agendamento de {nome}?"
+)
+
+
+def montar_mensagem_retorno_dependente_contexto_invalido_etapa9(nome):
+    return MENSAGEM_RETORNO_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA9.format(
+        nome=nome,
+    )
+
+
+# BOTOES DA ETAPA 9
+
+BOTAO_ETAPA9_QUERO_AGENDAR = "Quero agendar"
+BOTAO_ETAPA9_TALVEZ_MAIS_TARDE = "Talvez mais tarde"
+
+BOTOES_ETAPA9 = (
+    BOTAO_ETAPA9_QUERO_AGENDAR,
+    BOTAO_ETAPA9_TALVEZ_MAIS_TARDE,
+)
+
+
+def montar_botoes_etapa9():
+    return BOTOES_ETAPA9

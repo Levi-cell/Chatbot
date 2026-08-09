@@ -1,7 +1,7 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
-    enviar_etapa3_contexto_profissao_invalida,
+    enviar_etapa3_contexto_invalido,
     enviar_etapa3_financeiro,
     enviar_etapa3_midia,
 )
@@ -9,23 +9,27 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
     enviar_etapa4,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
-    enviar_etapa5_cliente,
+    enviar_etapa5,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
-    validar_profissao_etapa3,
+    TIPOS_MENSAGEM_ACEITOS_ETAPA3,
+    TIPO_TRATAMENTO_CONFIRMACAO_INVALIDA,
+    validar_etapa3,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa3 import (
-    validar_pergunta_financeira_etapa3,
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
+    TIPO_TRATAMENTO_FINANCEIRO,
+    validar_pergunta_financeira,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
+    TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_4_NOME_DEPENDENTE,
-    ETAPA_5_IDADE_ALUNO,
-    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-    EVENTO_PROFISSAO_TITULAR_VALIDA,
+    ETAPA_4_PROFISSAO,
+    ETAPA_5_NOME_DEPENDENTE,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -35,30 +39,37 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 
 logger = logging.getLogger("worker.etapa3")
 
-TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
-TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
-TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
-
 
 def resolve_etapa3(contexto_historico):
+    """Confirma ou corrige o destino salvo pela etapa 2.
+
+    Tratamentos permanecem na etapa 3. Uma resposta válida sempre produz um
+    estado final absoluto, evitando que retries reapliquem uma inversão.
+    """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente = bool(contexto_historico.get("status_dependente"))
+    status_dependente_atual = bool(
+        contexto_historico.get("status_dependente")
+    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    if validar_midia(tipo_mensagem):
+    if (
+        validar_midia(tipo_mensagem)
+        and tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA3
+    ):
         _logar_tratamento(
             contexto_historico,
-            TIPO_TRATAMENTO_MIDIA,
+            TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
         )
         return enviar_etapa3_midia(
             cliente_telefone,
             phone_id_unidade,
+            status_dependente_atual,
         )
 
-    if validar_pergunta_financeira_etapa3(texto_cliente):
+    if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
@@ -66,30 +77,34 @@ def resolve_etapa3(contexto_historico):
         return enviar_etapa3_financeiro(
             cliente_telefone,
             phone_id_unidade,
+            status_dependente_atual,
         )
 
-    resultado_profissao = validar_profissao_etapa3(
+    resultado = validar_etapa3(
         texto_cliente,
-        tipo_mensagem,
+        status_dependente_atual,
     )
 
-    if not resultado_profissao.valida:
+    if not resultado.valida:
         _logar_tratamento(
             contexto_historico,
-            TIPO_TRATAMENTO_PROFISSAO_INVALIDA,
-            motivo_detalhado=resultado_profissao.motivo,
+            TIPO_TRATAMENTO_CONFIRMACAO_INVALIDA,
+            motivo_detalhado=resultado.motivo,
         )
-        return enviar_etapa3_contexto_profissao_invalida(
+        return enviar_etapa3_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
+            status_dependente_atual,
         )
 
-    if status_dependente:
-        evento = EVENTO_PROFISSAO_DEPENDENTE_VALIDA
-        destino_esperado = ETAPA_4_NOME_DEPENDENTE
+    status_dependente_final = resultado.status_dependente_final
+
+    if status_dependente_final:
+        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+        destino_esperado = ETAPA_5_NOME_DEPENDENTE
     else:
-        evento = EVENTO_PROFISSAO_TITULAR_VALIDA
-        destino_esperado = ETAPA_5_IDADE_ALUNO
+        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR
+        destino_esperado = ETAPA_4_PROFISSAO
 
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
@@ -97,29 +112,41 @@ def resolve_etapa3(contexto_historico):
         destinos_esperados={destino_esperado},
     )
 
-    if status_dependente:
-        contexto_envio = enviar_etapa4(
+    if status_dependente_final:
+        contexto_envio = enviar_etapa5(
             cliente_telefone,
             phone_id_unidade,
         )
     else:
-        contexto_envio = enviar_etapa5_cliente(
+        contexto_envio = enviar_etapa4(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    contexto_envio["profissao"] = resultado_profissao.profissao
+    # O efeito transacional usa SET para este valor absoluto. Não carregamos
+    # uma ordem de "inverter", que seria insegura durante reaplicações.
+    contexto_envio.update(
+        {
+            "status_dependente_anterior": status_dependente_atual,
+            "status_dependente_final": status_dependente_final,
+            "status_dependente_alterado": (
+                status_dependente_final != status_dependente_atual
+            ),
+        }
+    )
 
     logger.info(
-        "etapa3_profissao_validada | acao=avancar_fluxo id_conversa=%s "
-        "id_mensagem_fila=%s evento=%s etapa_destino=%s "
-        "status_dependente=%s profissao=%s",
+        "etapa3_destino_confirmado | acao=avancar_fluxo "
+        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "status_dependente_anterior=%s status_dependente_final=%s "
+        "status_dependente_alterado=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
         evento,
         etapa_destino,
-        status_dependente,
-        short_value(resultado_profissao.profissao),
+        status_dependente_atual,
+        status_dependente_final,
+        status_dependente_final != status_dependente_atual,
     )
 
     return anexar_transicao_ao_contexto_envio(
@@ -141,12 +168,13 @@ def _logar_tratamento(
     logger.info(
         "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s "
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
-        "cliente=%s phone_number_id=%s etapa_cliente=%s",
+        "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
         motivo,
         motivo_detalhado,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),
         short_value(mensagem["id_phone_unidade"]),
+        contexto_historico.get("tipo_mensagem_atual"),
         contexto_historico["id_etapa_cliente"],
     )

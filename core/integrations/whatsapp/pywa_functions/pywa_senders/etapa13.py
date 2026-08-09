@@ -12,9 +12,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.triagem_base import 
 
 
 ID_ETAPA13 = 13
-
-
-# CENARIO NORMAL: PERGUNTA 3 SOBRE O PROPRIO CLIENTE
+# CENARIO NORMAL: PERGUNTA 2 SOBRE O PROPRIO CLIENTE
 def enviar_etapa13_cliente(cliente_telefone, phone_id_unidade):
     return _enviar_etapa13(
         cliente_telefone,
@@ -24,7 +22,7 @@ def enviar_etapa13_cliente(cliente_telefone, phone_id_unidade):
     )
 
 
-# CENARIO NORMAL: PERGUNTA 3 SOBRE O DEPENDENTE
+# CENARIO NORMAL: PERGUNTA 2 SOBRE O DEPENDENTE
 def enviar_etapa13_dependente(
     cliente_telefone,
     phone_id_unidade,
@@ -38,7 +36,7 @@ def enviar_etapa13_dependente(
     )
 
 
-# RESPOSTA INVALIDA: REPETE A PERGUNTA 3 SOBRE O PROPRIO CLIENTE
+# RESPOSTA INVALIDA: REPETE A PERGUNTA 2 SOBRE O PROPRIO CLIENTE
 def enviar_etapa13_cliente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
@@ -52,7 +50,7 @@ def enviar_etapa13_cliente_contexto_invalido(
     )
 
 
-# RESPOSTA INVALIDA: REPETE A PERGUNTA 3 SOBRE O DEPENDENTE
+# RESPOSTA INVALIDA: REPETE A PERGUNTA 2 SOBRE O DEPENDENTE
 def enviar_etapa13_dependente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,

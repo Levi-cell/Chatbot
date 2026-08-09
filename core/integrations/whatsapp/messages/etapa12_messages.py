@@ -1,19 +1,19 @@
-# ETAPA 12 - TESTE COGNITIVO, PERGUNTA 2
+# ETAPA 12 - TESTE COGNITIVO, PERGUNTA 1
 
-CABECALHO_ETAPA12 = "Pergunta 2"
+CABECALHO_ETAPA12 = "Pergunta 1"
 
 MENSAGEM_CLIENTE_ETAPA12 = (
-    "Com que frequência você esquece o que foi fazer ou procurar "
-    "em outro lugar?"
+    "Com que frequência você esquece de acontecimentos recentes, "
+    "como o que fez no final de semana?"
 )
 
 MENSAGEM_DEPENDENTE_ETAPA12 = (
-    "Com que frequência {nome} esquece o que foi fazer ou procurar "
-    "em outro lugar?"
+    "Com que frequência {nome} esquece de acontecimentos recentes, "
+    "como o que fez no final de semana?"
 )
 
 MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA12 = (
-    "Não consegui entender sua resposta.\n\n"
+    "Não consegui entender sua resposta, mas me diz:\n\n"
     + MENSAGEM_CLIENTE_ETAPA12
 )
 

@@ -1,28 +1,31 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
-    enviar_etapa4_contexto_nome_invalido,
+    enviar_etapa4_contexto_profissao_invalida,
     enviar_etapa4_financeiro,
     enviar_etapa4_midia,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
-    enviar_etapa5_dependente,
+    enviar_etapa5,
+)
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
+    enviar_etapa6_cliente,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    TIPO_TRATAMENTO_FINANCEIRO,
-    validar_pergunta_financeira,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+    validar_profissao_etapa4,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
+    validar_pergunta_financeira_etapa4,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
 )
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
-    TIPO_TRATAMENTO_NOME_INVALIDO,
-    validar_nome_cliente,
-)
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_5_IDADE_ALUNO,
-    EVENTO_NOME_DEPENDENTE_VALIDO,
+    ETAPA_5_NOME_DEPENDENTE,
+    ETAPA_6_IDADE_ALUNO,
+    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+    EVENTO_PROFISSAO_TITULAR_VALIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -30,143 +33,120 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 )
 
 
-"""
-ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
-
-- VALIDAR A ETAPA 4
-- ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA
-"""
-
-
 logger = logging.getLogger("worker.etapa4")
+
+TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
+TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
 
 
 def resolve_etapa4(contexto_historico):
-    """
-    Mídia, financeiro e nome inválido recebem tratamento sem avançar.
-
-Nome válido resolve 4 -> 5, envia a etapa 5 e carrega o primeiro nome do
-    dependente para a persistência transacional.
-    """
-    id_conversa = contexto_historico["id_conversa"]
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
-    cliente_telefone = mensagem_cliente_atual["cliente_telefone"]
-    phone_id_unidade = mensagem_cliente_atual["id_phone_unidade"]
+    status_dependente = bool(contexto_historico.get("status_dependente"))
+    mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
+    cliente_telefone = mensagem_cliente["cliente_telefone"]
+    phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
-        _logar_tipo_nao_suportado(contexto_historico)
-
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_MIDIA,
+        )
         return enviar_etapa4_midia(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    # Pergunta financeira tem prioridade sobre a validação de nome.
-    if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento_texto(
+    if validar_pergunta_financeira_etapa4(texto_cliente):
+        _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
         )
-
         return enviar_etapa4_financeiro(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    ### VALIDACAO DE NOME
+    resultado_profissao = validar_profissao_etapa4(
+        texto_cliente,
+        tipo_mensagem,
+    )
 
-    resultado_nome = validar_nome_cliente(texto_cliente)
-
-    if not resultado_nome.valido:
-        _logar_tratamento_texto(
+    if not resultado_profissao.valida:
+        _logar_tratamento(
             contexto_historico,
-            TIPO_TRATAMENTO_NOME_INVALIDO,
-            motivo_detalhado=resultado_nome.motivo,
+            TIPO_TRATAMENTO_PROFISSAO_INVALIDA,
+            motivo_detalhado=resultado_profissao.motivo,
         )
-
-        return enviar_etapa4_contexto_nome_invalido(
+        return enviar_etapa4_contexto_profissao_invalida(
             cliente_telefone,
             phone_id_unidade,
         )
 
-
-    # VALIDANDO DESTINO(S)
-    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+    if status_dependente:
+        evento = EVENTO_PROFISSAO_DEPENDENTE_VALIDA
+        destino_esperado = ETAPA_5_NOME_DEPENDENTE
+    else:
+        evento = EVENTO_PROFISSAO_TITULAR_VALIDA
+        destino_esperado = ETAPA_6_IDADE_ALUNO
 
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_NOME_DEPENDENTE_VALIDO,
-        destinos_esperados={ETAPA_5_IDADE_ALUNO},
+        evento,
+        destinos_esperados={destino_esperado},
     )
+
+    if status_dependente:
+        contexto_envio = enviar_etapa5(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+    else:
+        contexto_envio = enviar_etapa6_cliente(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    contexto_envio["profissao"] = resultado_profissao.profissao
 
     logger.info(
-        "etapa4_nome_dependente_validado | acao=enviar_etapa5 id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s primeiro_nome=%s",
-        id_conversa,
-        mensagem_cliente_atual["id_mensagem_fila"],
-        EVENTO_NOME_DEPENDENTE_VALIDO,
+        "etapa4_profissao_validada | acao=avancar_fluxo id_conversa=%s "
+        "id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "status_dependente=%s profissao=%s",
+        contexto_historico["id_conversa"],
+        mensagem_cliente["id_mensagem_fila"],
+        evento,
         etapa_destino,
-        short_value(resultado_nome.primeiro_nome),
+        status_dependente,
+        short_value(resultado_profissao.profissao),
     )
-
-    contexto_envio = enviar_etapa5_dependente(
-        cliente_telefone,
-        phone_id_unidade,
-        resultado_nome.primeiro_nome,
-    )
-    contexto_envio["primeiro_nome_dependente"] = resultado_nome.primeiro_nome
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_NOME_DEPENDENTE_VALIDO,
+        evento,
         etapa_destino,
     )
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-def _logar_tipo_nao_suportado(contexto_historico):
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
-
-    logger.info(
-        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
-        contexto_historico["id_conversa"],
-        mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(mensagem_cliente_atual["cliente_telefone"]),
-        short_value(mensagem_cliente_atual["id_phone_unidade"]),
-        contexto_historico.get("tipo_mensagem_atual"),
-        contexto_historico["id_etapa_cliente"],
-    )
-
-
-def _logar_tratamento_texto(
+def _logar_tratamento(
     contexto_historico,
     motivo,
     *,
     motivo_detalhado=None,
 ):
-    mensagem_cliente_atual = contexto_historico["mensagem_cliente_atual"]
+    mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
-        "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s etapa_cliente=%s",
+        "resposta_cliente_tratamento | motivo=%s motivo_detalhado=%s "
+        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
+        "cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
         motivo_detalhado,
         contexto_historico["id_conversa"],
-        mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(mensagem_cliente_atual["cliente_telefone"]),
-        short_value(mensagem_cliente_atual["id_phone_unidade"]),
+        mensagem["id_mensagem_fila"],
+        short_value(mensagem["cliente_telefone"]),
+        short_value(mensagem["id_phone_unidade"]),
         contexto_historico["id_etapa_cliente"],
     )

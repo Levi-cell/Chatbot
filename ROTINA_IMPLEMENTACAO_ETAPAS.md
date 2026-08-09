@@ -40,8 +40,10 @@ Exemplo:
 
 ```text
 2 + destino_atendimento_definido -> 3
-3 + profissao_dependente_valida  -> 4
-3 + profissao_titular_valida     -> 5
+3 + destino_atendimento_confirmado_titular    -> 4
+3 + destino_atendimento_confirmado_dependente -> 5
+4 + profissao_dependente_valida  -> 5
+4 + profissao_titular_valida     -> 6
 ```
 
 Os tratamentos não produzem aresta:
@@ -80,10 +82,10 @@ exijam uma estratégia adicional.
 Exemplo:
 
 ```text
-Origem: etapa 3
+Origem: etapa 4
 Pergunta: qual sua profissão?
 Eventos válidos: profissao_dependente_valida ou profissao_titular_valida
-Destinos: etapa 4 ou etapa 5
+Destinos: etapa 5 ou etapa 6
 Efeito: salvar conversa.profissao
 ```
 
@@ -98,10 +100,17 @@ core/database/deploy_database/povoar_etapas.py
 O ID deve ser estável e o nome deve explicar o estado:
 
 ```python
-(3, "Profissão do cliente")
+(4, "Profissão do cliente")
 ```
 
 Não reutilizar um ID antigo para outro significado.
+
+`povoar_etapas.py` e `etapa_transicao_script.py` devem sempre representar o
+catálogo e o mapa finais de uma instalação limpa. Quando já existir banco com
+referências às etapas, atualize primeiro esses arquivos canônicos e entregue o
+remapeamento incremental separadamente em `deploy/migrations/*.sql`, para
+execução manual no DBeaver. Não acumule `ALTER TABLE`, `UPDATE` de migração ou
+outro histórico de implantação nos scripts Python de criação e seed.
 
 ### 3. Declarar o evento e a transição
 
@@ -122,9 +131,10 @@ As constantes de etapa devem incluir número e significado:
 ```python
 ETAPA_1_NOME_CLIENTE = 1
 ETAPA_2_DESTINO_ATENDIMENTO = 2
-ETAPA_3_PROFISSAO = 3
-ETAPA_4_NOME_DEPENDENTE = 4
-ETAPA_5_IDADE_ALUNO = 5
+ETAPA_3_CONFIRMACAO_DESTINO = 3
+ETAPA_4_PROFISSAO = 4
+ETAPA_5_NOME_DEPENDENTE = 5
+ETAPA_6_IDADE_ALUNO = 6
 ```
 
 Para novas etapas, seguir obrigatoriamente:
@@ -142,7 +152,7 @@ core/database/deploy_database/etapa_transicao_script.py
 Exemplo:
 
 ```python
-(3, "profissao_titular_valida", 5)
+(4, "profissao_titular_valida", 6)
 ```
 
 Uma origem e um evento possuem somente um destino. Uma origem e um destino
@@ -175,11 +185,11 @@ Responsabilidades proibidas:
 Exemplo:
 
 ```python
-MENSAGEM_ETAPA3 = "Qual o nome da pessoa?"
+MENSAGEM_ETAPA4 = "Qual é a sua profissão?"
 
 
-def montar_mensagem_etapa3():
-    return MENSAGEM_ETAPA3
+def montar_mensagem_etapa4():
+    return MENSAGEM_ETAPA4
 ```
 
 ### 5. Criar o sender
@@ -187,7 +197,7 @@ def montar_mensagem_etapa3():
 Criar ou atualizar:
 
 ```text
-core/integrations/whatsapp/pywa_functions/pywa_senders/etapa3.py
+core/integrations/whatsapp/pywa_functions/pywa_senders/etapa4.py
 ```
 
 O sender:
@@ -215,7 +225,7 @@ Contrato esperado:
     "resposta_ja_existia": False,
     "mensagem_bot": mensagem_bot,
     "id_hash_msg_bot": id_hash_msg_bot,
-    "id_etapa_resultante": 3,
+    "id_etapa_resultante": 4,
     "tipo_mensagem": "text",
     "canal": "meta_whatsapp",
     "atualizar_conversa": True,
@@ -227,8 +237,8 @@ O worker acrescenta depois:
 
 ```python
 {
-    "id_etapa_origem_transicao": 2,
-    "evento_transicao": "destino_atendimento_definido",
+    "id_etapa_origem_transicao": 3,
+    "evento_transicao": "destino_atendimento_confirmado_titular",
 }
 ```
 
@@ -244,7 +254,7 @@ Exemplos:
 
 ```text
 valida_etapa2.py
-valida_etapa3.py
+valida_etapa4.py
 valida_quarta_etapa.py
 ```
 
@@ -286,15 +296,15 @@ etapas distintas podem ter gramática semelhante e ainda assim permanecer
 separados:
 
 ```text
-etapa 5 + resposta positiva -> oferta_aceita
-etapa 7 + resposta positiva -> retorno_confirmado
+etapa 7 + resposta positiva -> oferta_aceita
+etapa 9 + resposta positiva -> retorno_confirmado
 ```
 
 O resolver não deve traduzir uma decisão genérica para o evento. O próprio
 validador contextual devolve o evento:
 
 ```python
-evento_transicao = validar_etapa5(texto_cliente)
+evento_transicao = validar_etapa7(texto_cliente)
 
 if evento_transicao is None:
     return sender_de_tratamento(...)
@@ -346,31 +356,31 @@ O marcador obrigatório deve aparecer depois de todos os tratamentos:
 Modelo:
 
 ```python
-def resolve_etapa3(contexto_historico):
+def resolve_etapa4(contexto_historico):
     tipo_mensagem = contexto_historico["tipo_mensagem_atual"]
     texto_cliente = contexto_historico["texto_cliente_atual"]
 
     if validar_midia(tipo_mensagem):
-        return enviar_etapa3_midia(...)
+        return enviar_etapa4_midia(...)
 
     if validar_pergunta_financeira(texto_cliente):
-        return enviar_etapa3_financeiro(...)
+        return enviar_etapa4_financeiro(...)
 
-    resultado = validar_profissao_etapa3(
+    resultado = validar_profissao_etapa4(
         texto_cliente,
         tipo_mensagem,
     )
 
     if not resultado.valida:
-        return enviar_etapa3_contexto_profissao_invalida(...)
+        return enviar_etapa4_contexto_profissao_invalida(...)
 
     destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_PROFISSAO_TITULAR_VALIDA,
-        destinos_esperados={ETAPA_5_IDADE_ALUNO},
+        destinos_esperados={ETAPA_6_IDADE_ALUNO},
     )
 
-    contexto_envio = enviar_etapa5_cliente(...)
+    contexto_envio = enviar_etapa6_cliente(...)
     contexto_envio["profissao"] = resultado.profissao
 
     return anexar_transicao_ao_contexto_envio(
@@ -394,8 +404,8 @@ workers/worker_flow/response_flow/flow_sender.py
 Exemplo:
 
 ```python
-if id_etapa_atual == 3:
-    return resolve_etapa3(contexto_historico)
+if id_etapa_atual == 4:
+    return resolve_etapa4(contexto_historico)
 ```
 
 O `flow_sender`:
@@ -430,15 +440,23 @@ específicos da aresta e deve deixar cada ponte visualmente explícita:
 # ETAPA 2
 if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
     if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
-        # 2 -> 3: persiste a escolha antes de perguntar a profissão.
+        # 2 -> 3: persiste a escolha antes de pedir confirmação.
 
 # ETAPA 3
-if etapa_origem == ETAPA_3_PROFISSAO:
-    if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
+if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
         # 3 -> 4
 
-    if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
         # 3 -> 5
+
+# ETAPA 4
+if etapa_origem == ETAPA_4_PROFISSAO:
+    if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
+        # 4 -> 5
+
+    if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
+        # 4 -> 6
 ```
 
 Exemplos:
@@ -563,10 +581,10 @@ O contexto histórico carrega somente a fotografia da origem:
 
 ```python
 {
-    "id_etapa_origem_transicao": 3,
+    "id_etapa_origem_transicao": 4,
     "transicoes_permitidas": {
-        "profissao_dependente_valida": 4,
-        "profissao_titular_valida": 5,
+        "profissao_dependente_valida": 5,
+        "profissao_titular_valida": 6,
     },
 }
 ```
@@ -575,9 +593,9 @@ O contexto de envio carrega a decisão exata:
 
 ```python
 {
-    "id_etapa_origem_transicao": 3,
+    "id_etapa_origem_transicao": 4,
     "evento_transicao": "profissao_titular_valida",
-    "id_etapa_resultante": 5,
+    "id_etapa_resultante": 6,
 }
 ```
 

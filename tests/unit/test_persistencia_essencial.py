@@ -1,11 +1,13 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from core.repositories.fluxo.politicas import PoliticaEtapa
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_PARA_MIM,
@@ -287,17 +289,130 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 else:
                     inserir_dependente.assert_not_called()
 
-    def test_etapa_tres_persiste_profissao_e_respeita_os_dois_ramos(self):
+    def test_etapa_tres_aplica_destino_final_sem_inversao_relativa(self):
+        dependente = {
+            "id_dependente": 30,
+            "id_cliente": 5,
+            "id_conversa": 10,
+            "inserido": False,
+        }
+        casos = (
+            (
+                False,
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
+                5,
+                True,
+                True,
+            ),
+            (
+                True,
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+                4,
+                False,
+                False,
+            ),
+        )
+
+        for (
+            status_anterior,
+            evento,
+            destino,
+            status_final,
+            deve_manter_dependente,
+        ) in casos:
+            with self.subTest(evento=evento), patch.object(
+                efeitos,
+                "atualizar_status_dependente_conversa",
+                return_value=1,
+            ) as atualizar_status, patch.object(
+                efeitos,
+                "inserir_dependente_para_conversa",
+                return_value=dependente,
+            ) as inserir_dependente, patch.object(
+                efeitos,
+                "remover_dependente_placeholder_da_conversa",
+                return_value=True,
+            ) as remover_dependente:
+                resultado = (
+                    efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                        contexto_historico_base(
+                            id_etapa_atual=3,
+                            status_dependente=status_anterior,
+                        ),
+                        {
+                            "id_etapa_resultante": destino,
+                            "evento_transicao": evento,
+                            "status_dependente_final": status_final,
+                        },
+                        object(),
+                    )
+                )
+
+            atualizar_status.assert_called_once_with(
+                10,
+                status_final,
+                ANY,
+            )
+            self.assertEqual(resultado["status_dependente"], status_final)
+            self.assertTrue(resultado["status_dependente_alterado"])
+
+            if deve_manter_dependente:
+                inserir_dependente.assert_called_once()
+                remover_dependente.assert_not_called()
+            else:
+                inserir_dependente.assert_not_called()
+                remover_dependente.assert_called_once()
+
+    def test_retry_da_etapa_tres_reaplica_valor_absoluto_idempotente(self):
+        dependente = {
+            "id_dependente": 30,
+            "id_cliente": 5,
+            "id_conversa": 10,
+            "inserido": False,
+        }
+
+        with patch.object(
+            efeitos,
+            "atualizar_status_dependente_conversa",
+            return_value=1,
+        ) as atualizar_status, patch.object(
+            efeitos,
+            "inserir_dependente_para_conversa",
+            return_value=dependente,
+        ) as inserir_dependente:
+            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=3,
+                    status_dependente=True,
+                ),
+                {
+                    "resposta_ja_existia": True,
+                    "id_etapa_resultante": 5,
+                    "evento_transicao": (
+                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+                    ),
+                    "status_dependente_final": True,
+                },
+                object(),
+            )
+
+        atualizar_status.assert_called_once()
+        inserir_dependente.assert_called_once()
+        self.assertTrue(resultado["status_dependente"])
+        self.assertFalse(resultado["status_dependente_alterado"])
+        self.assertFalse(resultado["dependente_criado"])
+
+    def test_etapa_quatro_persiste_profissao_e_respeita_os_dois_ramos(self):
         casos = (
             (
                 False,
                 EVENTO_PROFISSAO_TITULAR_VALIDA,
-                5,
+                6,
             ),
             (
                 True,
                 EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-                4,
+                5,
             ),
         )
 
@@ -311,7 +426,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 resultado = (
                     efeitos.atualizar_banco_conforme_transicao_de_etapa(
                         contexto_historico_base(
-                            id_etapa_atual=3,
+                            id_etapa_atual=4,
                             texto_cliente="Sou engenheiro",
                             status_dependente=status_dependente,
                         ),
@@ -342,12 +457,12 @@ class PersistenciaEssencialTests(unittest.TestCase):
         ) as atualizar_profissao:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
-                    id_etapa_atual=3,
+                    id_etapa_atual=4,
                     texto_cliente="Trabalho com finanças",
                     status_dependente=False,
                 ),
                 {
-                    "id_etapa_resultante": 5,
+                    "id_etapa_resultante": 6,
                     "evento_transicao": (
                         EVENTO_PROFISSAO_TITULAR_VALIDA
                     ),
@@ -375,9 +490,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             },
         ) as salvar:
             aceite = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico_base(id_etapa_atual=19),
+                contexto_historico_base(id_etapa_atual=20),
                 {
-                    "id_etapa_resultante": 20,
+                    "id_etapa_resultante": 21,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_ACEITO
                     ),
@@ -388,9 +503,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             salvar.assert_not_called()
 
             recusa = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico_base(id_etapa_atual=19),
+                contexto_historico_base(id_etapa_atual=20),
                 {
-                    "id_etapa_resultante": 21,
+                    "id_etapa_resultante": 22,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_RECUSADO
                     ),
@@ -407,7 +522,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
         salvar.assert_called_once_with(10, None, cursor)
         self.assertTrue(recusa["comentario_satisfacao_persistido"])
 
-    def test_comentario_da_etapa20_e_persistido_integralmente(self):
+    def test_comentario_da_etapa21_e_persistido_integralmente(self):
         cursor = object()
 
         with patch.object(
@@ -421,11 +536,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
         ) as salvar:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
-                    id_etapa_atual=20,
+                    id_etapa_atual=21,
                     texto_cliente="Atendimento muito atencioso!",
                 ),
                 {
-                    "id_etapa_resultante": 21,
+                    "id_etapa_resultante": 22,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_RECEBIDO
                     ),
@@ -443,10 +558,10 @@ class PersistenciaEssencialTests(unittest.TestCase):
         )
         self.assertTrue(resultado["comentario_satisfacao_persistido"])
 
-    def test_somente_etapa_21_encerra_e_aplica_bloqueio_de_30_dias(self):
-        contexto = contexto_historico_base(id_etapa_atual=19)
+    def test_somente_etapa_22_encerra_e_aplica_bloqueio_de_30_dias(self):
+        contexto = contexto_historico_base(id_etapa_atual=20)
 
-        for id_etapa in (18, 19, 20):
+        for id_etapa in (18, 19, 20, 21):
             with self.subTest(id_etapa=id_etapa), patch.object(
                 encerramento,
                 "buscar_politica_etapa",
@@ -472,7 +587,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
             encerramento,
             "buscar_politica_etapa",
             return_value=PoliticaEtapa(
-                id_etapa=21,
+                id_etapa=22,
                 encerra_automaticamente=True,
                 bloqueio_dias=30,
                 elegivel_funil=True,
@@ -482,7 +597,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 contexto,
                 {
                     "evento_transicao": "comentario_satisfacao_recebido",
-                    "id_etapa_resultante": 21,
+                    "id_etapa_resultante": 22,
                 },
                 object(),
             )

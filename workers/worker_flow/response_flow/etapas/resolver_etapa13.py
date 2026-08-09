@@ -14,8 +14,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_t
     validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_14_TRIAGEM_PERGUNTA_4,
-    EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
+    ETAPA_14_TRIAGEM_PERGUNTA_3,
+    EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -26,8 +26,8 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 """
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-- VALIDAR A RESPOSTA DA PERGUNTA 3
-- ENCAMINHAR PARA A PERGUNTA 4 AUTORIZADA PELO MAPA
+- VALIDAR A RESPOSTA DA PERGUNTA 2
+- ENCAMINHAR PARA A PERGUNTA 3 AUTORIZADA PELO MAPA
 """
 
 
@@ -43,7 +43,7 @@ def resolve_etapa13(contexto_historico):
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    # VALIDANDO A OPCAO DA PERGUNTA 3
+    # VALIDANDO A OPCAO DA PERGUNTA 2
     resposta_triagem = validar_resposta_triagem(
         texto_cliente,
         tipo_mensagem,
@@ -69,8 +69,8 @@ def resolve_etapa13(contexto_historico):
     # explícito; _destinos_esperados_por_evento é usado com múltiplos eventos.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
-        destinos_esperados={ETAPA_14_TRIAGEM_PERGUNTA_4},
+        EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
+        destinos_esperados={ETAPA_14_TRIAGEM_PERGUNTA_3},
     )
 
     logger.info(
@@ -79,7 +79,7 @@ def resolve_etapa13(contexto_historico):
         "etapa_destino=%s resposta=%s status_dependente=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
+        EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
         etapa_destino,
         resposta_triagem,
         status_dependente,
@@ -102,7 +102,7 @@ def resolve_etapa13(contexto_historico):
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
+        EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
         etapa_destino,
     )
 

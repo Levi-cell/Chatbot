@@ -1,35 +1,39 @@
 import unittest
 
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
-    TAMANHO_MAXIMO_PROFISSAO,
-    validar_profissao_etapa3,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
+    PARENTESCOS_ACEITOS,
+    validar_etapa2,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
+    TAMANHO_MAXIMO_PROFISSAO,
+    validar_profissao_etapa4,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa6 import (
     STATUS_IDADE_ACIMA_LIMITE,
     STATUS_IDADE_INVALIDA,
     obter_idade_minima_dependente,
     validar_idade,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa6 import (
-    validar_etapa6,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
-    validar_etapa8,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7 import (
+    validar_etapa7,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
     validar_etapa9,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
-    validar_etapa18,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa10 import (
+    validar_etapa10,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
-    validar_decisao_comentario_etapa19,
+    validar_etapa19,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    normalizar_comentario_etapa20,
+    validar_decisao_comentario_etapa20,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa3 import (
-    validar_pergunta_financeira_etapa3,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa21 import (
+    normalizar_comentario_etapa21,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
+    validar_pergunta_financeira_etapa4,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais import (
     validador_nome,
@@ -51,12 +55,83 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_OFERTA_ACEITA,
     EVENTO_OFERTA_ADIADA,
+    EVENTO_PARA_MIM,
+    EVENTO_PARA_OUTRA_PESSOA,
     EVENTO_RETORNO_ADIADO,
     EVENTO_RETORNO_CONFIRMADO,
 )
 
 
 class ValidadoresEssenciaisTests(unittest.TestCase):
+    def test_etapa2_classifica_frases_para_a_propria_pessoa(self):
+        frases = (
+            "Para mim",
+            "Só para mim!",
+            "Eu mesmo",
+            "Eu mesma",
+            "Sim, é para mim.",
+            "Não, é para mim",
+            "Quero para mim",
+            "Pra eu",
+        )
+
+        for frase in frases:
+            with self.subTest(frase=frase):
+                self.assertEqual(validar_etapa2(frase), EVENTO_PARA_MIM)
+
+    def test_etapa2_classifica_parentescos_e_frases_para_dependente(self):
+        frases = (
+            "Para um dependente",
+            "Para outra pessoa",
+            "Para um dependente meu",
+            "Para alguém que depende de mim",
+            "Para uma criança",
+            "Para um idoso",
+            "Para um deficiente",
+            "Minha irmã",
+            "Sim, para meu filho",
+            "Quero para a minha filha",
+            "Sim eu quero, é para o meu avô",
+            "Quero para a minha",
+            "Pra minha enteada",
+            "Para meu filha",
+            "Não, é para minha filha",
+            "Não é para mim, é para o meu pai",
+            "É pro meu filho",
+            "Sim, é pra minha mãe",
+            "É pra outra pessoa",
+            "Para meus pais",
+            "Sim eu quero, é para as minhas filhas",
+        )
+
+        for frase in frases:
+            with self.subTest(frase=frase):
+                self.assertEqual(
+                    validar_etapa2(frase),
+                    EVENTO_PARA_OUTRA_PESSOA,
+                )
+
+        for parentesco in PARENTESCOS_ACEITOS:
+            with self.subTest(parentesco=parentesco):
+                self.assertEqual(
+                    validar_etapa2(f"Para meu {parentesco}"),
+                    EVENTO_PARA_OUTRA_PESSOA,
+                )
+
+    def test_etapa2_rejeita_respostas_ambiguas_ou_fora_do_contexto(self):
+        for frase in (
+            "",
+            "Sim",
+            "Quero",
+            "Talvez",
+            "Qual o valor?",
+            "Meu nome é Carlos",
+            "Para meu cachorro",
+            None,
+        ):
+            with self.subTest(frase=frase):
+                self.assertIsNone(validar_etapa2(frase))
+
     def test_midia_e_financeiro_preservam_as_barreiras_universais(self):
         self.assertFalse(validar_midia("text"))
         self.assertFalse(validar_midia("interactive"))
@@ -147,7 +222,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
 
         for texto in profissoes:
             with self.subTest(texto=texto):
-                resultado = validar_profissao_etapa3(texto, "text")
+                resultado = validar_profissao_etapa4(texto, "text")
                 self.assertTrue(resultado.valida)
                 self.assertEqual(resultado.profissao, texto)
 
@@ -171,12 +246,12 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
 
         for texto in entradas:
             with self.subTest(texto=texto):
-                resultado = validar_profissao_etapa3(texto, "text")
+                resultado = validar_profissao_etapa4(texto, "text")
                 self.assertFalse(resultado.valida)
                 self.assertIsNone(resultado.profissao)
                 self.assertIsNotNone(resultado.motivo)
 
-        resultado_interativo = validar_profissao_etapa3(
+        resultado_interativo = validar_profissao_etapa4(
             "Para mim",
             "interactive",
         )
@@ -201,7 +276,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         for texto in perguntas_financeiras:
             with self.subTest(texto=texto):
                 self.assertTrue(
-                    validar_pergunta_financeira_etapa3(texto)
+                    validar_pergunta_financeira_etapa4(texto)
                 )
 
         profissoes = (
@@ -214,18 +289,18 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         for texto in profissoes:
             with self.subTest(texto=texto):
                 self.assertFalse(
-                    validar_pergunta_financeira_etapa3(texto)
+                    validar_pergunta_financeira_etapa4(texto)
                 )
 
     def test_decisoes_das_etapas_seis_e_oito_traduzem_eventos(self):
         validadores = (
             (
-                validar_etapa6,
+                validar_etapa7,
                 EVENTO_OFERTA_ACEITA,
                 EVENTO_OFERTA_ADIADA,
             ),
             (
-                validar_etapa8,
+                validar_etapa9,
                 EVENTO_RETORNO_CONFIRMADO,
                 EVENTO_RETORNO_ADIADO,
             ),
@@ -240,7 +315,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
                 self.assertIsNone(validador("qualquer coisa"))
 
     def test_email_exige_um_arroba_e_um_ponto_no_dominio(self):
-        resultado = validar_etapa9("Meu email é Ed@Gmail.com.")
+        resultado = validar_etapa10("Meu email é Ed@Gmail.com.")
         self.assertTrue(resultado.valido)
         self.assertEqual(resultado.email, "Ed@gmail.com")
 
@@ -252,7 +327,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             "nome@@gmail.com",
         ):
             with self.subTest(texto=texto):
-                self.assertFalse(validar_etapa9(texto).valido)
+                self.assertFalse(validar_etapa10(texto).valido)
 
     def test_triagem_aceita_somente_o_conteudo_exato_das_opcoes(self):
         casos = (
@@ -294,7 +369,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
 
         for texto, nota in casos:
             with self.subTest(texto=texto):
-                self.assertEqual(validar_etapa18(texto), nota)
+                self.assertEqual(validar_etapa19(texto), nota)
 
         for texto in (
             "2 - Bom",
@@ -306,7 +381,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
             "",
         ):
             with self.subTest(texto=texto):
-                self.assertIsNone(validar_etapa18(texto))
+                self.assertIsNone(validar_etapa19(texto))
 
     def test_decisao_de_comentar_aceita_intencoes_claras(self):
         positivos = (
@@ -327,14 +402,14 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         for texto in positivos:
             with self.subTest(texto=texto):
                 self.assertEqual(
-                    validar_decisao_comentario_etapa19(texto, "text"),
+                    validar_decisao_comentario_etapa20(texto, "text"),
                     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
                 )
 
         for texto in negativos:
             with self.subTest(texto=texto):
                 self.assertEqual(
-                    validar_decisao_comentario_etapa19(
+                    validar_decisao_comentario_etapa20(
                         texto,
                         "interactive",
                     ),
@@ -342,7 +417,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
                 )
 
         self.assertEqual(
-            validar_decisao_comentario_etapa19(
+            validar_decisao_comentario_etapa20(
                 "Sim, quero comentar",
                 "button",
             ),
@@ -361,12 +436,12 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         ):
             with self.subTest(texto=texto, tipo=tipo):
                 self.assertIsNone(
-                    validar_decisao_comentario_etapa19(texto, tipo)
+                    validar_decisao_comentario_etapa20(texto, tipo)
                 )
 
-    def test_comentario_da_etapa20_preserva_texto_e_rejeita_vazio_ou_midia(self):
+    def test_comentario_da_etapa21_preserva_texto_e_rejeita_vazio_ou_midia(self):
         self.assertEqual(
-            normalizar_comentario_etapa20(
+            normalizar_comentario_etapa21(
                 "  Atendimento muito atencioso!  ",
                 "text",
             ),
@@ -380,7 +455,7 @@ class ValidadoresEssenciaisTests(unittest.TestCase):
         ):
             with self.subTest(texto=texto, tipo=tipo):
                 self.assertIsNone(
-                    normalizar_comentario_etapa20(texto, tipo)
+                    normalizar_comentario_etapa21(texto, tipo)
                 )
 
 

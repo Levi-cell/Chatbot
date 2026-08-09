@@ -355,8 +355,8 @@ Mesmo que duas etapas reconheçam textos idênticos, cada uma mantém seu
 validador quando devolve eventos diferentes:
 
 ```text
-validar_etapa5("Quero agendar") -> oferta_aceita
-validar_etapa7("Quero agendar") -> retorno_confirmado
+validar_etapa7("Quero agendar") -> oferta_aceita
+validar_etapa9("Quero agendar") -> retorno_confirmado
 ```
 
 Nesse caso, a semelhança da gramática não transforma o validador em universal.
@@ -365,7 +365,7 @@ O contrato relevante é o evento de negócio produzido para a origem atual.
 O resolver deve receber diretamente esse evento:
 
 ```python
-evento_transicao = validar_etapa5(texto_cliente)
+evento_transicao = validar_etapa7(texto_cliente)
 
 destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
 etapa_destino = resolver_destino_transicao(
@@ -417,9 +417,10 @@ Toda constante de estado deve mostrar o número persistido e o significado:
 ```python
 ETAPA_1_NOME_CLIENTE = 1
 ETAPA_2_DESTINO_ATENDIMENTO = 2
-ETAPA_3_PROFISSAO = 3
-ETAPA_4_NOME_DEPENDENTE = 4
-ETAPA_5_IDADE_ALUNO = 5
+ETAPA_3_CONFIRMACAO_DESTINO = 3
+ETAPA_4_PROFISSAO = 4
+ETAPA_5_NOME_DEPENDENTE = 5
+ETAPA_6_IDADE_ALUNO = 6
 ```
 
 Não usar números mágicos como `etapa_origem == 2` e não omitir o número no nome
@@ -432,15 +433,23 @@ pela etapa de origem e depois pelo evento:
 # ETAPA 2
 if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
     if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
-        # 2 -> 3: persiste a escolha; a profissão vem antes da bifurcação.
+        # 2 -> 3: persiste a escolha inicial antes da confirmação.
 
 # ETAPA 3
-if etapa_origem == ETAPA_3_PROFISSAO:
+if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
+        # 3 -> 4: aplica status_dependente=False como valor absoluto.
+
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
+        # 3 -> 5: aplica status_dependente=True como valor absoluto.
+
+# ETAPA 4
+if etapa_origem == ETAPA_4_PROFISSAO:
     if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
-        # 3 -> 4
+        # 4 -> 5
 
     if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
-        # 3 -> 5
+        # 4 -> 6
 ```
 
 Cada comentário de evento deve mostrar `origem -> destino`. A tabela
@@ -507,7 +516,7 @@ Novos textos não devem ser escritos diretamente no worker ou em
 
 Componentes compartilhados por um grupo de etapas podem possuir um helper
 próprio. `triagem_componentes.py`, por exemplo, atende exclusivamente às etapas
-11 a 16 e centraliza botões e rodapé, sem conter envio ou decisão de fluxo.
+12 a 17 e centraliza botões e rodapé, sem conter envio ou decisão de fluxo.
 
 Componentes visuais usados por diferentes etapas pertencem a
 `componentes_compartilhados.py`. Esse helper pode armazenar textos comuns e
@@ -520,7 +529,7 @@ esses argumentos são ignorados.
 
 O WhatsApp aplica estilos diferentes ao `header` nativo conforme o tipo da
 mensagem interativa e não oferece controle do tamanho da fonte. Por isso, os
-cabeçalhos textuais do fluxo — etapas 10 a 16, 18 e 19 — são incorporados ao
+cabeçalhos textuais do fluxo — etapas 11 a 17 e 19 a 21 — são incorporados ao
 início do corpo, em negrito, por `montar_texto_com_cabecalho`. Os senders não
 devem passar `header` para a Meta. Novos cabeçalhos textuais devem reutilizar
 esse helper para manter a apresentação uniforme entre listas e botões.
@@ -555,7 +564,7 @@ Não pode conter:
 
 Quando várias etapas compartilham exatamente o mesmo contrato de transporte,
 um sender-base pode centralizar apenas a mecânica comum. `triagem_base.py`
-atende às etapas 11 a 16: monta os componentes PyWa, envia, extrai o ID da
+atende às etapas 12 a 17: monta os componentes PyWa, envia, extrai o ID da
 mensagem e produz o contexto de envio. Os senders públicos de cada etapa
 continuam responsáveis pelo conteúdo e o helper-base não pode validar respostas,
 produzir eventos ou escolher destinos.

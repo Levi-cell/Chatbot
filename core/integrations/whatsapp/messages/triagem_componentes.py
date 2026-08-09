@@ -1,5 +1,5 @@
 """
-Componentes visuais compartilhados exclusivamente pelas etapas 11 a 16.
+Componentes visuais compartilhados exclusivamente pelas etapas 12 a 17.
 
 Este helper centraliza as três opções e o rodapé das seis perguntas da
 triagem. Ele não contém perguntas, não envia mensagens e não decide etapas.

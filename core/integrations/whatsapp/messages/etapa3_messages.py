@@ -1,35 +1,63 @@
-MENSAGEM_ETAPA3 = "Antes de prosseguirmos com o atendimento, me fala, qual sua profissão hoje?"
+"""Mensagens da confirmação de quem receberá o atendimento."""
 
 
-def montar_mensagem_etapa3():
-    return MENSAGEM_ETAPA3
+MENSAGEM_ETAPA3_TITULAR = (
+    "Entendi, você confirma que esse atendimento é para você?"
+)
+MENSAGEM_ETAPA3_DEPENDENTE = (
+    "Entendi, você confirma que esse atendimento é para um dependente?"
+)
 
+MENSAGEM_TRATAMENTO_MIDIA_ETAPA3 = (
+    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto."
+)
+MENSAGEM_TRATAMENTO_FINANCEIRO_ETAPA3 = (
+    "Olha, demais informações, como valores de investimento, são "
+    "apresentadas no atendimento presencial após a aula *gratuita*."
+)
+MENSAGEM_TRATAMENTO_CONTEXTO_ETAPA3 = "Desculpe, não entendi."
 
-MENSAGEM_MIDIA_ETAPA3 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
+BOTAO_ETAPA3_SIM = "Sim"
+BOTAO_ETAPA3_NAO = "Não"
+BOTOES_ETAPA3 = (
+    BOTAO_ETAPA3_SIM,
+    BOTAO_ETAPA3_NAO,
 )
 
 
-def montar_mensagem_midia_etapa3():
-    return MENSAGEM_MIDIA_ETAPA3
+def montar_mensagem_etapa3(status_dependente):
+    """Escolhe a confirmação correspondente ao destino salvo na etapa 2."""
+    if status_dependente:
+        return MENSAGEM_ETAPA3_DEPENDENTE
+
+    return MENSAGEM_ETAPA3_TITULAR
 
 
-MENSAGEM_FINANCEIRO_ETAPA3 = (
-    "Olha, demais informações como valores são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
-)
+def montar_mensagem_midia_etapa3(status_dependente):
+    return _montar_mensagem_tratamento(
+        MENSAGEM_TRATAMENTO_MIDIA_ETAPA3,
+        status_dependente,
+    )
 
 
-def montar_mensagem_financeiro_etapa3():
-    return MENSAGEM_FINANCEIRO_ETAPA3
+def montar_mensagem_financeiro_etapa3(status_dependente):
+    return _montar_mensagem_tratamento(
+        MENSAGEM_TRATAMENTO_FINANCEIRO_ETAPA3,
+        status_dependente,
+    )
 
 
-MENSAGEM_CONTEXTO_PROFISSAO_INVALIDA_ETAPA3 = (
-    "Não consegui entender, por favor me diz novamente, qual sua profissão?"
-)
+def montar_mensagem_contexto_etapa3(status_dependente):
+    return _montar_mensagem_tratamento(
+        MENSAGEM_TRATAMENTO_CONTEXTO_ETAPA3,
+        status_dependente,
+    )
 
 
-def montar_mensagem_contexto_profissao_invalida_etapa3():
-    return MENSAGEM_CONTEXTO_PROFISSAO_INVALIDA_ETAPA3
+def montar_botoes_etapa3():
+    return BOTOES_ETAPA3
+
+
+def _montar_mensagem_tratamento(tratamento, status_dependente):
+    pergunta = montar_mensagem_etapa3(status_dependente)
+    return f"{tratamento}\n\nMas bora lá:\n\n{pergunta}"

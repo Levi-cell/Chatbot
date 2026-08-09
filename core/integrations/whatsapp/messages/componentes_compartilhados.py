@@ -5,11 +5,11 @@ compartilhados identificam a introdução da triagem e a pesquisa final.
 """
 
 
-CABECALHO_ETAPA10_TRIAGEM = "Triagem cognitiva"
+CABECALHO_ETAPA11_TRIAGEM = "Triagem cognitiva"
 CABECALHO_PESQUISA_SATISFACAO = "Pesquisa de satisfação"
 
 RODAPE_ETAPA1_BOAS_VINDAS = "Seja muito bem-vindo(a)!"
-RODAPE_ETAPA7_ESPERA = "Estaremos te esperando!"
+RODAPE_ETAPA8_ESPERA = "Estaremos te esperando!"
 RODAPE_OPCAO_UNICA = "Selecione apenas uma opção abaixo."
 
 

@@ -69,4 +69,4 @@ def atualizar_estado_lock(estado_ciclo, lock_ok, lock_version):
 
 def aguardar_fila_vazia():
     logger.debug("fila_vazia | acao=aguardar segundos=3")
-    time.sleep(3)
+    time.sleep(1.5)

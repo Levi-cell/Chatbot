@@ -34,6 +34,7 @@ def registrar_numero_whatsapp(phone_number_id, pin=None):
         json=payload,
         timeout=get_meta_http_timeout(),
     )
+
     logger.info(
         "whatsapp_numero_registro_resposta | acao=registrar_numero phone_number_id=%s status=%s",
         short_value(phone_number_id),

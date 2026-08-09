@@ -1,23 +1,24 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
-    enviar_etapa6_cliente_contexto_invalido,
+    enviar_etapa6_cliente_contexto_idade_invalida,
     enviar_etapa6_cliente_financeiro,
+    enviar_etapa6_cliente_menor_18,
     enviar_etapa6_cliente_midia,
-    enviar_etapa6_dependente_contexto_invalido,
+    enviar_etapa6_dependente_contexto_idade_invalida,
     enviar_etapa6_dependente_financeiro,
+    enviar_etapa6_dependente_menor_5,
     enviar_etapa6_dependente_midia,
+    enviar_etapa6_idade_acima_99,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa7 import (
-    enviar_etapa7,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa9 import (
-    enviar_etapa9,
+    enviar_etapa7_cliente,
+    enviar_etapa7_dependente,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa6 import (
-    TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
-    validar_etapa6,
+    obter_idade_minima_dependente,
+    validar_idade,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -27,10 +28,8 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     validar_midia,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_7_OFERTA_ADIADA,
-    ETAPA_9_EMAIL,
-    EVENTO_OFERTA_ACEITA,
-    EVENTO_OFERTA_ADIADA,
+    ETAPA_7_OFERTA_AULA,
+    EVENTO_IDADE_VALIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -38,172 +37,237 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 )
 
 
-"""
-ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
-
-- VALIDAR A ETAPA 6
-- ENCAMINHAR PARA A ETAPA AUTORIZADA PELO MAPA
-"""
-
-
 logger = logging.getLogger("worker.etapa6")
+
+MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
+MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
+MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
 
 
 def resolve_etapa6(contexto_historico):
     """
-    Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
-
-    oferta_aceita resolve 5 -> 8.
-    oferta_adiada resolve 5 -> 6.
-
-    As etapas 6 e 8 possuem senders reais.
+    Valida a idade do aluno e decide tratamento, encerramento ou 6 -> 7.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     status_dependente = bool(
         contexto_historico.get("status_dependente")
     )
+    bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
     nome_dependente = contexto_historico.get("nome_dependente")
-    link_instagram = contexto_historico.get(
-        "link_instagram_unidade"
-    )
+    nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-# CAMPOS QUE VALIDAM MIDIA NA ETAPA 6
+    # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
-        _logar_tipo_nao_suportado(contexto_historico)
-
-        if status_dependente:
-            return enviar_etapa6_dependente_midia(
-                cliente_telefone,
-                phone_id_unidade,
-                nome_dependente,
-            )
-
-        return enviar_etapa6_cliente_midia(
+        _logar_tratamento(
+            contexto_historico,
+            "tipo_mensagem_nao_suportado",
+        )
+        return _enviar_tratamento_midia(
+            status_dependente,
             cliente_telefone,
             phone_id_unidade,
+            nome_dependente,
         )
 
-# CAMPOS QUE VALIDAM FINANCEIRO NA ETAPA 6
+    # Pergunta financeira tem prioridade sobre a validação da idade.
     if validar_pergunta_financeira(texto_cliente):
-        _logar_tratamento_texto(
+        _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,
         )
-
-        if status_dependente:
-            return enviar_etapa6_dependente_financeiro(
-                cliente_telefone,
-                phone_id_unidade,
-                nome_dependente,
-            )
-
-        return enviar_etapa6_cliente_financeiro(
+        return _enviar_tratamento_financeiro(
+            status_dependente,
             cliente_telefone,
             phone_id_unidade,
+            nome_dependente,
         )
 
-    # VALIDANDO OPCOES
-    # O validador contextual já devolve o evento pertencente à etapa 6.
-    evento_transicao = validar_etapa6(texto_cliente)
+    resultado_idade = validar_idade(texto_cliente)
 
-    if evento_transicao is None:
-        _logar_tratamento_texto(
+    if not resultado_idade.valida and not resultado_idade.acima_limite:
+        _logar_tratamento(
             contexto_historico,
-            TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
+            "idade_invalida",
+            motivo_detalhado=resultado_idade.motivo,
         )
-
-        if status_dependente:
-            return enviar_etapa6_dependente_contexto_invalido(
-                cliente_telefone,
-                phone_id_unidade,
-                nome_dependente,
-            )
-
-        return enviar_etapa6_cliente_contexto_invalido(
+        return _enviar_tratamento_idade_invalida(
+            status_dependente,
             cliente_telefone,
             phone_id_unidade,
+            nome_dependente,
+        )
+
+    if resultado_idade.acima_limite:
+        contexto_envio = enviar_etapa6_idade_acima_99(
+            cliente_telefone,
+            phone_id_unidade,
+            contexto_historico.get("numero_comercial_unidade"),
+        )
+        return _anexar_encerramento(
+            contexto_envio,
+            resultado_idade.idade,
+            MOTIVO_IDADE_ACIMA_99,
+        )
+
+    idade = resultado_idade.idade
+
+    if not status_dependente and idade < 18:
+        contexto_envio = enviar_etapa6_cliente_menor_18(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+        return _anexar_encerramento(
+            contexto_envio,
+            idade,
+            MOTIVO_CLIENTE_MENOR_18,
+        )
+
+    idade_minima_dependente = obter_idade_minima_dependente(
+        bpa_ativo
+    )
+
+    if status_dependente and idade < idade_minima_dependente:
+        contexto_envio = enviar_etapa6_dependente_menor_5(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+            idade_minima_dependente,
+        )
+        return _anexar_encerramento(
+            contexto_envio,
+            idade,
+            MOTIVO_DEPENDENTE_MENOR_5,
+            excluir_dependente=True,
         )
 
     # VALIDANDO DESTINO(S)
-    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
-    destinos_esperados = _destinos_esperados_por_evento(
-        evento_transicao
-    )
+    # A resposta passou pelos tratamentos; agora o mapa autoriza 6 -> 7.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        evento_transicao,
-        destinos_esperados=destinos_esperados,
+        EVENTO_IDADE_VALIDA,
+        destinos_esperados={ETAPA_7_OFERTA_AULA},
     )
 
     logger.info(
-        "etapa6_oferta_validada | acao=%s "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
-        "status_dependente=%s",
-        (
-            "enviar_etapa7"
-            if evento_transicao == EVENTO_OFERTA_ADIADA
-            else "enviar_etapa9"
-        ),
+        "etapa6_idade_validada | acao=enviar_etapa7 "
+        "id_conversa=%s id_mensagem_fila=%s evento=%s "
+        "etapa_destino=%s idade=%s status_dependente=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        evento_transicao,
+        EVENTO_IDADE_VALIDA,
         etapa_destino,
+        idade,
         status_dependente,
     )
 
-    if evento_transicao == EVENTO_OFERTA_ADIADA:
-        contexto_envio = enviar_etapa7(
+    if status_dependente:
+        contexto_envio = enviar_etapa7_dependente(
             cliente_telefone,
             phone_id_unidade,
-            link_instagram,
+            nome_dependente,
         )
     else:
-        contexto_envio = enviar_etapa9(
+        contexto_envio = enviar_etapa7_cliente(
             cliente_telefone,
             phone_id_unidade,
+            nome_cliente,
         )
 
-    contexto_envio["decisao_oferta"] = evento_transicao
+    contexto_envio["idade_aluno"] = idade
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        evento_transicao,
+        EVENTO_IDADE_VALIDA,
         etapa_destino,
     )
 
 
-def _destinos_esperados_por_evento(evento_transicao):
-    if evento_transicao == EVENTO_OFERTA_ACEITA:
-        return {ETAPA_9_EMAIL}
+def _enviar_tratamento_midia(
+    status_dependente,
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    if status_dependente:
+        return enviar_etapa6_dependente_midia(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
 
-    if evento_transicao == EVENTO_OFERTA_ADIADA:
-        return {ETAPA_7_OFERTA_ADIADA}
-
-    return set()
-
-
-def _logar_tipo_nao_suportado(contexto_historico):
-    mensagem = contexto_historico["mensagem_cliente_atual"]
-
-    logger.info(
-        "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado "
-        "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
-        "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
-        contexto_historico["id_conversa"],
-        mensagem["id_mensagem_fila"],
-        short_value(mensagem["cliente_telefone"]),
-        short_value(mensagem["id_phone_unidade"]),
-        contexto_historico.get("tipo_mensagem_atual"),
-        contexto_historico["id_etapa_cliente"],
+    return enviar_etapa6_cliente_midia(
+        cliente_telefone,
+        phone_id_unidade,
     )
 
 
-def _logar_tratamento_texto(contexto_historico, motivo):
+def _enviar_tratamento_financeiro(
+    status_dependente,
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    if status_dependente:
+        return enviar_etapa6_dependente_financeiro(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+
+    return enviar_etapa6_cliente_financeiro(
+        cliente_telefone,
+        phone_id_unidade,
+    )
+
+
+def _enviar_tratamento_idade_invalida(
+    status_dependente,
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    if status_dependente:
+        return enviar_etapa6_dependente_contexto_idade_invalida(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+
+    return enviar_etapa6_cliente_contexto_idade_invalida(
+        cliente_telefone,
+        phone_id_unidade,
+    )
+
+
+def _anexar_encerramento(
+    contexto_envio,
+    idade,
+    motivo,
+    *,
+    excluir_dependente=False,
+):
+    contexto_envio.update(
+        {
+            "idade_aluno": idade,
+            "encerrar_atendimento": True,
+            "motivo_encerramento": motivo,
+            "excluir_dependente": excluir_dependente,
+        }
+    )
+    return contexto_envio
+
+
+def _logar_tratamento(
+    contexto_historico,
+    motivo,
+    *,
+    motivo_detalhado=None,
+):
     mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
@@ -211,7 +275,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
         "cliente=%s phone_number_id=%s etapa_cliente=%s",
         motivo,
-        None,
+        motivo_detalhado,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),

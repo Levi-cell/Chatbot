@@ -136,3 +136,65 @@ def excluir_dependente_da_conversa(id_conversa, cursor):
             "Dependente não excluído no encerramento "
             f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
+
+
+def remover_dependente_placeholder_da_conversa(id_conversa, cursor):
+    """Remove somente o dependente vazio criado pela escolha da etapa 2.
+
+    A operação é idempotente: a ausência da linha significa que o estado final
+    já foi aplicado por uma tentativa anterior. Se o dependente já tiver dados,
+    a função falha para impedir que uma confirmação apague informação legítima.
+    """
+    if not id_conversa:
+        raise ValueError(
+            "id_conversa não informado para remover placeholder de dependente"
+        )
+
+    cursor.execute(
+        """
+        DELETE FROM chatbot.dependente
+        WHERE id_conversa = %s
+          AND nome_dependente IS NULL
+          AND idade IS NULL;
+        """,
+        (id_conversa,),
+    )
+
+    if cursor.rowcount > 1:
+        raise RuntimeError(
+            "Mais de um placeholder de dependente foi removido "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
+        )
+
+    if cursor.rowcount == 1:
+        logger.info(
+            "dependente_placeholder_removido | acao=confirmar_titular "
+            "id_conversa=%s",
+            id_conversa,
+        )
+        return True
+
+    cursor.execute(
+        """
+        SELECT id_dependente
+        FROM chatbot.dependente
+        WHERE id_conversa = %s
+        LIMIT 1;
+        """,
+        (id_conversa,),
+    )
+    dependente_com_dados = cursor.fetchone()
+
+    if dependente_com_dados:
+        raise ValueError(
+            "Dependente com dados não pode ser removido pela confirmação "
+            f"(id_conversa={id_conversa}, "
+            f"id_dependente={dependente_com_dados[0]})"
+        )
+
+    logger.debug(
+        "dependente_placeholder_ausente | acao=manter_estado_idempotente "
+        "id_conversa=%s",
+        id_conversa,
+    )
+    return False
