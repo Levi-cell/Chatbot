@@ -3,9 +3,22 @@
 from datetime import datetime
 import re
 
+from core.triagem.perguntas import (
+    montar_pergunta_triagem,
+    obter_faixa_etaria_triagem,
+)
+
 
 ORIGEM_LEAD_CHATBOT = "Meta Chatbot"
 TITULO_OPORTUNIDADE = "Chatbot Lead"
+
+ETAPAS_TRIAGEM_ESPERADAS = tuple(range(12, 18))
+RESPOSTAS_TRIAGEM_EXIBICAO = {
+    "nunca": "Nunca",
+    "às vezes": "Às vezes",
+    "as vezes": "Às vezes",
+    "frequentemente": "Frequentemente",
+}
 
 MARCADORES_API_CARROSSEL = {
     "codigo_vendedor": "Code_User",
@@ -105,23 +118,16 @@ def montar_observacoes_lead(dados_lead):
     )
 
     if dados_lead["status_dependente"]:
-        pessoa_avaliada = dados_lead["nome_dependente"].strip()
         dados_pessoa = (
             f"\nO atendimento é para um dependente de {nome_cliente}:\n\n"
-            f"- Nome do dependente: {pessoa_avaliada}\n"
+            f"- Nome do dependente: "
+            f"{dados_lead['nome_dependente'].strip()}\n"
             f"- Idade do dependente: {dados_lead['idade_dependente']}\n"
         )
     else:
-        pessoa_avaliada = nome_cliente
         dados_pessoa = f"- Idade do cliente: {dados_lead['idade_cliente']}\n"
 
-    triagem = (
-        f"\nResultado do teste de triagem de {pessoa_avaliada} "
-        "(6 perguntas):\n"
-        f"- Nunca: {dados_lead['triagem_nunca']}\n"
-        f"- Às vezes: {dados_lead['triagem_as_vezes']}\n"
-        f"- Frequentemente: {dados_lead['triagem_frequentemente']}"
-    )
+    triagem = _montar_perguntas_e_respostas_triagem(dados_lead)
 
     dados_profissao = f"\n- Profissão: {profissao}\n"
 
@@ -132,6 +138,34 @@ def montar_observacoes_lead(dados_lead):
         + dados_profissao
         + triagem
     )
+
+
+def _montar_perguntas_e_respostas_triagem(dados_lead):
+    respostas = _obter_respostas_triagem_validadas(dados_lead)
+
+    if dados_lead["status_dependente"]:
+        idade_pessoa = dados_lead["idade_dependente"]
+        nome_pessoa = dados_lead["nome_dependente"].strip()
+    else:
+        idade_pessoa = dados_lead["idade_cliente"]
+        nome_pessoa = None
+
+    faixa_etaria = obter_faixa_etaria_triagem(idade_pessoa)
+    blocos = []
+
+    for numero, item in enumerate(respostas, start=1):
+        pergunta = montar_pergunta_triagem(
+            item["id_etapa"],
+            faixa_etaria=faixa_etaria,
+            nome_pessoa=nome_pessoa,
+        )
+        blocos.append(
+            f"-Pergunta {numero}:\n\n"
+            f"{pergunta}\n\n"
+            f"Resposta: {item['resposta_exibicao']}"
+        )
+
+    return "\nPerguntas e respostas da triagem:\n\n" + "\n\n".join(blocos)
 
 
 def _montar_nome_destaque(dados_lead):
@@ -182,11 +216,14 @@ def montar_dados_lead_teste():
         "profissao": "Engenheiro",
         "nome_dependente": "Enzo Teste",
         "idade_dependente": 12,
-        "triagem_total": 6,
-        "triagem_nunca": 2,
-        "triagem_as_vezes": 3,
-        "triagem_frequentemente": 1,
-        "triagem_desconhecida": 0,
+        "triagem_respostas": [
+            {"id_etapa": 12, "resposta": "nunca"},
+            {"id_etapa": 13, "resposta": "às vezes"},
+            {"id_etapa": 14, "resposta": "frequentemente"},
+            {"id_etapa": 15, "resposta": "às vezes"},
+            {"id_etapa": 16, "resposta": "nunca"},
+            {"id_etapa": 17, "resposta": "às vezes"},
+        ],
     }
 
 
@@ -207,22 +244,7 @@ def _validar_dados_lead(dados_lead):
             + ", ".join(ausentes)
         )
 
-    if dados_lead.get("triagem_total") != 6:
-        raise ValueError("A oportunidade exige exatamente 6 respostas da triagem")
-
-    if dados_lead.get("triagem_desconhecida", 0) != 0:
-        raise ValueError("A triagem contém respostas fora do domínio esperado")
-
-    total_contado = sum(
-        dados_lead.get(campo, 0)
-        for campo in (
-            "triagem_nunca",
-            "triagem_as_vezes",
-            "triagem_frequentemente",
-        )
-    )
-    if total_contado != 6:
-        raise ValueError("A soma das respostas da triagem deve ser igual a 6")
+    _obter_respostas_triagem_validadas(dados_lead)
 
     if dados_lead.get("status_dependente"):
         if not dados_lead.get("nome_dependente"):
@@ -231,3 +253,47 @@ def _validar_dados_lead(dados_lead):
             raise ValueError("Idade do dependente ausente")
     elif dados_lead.get("idade_cliente") is None:
         raise ValueError("Idade do cliente ausente")
+
+
+def _obter_respostas_triagem_validadas(dados_lead):
+    respostas = dados_lead.get("triagem_respostas")
+
+    if not isinstance(respostas, (list, tuple)):
+        raise ValueError("Respostas da triagem ausentes ou inválidas")
+
+    ids_etapas = []
+    respostas_validadas = []
+
+    for item in respostas:
+        if not isinstance(item, dict):
+            raise ValueError("Item de resposta da triagem inválido")
+
+        id_etapa = item.get("id_etapa")
+        resposta = item.get("resposta")
+        resposta_normalizada = str(resposta or "").strip().casefold()
+
+        ids_etapas.append(id_etapa)
+
+        if resposta_normalizada not in RESPOSTAS_TRIAGEM_EXIBICAO:
+            raise ValueError(
+                "A triagem contém resposta fora do domínio esperado "
+                f"(etapa={id_etapa}, resposta={resposta})"
+            )
+
+        respostas_validadas.append(
+            {
+                "id_etapa": id_etapa,
+                "resposta": resposta_normalizada,
+                "resposta_exibicao": RESPOSTAS_TRIAGEM_EXIBICAO[
+                    resposta_normalizada
+                ],
+            }
+        )
+
+    if tuple(ids_etapas) != ETAPAS_TRIAGEM_ESPERADAS:
+        raise ValueError(
+            "A oportunidade exige respostas ordenadas para as etapas "
+            "12, 13, 14, 15, 16 e 17"
+        )
+
+    return respostas_validadas

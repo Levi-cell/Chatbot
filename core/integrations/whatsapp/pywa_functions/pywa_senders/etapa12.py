@@ -27,11 +27,15 @@ def enviar_etapa12_dependente(
     cliente_telefone,
     phone_id_unidade,
     nome_dependente,
+    idade_dependente,
 ):
     return _enviar_etapa12(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_dependente_etapa12(nome_dependente),
+        montar_mensagem_dependente_etapa12(
+            nome_dependente,
+            idade_dependente,
+        ),
         evento_log="enviar_etapa12_dependente",
     )
 
@@ -55,11 +59,15 @@ def enviar_etapa12_dependente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
     nome_dependente,
+    idade_dependente,
 ):
     return _enviar_etapa12(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_dependente_contexto_invalido_etapa12(nome_dependente),
+        montar_mensagem_dependente_contexto_invalido_etapa12(
+            nome_dependente,
+            idade_dependente,
+        ),
         evento_log="enviar_etapa12_dependente_contexto_invalido",
         tipo_tratamento=TIPO_TRATAMENTO_RESPOSTA_INVALIDA,
     )

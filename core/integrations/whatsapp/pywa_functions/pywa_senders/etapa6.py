@@ -14,9 +14,11 @@ from core.integrations.whatsapp.messages.etapa6_messages import (
     montar_mensagem_idade_dependente_etapa6,
     montar_mensagem_idade_dependente_etapa6_financeiro,
     montar_mensagem_idade_dependente_etapa6_midia,
+    montar_mensagem_idade_dependente_etapa6_reforco_escolar,
     montar_mensagem_idade_etapa6,
     montar_mensagem_idade_etapa6_financeiro,
     montar_mensagem_idade_etapa6_midia,
+    montar_mensagem_idade_etapa6_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -30,6 +32,7 @@ logger = logging.getLogger("whatsapp.etapa6")
 ID_ETAPA6 = 6
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_IDADE_INVALIDA = "idade_invalida"
 
 
@@ -127,6 +130,40 @@ def enviar_etapa6_dependente_financeiro(
         mensagem_bot,
         evento="enviar_etapa6_dependente_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+def enviar_etapa6_cliente_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    mensagem_bot = montar_mensagem_idade_etapa6_reforco_escolar()
+
+    return _enviar_texto_etapa6(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa6_cliente_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    )
+
+
+def enviar_etapa6_dependente_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    mensagem_bot = montar_mensagem_idade_dependente_etapa6_reforco_escolar(
+        nome_dependente
+    )
+
+    return _enviar_texto_etapa6(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa6_dependente_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

@@ -7,6 +7,8 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa1 import (
     enviar_etapa1_financeiro_inicio,
     enviar_etapa1_midia,
     enviar_etapa1_midia_inicio,
+    enviar_etapa1_reforco_escolar,
+    enviar_etapa1_reforco_escolar_inicio,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_etapa2,
@@ -19,6 +21,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     TIPO_TRATAMENTO_NOME_INVALIDO,
@@ -86,7 +92,25 @@ def resolve_etapa1(contexto_historico):
             phone_id_unidade,
         )
 
-    # Pergunta financeira tem prioridade sobre a validação de nome.
+    # A dúvida sobre reforço é mais específica que o financeiro e o nome.
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento_texto(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+
+        if conversa_sem_etapa:
+            return enviar_etapa1_reforco_escolar_inicio(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_unidade,
+            )
+
+        return enviar_etapa1_reforco_escolar(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
     if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento_texto(
             contexto_historico,

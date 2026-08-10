@@ -13,6 +13,7 @@ from core.integrations.whatsapp.messages.etapa3_messages import (
     montar_mensagem_etapa3,
     montar_mensagem_financeiro_etapa3,
     montar_mensagem_midia_etapa3,
+    montar_mensagem_reforco_escolar_etapa3,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -27,6 +28,7 @@ ID_ETAPA3 = 3
 
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "confirmacao_destino_invalida"
 
 
@@ -71,6 +73,21 @@ def enviar_etapa3_financeiro(
         evento="enviar_etapa3_financeiro",
         status_dependente=status_dependente,
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+def enviar_etapa3_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+    status_dependente,
+):
+    return _enviar_botoes_etapa3(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_reforco_escolar_etapa3(status_dependente),
+        evento="enviar_etapa3_reforco_escolar",
+        status_dependente=status_dependente,
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

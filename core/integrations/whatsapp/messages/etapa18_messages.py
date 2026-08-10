@@ -1,6 +1,9 @@
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_rodape,
 )
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
 
 
 # ETAPA 18 - AGENDAMENTO APÓS A TRIAGEM COGNITIVA
@@ -38,6 +41,11 @@ MENSAGEM_CONTEXTO_INVALIDO_ETAPA18 = (
     "{link_agendamento}"
 )
 
+MENSAGEM_RETOMADA_ETAPA18 = (
+    "Para continuar, finalize seu agendamento pelo link:\n"
+    "{link_agendamento}"
+)
+
 
 def montar_mensagem_etapa18(link_agendamento):
     return _montar_mensagem_com_link_e_rodape(
@@ -56,6 +64,15 @@ def montar_mensagem_midia_etapa18(link_agendamento):
 def montar_mensagem_financeiro_etapa18(link_agendamento):
     return _montar_mensagem_com_link_e_rodape(
         MENSAGEM_FINANCEIRO_ETAPA18,
+        link_agendamento,
+    )
+
+
+def montar_mensagem_reforco_escolar_etapa18(link_agendamento):
+    return _montar_mensagem_com_link_e_rodape(
+        montar_mensagem_tratamento_reforco_escolar(
+            MENSAGEM_RETOMADA_ETAPA18,
+        ),
         link_agendamento,
     )
 

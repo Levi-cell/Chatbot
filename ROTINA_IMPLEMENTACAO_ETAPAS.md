@@ -182,6 +182,16 @@ Responsabilidades proibidas:
 - controlar retry;
 - executar envio.
 
+Quando várias etapas e integrações precisarem do mesmo catálogo de conteúdo,
+centralize-o em um módulo neutro de domínio. Na triagem, as etapas 12 a 17 e o
+Funil usam `core/triagem/perguntas.py`; mensagens e observações não devem
+duplicar as perguntas nem a regra `< 18`/`>= 18`.
+
+Ramificações apenas de mensagem não exigem novas etapas. Antes de criar ou
+renumerar uma etapa, confirme se evento, destino, efeito e persistência são os
+mesmos. Se somente o texto varia por um dado já persistido, releia esse dado no
+contexto, escolha a mensagem e preserve o mapa transacional existente.
+
 Exemplo:
 
 ```python
@@ -300,6 +310,13 @@ etapa 7 + resposta positiva -> oferta_aceita
 etapa 9 + resposta positiva -> retorno_confirmado
 ```
 
+Uma especialização local de um tratamento universal também permanece em
+`validadores_contexto/` quando o mesmo vocabulário puder ser uma resposta
+legítima apenas naquela etapa. Ela deve aplicar somente a desambiguação local e
+depois delegar ao validador universal, sem sender, banco ou alteração de
+contexto. Não duplique nem enfraqueça a regra compartilhada para acomodar uma
+única etapa.
+
 O resolver não deve traduzir uma decisão genérica para o evento. O próprio
 validador contextual devolve o evento:
 
@@ -337,13 +354,14 @@ Ordem recomendada:
 
 ```text
 1. validar mídia
-2. validar pergunta financeira
-3. validar contexto específico
-4. produzir evento
-5. marcar a fronteira VALIDANDO DESTINO(S)
-6. resolver destino pelo mapa
-7. chamar o sender correspondente
-8. anexar origem, evento e destino ao contexto de envio
+2. validar dúvida sobre reforço escolar
+3. validar pergunta financeira
+4. validar contexto específico
+5. produzir evento
+6. marcar a fronteira VALIDANDO DESTINO(S)
+7. resolver destino pelo mapa
+8. chamar o sender correspondente
+9. anexar origem, evento e destino ao contexto de envio
 ```
 
 O marcador obrigatório deve aparecer depois de todos os tratamentos:
@@ -362,6 +380,9 @@ def resolve_etapa4(contexto_historico):
 
     if validar_midia(tipo_mensagem):
         return enviar_etapa4_midia(...)
+
+    if validar_duvida_reforco_escolar_etapa4(texto_cliente):
+        return enviar_etapa4_reforco_escolar(...)
 
     if validar_pergunta_financeira(texto_cliente):
         return enviar_etapa4_financeiro(...)

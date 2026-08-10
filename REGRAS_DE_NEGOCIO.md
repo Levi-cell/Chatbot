@@ -282,15 +282,23 @@ Implementação principal:
 - Uma conversa finalizada em etapa com `bloqueio_dias > 0` permanecerá
   bloqueada pelo prazo declarado na política.
 - A etapa 2 registra a escolha inicial entre titular e dependente. A etapa 3
-  confirma ou inverte essa escolha: titular segue para a etapa 4 e dependente
-  para a etapa 5. Mídia, pergunta financeira inequívoca, resposta fora do
-  contexto ou sinais logicamente contraditórios repetem a confirmação.
+  aceita exclusivamente `Sim` ou `Não`, por clique nos botões ou pelo mesmo
+  texto digitado. `Sim` mantém a escolha; `Não` seleciona o polo oposto.
+  Titular segue para a etapa 4 e dependente para a etapa 5. Mídia, dúvida sobre
+  reforço escolar, pergunta financeira inequívoca ou qualquer outro conteúdo
+  repetem a confirmação.
 - A etapa 4 coleta, em texto livre, a profissão quando o fluxo passa por ela.
   Ela preserva as duas saídas para que conversas existentes, remapeadas da
   antiga etapa 3, continuem conforme `status_dependente`.
 - A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
   etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
+- As etapas 12 a 17 não mudam de ID nem de transição conforme a idade. Elas
+  selecionam somente o texto da pergunta: titular usa sempre a versão adulta;
+  dependente com menos de 18 anos usa a versão infantil; dependente com 18 anos
+  ou mais usa a versão adulta com o nome persistido. O limite de entrada de 4
+  anos em unidade com BPA e de 5 anos sem BPA continua pertencendo à validação
+  de idade anterior à triagem.
 - A etapa 19 registra uma nota de satisfação de 1 a 5. Na etapa 20, o cliente
   escolhe se deseja comentar: a aceitação segue para a etapa 21 e a recusa
   salta diretamente para a etapa 22. A etapa 21 coleta o comentário. Nota e
@@ -322,6 +330,10 @@ Implementação principal:
 - O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
   respostas canônicas da triagem. A profissão da conversa é exibida nas
   observações; conversas legadas podem apresentá-la como não informada.
+- As observações apresentam as seis perguntas e suas respostas na ordem das
+  etapas 12 a 17. O Funil usa o mesmo catálogo de perguntas do WhatsApp e não
+  envia mais o resumo por quantidade de `Nunca`, `Às vezes` e
+  `Frequentemente`.
 - Em atendimento para dependente, a oportunidade mantém o cliente pagante como
   contato e inclui nome e idade do dependente nas observações.
 - A resposta só é confirmada quando o HTTP não falha e o JSON contém
@@ -354,6 +366,12 @@ Depois que uma mensagem da fila for aceita pelo worker:
 
 ### Respostas da triagem cognitiva
 
+- A triagem mantém exatamente seis perguntas nas etapas 12 a 17.
+- A idade e o destino do atendimento são relidos do banco em cada ciclo. Isso
+  preserva a mesma variante no retry e impede escolher silenciosamente uma
+  pergunta quando idade, nome do dependente ou destino estiverem inconsistentes.
+- A versão infantil sempre usa o nome do dependente. A versão adulta usa
+  `você` para o titular e o nome para um dependente adulto.
 - Cada pergunta aceita somente `Nunca`, `Às vezes` ou `Frequentemente`.
 - Botão e texto digitado percorrem a mesma validação exata.
 - Qualquer outro conteúdo recebe o tratamento de contexto e mantém a conversa
@@ -538,7 +556,51 @@ Esse tratamento é financeiro, não tratamento de contexto. Ele possui fluxo e
 sender próprios para evitar misturar dúvida comercial com resposta fora do
 contexto da etapa.
 
-### 11.4. Tratamento de contexto para nome inválido
+### 11.4. Tratamento de dúvida sobre reforço escolar
+
+Nas mesmas etapas que oferecem tratamento financeiro, o sistema também deverá
+identificar dúvidas que confundam o Supera com serviços escolares tradicionais,
+como reforço escolar, banca, supletivo, cursinho, aula particular ou ensino de
+matérias específicas.
+
+O reconhecimento é universal e possui o seguinte contrato:
+
+1. mídia ou tipo não suportado continua tendo prioridade sobre o texto;
+2. a dúvida sobre reforço escolar tem prioridade sobre o tratamento financeiro;
+3. a mensagem do cliente e a resposta do bot são registradas normalmente;
+4. a resposta é marcada com `tipo_tratamento='duvida_reforco_escolar'`;
+5. nenhuma transição é produzida e a conversa permanece na etapa atual;
+6. a pergunta ou chamada da etapa é reapresentada de forma neutra, preservando
+   botões, rodapés, links e as variantes de titular ou dependente aplicáveis.
+
+Assim, uma pergunta como `Quanto custa o reforço escolar?` recebe este
+tratamento antes do financeiro. Já uma mídia que contenha texto ou legenda
+continua recebendo tratamento de mídia.
+
+Expressões inequívocas de serviço escolar podem ser reconhecidas diretamente.
+Nomes de matérias, como matemática ou português, exigem também contexto de
+ensino, aula, ajuda ou procura pelo serviço. A palavra isolada não é suficiente,
+pois respostas legítimas como `Sou professora de matemática` devem continuar
+pertencendo à etapa que coleta a profissão.
+
+Na etapa 4, declarações claras de profissão ou vínculo de trabalho com banca,
+cursinho, supletivo ou reforço também são respostas profissionais válidas. Por
+exemplo, `Trabalho em um cursinho`, `Sou diretora de um supletivo` e
+`Sou professora de matemática em uma banca` não acionam este tratamento. A
+exceção é contextual e não altera o reconhecimento nas demais etapas.
+
+Mensagem esperada:
+
+```text
+Olha, o Supera não é reforço escolar.
+Nós trabalhamos a raiz da aprendizagem, desenvolvendo habilidades como atenção, concentração, memória e raciocínio — o alicerce necessário para aprender melhor em qualquer matéria. 🧠✨
+
+Mas bora lá:
+
+(retomada neutra da etapa atual)
+```
+
+### 11.5. Tratamento de contexto para nome inválido
 
 Depois que a etapa 1 já foi apresentada, a resposta esperada do cliente é o nome.
 Se o cliente responder com texto que pareça fora do contexto de nome, como
@@ -554,6 +616,21 @@ Me diz, qual o seu nome?
 
 Esse tratamento é diferente do financeiro e do tipo não suportado. Ele existe
 para preservar a etapa atual e pedir novamente um nome utilizável.
+
+### 11.6. Coerência semântica ao reapresentar a etapa
+
+Quando um tratamento reapresentar a pergunta da etapa atual, ele não deverá
+concatenar automaticamente a mensagem padrão completa. A pergunta ou chamada
+principal pode ser reutilizada, mas aberturas que pressuponham resposta válida,
+confirmação, apresentação ou avanço — como `Entendi`, `Certo`, `Perfeito`,
+`Maravilha` e `Prazer` — deverão ser omitidas ou substituídas por uma retomada
+neutra.
+
+A mensagem final deverá ser lida como uma única fala semanticamente coerente.
+Depois de informar que uma resposta não foi compreendida ou aceita, o bot não
+deverá elogiar, confirmar entendimento nem pressupor que a conversa avançou.
+Essa regra vale para tratamentos de mídia, financeiro, contexto e qualquer
+tratamento futuro que reapresente conteúdo da etapa.
 
 ## 12. Flood, payload e assinatura
 

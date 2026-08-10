@@ -12,6 +12,7 @@ from core.integrations.whatsapp.messages.etapa11_messages import (
     montar_mensagem_contexto_invalido_etapa11,
     montar_mensagem_financeiro_etapa11,
     montar_mensagem_midia_etapa11,
+    montar_mensagem_reforco_escolar_etapa11,
     montar_mensagem_triagem_cognitiva_etapa11,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
@@ -26,6 +27,7 @@ logger = logging.getLogger("whatsapp.etapa11")
 ID_ETAPA11 = 11
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "confirmacao_triagem_invalida"
 
 
@@ -73,6 +75,22 @@ def enviar_etapa11_financeiro(
         mensagem_bot,
         evento="enviar_etapa11_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+def enviar_etapa11_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa11()
+
+    return _enviar_botoes_etapa11(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa11_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

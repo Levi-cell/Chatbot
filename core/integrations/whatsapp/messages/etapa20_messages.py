@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 # ETAPA 20 - DECISAO SOBRE O COMENTARIO DA PESQUISA DE SATISFACAO
 
 TEXTO_BOTAO_COMENTAR_ETAPA20 = "Sim, quero comentar"
@@ -38,6 +43,12 @@ def montar_mensagem_midia_etapa20():
 
 def montar_mensagem_financeiro_etapa20():
     return MENSAGEM_FINANCEIRO_ETAPA20
+
+
+def montar_mensagem_reforco_escolar_etapa20():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_ETAPA20,
+    )
 
 
 def montar_mensagem_contexto_invalido_etapa20():

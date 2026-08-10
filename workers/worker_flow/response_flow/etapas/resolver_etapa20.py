@@ -4,6 +4,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa20 import (
     enviar_etapa20_contexto_invalido,
     enviar_etapa20_financeiro,
     enviar_etapa20_midia,
+    enviar_etapa20_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa21 import (
     enviar_etapa21,
@@ -19,6 +20,10 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
     validar_pergunta_financeira,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_21_COMENTARIO_SATISFACAO,
@@ -52,6 +57,16 @@ def resolve_etapa20(contexto_historico):
             TIPO_TRATAMENTO_MIDIA,
         )
         return enviar_etapa20_midia(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return enviar_etapa20_reforco_escolar(
             cliente_telefone,
             phone_id_unidade,
         )

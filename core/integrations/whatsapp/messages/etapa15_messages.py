@@ -1,24 +1,15 @@
-# ETAPA 15 - TESTE COGNITIVO, PERGUNTA 4
+from core.triagem.perguntas import (
+    FAIXA_ETARIA_ADULTA,
+    montar_pergunta_triagem,
+    obter_faixa_etaria_triagem,
+)
+
+
+# ETAPA 15 - TRIAGEM, PERGUNTA 4
 
 CABECALHO_ETAPA15 = "Pergunta 4"
-
-MENSAGEM_CLIENTE_ETAPA15 = (
-    "Com que frequência você esquece de levar suas coisas com você?"
-)
-
-MENSAGEM_DEPENDENTE_ETAPA15 = (
-    "Com que frequência {nome} esquece de levar as próprias coisas?"
-)
-
-MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA15 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_CLIENTE_ETAPA15
-)
-
-MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA15 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_DEPENDENTE_ETAPA15
-)
+ID_ETAPA15 = 15
+PREFIXO_CONTEXTO_INVALIDO = "Não consegui entender sua resposta.\n\n"
 
 
 def montar_cabecalho_etapa15():
@@ -26,16 +17,29 @@ def montar_cabecalho_etapa15():
 
 
 def montar_mensagem_cliente_etapa15():
-    return MENSAGEM_CLIENTE_ETAPA15
+    return montar_pergunta_triagem(
+        ID_ETAPA15,
+        faixa_etaria=FAIXA_ETARIA_ADULTA,
+    )
 
 
-def montar_mensagem_dependente_etapa15(nome):
-    return MENSAGEM_DEPENDENTE_ETAPA15.format(nome=nome)
+def montar_mensagem_dependente_etapa15(nome, idade_dependente):
+    return montar_pergunta_triagem(
+        ID_ETAPA15,
+        faixa_etaria=obter_faixa_etaria_triagem(idade_dependente),
+        nome_pessoa=nome,
+    )
 
 
 def montar_mensagem_cliente_contexto_invalido_etapa15():
-    return MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA15
+    return PREFIXO_CONTEXTO_INVALIDO + montar_mensagem_cliente_etapa15()
 
 
-def montar_mensagem_dependente_contexto_invalido_etapa15(nome):
-    return MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA15.format(nome=nome)
+def montar_mensagem_dependente_contexto_invalido_etapa15(
+    nome,
+    idade_dependente,
+):
+    return (
+        PREFIXO_CONTEXTO_INVALIDO
+        + montar_mensagem_dependente_etapa15(nome, idade_dependente)
+    )

@@ -13,6 +13,7 @@ from core.integrations.whatsapp.messages.etapa2_messages import (
     montar_mensagem_etapa2,
     montar_mensagem_financeiro_etapa2,
     montar_mensagem_midia_etapa2,
+    montar_mensagem_reforco_escolar_etapa2,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -27,6 +28,7 @@ ID_ETAPA2 = 2
 
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 
 
@@ -68,6 +70,20 @@ def enviar_etapa2_financeiro(cliente_telefone, phone_id_unidade):
         mensagem_bot,
         evento="enviar_etapa2_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+### PARA O WORKER QUANDO O CLIENTE PERGUNTA SOBRE REFORÇO ESCOLAR
+
+def enviar_etapa2_reforco_escolar(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa2()
+
+    return _enviar_texto_etapa2(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa2_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

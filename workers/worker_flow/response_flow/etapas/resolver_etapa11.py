@@ -4,6 +4,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa11 import (
     enviar_etapa11_contexto_invalido,
     enviar_etapa11_financeiro,
     enviar_etapa11_midia,
+    enviar_etapa11_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa12 import (
     enviar_etapa12_cliente,
@@ -22,6 +23,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_12_TRIAGEM_PERGUNTA_1,
@@ -54,6 +59,9 @@ def resolve_etapa11(contexto_historico):
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
+    idade_pessoa_triagem = contexto_historico[
+        "idade_pessoa_triagem"
+    ]
 
     # VALIDANDO MÍDIA NA ETAPA 11
     # Além de interactive, o webhook reconhece o formato legado button.
@@ -66,6 +74,16 @@ def resolve_etapa11(contexto_historico):
             TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
         )
         return enviar_etapa11_midia(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return enviar_etapa11_reforco_escolar(
             cliente_telefone,
             phone_id_unidade,
         )
@@ -118,6 +136,7 @@ def resolve_etapa11(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             contexto_historico.get("nome_dependente"),
+            idade_pessoa_triagem,
         )
     else:
         contexto_envio = enviar_etapa12_cliente(

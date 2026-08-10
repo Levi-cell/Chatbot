@@ -39,6 +39,9 @@ def resolve_etapa14(contexto_historico):
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     status_dependente = bool(contexto_historico.get("status_dependente"))
     nome_dependente = contexto_historico.get("nome_dependente")
+    idade_pessoa_triagem = contexto_historico[
+        "idade_pessoa_triagem"
+    ]
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -57,6 +60,7 @@ def resolve_etapa14(contexto_historico):
                 cliente_telefone,
                 phone_id_unidade,
                 nome_dependente,
+                idade_pessoa_triagem,
             )
 
         return enviar_etapa14_cliente_contexto_invalido(
@@ -90,6 +94,7 @@ def resolve_etapa14(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             nome_dependente,
+            idade_pessoa_triagem,
         )
     else:
         contexto_envio = enviar_etapa15_cliente(

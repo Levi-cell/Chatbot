@@ -1,26 +1,15 @@
-# ETAPA 16 - TESTE COGNITIVO, PERGUNTA 5
+from core.triagem.perguntas import (
+    FAIXA_ETARIA_ADULTA,
+    montar_pergunta_triagem,
+    obter_faixa_etaria_triagem,
+)
+
+
+# ETAPA 16 - TRIAGEM, PERGUNTA 5
 
 CABECALHO_ETAPA16 = "Pergunta 5"
-
-MENSAGEM_CLIENTE_ETAPA16 = (
-    "Com que frequência você perde a atenção/foco na atividade "
-    "que está fazendo?"
-)
-
-MENSAGEM_DEPENDENTE_ETAPA16 = (
-    "Com que frequência {nome} perde a atenção/foco na atividade "
-    "que está fazendo?"
-)
-
-MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA16 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_CLIENTE_ETAPA16
-)
-
-MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA16 = (
-    "Não consegui entender sua resposta.\n\n"
-    + MENSAGEM_DEPENDENTE_ETAPA16
-)
+ID_ETAPA16 = 16
+PREFIXO_CONTEXTO_INVALIDO = "Não consegui entender sua resposta.\n\n"
 
 
 def montar_cabecalho_etapa16():
@@ -28,16 +17,29 @@ def montar_cabecalho_etapa16():
 
 
 def montar_mensagem_cliente_etapa16():
-    return MENSAGEM_CLIENTE_ETAPA16
+    return montar_pergunta_triagem(
+        ID_ETAPA16,
+        faixa_etaria=FAIXA_ETARIA_ADULTA,
+    )
 
 
-def montar_mensagem_dependente_etapa16(nome):
-    return MENSAGEM_DEPENDENTE_ETAPA16.format(nome=nome)
+def montar_mensagem_dependente_etapa16(nome, idade_dependente):
+    return montar_pergunta_triagem(
+        ID_ETAPA16,
+        faixa_etaria=obter_faixa_etaria_triagem(idade_dependente),
+        nome_pessoa=nome,
+    )
 
 
 def montar_mensagem_cliente_contexto_invalido_etapa16():
-    return MENSAGEM_CLIENTE_CONTEXTO_INVALIDO_ETAPA16
+    return PREFIXO_CONTEXTO_INVALIDO + montar_mensagem_cliente_etapa16()
 
 
-def montar_mensagem_dependente_contexto_invalido_etapa16(nome):
-    return MENSAGEM_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA16.format(nome=nome)
+def montar_mensagem_dependente_contexto_invalido_etapa16(
+    nome,
+    idade_dependente,
+):
+    return (
+        PREFIXO_CONTEXTO_INVALIDO
+        + montar_mensagem_dependente_etapa16(nome, idade_dependente)
+    )

@@ -4,6 +4,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
     enviar_etapa4_contexto_profissao_invalida,
     enviar_etapa4_financeiro,
     enviar_etapa4_midia,
+    enviar_etapa4_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
     enviar_etapa5,
@@ -18,8 +19,14 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4
 from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
     validar_pergunta_financeira_etapa4,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_reforco_escolar_etapa4 import (
+    validar_duvida_reforco_escolar_etapa4,
+)
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_5_NOME_DEPENDENTE,
@@ -58,6 +65,16 @@ def resolve_etapa4(contexto_historico):
             phone_id_unidade,
         )
 
+    if validar_duvida_reforco_escolar_etapa4(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return enviar_etapa4_reforco_escolar(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
     if validar_pergunta_financeira_etapa4(texto_cliente):
         _logar_tratamento(
             contexto_historico,
@@ -91,6 +108,8 @@ def resolve_etapa4(contexto_historico):
         evento = EVENTO_PROFISSAO_TITULAR_VALIDA
         destino_esperado = ETAPA_6_IDADE_ALUNO
 
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         evento,

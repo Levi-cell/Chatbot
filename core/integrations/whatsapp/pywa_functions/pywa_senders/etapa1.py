@@ -8,6 +8,8 @@ from core.integrations.whatsapp.messages.etapa1_messages import (
     montar_mensagem_financeiro_inicio,
     montar_mensagem_midia_etapa1,
     montar_mensagem_midia_inicio,
+    montar_mensagem_reforco_escolar_etapa1,
+    montar_mensagem_reforco_escolar_inicio,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -25,6 +27,7 @@ ID_ETAPA1 = 1
 
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 
@@ -80,6 +83,28 @@ def enviar_etapa1_financeiro_inicio(
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
     )
 
+
+### PARA O WORKER QUANDO O CLIENTE INICIA PERGUNTANDO SOBRE REFORÇO ESCOLAR
+
+def enviar_etapa1_reforco_escolar_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+):
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_reforco_escolar_inicio(
+        saudacao,
+        nome_unidade,
+    )
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_reforco_escolar_inicio",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    )
+
 ## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO. com midia
 
 def enviar_etapa1_midia(cliente_telefone, phone_id_unidade):
@@ -104,6 +129,20 @@ def enviar_etapa1_financeiro(cliente_telefone, phone_id_unidade):
         mensagem_bot,
         evento="enviar_etapa1_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+## CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+def enviar_etapa1_reforco_escolar(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa1()
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 ## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO, fora do contexto

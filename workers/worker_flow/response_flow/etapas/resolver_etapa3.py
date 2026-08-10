@@ -4,6 +4,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
     enviar_etapa3_contexto_invalido,
     enviar_etapa3_financeiro,
     enviar_etapa3_midia,
+    enviar_etapa3_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
     enviar_etapa4,
@@ -25,6 +26,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_m
     TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
     validar_midia,
 )
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_4_PROFISSAO,
     ETAPA_5_NOME_DEPENDENTE,
@@ -41,10 +46,11 @@ logger = logging.getLogger("worker.etapa3")
 
 
 def resolve_etapa3(contexto_historico):
-    """Confirma ou corrige o destino salvo pela etapa 2.
+    """Mantém com Sim ou inverte com Não o destino salvo pela etapa 2.
 
-    Tratamentos permanecem na etapa 3. Uma resposta válida sempre produz um
-    estado final absoluto, evitando que retries reapliquem uma inversão.
+    Qualquer outro texto recebe tratamento e permanece na etapa 3. Uma
+    resposta válida sempre produz um estado final absoluto, evitando que
+    retries reapliquem uma inversão.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -64,6 +70,17 @@ def resolve_etapa3(contexto_historico):
             TIPO_TRATAMENTO_TIPO_NAO_SUPORTADO,
         )
         return enviar_etapa3_midia(
+            cliente_telefone,
+            phone_id_unidade,
+            status_dependente_atual,
+        )
+
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return enviar_etapa3_reforco_escolar(
             cliente_telefone,
             phone_id_unidade,
             status_dependente_atual,

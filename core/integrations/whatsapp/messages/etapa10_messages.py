@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 # ENTRADA NA ETAPA 10
 
 MENSAGEM_PERGUNTA_EMAIL_ETAPA10 = "Qual o seu melhor email?"
@@ -30,6 +35,17 @@ MENSAGEM_PERGUNTA_EMAIL_ETAPA10_FINANCEIRO = (
 
 def montar_mensagem_email_etapa10_financeiro():
     return MENSAGEM_PERGUNTA_EMAIL_ETAPA10_FINANCEIRO
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_EMAIL_ETAPA10 = "Me diz, qual o seu melhor email?"
+
+
+def montar_mensagem_email_etapa10_reforco_escolar():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_EMAIL_ETAPA10,
+    )
 
 
 # CLIENTE RESPONDE COM EMAIL FORA DO CONTEXTO

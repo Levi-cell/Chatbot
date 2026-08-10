@@ -6,6 +6,7 @@ from core.integrations.whatsapp.messages.etapa5_messages import (
     montar_mensagem_etapa5,
     montar_mensagem_financeiro_etapa5,
     montar_mensagem_midia_etapa5,
+    montar_mensagem_reforco_escolar_etapa5,
 )
 
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
@@ -20,6 +21,7 @@ logger = logging.getLogger("whatsapp.etapa5")
 ID_ETAPA5 = 5
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 
@@ -58,6 +60,19 @@ def enviar_etapa5_financeiro(cliente_telefone, phone_id_unidade):
         mensagem_bot,
         evento="enviar_etapa5_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+def enviar_etapa5_reforco_escolar(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa5()
+
+    return _enviar_texto_etapa5(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa5_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

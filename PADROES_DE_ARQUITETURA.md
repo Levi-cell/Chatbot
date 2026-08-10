@@ -346,8 +346,17 @@ Um validador só pertence a `validadores_universais` quando:
 - apenas identifica tratamento/permanência ou permite seguir o fluxo;
 - não escolhe entre diferentes arestas do mapa.
 
-Mídia, financeiro e nome atendem a esse contrato. O resultado deles não muda
-de significado conforme a etapa que os chama.
+Mídia, o classificador-base de dúvida sobre reforço escolar, financeiro e nome
+atendem a esse contrato. O resultado-base deles não muda de significado
+conforme a etapa que os chama.
+
+Quando o vocabulário universal também puder representar uma resposta legítima
+de uma etapa específica, a desambiguação deverá ficar em
+`validadores_contexto/` e delegar ao classificador universal depois de aplicar
+somente a exceção local. Esse adaptador não envia mensagem, não acessa banco,
+não altera contexto e não modifica o classificador compartilhado. A etapa 4
+usa esse padrão para distinguir dúvida sobre reforço escolar de uma declaração
+de profissão ou vínculo de trabalho com banca, cursinho, supletivo ou reforço.
 
 Um validador pertence a `validadores_contexto` quando a resposta produz eventos
 próprios daquela etapa, especialmente quando pode pular ou retroceder no mapa.
@@ -517,6 +526,18 @@ Novos textos não devem ser escritos diretamente no worker ou em
 Componentes compartilhados por um grupo de etapas podem possuir um helper
 próprio. `triagem_componentes.py`, por exemplo, atende exclusivamente às etapas
 12 a 17 e centraliza botões e rodapé, sem conter envio ou decisão de fluxo.
+
+Quando o mesmo conteúdo de negócio for consumido por canais diferentes, ele
+deve possuir uma fonte neutra fora das integrações. A triagem por faixa etária
+usa `core/triagem/perguntas.py` como catálogo único das etapas 12 a 17. Os
+arquivos de `messages` selecionam a pergunta para o WhatsApp e a integração do
+Funil reutiliza exatamente o mesmo catálogo; nenhum dos dois deve manter uma
+cópia independente dos textos ou da fronteira infantil/adulta.
+
+A elegibilidade por idade continua na regra de negócio que antecede a triagem.
+O catálogo apenas classifica uma idade persistida válida como infantil (`< 18`)
+ou adulta (`>= 18`) e monta o texto. Consulta ao banco, BPA, transição e envio
+não pertencem a esse módulo.
 
 Componentes visuais usados por diferentes etapas pertencem a
 `componentes_compartilhados.py`. Esse helper pode armazenar textos comuns e

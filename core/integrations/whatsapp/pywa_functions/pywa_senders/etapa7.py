@@ -13,10 +13,12 @@ from core.integrations.whatsapp.messages.etapa7_messages import (
     montar_mensagem_oferta_cliente_etapa7,
     montar_mensagem_oferta_cliente_financeiro_etapa7,
     montar_mensagem_oferta_cliente_midia_etapa7,
+    montar_mensagem_oferta_cliente_reforco_escolar_etapa7,
     montar_mensagem_oferta_dependente_contexto_invalido_etapa7,
     montar_mensagem_oferta_dependente_etapa7,
     montar_mensagem_oferta_dependente_financeiro_etapa7,
     montar_mensagem_oferta_dependente_midia_etapa7,
+    montar_mensagem_oferta_dependente_reforco_escolar_etapa7,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -30,6 +32,7 @@ logger = logging.getLogger("whatsapp.etapa7")
 ID_ETAPA7 = 7
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 
 
@@ -134,6 +137,42 @@ def enviar_etapa7_dependente_financeiro(
         mensagem_bot,
         evento="enviar_etapa7_dependente_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+def enviar_etapa7_cliente_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    mensagem_bot = montar_mensagem_oferta_cliente_reforco_escolar_etapa7()
+
+    return _enviar_texto_etapa7(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa7_cliente_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    )
+
+
+def enviar_etapa7_dependente_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    mensagem_bot = (
+        montar_mensagem_oferta_dependente_reforco_escolar_etapa7(
+            nome_dependente
+        )
+    )
+
+    return _enviar_texto_etapa7(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa7_dependente_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

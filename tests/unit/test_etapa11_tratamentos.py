@@ -47,6 +47,7 @@ def _contexto_historico(texto, tipo="text", *, dependente=False):
         "tipo_mensagem_atual": tipo,
         "status_dependente": dependente,
         "nome_dependente": "Ana" if dependente else None,
+        "idade_pessoa_triagem": 12 if dependente else 30,
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
             "cliente_telefone": "5571999999999",
@@ -330,6 +331,7 @@ class Etapa11TratamentosTests(unittest.TestCase):
             "5571999999999",
             "phone-id",
             "Ana",
+            12,
         )
         self.assertEqual(
             resultado["evento_transicao"],

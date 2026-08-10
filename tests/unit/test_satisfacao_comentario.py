@@ -1,6 +1,11 @@
 import unittest
 from unittest.mock import patch
 
+from core.integrations.whatsapp.messages.etapa21_messages import (
+    montar_mensagem_contexto_invalido_etapa21,
+    montar_mensagem_etapa21,
+    montar_mensagem_midia_etapa21,
+)
 import workers.worker_flow.response_flow.etapas.resolver_etapa20 as etapa20
 import workers.worker_flow.response_flow.etapas.resolver_etapa21 as etapa21
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -72,6 +77,26 @@ def contexto_envio(id_etapa, *, tratamento=False):
 
 
 class SatisfacaoComentarioTests(unittest.TestCase):
+    def test_etapa21_usa_abertura_de_sucesso_apenas_na_entrada(self):
+        mensagem_normal = montar_mensagem_etapa21()
+        retomada = (
+            "Deixa aqui a baixo seu comentário para melhorar nosso "
+            "atendimento."
+        )
+
+        self.assertTrue(mensagem_normal.startswith("Perfeito! 😊\n"))
+        self.assertTrue(mensagem_normal.endswith(retomada))
+
+        for montar_tratamento in (
+            montar_mensagem_midia_etapa21,
+            montar_mensagem_contexto_invalido_etapa21,
+        ):
+            with self.subTest(montador=montar_tratamento.__name__):
+                mensagem = montar_tratamento()
+                self.assertNotIn("Perfeito!", mensagem)
+                self.assertIn("\n\nMas bora lá:\n\n", mensagem)
+                self.assertTrue(mensagem.endswith(retomada))
+
     def test_etapa20_aceite_encaminha_para_captura_sem_salvar_comentario(self):
         with (
             patch.object(

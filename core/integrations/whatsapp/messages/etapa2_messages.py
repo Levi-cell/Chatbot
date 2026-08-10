@@ -1,4 +1,9 @@
 
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 ### INICIO
 
 MENSAGEM_ETAPA2 = (
@@ -22,6 +27,19 @@ MENSAGEM_FINANCEIRO_ETAPA2 = (
 
 def montar_mensagem_financeiro_etapa2():
     return MENSAGEM_FINANCEIRO_ETAPA2
+
+
+### RESPONDEU COM DÚVIDA SOBRE REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_ETAPA2 = (
+    "Fala para mim, esse atendimento é para você ou para um dependente?"
+)
+
+
+def montar_mensagem_reforco_escolar_etapa2():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_ETAPA2,
+    )
 
 ### RESPONDEU ERRADO COM MIDIA
 

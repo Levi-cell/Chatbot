@@ -161,7 +161,22 @@ class FunilEssencialTests(unittest.TestCase):
             "- Profissão: Engenheiro",
             personalizados["Observações"],
         )
-        self.assertIn("Às vezes: 3", personalizados["Observações"])
+        self.assertIn(
+            "Perguntas e respostas da triagem:",
+            personalizados["Observações"],
+        )
+        self.assertIn(
+            "-Pergunta 1:\n\n"
+            "Com que frequência Enzo Teste se distrai com facilidade "
+            "durante tarefas ou atividades escolares?\n\n"
+            "Resposta: Nunca",
+            personalizados["Observações"],
+        )
+        self.assertEqual(
+            personalizados["Observações"].count("-Pergunta "),
+            6,
+        )
+        self.assertNotIn("- Nunca:", personalizados["Observações"])
         self.assertLess(
             personalizados["Observações"].index(
                 "- Idade do dependente: 12"
@@ -175,7 +190,7 @@ class FunilEssencialTests(unittest.TestCase):
                 "- Profissão: Engenheiro"
             ),
             personalizados["Observações"].index(
-                "Resultado do teste de triagem"
+                "Perguntas e respostas da triagem"
             ),
         )
 
@@ -193,11 +208,14 @@ class FunilEssencialTests(unittest.TestCase):
                 "Analista financeira",
                 None,
                 None,
-                6,
-                1,
-                2,
-                3,
-                0,
+                [
+                    {"id_etapa": 12, "resposta": "nunca"},
+                    {"id_etapa": 13, "resposta": "às vezes"},
+                    {"id_etapa": 14, "resposta": "frequentemente"},
+                    {"id_etapa": 15, "resposta": "nunca"},
+                    {"id_etapa": 16, "resposta": "às vezes"},
+                    {"id_etapa": 17, "resposta": "frequentemente"},
+                ],
             )
         )
 
@@ -205,8 +223,14 @@ class FunilEssencialTests(unittest.TestCase):
 
         sql, parametros = cursor.calls[0]
         self.assertIn("c.profissao", sql)
+        self.assertIn("r.id_etapa BETWEEN 12 AND 17", sql)
+        self.assertIn("ORDER BY r.id_etapa", sql)
         self.assertEqual(parametros, (123,))
         self.assertEqual(dados["profissao"], "Analista financeira")
+        self.assertEqual(
+            [item["id_etapa"] for item in dados["triagem_respostas"]],
+            [12, 13, 14, 15, 16, 17],
+        )
 
     def test_payload_legado_exibe_profissao_nao_informada(self):
         dados = montar_dados_lead_teste()
@@ -218,7 +242,7 @@ class FunilEssencialTests(unittest.TestCase):
         self.assertIn("- Profissão: Não informada", observacoes)
         self.assertLess(
             observacoes.index("- Profissão: Não informada"),
-            observacoes.index("Resultado do teste de triagem"),
+            observacoes.index("Perguntas e respostas da triagem"),
         )
 
     def test_payload_adiciona_nono_digito_ao_telefone_brasileiro(self):
@@ -255,14 +279,14 @@ class FunilEssencialTests(unittest.TestCase):
             observacoes.index(
                 "O cliente possui um número internacional fora do padrão brasileiro"
             ),
-            observacoes.index("Resultado do teste de triagem"),
+            observacoes.index("Perguntas e respostas da triagem"),
         )
         self.assertIn(
             "- Idade do dependente: 12\n\n"
             "O cliente possui um número internacional fora do padrão brasileiro, "
             "por isso o campo Telefone 1 não foi preenchido.\n\n"
             "- Profissão: Engenheiro\n\n"
-            "Resultado do teste de triagem",
+            "Perguntas e respostas da triagem",
             observacoes,
         )
 
@@ -290,12 +314,47 @@ class FunilEssencialTests(unittest.TestCase):
         )
         self.assertIn("Idade do cliente: 25", observacoes)
         self.assertNotIn("Nome do dependente", observacoes)
+        self.assertIn(
+            "Com que frequência você esquece compromissos, recados ou "
+            "onde guardou objetos pessoais?",
+            observacoes,
+        )
+
+    def test_payload_dependente_adulto_usa_nome_nas_perguntas(self):
+        dados = montar_dados_lead_teste()
+        dados["idade_dependente"] = 35
+
+        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
+        observacoes = oportunidade["personalizados"][0]["valor"]
+
+        self.assertIn(
+            "Com que frequência Enzo Teste esquece compromissos, recados "
+            "ou onde guardou objetos pessoais?",
+            observacoes,
+        )
+        self.assertNotIn("Com que frequência você", observacoes)
 
     def test_payload_rejeita_triagem_incompleta(self):
         dados = montar_dados_lead_teste()
-        dados["triagem_total"] = 5
+        dados["triagem_respostas"] = dados["triagem_respostas"][:-1]
 
-        with self.assertRaisesRegex(ValueError, "exatamente 6"):
+        with self.assertRaisesRegex(ValueError, "etapas 12"):
+            montar_payload_oportunidade(dados)
+
+    def test_payload_rejeita_triagem_fora_de_ordem(self):
+        dados = montar_dados_lead_teste()
+        dados["triagem_respostas"] = list(
+            reversed(dados["triagem_respostas"])
+        )
+
+        with self.assertRaisesRegex(ValueError, "ordenadas"):
+            montar_payload_oportunidade(dados)
+
+    def test_payload_rejeita_resposta_fora_do_dominio(self):
+        dados = montar_dados_lead_teste()
+        dados["triagem_respostas"][2]["resposta"] = "raramente"
+
+        with self.assertRaisesRegex(ValueError, "fora do domínio"):
             montar_payload_oportunidade(dados)
 
     def test_payload_nao_inclui_dados_da_pesquisa_de_satisfacao(self):

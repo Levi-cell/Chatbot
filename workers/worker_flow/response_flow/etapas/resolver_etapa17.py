@@ -38,6 +38,9 @@ def resolve_etapa17(contexto_historico):
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     status_dependente = bool(contexto_historico.get("status_dependente"))
     nome_dependente = contexto_historico.get("nome_dependente")
+    idade_pessoa_triagem = contexto_historico[
+        "idade_pessoa_triagem"
+    ]
     link_agendamento = contexto_historico.get(
         "link_agendamento_unidade"
     )
@@ -59,6 +62,7 @@ def resolve_etapa17(contexto_historico):
                 cliente_telefone,
                 phone_id_unidade,
                 nome_dependente,
+                idade_pessoa_triagem,
             )
 
         return enviar_etapa17_cliente_contexto_invalido(

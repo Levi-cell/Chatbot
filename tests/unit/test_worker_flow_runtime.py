@@ -78,16 +78,16 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
-    def test_fila_vazia_aguarda_tres_segundos(self):
+    def test_fila_vazia_aguarda_um_segundo_e_meio(self):
         with (
             patch.object(estado_ciclo.time, "sleep") as sleep,
             patch.object(estado_ciclo.logger, "debug") as log_debug,
         ):
             estado_ciclo.aguardar_fila_vazia()
 
-        sleep.assert_called_once_with(3)
+        sleep.assert_called_once_with(1.5)
         log_debug.assert_called_once_with(
-            "fila_vazia | acao=aguardar segundos=3"
+            "fila_vazia | acao=aguardar segundos=1.5"
         )
 
     def test_erro_operacional_psycopg3_reinicia_conexao(self):

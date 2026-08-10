@@ -2,7 +2,7 @@
 
 
 def buscar_dados_lead_funil(id_conversa, cursor):
-    """Retorna cliente, profissão, dependente e resumo da triagem."""
+    """Retorna cliente, profissão, dependente e respostas da triagem."""
     cursor.execute(
         """
         SELECT
@@ -17,11 +17,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             c.profissao,
             d.nome_dependente,
             d.idade AS idade_dependente,
-            triagem.total,
-            triagem.nunca,
-            triagem.as_vezes,
-            triagem.frequentemente,
-            triagem.desconhecida
+            triagem.respostas
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -33,30 +29,19 @@ def buscar_dados_lead_funil(id_conversa, cursor):
           ON d.id_conversa = c.id_conversa
         CROSS JOIN LATERAL (
             SELECT
-                COUNT(*)::INT AS total,
-                COUNT(*) FILTER (
-                    WHERE LOWER(BTRIM(r.resposta)) = 'nunca'
-                )::INT AS nunca,
-                COUNT(*) FILTER (
-                    WHERE LOWER(BTRIM(r.resposta)) IN ('às vezes', 'as vezes')
-                )::INT AS as_vezes,
-                COUNT(*) FILTER (
-                    WHERE LOWER(BTRIM(r.resposta)) = 'frequentemente'
-                )::INT AS frequentemente,
-                COUNT(*) FILTER (
-                    WHERE LOWER(BTRIM(r.resposta)) NOT IN (
-                        'nunca',
-                        'às vezes',
-                        'as vezes',
-                        'frequentemente'
-                    )
-                )::INT AS desconhecida
+                COALESCE(
+                    JSONB_AGG(
+                        JSONB_BUILD_OBJECT(
+                            'id_etapa', r.id_etapa,
+                            'resposta', r.resposta
+                        )
+                        ORDER BY r.id_etapa
+                    ),
+                    '[]'::JSONB
+                ) AS respostas
             FROM chatbot.respostas_desafios r
-            JOIN chatbot.etapa etapa_triagem
-              ON etapa_triagem.id_etapa = r.id_etapa
             WHERE r.id_conversa = c.id_conversa
-              AND etapa_triagem.nome_etapa
-                  LIKE 'Triagem cognitiva - pergunta %%'
+              AND r.id_etapa BETWEEN 12 AND 17
         ) AS triagem
         WHERE c.id_conversa = %s
           AND etapa_atual.elegivel_funil = TRUE
@@ -82,9 +67,5 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         "profissao": resultado[8],
         "nome_dependente": resultado[9],
         "idade_dependente": resultado[10],
-        "triagem_total": resultado[11],
-        "triagem_nunca": resultado[12],
-        "triagem_as_vezes": resultado[13],
-        "triagem_frequentemente": resultado[14],
-        "triagem_desconhecida": resultado[15],
+        "triagem_respostas": resultado[11],
     }

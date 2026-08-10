@@ -4,6 +4,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_etapa2_contexto_opcao_invalida,
     enviar_etapa2_financeiro,
     enviar_etapa2_midia,
+    enviar_etapa2_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
     enviar_etapa3,
@@ -20,6 +21,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_3_CONFIRMACAO_DESTINO,
@@ -47,6 +52,16 @@ def resolve_etapa2(contexto_historico):
             "tipo_mensagem_nao_suportado",
         )
         return enviar_etapa2_midia(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return enviar_etapa2_reforco_escolar(
             cliente_telefone,
             phone_id_unidade,
         )

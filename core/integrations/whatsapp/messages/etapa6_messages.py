@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 ### ENTRADA NA ETAPA 6 - CLIENTE
 
 MENSAGEM_IDADE_ETAPA6 = (
@@ -68,6 +73,26 @@ MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO = (
 
 def montar_mensagem_idade_dependente_etapa6_financeiro(nome):
     return MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO.format(nome=nome)
+
+
+### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_IDADE_ETAPA6 = "Me diz, qual é a sua idade?"
+MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6 = (
+    "Me diz, qual é a idade de {nome}?"
+)
+
+
+def montar_mensagem_idade_etapa6_reforco_escolar():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_IDADE_ETAPA6,
+    )
+
+
+def montar_mensagem_idade_dependente_etapa6_reforco_escolar(nome):
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6.format(nome=nome),
+    )
 
 
 ### CLIENTE RESPONDE À IDADE COM MENSAGEM FORA DE CONTEXTO

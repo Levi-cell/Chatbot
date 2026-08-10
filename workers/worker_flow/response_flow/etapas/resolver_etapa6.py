@@ -5,10 +5,12 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
     enviar_etapa6_cliente_financeiro,
     enviar_etapa6_cliente_menor_18,
     enviar_etapa6_cliente_midia,
+    enviar_etapa6_cliente_reforco_escolar,
     enviar_etapa6_dependente_contexto_idade_invalida,
     enviar_etapa6_dependente_financeiro,
     enviar_etapa6_dependente_menor_5,
     enviar_etapa6_dependente_midia,
+    enviar_etapa6_dependente_reforco_escolar,
     enviar_etapa6_idade_acima_99,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa7 import (
@@ -26,6 +28,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_7_OFERTA_AULA,
@@ -73,7 +79,19 @@ def resolve_etapa6(contexto_historico):
             nome_dependente,
         )
 
-    # Pergunta financeira tem prioridade sobre a validação da idade.
+    # A dúvida sobre reforço é mais específica que o financeiro e a idade.
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+        return _enviar_tratamento_reforco_escolar(
+            status_dependente,
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+
     if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento(
             contexto_historico,
@@ -220,6 +238,25 @@ def _enviar_tratamento_financeiro(
         )
 
     return enviar_etapa6_cliente_financeiro(
+        cliente_telefone,
+        phone_id_unidade,
+    )
+
+
+def _enviar_tratamento_reforco_escolar(
+    status_dependente,
+    cliente_telefone,
+    phone_id_unidade,
+    nome_dependente,
+):
+    if status_dependente:
+        return enviar_etapa6_dependente_reforco_escolar(
+            cliente_telefone,
+            phone_id_unidade,
+            nome_dependente,
+        )
+
+    return enviar_etapa6_cliente_reforco_escolar(
         cliente_telefone,
         phone_id_unidade,
     )

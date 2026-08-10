@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 # ENTRADA NA ETAPA 11
 
 MENSAGEM_TRIAGEM_COGNITIVA_ETAPA11 = (
@@ -47,6 +52,12 @@ def montar_mensagem_midia_etapa11():
 
 def montar_mensagem_financeiro_etapa11():
     return MENSAGEM_FINANCEIRO_ETAPA11
+
+
+def montar_mensagem_reforco_escolar_etapa11():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_TRIAGEM_COGNITIVA_ETAPA11,
+    )
 
 
 def montar_mensagem_contexto_invalido_etapa11():

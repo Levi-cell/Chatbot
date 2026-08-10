@@ -182,8 +182,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente})"
             )
 
-    # As etapas 11-17 compartilham o nome do dependente. O dado sempre volta
-    # do banco em cada ciclo para que retries reconstruam o contexto completo.
+    # As etapas 11-17 relêem do banco a pessoa atendida em cada ciclo. Assim,
+    # retries reconstroem a mesma variante etária sem depender de memória.
     if id_etapa_cliente in ETAPAS_TRIAGEM:
         contexto_especifico_etapa.update(
             buscar_contexto_triagem(
@@ -193,14 +193,64 @@ def valida_historico(mensagem, contexto_banco, cursor):
             )
         )
 
+        status_dependente = contexto_conversa.get("status_dependente")
+        status_dependente_contexto = contexto_especifico_etapa[
+            "status_dependente_contexto_triagem"
+        ]
+
+        if not isinstance(status_dependente, bool):
+            raise ValueError(
+                "Triagem sem destino de atendimento definido "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
         if (
-            contexto_conversa.get("status_dependente")
-            and not contexto_especifico_etapa["nome_dependente"]
+            not isinstance(status_dependente_contexto, bool)
+            or status_dependente_contexto != status_dependente
+        ):
+            raise ValueError(
+                "Triagem com destino de atendimento inconsistente "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
+        idade_pessoa_triagem = contexto_especifico_etapa[
+            "idade_pessoa_triagem"
+        ]
+        if (
+            isinstance(idade_pessoa_triagem, bool)
+            or not isinstance(idade_pessoa_triagem, int)
+            or idade_pessoa_triagem <= 0
+            or idade_pessoa_triagem >= 100
+        ):
+            raise ValueError(
+                "Triagem sem idade valida da pessoa atendida "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
+        if status_dependente and idade_pessoa_triagem < 4:
+            raise ValueError(
+                "Triagem de dependente abaixo da idade minima suportada "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
+        if not status_dependente and idade_pessoa_triagem < 18:
+            raise ValueError(
+                "Triagem de titular menor de idade "
+                f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
+            )
+
+        nome_dependente = contexto_especifico_etapa["nome_dependente"]
+        if status_dependente and (
+            not nome_dependente or not str(nome_dependente).strip()
         ):
             raise ValueError(
                 "Triagem de dependente sem nome persistido "
                 f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
             )
+
+        contexto_especifico_etapa.pop(
+            "status_dependente_contexto_triagem"
+        )
 
     # A resposta da pergunta 6 envia a etapa 18, e os tratamentos da própria
     # etapa 18 repetem a mensagem. Os dois ciclos precisam do link da unidade.

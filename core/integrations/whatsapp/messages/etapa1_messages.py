@@ -2,6 +2,9 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
     RODAPE_ETAPA1_BOAS_VINDAS,
     montar_texto_com_rodape,
 )
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
 
 
 ### INICIO NORMAL
@@ -85,6 +88,28 @@ MENSAGEM_FINANCEIRO_ETAPA1 = (
 
 def montar_mensagem_financeiro_etapa1():
     return MENSAGEM_FINANCEIRO_ETAPA1
+
+
+### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_ETAPA1 = "Me diz, qual o seu primeiro nome?"
+
+
+def montar_mensagem_reforco_escolar_inicio(saudacao, nome_unidade):
+    mensagem = (
+        f"{saudacao}! Sou a Suh, atendente virtual do {nome_unidade}! ☺️\n"
+        f"{montar_mensagem_tratamento_reforco_escolar(MENSAGEM_RETOMADA_ETAPA1)}"
+    )
+    return montar_texto_com_rodape(
+        mensagem,
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
+
+
+def montar_mensagem_reforco_escolar_etapa1():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_ETAPA1,
+    )
 
 
 ### CLIENTE RESPONDE AO NOME COM CONTEXTO INVALIDO

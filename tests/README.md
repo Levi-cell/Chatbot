@@ -11,8 +11,11 @@ produção. A suíte não tenta reproduzir cada arquivo, sender ou texto exibido
 - mapa de transições e rejeição de saltos inválidos;
 - persistência final, tratamentos sem avanço e ramificações principais;
 - cache de unidade e bloqueio com fallback para o banco;
-- validadores de mídia, financeiro, nome, idade, decisão, email e triagem;
+- validadores de mídia, dúvida sobre reforço escolar, financeiro, nome, idade,
+  decisão, email e triagem;
 - persistência das respostas da triagem;
+- catálogo das perguntas da triagem por faixa etária, seus limites e a mesma
+  ordenação no WhatsApp e no Funil;
 - apresentação uniforme dos cabeçalhos interativos do WhatsApp;
 - contratos mínimos do DDL, catálogo de etapas e mapa inicial.
 
@@ -62,6 +65,7 @@ tests/
     |-- test_cache_essencial.py
     |-- test_deploy_essencial.py
     |-- test_efeitos_triagem.py
+    |-- test_triagem_faixa_etaria.py
     |-- test_flood_guard.py
     |-- test_fluxo_turno_abc.py
     |-- test_lastfrom_semantico.py

@@ -6,6 +6,7 @@ from core.integrations.whatsapp.messages.etapa10_messages import (
     montar_mensagem_email_etapa10,
     montar_mensagem_email_etapa10_financeiro,
     montar_mensagem_email_etapa10_midia,
+    montar_mensagem_email_etapa10_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -19,6 +20,7 @@ logger = logging.getLogger("whatsapp.etapa10")
 ID_ETAPA10 = 10
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_EMAIL_INVALIDO = "email_invalido"
 
 
@@ -66,6 +68,22 @@ def enviar_etapa10_financeiro(
         mensagem_bot,
         evento="enviar_etapa10_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+def enviar_etapa10_reforco_escolar(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    mensagem_bot = montar_mensagem_email_etapa10_reforco_escolar()
+
+    return _enviar_texto_etapa10(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa10_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

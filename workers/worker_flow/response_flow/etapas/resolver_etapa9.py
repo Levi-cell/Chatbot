@@ -7,9 +7,11 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa9 import (
     enviar_etapa9_cliente_contexto_invalido,
     enviar_etapa9_cliente_financeiro,
     enviar_etapa9_cliente_midia,
+    enviar_etapa9_cliente_reforco_escolar,
     enviar_etapa9_dependente_contexto_invalido,
     enviar_etapa9_dependente_financeiro,
     enviar_etapa9_dependente_midia,
+    enviar_etapa9_dependente_reforco_escolar,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa10 import (
     enviar_etapa10,
@@ -25,6 +27,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
     validar_midia,
+)
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    validar_duvida_reforco_escolar,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_8_OFERTA_ADIADA,
@@ -87,7 +93,25 @@ def resolve_etapa9(contexto_historico):
             phone_id_unidade,
         )
 
-# CAMPOS QUE VALIDAM FINANCEIRO NA ETAPA 9
+# DÚVIDA SOBRE REFORÇO TEM PRIORIDADE SOBRE O FINANCEIRO
+    if validar_duvida_reforco_escolar(texto_cliente):
+        _logar_tratamento_texto(
+            contexto_historico,
+            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+        )
+
+        if status_dependente:
+            return enviar_etapa9_dependente_reforco_escolar(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_dependente,
+            )
+
+        return enviar_etapa9_cliente_reforco_escolar(
+            cliente_telefone,
+            phone_id_unidade,
+        )
+
     if validar_pergunta_financeira(texto_cliente):
         _logar_tratamento_texto(
             contexto_historico,

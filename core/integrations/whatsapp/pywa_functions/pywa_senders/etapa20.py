@@ -13,6 +13,7 @@ from core.integrations.whatsapp.messages.etapa20_messages import (
     montar_mensagem_etapa20,
     montar_mensagem_financeiro_etapa20,
     montar_mensagem_midia_etapa20,
+    montar_mensagem_reforco_escolar_etapa20,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -26,6 +27,7 @@ logger = logging.getLogger("whatsapp.etapa20")
 ID_ETAPA20 = 20
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_comentario_invalida"
 
 
@@ -59,6 +61,16 @@ def enviar_etapa20_financeiro(cliente_telefone, phone_id_unidade):
         montar_mensagem_financeiro_etapa20(),
         evento="enviar_etapa20_financeiro",
         tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+def enviar_etapa20_reforco_escolar(cliente_telefone, phone_id_unidade):
+    return _enviar_botoes_etapa20(
+        cliente_telefone,
+        phone_id_unidade,
+        montar_mensagem_reforco_escolar_etapa20(),
+        evento="enviar_etapa20_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
 

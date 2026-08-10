@@ -22,7 +22,6 @@ from workers.worker_flow.response_flow.etapas import (
     resolver_etapa3,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
-    MOTIVO_SINAIS_CONTRADITORIOS,
     validar_etapa3,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -147,19 +146,21 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                 status_dependente,
             )
 
-    def test_mensagens_variam_com_destino_sem_exibir_entao(self):
+    def test_mensagens_variam_com_destino_sem_entendi_ou_entao(self):
         titular = montar_mensagem_etapa3(False)
         dependente = montar_mensagem_etapa3(True)
 
         self.assertEqual(
             titular,
-            "Entendi, você confirma que esse atendimento é para você?",
+            "Você confirma que esse atendimento é para você?",
         )
         self.assertEqual(
             dependente,
-            "Entendi, você confirma que esse atendimento é para um "
+            "Você confirma que esse atendimento é para um "
             "dependente?",
         )
+        self.assertNotIn("entendi", titular.casefold())
+        self.assertNotIn("entendi", dependente.casefold())
         self.assertNotIn("então", titular.casefold())
         self.assertNotIn("então", dependente.casefold())
 
@@ -183,6 +184,10 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                     mensagem = montar(status_dependente)
                     self.assertIn(aviso, mensagem)
                     self.assertIn("\n\nMas bora lá:\n\n", mensagem)
+                    self.assertNotIn(
+                        "Mas bora lá:\n\nEntendi",
+                        mensagem,
+                    )
                     self.assertTrue(mensagem.endswith(pergunta))
 
     def test_sender_preserva_botoes_e_rodape_de_opcao_unica(self):
@@ -213,154 +218,28 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
             ETAPA_3_CONFIRMACAO_DESTINO,
         )
 
-    def test_validador_aceita_confirmacoes_positivas_e_negativas(self):
-        positivas = (
-            "Sim",
-            "s",
-            "confirmo",
-            "Confirmo sim",
-            "Ok",
-            "Sim, vamos lá",
-            "Ok, continuar",
-            "pode prosseguir",
-            "isso mesmo",
-        )
-        negativas = (
-            "Não",
-            "n",
-            "Não confirmo",
-            "não, acabei me enganando",
-            "foi um engano",
-            "me confundi",
-            "marquei errado",
-        )
+    def test_validador_aceita_somente_sim_ou_nao(self):
+        entradas_sim = ("Sim", "SIM", " sim ", "\nSim\t")
+        entradas_nao = ("Não", "NÃO", "nao", " não ")
 
         for status_atual in (False, True):
-            for texto in positivas:
+            for texto in entradas_sim:
                 with self.subTest(
                     texto=texto,
                     status_atual=status_atual,
                 ):
                     resultado = validar_etapa3(texto, status_atual)
                     self.assertTrue(resultado.valida)
-                    self.assertEqual(
+                    self.assertIs(
                         resultado.status_dependente_final,
                         status_atual,
                     )
 
-            for texto in negativas:
+            for texto in entradas_nao:
                 with self.subTest(
                     texto=texto,
                     status_atual=status_atual,
                 ):
-                    resultado = validar_etapa3(texto, status_atual)
-                    self.assertTrue(resultado.valida)
-                    self.assertEqual(
-                        resultado.status_dependente_final,
-                        not status_atual,
-                    )
-
-    def test_validador_aceita_destino_explicito_e_erros_tolerados(self):
-        para_titular = (
-            "Para mim",
-            "eu mesmo",
-            "só para mim",
-            "é a para mim",
-            "é para min",
-            "pra min",
-            "só para min",
-            "somente para min",
-            "apenas para min",
-            "eu quero para min",
-        )
-        para_dependente = (
-            "Para outra pessoa",
-            "para um dependente",
-            "é para meu filho",
-            "para minha mãe",
-            "para alguém que depende de mim",
-            "para uma criança",
-            "para um idoso",
-            "para uma pessoa com deficiência",
-        )
-
-        for texto in para_titular:
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, True)
-                self.assertTrue(resultado.valida)
-                self.assertFalse(resultado.status_dependente_final)
-
-        for texto in para_dependente:
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, False)
-                self.assertTrue(resultado.valida)
-                self.assertTrue(resultado.status_dependente_final)
-
-    def test_validador_aceita_correcao_contrastiva(self):
-        casos = (
-            (
-                "Não é para mim não, é para outra pessoa",
-                False,
-                True,
-            ),
-            ("Né para mim não é para meu filho", False, True),
-            (
-                "Não é para outra pessoa não, é para min",
-                True,
-                False,
-            ),
-            (
-                "Não é para um dependente, mas é para eu mesmo",
-                True,
-                False,
-            ),
-        )
-
-        for texto, status_atual, status_final in casos:
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, status_atual)
-                self.assertTrue(resultado.valida)
-                self.assertEqual(
-                    resultado.status_dependente_final,
-                    status_final,
-                )
-
-    def test_validador_aceita_polaridades_compostas_coerentes(self):
-        casos = (
-            ("não, foi um engano", False),
-            ("não, me enganei", False),
-            ("não, errei", False),
-            ("sim, confirmo", True),
-            ("sim, isso mesmo", True),
-        )
-
-        for texto, polaridade_positiva in casos:
-            for status_atual in (False, True):
-                with self.subTest(texto=texto, status_atual=status_atual):
-                    resultado = validar_etapa3(texto, status_atual)
-                    self.assertTrue(resultado.valida)
-                    esperado = (
-                        status_atual
-                        if polaridade_positiva
-                        else not status_atual
-                    )
-                    self.assertEqual(
-                        resultado.status_dependente_final,
-                        esperado,
-                    )
-
-    def test_erro_sem_destino_inverte_a_escolha_atual(self):
-        frases = (
-            "me enganei",
-            "foi um engano",
-            "errei",
-            "Cometi um erro",
-            "Eu cometi um erro",
-        )
-
-        for status_atual in (False, True):
-            for texto in frases:
-                with self.subTest(texto=texto, status_atual=status_atual):
                     resultado = validar_etapa3(texto, status_atual)
                     self.assertTrue(resultado.valida)
                     self.assertIs(
@@ -368,91 +247,91 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                         not status_atual,
                     )
 
-    def test_erro_com_destino_so_aceita_correcao_logica(self):
-        casos_validos = (
-            ("me enganei, é para outra pessoa", False, True),
-            ("errei, é para outra pessoa", False, True),
-            ("Cometi um erro, é para outra pessoa", False, True),
-            ("me enganei, é para mim", True, False),
-            ("errei, é para mim", True, False),
-            ("Cometi um erro, é para mim", True, False),
+    def test_validador_rejeita_qualquer_outro_conteudo(self):
+        respostas_invalidas = (
+            "",
+            "s",
+            "n",
+            "ok",
+            "confirmo",
+            "foi um engano",
+            "para mim",
+            "para um dependente",
+            "sim!",
+            "não?",
+            "sim, é para mim",
+            "não é para outra pessoa",
+            "sim 👍",
+            "qualquer coisa",
+            None,
         )
-        casos_contraditorios = (
-            ("me enganei, é para outra pessoa", True),
-            ("errei, é para outra pessoa", True),
-            ("Cometi um erro, é para outra pessoa", True),
-            ("me enganei, é para mim", False),
-            ("errei, é para mim", False),
-            ("Cometi um erro, é para mim", False),
-        )
 
-        for texto, status_atual, status_final in casos_validos:
-            with self.subTest(texto=texto, status_atual=status_atual):
-                resultado = validar_etapa3(texto, status_atual)
-                self.assertTrue(resultado.valida)
-                self.assertIs(
-                    resultado.status_dependente_final,
-                    status_final,
-                )
+        for status_atual in (False, True):
+            for texto in respostas_invalidas:
+                with self.subTest(
+                    texto=texto,
+                    status_atual=status_atual,
+                ):
+                    resultado = validar_etapa3(texto, status_atual)
+                    self.assertFalse(resultado.valida)
+                    self.assertIsNone(
+                        resultado.status_dependente_final
+                    )
 
-        for texto, status_atual in casos_contraditorios:
-            with self.subTest(texto=texto, status_atual=status_atual):
-                resultado = validar_etapa3(texto, status_atual)
-                self.assertFalse(resultado.valida)
-                self.assertEqual(
-                    resultado.motivo,
-                    MOTIVO_SINAIS_CONTRADITORIOS,
-                )
-
-    def test_validador_rejeita_polaridades_compostas_contraditorias(self):
-        for texto in ("sim, não confirmo", "não, sim"):
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, False)
-                self.assertFalse(resultado.valida)
-                self.assertEqual(
-                    resultado.motivo,
-                    MOTIVO_SINAIS_CONTRADITORIOS,
-                )
-
-    def test_validador_entende_negacao_direta_do_destino(self):
+    def test_resolver_aceita_clique_nos_botoes_sim_e_nao(self):
         casos = (
-            ("Não é para mim", False, True),
-            ("Né pra min não", False, True),
-            ("Não é para outra pessoa", True, False),
-            ("Não é para o meu filho", True, False),
+            (
+                "interactive",
+                "Sim",
+                "enviar_etapa4",
+                ETAPA_4_PROFISSAO,
+            ),
+            (
+                "button",
+                "Não",
+                "enviar_etapa5",
+                ETAPA_5_NOME_DEPENDENTE,
+            ),
         )
 
-        for texto, status_atual, status_final in casos:
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, status_atual)
-                self.assertTrue(resultado.valida)
-                self.assertEqual(
-                    resultado.status_dependente_final,
-                    status_final,
-                )
+        for tipo, texto, sender_esperado, etapa_esperada in casos:
+            with self.subTest(tipo=tipo, texto=texto):
+                with (
+                    patch.object(
+                        resolver_etapa3,
+                        "enviar_etapa4",
+                        return_value=_contexto_envio(
+                            ETAPA_4_PROFISSAO
+                        ),
+                    ) as enviar_titular,
+                    patch.object(
+                        resolver_etapa3,
+                        "enviar_etapa5",
+                        return_value=_contexto_envio(
+                            ETAPA_5_NOME_DEPENDENTE
+                        ),
+                    ) as enviar_dependente,
+                ):
+                    resultado = resolver_etapa3.resolve_etapa3(
+                        _contexto_historico(
+                            texto,
+                            tipo=tipo,
+                            status_dependente=False,
+                        )
+                    )
 
-    def test_validador_rejeita_polaridade_e_destino_contraditorios(self):
-        casos = (
-            ("sim, é para mim", True),
-            ("sim, é para outra pessoa", False),
-            ("não, é para outra pessoa", True),
-            ("não, é para mim", False),
-            ("sim, eu quero, é para meu filho", False),
-        )
-
-        for texto, status_atual in casos:
-            with self.subTest(texto=texto):
-                resultado = validar_etapa3(texto, status_atual)
-                self.assertFalse(resultado.valida)
-                self.assertEqual(
-                    resultado.motivo,
-                    MOTIVO_SINAIS_CONTRADITORIOS,
-                )
-
-    def test_validador_rejeita_respostas_fora_do_contexto(self):
-        for texto in ("", "talvez", "qualquer coisa", "sim banana", None):
-            with self.subTest(texto=texto):
-                self.assertFalse(validar_etapa3(texto, False).valida)
+            senders = {
+                "enviar_etapa4": enviar_titular,
+                "enviar_etapa5": enviar_dependente,
+            }
+            senders[sender_esperado].assert_called_once_with(
+                "5571999999999",
+                "phone-id",
+            )
+            self.assertEqual(
+                resultado["id_etapa_resultante"],
+                etapa_esperada,
+            )
 
     def test_resolver_prioriza_midia_financeiro_e_contexto(self):
         casos = (
@@ -566,7 +445,7 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
             ),
             (
                 True,
-                "foi um engano",
+                "não",
                 False,
                 EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
                 ETAPA_4_PROFISSAO,

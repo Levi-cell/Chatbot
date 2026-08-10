@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 ### MENSAGENS EXCLUSIVA PARA DEPENDENTE
 
 ### MENSAGEM DE INICIO PERGUNTANDO O NOME
@@ -34,6 +39,19 @@ MENSAGEM_FINANCEIRO_ETAPA5 = (
 
 def montar_mensagem_financeiro_etapa5():
     return MENSAGEM_FINANCEIRO_ETAPA5
+
+
+### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_ETAPA5 = (
+    "Fala para mim, qual o primeiro nome da pessoa?"
+)
+
+
+def montar_mensagem_reforco_escolar_etapa5():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_ETAPA5,
+    )
 
 
 ### CLIENTE RESPONDE O NOME DA PESSOA COM MENSAGEM FORA DE CONTEXTO

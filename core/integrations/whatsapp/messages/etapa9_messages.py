@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 # ENTRADA NA ETAPA 9 - RETORNO DO PROPRIO CLIENTE
 
 MENSAGEM_RETORNO_CLIENTE_ETAPA9 = (
@@ -78,6 +83,28 @@ MENSAGEM_RETORNO_DEPENDENTE_FINANCEIRO_ETAPA9 = (
 
 def montar_mensagem_retorno_dependente_financeiro_etapa9(nome):
     return MENSAGEM_RETORNO_DEPENDENTE_FINANCEIRO_ETAPA9.format(nome=nome)
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_CLIENTE_ETAPA9 = (
+    "Vamos dar continuidade ao seu agendamento?"
+)
+MENSAGEM_RETOMADA_DEPENDENTE_ETAPA9 = (
+    "Vamos dar continuidade ao agendamento de {nome}?"
+)
+
+
+def montar_mensagem_retorno_cliente_reforco_escolar_etapa9():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_CLIENTE_ETAPA9,
+    )
+
+
+def montar_mensagem_retorno_dependente_reforco_escolar_etapa9(nome):
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_DEPENDENTE_ETAPA9.format(nome=nome),
+    )
 
 
 # CLIENTE RESPONDE AO RETORNO PROPRIO FORA DO CONTEXTO

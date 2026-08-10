@@ -1,3 +1,8 @@
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
 # ENTRADA NA ETAPA 7 - CLIENTE
 
 MENSAGEM_OFERTA_CLIENTE_ETAPA7 = (
@@ -106,6 +111,39 @@ MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA7 = (
 
 def montar_mensagem_oferta_dependente_financeiro_etapa7(nome):
     return MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA7.format(nome=nome)
+
+
+# CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_OFERTA_CLIENTE_ETAPA7 = (
+    "Quero te presentear com uma experiência que pode fazer toda a diferença "
+    "no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
+    "uma avaliação que vai mostrar como estão habilidades importantes para o "
+    "seu dia a dia, como: memória, atenção, concentração e raciocínio lógico."
+    "\n\n"
+)
+
+MENSAGEM_RETOMADA_OFERTA_DEPENDENTE_ETAPA7 = (
+    "Quero presentear {nome} com uma experiência que pode fazer toda a "
+    "diferença no seu desenvolvimento.\n\n"
+    "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
+    "fará uma avaliação que vai mostrar como estão habilidades importantes "
+    "para o seu dia a dia, como: memória, atenção, concentração e raciocínio "
+    "lógico.\n\n"
+)
+
+
+def montar_mensagem_oferta_cliente_reforco_escolar_etapa7():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_OFERTA_CLIENTE_ETAPA7,
+    )
+
+
+def montar_mensagem_oferta_dependente_reforco_escolar_etapa7(nome):
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_OFERTA_DEPENDENTE_ETAPA7.format(nome=nome),
+    )
 
 
 # CLIENTE RESPONDE À OFERTA COM MENSAGEM FORA DE CONTEXTO
