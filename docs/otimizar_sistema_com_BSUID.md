@@ -9,6 +9,13 @@ Nesta tarefa, somente este arquivo Markdown é alterado. Todos os caminhos de
 código, banco, testes e deploy citados abaixo descrevem impacto futuro; não são
 arquivos a modificar agora.
 
+A baseline operacional usada nesta revisão é a V1.0.5, commit `345e876`, já
+implantada com 22 etapas e 26 transições. Ela inclui a confirmação do destino,
+os tratamentos atuais, a triagem por faixa etária e o detalhamento das perguntas
+no Funil. A futura implementação deste plano acrescentará somente a etapa de
+compartilhamento oficial do contato após o nome; por isso o estado final terá 23
+etapas e 28 transições.
+
 Os contratos de payload usados como referência são:
 
 - `payloads/WAID.json`;
@@ -876,6 +883,7 @@ Também permanecem:
 - requeue sem erro de 300 segundos para vínculo fila/conversa inconsistente;
 - retry genérico de 2 minutos;
 - limite atual de tentativas;
+- espera atual de 1,5 segundo quando a fila está vazia;
 - exatamente um processo de `flow_worker` em produção;
 - toda a verdade lógica de `tests/unit/test_fluxo_turno_abc.py`.
 
@@ -1155,10 +1163,14 @@ atuais:
   `anexar_transicao_ao_contexto_envio()`. Tratamentos não carregam evento e o
   resolver não faz SQL/commit;
 - `flow_sender.py` conserva a barreira idempotente e apenas roteia pela etapa
-  persistida: `None/1 -> resolver 1`, `2 -> resolver 2`, até `21 -> resolver 21`.
-  A etapa 22 é terminal e não possui resolver. `flow_sender()` acrescenta os
-  três snapshots antes de todo retorno, inclusive o idempotente; ele não valida
-  conteúdo, executa SQL nem chama a Meta diretamente;
+  persistida: `None/1 -> resolver 1`, `2 -> resolver 2`, até `22 -> resolver 22`.
+  A etapa 23 é terminal e não possui resolver. `flow_sender()` acrescenta os
+  três snapshots antes de todo retorno, inclusive o idempotente. Ele também
+  preserva a reconstrução idempotente já existente da confirmação do destino:
+  ao recuperar uma resposta do bot, o evento persistido repõe o
+  `status_dependente_final` absoluto, sem reaplicar uma inversão. Fora esse
+  contrato existente, ele não valida conteúdo, executa SQL nem chama a Meta
+  diretamente;
 - `transicoes/eventos.py` e `chatbot.etapa_transicao` definem nomes e arestas,
   sem conter efeitos de dados;
 - `persistencia_resposta.py` e `efeitos_transicao.py` continuam sendo os donos
@@ -1251,6 +1263,13 @@ Não haverá:
 - coleta de username;
 - pausa ou rota alternativa.
 
+O mesmo arquivo de mensagens expõe uma retomada neutra própria para os
+tratamentos da etapa 2. Os builders de mídia, reforço escolar, financeiro e
+contexto usam essa retomada e o mesmo componente oficial; não concatenam
+automaticamente o prefixo de tratamento com a mensagem inaugural iniciada por
+“Olha, para prosseguir...”. O plano fixa o contrato semântico, sem obrigar uma
+segunda frase literal antes da implementação final.
+
 ### 8.3 Validação
 
 Enquanto aguarda:
@@ -1258,17 +1277,26 @@ Enquanto aguarda:
 - primeiro, reconhecer
   `contacts + contact_request + wa_id_compartilhado` válido;
 - depois, tratar qualquer outro `contacts` como contexto inválido;
-- texto, mesmo que contenha um número: contexto específico e repetição do
-  pedido oficial;
-- contato manual/vCard: contexto específico e repetição;
-- mídia: tratamento clássico de mídia + repetição;
-- pergunta financeira: tratamento financeiro + repetição;
+- nas demais entradas, mídia: tratamento clássico de mídia + repetição;
+- depois, dúvida sobre reforço escolar/banca/cursinho: tratamento universal +
+  repetição;
+- depois, pergunta financeira: tratamento financeiro + repetição;
+- por fim, texto residual, mesmo que contenha um número: contexto específico e
+  repetição do pedido oficial;
+- contato manual/vCard já caiu no segundo item e nunca é reinterpretado como
+  texto;
 - somente `contacts` com origem `contact_request` e WA ID compartilhado extraído
   avança.
 
-Essa ordem é obrigatória porque o validador universal de mídia atual classifica
-`contacts` como mídia/não texto. Se mídia rodar antes do reconhecimento oficial,
-o clique correto nunca alcançará a transição.
+Todos os tratamentos reapresentam o pedido oficial com formulação neutra,
+preservando o componente de compartilhamento e sem repetir uma abertura que
+pressuponha sucesso na resposta anterior.
+
+Essa ordem é obrigatória. O validador universal de mídia atual classifica
+`contacts` como mídia/não texto; se ele rodar antes do reconhecimento oficial,
+o clique correto nunca alcançará a transição. Da mesma forma, texto residual só
+pode cair em contexto depois de reforço e financeiro, para que uma pergunta
+mista como “qual o valor da banca?” receba o tratamento correto.
 
 Depois do compartilhamento válido, o WA ID é persistido e volta ao sender pelo
 `contexto_historico` reconstruído a partir do banco. A resposta seguinte usa esse
@@ -1306,35 +1334,48 @@ as validações de destino refletem corretamente 1 -> 2 ou 1 -> 3. A idempotênc
 é de resultado: o efeito pode ser invocado novamente pelo caminho atual de retry
 sem produzir nome divergente nem depender de telefone.
 
-Texto, mídia, financeiro e contato manual tratados na etapa 2 permanecem na
-etapa 2, repetem o pedido quando aplicável e não carregam evento de transição.
-Nenhuma dessas decisões ocorre no sender nem dentro da função de efeito.
+Texto, mídia, dúvida sobre reforço escolar, financeiro e contato manual tratados
+na etapa 2 permanecem na etapa 2, repetem o pedido quando aplicável e não
+carregam evento de transição. O contato oficial válido é reconhecido antes dos
+tratamentos; nas demais entradas a ordem é mídia -> reforço -> financeiro ->
+contexto. Nenhuma dessas decisões ocorre no sender nem dentro da função de
+efeito.
 
 ## 9. Catálogo e mapa de transição
 
-O catálogo final terá 22 etapas:
+O catálogo final terá 23 etapas:
 
 | ID | Etapa | Funil | Terminal |
 |---:|---|:---:|:---:|
 | 1 | Saudação e nome | não | não |
 | 2 | Compartilhamento oficial do contato | não | não |
 | 3 | Destino do atendimento | não | não |
-| 4 | Profissão | não | não |
-| 5 | Nome do dependente | não | não |
-| 6 | Idade | não | não |
-| 7 | Oferta | não | não |
-| 8 | Oferta adiada | não | não |
-| 9 | Retorno ao atendimento | não | não |
-| 10 | Email | não | não |
-| 11 | Introdução à triagem | não | não |
-| 12–17 | Perguntas 1–6 da triagem | não | não |
-| 18 | Agendamento | sim | não |
-| 19 | Satisfação — nota | sim | não |
-| 20 | Satisfação — opção de comentário | sim | não |
-| 21 | Satisfação — comentário | sim | não |
-| 22 | Finalização | sim | sim, bloqueio de 30 dias |
+| 4 | Confirmação do destino do atendimento | não | não |
+| 5 | Profissão | não | não |
+| 6 | Nome do dependente | não | não |
+| 7 | Idade | não | não |
+| 8 | Oferta | não | não |
+| 9 | Oferta adiada | não | não |
+| 10 | Retorno ao atendimento | não | não |
+| 11 | Email | não | não |
+| 12 | Introdução à triagem | não | não |
+| 13–18 | Perguntas 1–6 da triagem | não | não |
+| 19 | Agendamento | sim | não |
+| 20 | Satisfação — nota | sim | não |
+| 21 | Satisfação — opção de comentário | sim | não |
+| 22 | Satisfação — comentário | sim | não |
+| 23 | Finalização | sim | sim, bloqueio de 30 dias |
 
-As etapas antigas 2..21 serão remapeadas para 3..22 sem apagar dados.
+A baseline V1.0.5 já possui 22 etapas. Na migração futura, as etapas atuais
+2..22 serão remapeadas para 3..23 sem apagar dados. A etapa 1 permanece no
+mesmo ID e a única etapa realmente adicionada sobre essa baseline é a etapa 2
+de compartilhamento oficial.
+
+Conversas já existentes conservam seu progresso: uma conversa atual na etapa 2
+vai para a futura etapa 3, a atual 3 vai para a futura 4 e assim por diante. Elas
+não são devolvidas à etapa especial. Isso é seguro para a baseline, na qual o
+WA ID ainda é obrigatório; somente atendimentos privados processados pelo código
+novo entram na etapa 2 quando terminarem a captura do nome sem WA ID canônico.
 
 Mapa final:
 
@@ -1344,32 +1385,97 @@ TRANSICOES = (
     (1, "nome_cliente_valido_sem_wa_id", 2),
     (2, "contato_oficial_compartilhado", 3),
     (3, "destino_atendimento_definido", 4),
-    (4, "profissao_dependente_valida", 5),
-    (4, "profissao_titular_valida", 6),
-    (5, "nome_dependente_valido", 6),
-    (6, "idade_valida", 7),
-    (7, "oferta_aceita", 10),
-    (7, "oferta_adiada", 8),
-    (8, "cliente_retornou", 9),
-    (9, "retorno_confirmado", 10),
-    (9, "retorno_adiado", 8),
-    (10, "email_valido", 11),
-    (11, "triagem_iniciada", 12),
-    (12, "triagem_pergunta_1_respondida", 13),
-    (13, "triagem_pergunta_2_respondida", 14),
-    (14, "triagem_pergunta_3_respondida", 15),
-    (15, "triagem_pergunta_4_respondida", 16),
-    (16, "triagem_pergunta_5_respondida", 17),
-    (17, "triagem_pergunta_6_respondida", 18),
-    (18, "agendamento_confirmado", 19),
-    (19, "satisfacao_avaliada", 20),
-    (20, "comentario_satisfacao_aceito", 21),
-    (20, "comentario_satisfacao_recusado", 22),
-    (21, "comentario_satisfacao_recebido", 22),
+    (4, "destino_atendimento_confirmado_titular", 5),
+    (4, "destino_atendimento_confirmado_dependente", 6),
+    (5, "profissao_dependente_valida", 6),
+    (5, "profissao_titular_valida", 7),
+    (6, "nome_dependente_valido", 7),
+    (7, "idade_valida", 8),
+    (8, "oferta_aceita", 11),
+    (8, "oferta_adiada", 9),
+    (9, "cliente_retornou", 10),
+    (10, "retorno_confirmado", 11),
+    (10, "retorno_adiado", 9),
+    (11, "email_valido", 12),
+    (12, "triagem_iniciada", 13),
+    (13, "triagem_pergunta_1_respondida", 14),
+    (14, "triagem_pergunta_2_respondida", 15),
+    (15, "triagem_pergunta_3_respondida", 16),
+    (16, "triagem_pergunta_4_respondida", 17),
+    (17, "triagem_pergunta_5_respondida", 18),
+    (18, "triagem_pergunta_6_respondida", 19),
+    (19, "agendamento_confirmado", 20),
+    (20, "satisfacao_avaliada", 21),
+    (21, "comentario_satisfacao_aceito", 22),
+    (21, "comentario_satisfacao_recusado", 23),
+    (22, "comentario_satisfacao_recebido", 23),
 )
 ```
 
-Haverá resolvers para 1..21. A etapa 22 é terminal e não possui resolver.
+Haverá resolvers para 1..22. A etapa 23 é terminal e não possui resolver.
+
+### 9.1 Destino do atendimento preservado
+
+A etapa atual 2 passa à futura etapa 3 conservando sua interface e seu
+validador contextual:
+
+- os botões visíveis continuam `Para mim` e `Para um dependente`;
+- o texto legado `Para outra pessoa` e as frases inequívocas já catalogadas para
+  titular, dependente, parentescos e destinos genéricos continuam aceitos;
+- caixa, acentos, pontuação, espaços e vírgulas ausentes seguem a normalização
+  atual;
+- mídia, dúvida sobre reforço escolar, pergunta financeira ou qualquer conteúdo
+  fora dos conjuntos reconhecidos permanecem como tratamento na etapa 3;
+- a escolha continua sendo persistida pelos efeitos transacionais existentes e
+  encaminha ambas as opções à confirmação, sem salto direto para profissão ou
+  nome do dependente.
+
+### 9.2 Confirmação do destino preservada
+
+A confirmação implantada na V1.0.4 e presente na baseline V1.0.5 passa da etapa
+atual 3 para a futura etapa 4 sem ampliar sua gramática:
+
+- aceita somente o clique nos botões `Sim`/`Não` ou o texto digitado
+  `Sim`/`Não`, após a normalização já existente;
+- `Sim` mantém o `status_dependente` definido na etapa anterior;
+- `Não` persiste o polo oposto e segue adiante, sem voltar à etapa 3;
+- qualquer outro texto que não tenha sido classificado antes como reforço
+  escolar ou financeiro recebe tratamento de contexto e repete a etapa 4;
+- mídia, dúvida sobre reforço escolar e pergunta financeira permanecem como
+  tratamentos sem evento e sem avanço;
+- o contexto carrega `status_dependente_final` absoluto, nunca uma ordem de
+  inversão. O efeito transacional faz `SET` idempotente, cria o placeholder do
+  dependente quando o valor final é verdadeiro e remove o placeholder quando o
+  valor final é falso;
+- o caminho de resposta do bot já existente reconstrói esse mesmo valor
+  absoluto pelo evento persistido, preservando a segurança em retry.
+
+### 9.3 Triagem por faixa etária preservada
+
+O catálogo canônico compartilhado por WhatsApp e Funil continua em
+`core/triagem/perguntas.py`, com as chaves renumeradas de 12..17 para 13..18:
+
+- `valida_historico.ETAPAS_TRIAGEM` passa do intervalo atual 11..17 para
+  12..18; a introdução futura 12 também relê nome, idade e destino para que o
+  sender monte corretamente a primeira pergunta;
+- titular usa as seis perguntas adultas com `você`;
+- dependente menor de 18 anos usa as seis perguntas infantis com o nome;
+- dependente adulto usa as seis perguntas adultas com o nome;
+- a elegibilidade mínima de 4 anos em unidade com BPA ou 5 anos sem BPA
+  continua pertencendo à validação de idade anterior à triagem;
+- status de dependente, nome e idade são relidos do banco em cada ciclo; dados
+  ausentes ou inconsistentes falham de forma fechada;
+- as respostas continuam restritas a `Nunca`, `Às vezes` e `Frequentemente`;
+- a unicidade e a idempotência de `respostas_desafios (id_conversa, id_etapa)`
+  permanecem iguais.
+
+O contexto de agendamento que hoje é carregado nos ciclos 17/18 passa aos ciclos
+18/19: a resposta da sexta pergunta precisa do link para enviar a etapa 19 e os
+tratamentos da própria etapa 19 precisam repetir a mesma mensagem.
+
+Confirmação, tratamentos e triagem por idade não exigem coluna nova. Suas
+mudanças futuras são de numeração, catálogo, validadores, mensagens e projeções
+já previstas; o desenho físico de identidade da seção 5 permanece intacto.
 
 ## 10. Senders
 
@@ -1411,23 +1517,58 @@ reutilizam. Esses componentes recebem somente a identidade tipada do evento
 inbound, que pode continuar sendo user ID quando a Meta omitir WA ID mesmo após
 a etapa 2, sem mudar seus algoritmos nem autorizar fallback no sender.
 
+### 10.1 Tratamentos atuais preservados
+
+A implementação futura não volta ao conjunto de validadores anterior à V1.0.5.
+Toda etapa que possui tratamento financeiro continua possuindo também o
+tratamento universal de dúvida sobre reforço escolar, inclusive a nova etapa 2.
+O tipo técnico permanece `duvida_reforco_escolar`.
+
+A gramática implantada é congelada durante a renumeração. Ela reconhece reforço
+escolar/pedagógico, banca escolar, supletivo, EJA, Encceja, cursinho,
+pré-vestibular/preparatório, aula ou professor particular, apoio,
+acompanhamento, recuperação e nivelamento escolar, além de tarefa/dever de casa.
+Matérias como matemática ou português só disparam quando ligadas a intenção de
+aula, ensino ou ajuda; a palavra isolada não basta. Banca examinadora,
+avaliadora, acadêmica, de concurso ou de TCC permanece excluída, assim como usos
+não escolares de “reforço”. Formas curtas de `banca`/`reforço` continuam sujeitas
+aos contextos controlados do validador atual. Ampliar ou reduzir esse vocabulário
+é tarefa separada, não efeito da migração de identidade.
+
+Na etapa especial, o validador do contato oficial válido roda primeiro, pois
+`contacts + contact_request + wa_id_compartilhado` é a prova que autoriza a
+transição. Contato manual ou inválido não satisfaz essa prova. Para as demais
+entradas, e nas outras etapas, a prioridade permanece:
+
+```text
+mídia/tipo não suportado -> reforço escolar -> financeiro -> contexto/regra da etapa
+```
+
+Assim, uma frase mista como “qual o valor da banca?” recebe o tratamento de
+reforço escolar, não o financeiro. Tratamentos ficam na etapa atual, retornam
+`tratamento=True`, não carregam evento e não alteram transação, retry nem
+contadores além do comportamento transversal já existente. As mensagens
+financeiras preservam a expressão atual “valores de investimento”.
+
+A profissão atual da etapa 4 passa à futura etapa 5. Seus adaptadores
+contextuais de reforço e financeiro também são renumerados e continuam
+protegendo declarações inequívocas de vínculo profissional com banca, cursinho,
+supletivo ou reforço. O classificador universal não é enfraquecido para as
+demais etapas.
+
+Cada mensagem de tratamento deve reapresentar a pergunta de forma neutra. Não é
+permitido concatenar cegamente a mensagem inaugural quando ela começa com
+expressões que pressupõem avanço ou resposta válida, como `Entendi`, `Certo`,
+`Perfeito`, `Maravilha` ou `Prazer`. Mídia, reforço, financeiro e contexto
+preservam os componentes, botões, rodapés e variantes titular/dependente da
+etapa, mas usam uma retomada semanticamente coerente.
+
 ## 11. Funil
 
-WA ID continua obrigatório para o comercial e para materializar o lead.
-
-```python
-def montar_contato_funil(dados_lead):
-    wa_id = normalizar_texto_opcional(dados_lead.get("wa_id"))
-    username = formatar_username(dados_lead.get("username"))
-
-    if not wa_id:
-        raise ValueError("Lead elegível sem WA ID")
-
-    return {
-        "telefone": wa_id,
-        "username": username,
-    }
-```
+WA ID continua obrigatório para o comercial e para materializar o lead. A
+implementação deve adaptar o fluxo atual — `buscar_dados_lead_funil()`,
+`montar_observacoes_lead()` e `montar_payload_oportunidade()` — sem criar uma
+arquitetura paralela.
 
 Regras:
 
@@ -1436,12 +1577,34 @@ Regras:
 - somente username: nunca materializar;
 - user ID: nunca mostrar ao comercial;
 - username aparece com exatamente um `@`;
-- elegibilidade continua começando na etapa 18;
-- a etapa especial impede que uma conversa sem WA ID alcance a etapa 18.
+- elegibilidade começa na etapa 19 e abrange 19..23;
+- a etapa especial impede que uma conversa sem WA ID alcance a etapa 19.
 
-O funil deverá usar `conversa.username` para representar o snapshot daquele
-atendimento. `cliente.username` continua disponível como valor canônico atual,
-mas não reescreve retroativamente o lead antigo.
+O Funil usa `conversa.username` para representar o snapshot daquele atendimento
+e o coloca, quando existir, junto às informações de contato antes da seção de
+triagem. `cliente.username` continua disponível como valor canônico atual, mas
+não reescreve retroativamente o lead antigo.
+
+No contrato futuro do repositório, `buscar_dados_lead_funil()` seleciona
+`cliente.wa_id` como telefone obrigatório e `conversa.username` como username
+do atendimento, devolve ambos no dicionário do snapshot e filtra
+`respostas_desafios.id_etapa BETWEEN 13 AND 18`. Não usa
+`cliente.username` como atalho e não projeta `user_id` para a integração.
+
+O detalhamento implantado na V1.0.5 também é obrigatório:
+
+- `buscar_dados_lead_funil()` lê as respostas das futuras etapas 13..18 em
+  ordem crescente;
+- `core/triagem/perguntas.py` é a única fonte dos textos exibidos no WhatsApp e
+  reconstruídos no Funil;
+- `montar_observacoes_lead()` apresenta “Perguntas e respostas da triagem” com
+  seis blocos ordenados, cada um contendo número, pergunta completa e resposta;
+- não volta a existir resumo quantitativo como “Nunca: 2 vezes”;
+- titular usa a variante adulta com `você`; dependente usa o nome e a variante
+  infantil ou adulta conforme a idade;
+- ausência, duplicidade, desordem ou resposta fora de `Nunca`, `Às vezes` e
+  `Frequentemente` impede a montagem do lead;
+- ausência de username não impede o lead; ausência de WA ID continua impedindo.
 
 ## 12. Bloqueio, desbloqueio e Django Admin
 
@@ -1603,10 +1766,39 @@ Atualizar explicitamente `flow_sender.py`, `transicoes/eventos.py`,
 por `id_cliente`, com evento/destino efetivos e sem hardcode legado, e 2 -> 3 não
 repete SQL de identidade.
 
-Renumerar mecanicamente todos os arquivos antigos 2..21 para 3..22, incluindo
+Renumerar mecanicamente todos os arquivos atuais 2..22 para 3..23, incluindo
 mensagens, senders, validadores, resolvers, constantes, imports, IDs usados nos
-efeitos, testes, catálogo e mapa. O conteúdo/regra das etapas antigas não muda e
-a etapa terminal 22 não ganha resolver.
+efeitos, testes, catálogo e mapa. O conteúdo/regra das etapas atuais não muda e
+a etapa terminal 23 não ganha resolver.
+
+Nos caminhos físicos, a movimentação ocorre em ordem decrescente — 22 -> 23 até
+2 -> 3 — ou por nomes temporários equivalentes. Só depois é criado o novo
+arquivo da etapa 2, evitando sobrescrever módulos da baseline.
+
+A renumeração inclui explicitamente:
+
+- a confirmação atual 3 -> futura 4, seu bloco idempotente em
+  `flow_sender.py`, seus dois eventos e os efeitos de valor absoluto;
+- a profissão atual 4 -> futura 5 e os adaptadores contextuais
+  `validador_reforco_escolar_etapa4.py` ->
+  `validador_reforco_escolar_etapa5.py` e
+  `validador_financeiro_etapa4.py` ->
+  `validador_financeiro_etapa5.py`, com imports e testes ajustados;
+- a introdução à triagem atual 11 -> futura 12;
+- `core/triagem/perguntas.py`, cujas chaves atuais 12..17 passam a 13..18;
+- `valida_historico.ETAPAS_TRIAGEM`, que passa de 11..17 para 12..18;
+- `core/repositories/fluxo/contextos/triagem.py`, os módulos numerados de
+  triagem, `pywa_senders/triagem_base.py` e o contexto atual da etapa 18, que
+  passa a representar o agendamento na etapa 19; a carga desse contexto muda
+  dos ciclos 17/18 para 18/19;
+- `core/repositories/funil/leads.py`, com filtro das respostas 13..18;
+- `core/integrations/funil/oportunidades.py`, com conjunto esperado 13..18;
+- `core/integrations/whatsapp/messages/triagem_componentes.py`;
+- `REGRAS_DE_NEGOCIO.md`, `PADROES_DE_ARQUITETURA.md`,
+  `ROTINA_IMPLEMENTACAO_ETAPAS.md` e `tests/README.md`, para que a documentação
+  aplicada não mantenha IDs anteriores;
+- testes de confirmação, triagem etária, Funil, tratamentos, efeitos,
+  transições, deploy, roteamento e terminalidade.
 
 ### Passo 6 — Senders e Meta
 
@@ -1614,8 +1806,9 @@ Centralizar a seleção consciente da etapa: WA ID sempre prioritário; user ID 
 quando o resolver do envio da etapa 1 ou do pedido/repetição de compartilhamento
 habilitar explicitamente o fallback. A resposta válida da etapa 2 e todos os envios
 posteriores exigem WA ID. Alterar apenas as assinaturas/calls necessárias e
-garantir o mesmo contrato no retorno idempotente de `flow_sender()`. Não alterar
-textos ou regras das outras etapas.
+garantir o mesmo contrato no retorno idempotente de `flow_sender()`. Não
+regredir textos, tratamentos, perguntas etárias ou regras das etapas atuais; a
+mudança nelas é de numeração e de transporte dos novos snapshots.
 
 O resolver chama o helper puro com a permissão explícita da etapa e passa apenas
 o destinatário escalar ao sender. O sender não recebe o contexto inteiro para
@@ -1625,8 +1818,10 @@ resolver e ao retorno idempotente antes de devolver `contexto_envio`.
 ### Passo 7 — Funil, bloqueio e Admin
 
 No Funil, manter WA ID obrigatório e acrescentar username somente como
-informação opcional quando existir. Não transferir, reagendar ou conciliar itens
-de `funil_envios` durante a reconciliação. Bloqueio e Admin recebem apenas as
+informação opcional quando existir. Preservar o relatório atual com as seis
+perguntas e respostas em ordem, usando o catálogo compartilhado e nunca o
+resumo quantitativo antigo. Não transferir, reagendar ou conciliar itens de
+`funil_envios` durante a reconciliação. Bloqueio e Admin recebem apenas as
 adaptações declarativas necessárias aos campos anuláveis. Na implementação
 futura, atualizar as choices e `MOTIVOS_ENCERRAMENTO_VALIDOS` com
 `ativou_user_id`.
@@ -1686,25 +1881,26 @@ BEGIN
         VALUES
             (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
             (2,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-            (3,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-            (4,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-            (5,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-            (6,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-            (7,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-            (8,  'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-            (9,  'Email',                                              FALSE, 0,  FALSE),
-            (10, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-            (11, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-            (12, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-            (13, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-            (14, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-            (15, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-            (16, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-            (17, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-            (18, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-            (19, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-            (20, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-            (21, 'Finalização do atendimento',                         TRUE,  30, TRUE)
+            (3,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
+            (4,  'Profissão do cliente',                               FALSE, 0,  FALSE),
+            (5,  'Nome do dependente',                                 FALSE, 0,  FALSE),
+            (6,  'Idade do aluno',                                     FALSE, 0,  FALSE),
+            (7,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
+            (8,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
+            (9,  'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
+            (10, 'Email',                                              FALSE, 0,  FALSE),
+            (11, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
+            (12, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
+            (13, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
+            (14, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
+            (15, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
+            (16, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
+            (17, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
+            (18, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
+            (19, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
+            (20, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
+            (21, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
+            (22, 'Finalização do atendimento',                         TRUE,  30, TRUE)
     ) AS esperado(
         id_etapa,
         nome_etapa,
@@ -1725,28 +1921,30 @@ BEGIN
         VALUES
             (1,  'nome_cliente_valido',                    2),
             (2,  'destino_atendimento_definido',           3),
-            (3,  'profissao_dependente_valida',            4),
-            (3,  'profissao_titular_valida',               5),
-            (4,  'nome_dependente_valido',                 5),
-            (5,  'idade_valida',                           6),
-            (6,  'oferta_aceita',                          9),
-            (6,  'oferta_adiada',                          7),
-            (7,  'cliente_retornou',                       8),
-            (8,  'retorno_confirmado',                     9),
-            (8,  'retorno_adiado',                         7),
-            (9,  'email_valido',                          10),
-            (10, 'triagem_iniciada',                      11),
-            (11, 'triagem_pergunta_1_respondida',         12),
-            (12, 'triagem_pergunta_2_respondida',         13),
-            (13, 'triagem_pergunta_3_respondida',         14),
-            (14, 'triagem_pergunta_4_respondida',         15),
-            (15, 'triagem_pergunta_5_respondida',         16),
-            (16, 'triagem_pergunta_6_respondida',         17),
-            (17, 'agendamento_confirmado',                18),
-            (18, 'satisfacao_avaliada',                   19),
-            (19, 'comentario_satisfacao_aceito',          20),
-            (19, 'comentario_satisfacao_recusado',        21),
-            (20, 'comentario_satisfacao_recebido',        21)
+            (3,  'destino_atendimento_confirmado_titular', 4),
+            (3,  'destino_atendimento_confirmado_dependente', 5),
+            (4,  'profissao_dependente_valida',            5),
+            (4,  'profissao_titular_valida',               6),
+            (5,  'nome_dependente_valido',                 6),
+            (6,  'idade_valida',                           7),
+            (7,  'oferta_aceita',                         10),
+            (7,  'oferta_adiada',                          8),
+            (8,  'cliente_retornou',                       9),
+            (9,  'retorno_confirmado',                    10),
+            (9,  'retorno_adiado',                         8),
+            (10, 'email_valido',                          11),
+            (11, 'triagem_iniciada',                      12),
+            (12, 'triagem_pergunta_1_respondida',         13),
+            (13, 'triagem_pergunta_2_respondida',         14),
+            (14, 'triagem_pergunta_3_respondida',         15),
+            (15, 'triagem_pergunta_4_respondida',         16),
+            (16, 'triagem_pergunta_5_respondida',         17),
+            (17, 'triagem_pergunta_6_respondida',         18),
+            (18, 'agendamento_confirmado',                19),
+            (19, 'satisfacao_avaliada',                   20),
+            (20, 'comentario_satisfacao_aceito',          21),
+            (20, 'comentario_satisfacao_recusado',        22),
+            (21, 'comentario_satisfacao_recebido',        22)
     ) AS esperado(id_etapa_origem, evento, id_etapa_destino)
       ON transicao.id_etapa_origem = esperado.id_etapa_origem
      AND transicao.evento = esperado.evento
@@ -1779,14 +1977,14 @@ BEGIN
             funil_aberto;
     END IF;
 
-    IF etapas_atuais <> 21
-       OR etapas_atuais_corretas <> 21
-       OR transicoes_atuais <> 24
-       OR transicoes_atuais_corretas <> 24
+    IF etapas_atuais <> 22
+       OR etapas_atuais_corretas <> 22
+       OR transicoes_atuais <> 26
+       OR transicoes_atuais_corretas <> 26
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.3 (etapas=%/%; transições=%/%).',
+            'à V1.0.5 (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -1796,14 +1994,23 @@ BEGIN
     IF NOT EXISTS (
         SELECT 1
         FROM chatbot.etapa
-        WHERE id_etapa = 21
+        WHERE id_etapa = 22
           AND nome_etapa = 'Finalização do atendimento'
           AND encerra_automaticamente IS TRUE
           AND bloqueio_dias = 30
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.3.';
+            'Migração recusada: etapa final atual não corresponde à V1.0.5.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM chatbot.respostas_desafios
+        WHERE id_etapa NOT BETWEEN 12 AND 17
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.5.';
     END IF;
 
     IF NOT EXISTS (
@@ -2025,6 +2232,20 @@ SELECT 'webhook_flood_evento', COUNT(*)
 FROM chatbot.webhook_flood_evento
 UNION ALL
 SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios;
+
+CREATE TEMP TABLE pg_temp.migracao_respostas_etapas (
+    id_resposta_desafio INTEGER PRIMARY KEY,
+    id_etapa INTEGER NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO pg_temp.migracao_respostas_etapas (
+    id_resposta_desafio,
+    id_etapa
+)
+SELECT
+    id_resposta_desafio,
+    id_etapa
+FROM chatbot.respostas_desafios;
 
 DROP FUNCTION chatbot.dequeue_message();
 
@@ -2271,7 +2492,7 @@ ON chatbot.webhook_flood_evento (
 )
 WHERE user_id IS NOT NULL;
 
--- O mapa é declarativo e será recriado depois do deslocamento 2..21 -> 3..22.
+-- O mapa é declarativo e será recriado depois do deslocamento 2..22 -> 3..23.
 TRUNCATE TABLE chatbot.etapa_transicao RESTART IDENTITY;
 
 INSERT INTO chatbot.etapa (
@@ -2282,8 +2503,8 @@ INSERT INTO chatbot.etapa (
     elegivel_funil
 )
 VALUES (
-    22,
-    '__migracao_user_id_etapa_22__',
+    23,
+    '__migracao_user_id_etapa_23__',
     FALSE,
     0,
     FALSE
@@ -2293,7 +2514,9 @@ DO $remapear_referencias$
 DECLARE
     etapa_antiga INTEGER;
 BEGIN
-    FOR etapa_antiga IN REVERSE 21..2 LOOP
+    -- A ordem decrescente evita colisão na UNIQUE
+    -- respostas_desafios(id_conversa, id_etapa), inclusive em 12..17 -> 13..18.
+    FOR etapa_antiga IN REVERSE 22..2 LOOP
         UPDATE chatbot.conversa
         SET id_etapa_atual = etapa_antiga + 1
         WHERE id_etapa_atual = etapa_antiga;
@@ -2311,7 +2534,7 @@ $remapear_referencias$;
 
 UPDATE chatbot.etapa
 SET nome_etapa = FORMAT('__migracao_user_id_%s__', id_etapa)
-WHERE id_etapa BETWEEN 2 AND 22;
+WHERE id_etapa BETWEEN 2 AND 23;
 
 INSERT INTO chatbot.etapa (
     id_etapa,
@@ -2324,25 +2547,26 @@ VALUES
     (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
     (2,  'Compartilhamento oficial do contato',                FALSE, 0,  FALSE),
     (3,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-    (4,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-    (5,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-    (6,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-    (7,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-    (8,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-    (9,  'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-    (10, 'Email',                                              FALSE, 0,  FALSE),
-    (11, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-    (12, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-    (13, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-    (14, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-    (15, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-    (16, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-    (17, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-    (18, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-    (19, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-    (20, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-    (21, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-    (22, 'Finalização do atendimento',                         TRUE,  30, TRUE)
+    (4,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
+    (5,  'Profissão do cliente',                               FALSE, 0,  FALSE),
+    (6,  'Nome do dependente',                                 FALSE, 0,  FALSE),
+    (7,  'Idade do aluno',                                     FALSE, 0,  FALSE),
+    (8,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
+    (9,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
+    (10, 'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
+    (11, 'Email',                                              FALSE, 0,  FALSE),
+    (12, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
+    (13, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
+    (14, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
+    (15, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
+    (16, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
+    (17, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
+    (18, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
+    (19, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
+    (20, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
+    (21, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
+    (22, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
+    (23, 'Finalização do atendimento',                         TRUE,  30, TRUE)
 ON CONFLICT (id_etapa)
 DO UPDATE SET
     nome_etapa = EXCLUDED.nome_etapa,
@@ -2360,38 +2584,40 @@ VALUES
     (1,  'nome_cliente_valido_sem_wa_id',          2),
     (2,  'contato_oficial_compartilhado',          3),
     (3,  'destino_atendimento_definido',           4),
-    (4,  'profissao_dependente_valida',            5),
-    (4,  'profissao_titular_valida',               6),
-    (5,  'nome_dependente_valido',                 6),
-    (6,  'idade_valida',                           7),
-    (7,  'oferta_aceita',                         10),
-    (7,  'oferta_adiada',                          8),
-    (8,  'cliente_retornou',                       9),
-    (9,  'retorno_confirmado',                    10),
-    (9,  'retorno_adiado',                         8),
-    (10, 'email_valido',                          11),
-    (11, 'triagem_iniciada',                      12),
-    (12, 'triagem_pergunta_1_respondida',         13),
-    (13, 'triagem_pergunta_2_respondida',         14),
-    (14, 'triagem_pergunta_3_respondida',         15),
-    (15, 'triagem_pergunta_4_respondida',         16),
-    (16, 'triagem_pergunta_5_respondida',         17),
-    (17, 'triagem_pergunta_6_respondida',         18),
-    (18, 'agendamento_confirmado',                19),
-    (19, 'satisfacao_avaliada',                   20),
-    (20, 'comentario_satisfacao_aceito',          21),
-    (20, 'comentario_satisfacao_recusado',        22),
-    (21, 'comentario_satisfacao_recebido',        22);
+    (4,  'destino_atendimento_confirmado_titular', 5),
+    (4,  'destino_atendimento_confirmado_dependente', 6),
+    (5,  'profissao_dependente_valida',            6),
+    (5,  'profissao_titular_valida',               7),
+    (6,  'nome_dependente_valido',                 7),
+    (7,  'idade_valida',                           8),
+    (8,  'oferta_aceita',                         11),
+    (8,  'oferta_adiada',                          9),
+    (9,  'cliente_retornou',                      10),
+    (10, 'retorno_confirmado',                    11),
+    (10, 'retorno_adiado',                         9),
+    (11, 'email_valido',                          12),
+    (12, 'triagem_iniciada',                      13),
+    (13, 'triagem_pergunta_1_respondida',         14),
+    (14, 'triagem_pergunta_2_respondida',         15),
+    (15, 'triagem_pergunta_3_respondida',         16),
+    (16, 'triagem_pergunta_4_respondida',         17),
+    (17, 'triagem_pergunta_5_respondida',         18),
+    (18, 'triagem_pergunta_6_respondida',         19),
+    (19, 'agendamento_confirmado',                20),
+    (20, 'satisfacao_avaliada',                   21),
+    (21, 'comentario_satisfacao_aceito',          22),
+    (21, 'comentario_satisfacao_recusado',        23),
+    (22, 'comentario_satisfacao_recebido',        23);
 
 SELECT setval(
     pg_get_serial_sequence('chatbot.etapa', 'id_etapa'),
-    22,
+    23,
     TRUE
 );
 
 SELECT setval(
     pg_get_serial_sequence('chatbot.etapa_transicao', 'id_transicao'),
-    26,
+    28,
     TRUE
 );
 
@@ -2915,6 +3141,23 @@ BEGIN
             'Pós-validação falhou: contagem operacional mudou durante a migração.';
     END IF;
 
+    IF EXISTS (
+        SELECT 1
+        FROM pg_temp.migracao_respostas_etapas AS antes
+        FULL JOIN chatbot.respostas_desafios AS depois
+          ON depois.id_resposta_desafio = antes.id_resposta_desafio
+        WHERE antes.id_resposta_desafio IS NULL
+           OR depois.id_resposta_desafio IS NULL
+           OR depois.id_etapa IS DISTINCT FROM antes.id_etapa + 1
+    ) OR EXISTS (
+        SELECT 1
+        FROM chatbot.respostas_desafios
+        WHERE id_etapa NOT BETWEEN 13 AND 18
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: respostas da triagem não foram remapeadas exatamente de 12..17 para 13..18.';
+    END IF;
+
     SELECT COUNT(*)
     INTO etapas_finais_corretas
     FROM chatbot.etapa AS etapa
@@ -2923,25 +3166,26 @@ BEGIN
             (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
             (2,  'Compartilhamento oficial do contato',                FALSE, 0,  FALSE),
             (3,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-            (4,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-            (5,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-            (6,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-            (7,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-            (8,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-            (9,  'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-            (10, 'Email',                                              FALSE, 0,  FALSE),
-            (11, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-            (12, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-            (13, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-            (14, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-            (15, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-            (16, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-            (17, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-            (18, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-            (19, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-            (20, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-            (21, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-            (22, 'Finalização do atendimento',                         TRUE,  30, TRUE)
+            (4,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
+            (5,  'Profissão do cliente',                               FALSE, 0,  FALSE),
+            (6,  'Nome do dependente',                                 FALSE, 0,  FALSE),
+            (7,  'Idade do aluno',                                     FALSE, 0,  FALSE),
+            (8,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
+            (9,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
+            (10, 'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
+            (11, 'Email',                                              FALSE, 0,  FALSE),
+            (12, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
+            (13, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
+            (14, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
+            (15, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
+            (16, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
+            (17, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
+            (18, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
+            (19, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
+            (20, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
+            (21, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
+            (22, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
+            (23, 'Finalização do atendimento',                         TRUE,  30, TRUE)
     ) AS esperado(
         id_etapa,
         nome_etapa,
@@ -2964,39 +3208,41 @@ BEGIN
             (1,  'nome_cliente_valido_sem_wa_id',          2),
             (2,  'contato_oficial_compartilhado',          3),
             (3,  'destino_atendimento_definido',           4),
-            (4,  'profissao_dependente_valida',            5),
-            (4,  'profissao_titular_valida',               6),
-            (5,  'nome_dependente_valido',                 6),
-            (6,  'idade_valida',                           7),
-            (7,  'oferta_aceita',                         10),
-            (7,  'oferta_adiada',                          8),
-            (8,  'cliente_retornou',                       9),
-            (9,  'retorno_confirmado',                    10),
-            (9,  'retorno_adiado',                         8),
-            (10, 'email_valido',                          11),
-            (11, 'triagem_iniciada',                      12),
-            (12, 'triagem_pergunta_1_respondida',         13),
-            (13, 'triagem_pergunta_2_respondida',         14),
-            (14, 'triagem_pergunta_3_respondida',         15),
-            (15, 'triagem_pergunta_4_respondida',         16),
-            (16, 'triagem_pergunta_5_respondida',         17),
-            (17, 'triagem_pergunta_6_respondida',         18),
-            (18, 'agendamento_confirmado',                19),
-            (19, 'satisfacao_avaliada',                   20),
-            (20, 'comentario_satisfacao_aceito',          21),
-            (20, 'comentario_satisfacao_recusado',        22),
-            (21, 'comentario_satisfacao_recebido',        22)
+            (4,  'destino_atendimento_confirmado_titular', 5),
+            (4,  'destino_atendimento_confirmado_dependente', 6),
+            (5,  'profissao_dependente_valida',            6),
+            (5,  'profissao_titular_valida',               7),
+            (6,  'nome_dependente_valido',                 7),
+            (7,  'idade_valida',                           8),
+            (8,  'oferta_aceita',                         11),
+            (8,  'oferta_adiada',                          9),
+            (9,  'cliente_retornou',                      10),
+            (10, 'retorno_confirmado',                    11),
+            (10, 'retorno_adiado',                         9),
+            (11, 'email_valido',                          12),
+            (12, 'triagem_iniciada',                      13),
+            (13, 'triagem_pergunta_1_respondida',         14),
+            (14, 'triagem_pergunta_2_respondida',         15),
+            (15, 'triagem_pergunta_3_respondida',         16),
+            (16, 'triagem_pergunta_4_respondida',         17),
+            (17, 'triagem_pergunta_5_respondida',         18),
+            (18, 'triagem_pergunta_6_respondida',         19),
+            (19, 'agendamento_confirmado',                20),
+            (20, 'satisfacao_avaliada',                   21),
+            (21, 'comentario_satisfacao_aceito',          22),
+            (21, 'comentario_satisfacao_recusado',        23),
+            (22, 'comentario_satisfacao_recebido',        23)
     ) AS esperado(id_etapa_origem, evento, id_etapa_destino)
       ON transicao.id_etapa_origem = esperado.id_etapa_origem
      AND transicao.evento = esperado.evento
      AND transicao.id_etapa_destino = esperado.id_etapa_destino;
 
-    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 22
-       OR etapas_finais_corretas <> 22
+    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 23
+       OR etapas_finais_corretas <> 23
        OR (SELECT MIN(id_etapa) FROM chatbot.etapa) <> 1
-       OR (SELECT MAX(id_etapa) FROM chatbot.etapa) <> 22
-       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 26
-       OR transicoes_finais_corretas <> 26
+       OR (SELECT MAX(id_etapa) FROM chatbot.etapa) <> 23
+       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 28
+       OR transicoes_finais_corretas <> 28
     THEN
         RAISE EXCEPTION
             'Pós-validação falhou: conteúdo exato do catálogo/mapa divergente.';
@@ -3242,6 +3488,8 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - etapa 2 envia `request_contact_info` ao user ID obtido do banco por meio do
   contexto;
 - texto, mídia, financeiro e contato manual não avançam;
+- dúvida sobre reforço escolar também não avança e tem prioridade sobre o
+  financeiro quando os dois classificadores reconhecerem a frase;
 - não existe recusa nem confirmação posterior;
 - `contact_request` válido fornece WA ID e leva 2 -> 3;
 - o efeito final reconhece explicitamente 2 -> 3 sem repetir a
@@ -3255,9 +3503,32 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   etapa 3;
 - etapa 3 em diante sem WA ID falha antes de chamar a Meta;
 - username nunca é usado no campo `to`;
-- nenhuma conversa sem WA ID chega à etapa 18.
+- nenhuma conversa sem WA ID chega à etapa 19.
 
-### 15.5 Arquitetura
+### 15.5 Confirmação, tratamentos e triagem preservados
+
+- a futura etapa 4 aceita somente botão ou texto normalizado `Sim`/`Não`;
+- `Sim` mantém o destino escolhido na etapa 3 e `Não` persiste o oposto;
+- qualquer outra frase que não tenha sido classificada antes como reforço
+  escolar ou financeiro, inclusive tentativas de linguagem natural, repete a
+  confirmação como tratamento de contexto;
+- retry da confirmação reconstrói o valor final absoluto pelo evento e nunca
+  reaplica uma inversão;
+- trocar para dependente cria o placeholder necessário de forma idempotente e
+  trocar para titular remove somente o placeholder da conversa;
+- em etapas com financeiro, a prioridade permanece mídia -> reforço escolar ->
+  financeiro -> contexto/regra específica;
+- a profissão futura 5 não classifica como dúvida escolar uma declaração
+  profissional inequívoca com banca, cursinho, supletivo ou reforço;
+- mensagens de tratamento reapresentam a etapa com texto neutro, sem repetir
+  aberturas de confirmação ou avanço;
+- o catálogo de perguntas usa as futuras etapas 13..18 e seleciona corretamente
+  titular adulto, dependente infantil ou dependente adulto;
+- a pergunta reconstruída no retry é a mesma variante etária, relida do banco;
+- a migração preserva as seis respostas existentes e desloca seus IDs atuais
+  12..17 para 13..18 sem colisão.
+
+### 15.6 Arquitetura
 
 - `etapa2_messages.py` contém o texto/builder e não chama Meta nem banco;
 - o sender da etapa 2 usa o builder, realiza somente I/O Meta e não escolhe
@@ -3266,7 +3537,7 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   universal de mídia, sem enviar ou consultar banco;
 - o resolver produz o evento, consulta o mapa, resolve o destinatário, chama o
   sender e anexa a transição, sem SQL/commit;
-- `flow_sender()` roteia resolvers 1..21, não possui resolver 22 e acrescenta os
+- `flow_sender()` roteia resolvers 1..22, não possui resolver 23 e acrescenta os
   snapshots também no retorno idempotente;
 - nenhum arquivo de `messages`, sender, validador ou resolver executa SQL ou
   `commit`, e nenhum sender escolhe evento;
@@ -3275,12 +3546,25 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   `atualizar_banco_conforme_transicao_de_etapa()` são os donos do movimento e
   dos efeitos finais.
 
-### 15.6 Funil, bloqueio e Admin
+### 15.7 Funil, bloqueio e Admin
 
 - funil recusa lead sem WA ID;
 - funil inclui `@username` somente quando existir;
 - user ID nunca aparece no funil;
 - username ausente não impede um lead que possua WA ID;
+- o snapshot do username vem de `conversa.username`, nunca de
+  `cliente.username`;
+- `alice` e `@alice` são exibidos como exatamente `@alice`, e ausência não cria
+  linha vazia nas observações;
+- quando presente, username aparece junto ao contato e antes da triagem;
+- a etapa 18 futura ainda não é elegível; exatamente 19..23 são elegíveis;
+- o Funil consulta exatamente as respostas das futuras etapas 13..18;
+- as seis perguntas e respostas aparecem completas e em ordem nas observações;
+- os textos reconstruídos no Funil são idênticos aos do catálogo usado pelo
+  WhatsApp para a mesma faixa etária;
+- os 12 textos canônicos de pergunta permanecem intactos; somente suas chaves
+  mudam de 12..17 para 13..18;
+- o resumo quantitativo antigo por quantidade de alternativas não reaparece;
 - reconciliação não move nem altera `funil_envios` e não cria regra concorrente
   nova no `worker_funil`;
 - bloqueio/desbloqueio prioriza WA ID e usa user ID como fallback;
@@ -3291,7 +3575,7 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 
 ## 16. Sequência de deploy futura
 
-1. congelar e commitar os refinamentos atuais de sender;
+1. congelar e commitar a baseline definitiva posterior à V1.0.5;
 2. regenerar o apêndice de código completo deste plano;
 3. implementar em branch separada;
 4. executar testes unitários e de integração;
@@ -3324,10 +3608,23 @@ O plano só poderá ser aplicado se:
   WA ID canônico como prova da origem do payload;
 - username nunca for identidade técnica;
 - WA ID for obrigatório para chegar ao funil;
-- somente a etapa especial 2 for adicionada;
-- catálogo tiver 22 etapas e mapa 26 transições;
-- somente etapa 22 encerrar e bloquear por 30 dias;
-- etapa 22 não tiver resolver;
+- somente a etapa especial 2 for adicionada sobre a baseline V1.0.5;
+- catálogo tiver 23 etapas e mapa 28 transições;
+- somente etapa 23 encerrar e bloquear por 30 dias;
+- etapa 23 não tiver resolver;
+- a confirmação futura 4 continuar aceitando exclusivamente `Sim`/`Não` e
+  persistir o valor final absoluto de forma idempotente;
+- a profissão futura 5 conservar seus validadores contextuais para não barrar
+  vínculos profissionais inequívocos com serviços escolares;
+- contato oficial válido ser reconhecido antes dos tratamentos da etapa 2 e,
+  nas entradas comuns, a prioridade permanecer mídia -> reforço -> financeiro
+  -> contexto;
+- toda retomada de tratamento ser semanticamente neutra e preservar os
+  componentes da etapa;
+- o catálogo compartilhado de triagem usar 13..18 e manter as variantes por
+  idade e pessoa atendida;
+- o Funil exibir as seis perguntas/respostas ordenadas, nunca o resumo por
+  quantidade, e acrescentar username apenas quando existir;
 - nenhum sender usar username;
 - nenhum sender usar user ID quando WA ID lido do banco existir;
 - somente os resolvers dos envios da etapa 1 e do pedido/repetição de
@@ -3371,6 +3668,7 @@ O plano só poderá ser aplicado se:
 - mensagens, senders, validadores, resolvers e `flow_sender()` respeitarem as
   fronteiras da seção 7.5, sem SQL/commit fora das camadas transacionais;
 - `bot_resposta_atual()` e reagendamentos permanecerem intocados;
+- a espera de fila vazia permanecer em 1,5 segundo;
 - testes com os quatro fixtures e payloads reais passarem;
 - SQL de migração não apagar clientes, conversas, fila ou histórico;
 - em runtime, somente cliente estritamente provisório e sem referências ser
@@ -3424,3 +3722,8 @@ O desenho fecha o caso normal de privacidade sem permitir dois `id_cliente` para
 a mesma pessoa depois da prova oficial. O handoff user ID -> WA ID, a conversa
 canônica anterior, o transporte pelos contextos e o fallback limitado do sender
 exigem os testes integrados listados antes de qualquer deploy.
+
+Sobre essa identidade nova, o comportamento funcional da V1.0.5 permanece
+reconhecível: confirmação binária, tratamentos atuais, triagem por faixa etária,
+perguntas e respostas detalhadas no Funil e terminalidade de 30 dias são apenas
+renumerados, nunca redesenhados.

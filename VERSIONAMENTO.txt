@@ -16,6 +16,9 @@ Commit: 61325237d9f84aeb6909992d344f56d18a4001bd
 V1.0.4 - Confirmação, validações, tratamentos, renumeração
 Commit: 440d5e0971cbd76841a764030fe510dc4861fa5a
 
+V1.0.5 - Triagem etária, Funil, tratamentos e validações
+Commit: 345e8767946a4cab41c9f31359db137c40fb60e7
+
 
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================
