@@ -27,7 +27,7 @@ ETAPAS_PERGUNTAS_TRIAGEM = {
     },
     14: {
         FAIXA_ETARIA_INFANTIL: (
-            "Com que frequência {pessoa} esquece com frequência orientações "
+            "Com que frequência {pessoa} esquece orientações "
             "ou conteúdos que acabou de aprender?"
         ),
         FAIXA_ETARIA_ADULTA: (

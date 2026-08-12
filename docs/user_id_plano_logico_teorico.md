@@ -85,13 +85,16 @@ O plano não autoriza:
 - executar `ALTER TABLE` em Python;
 - usar `metadata.display_phone_number` como telefone do cliente.
 
-Há somente duas extensões comportamentais aprovadas neste plano:
+Há somente três extensões comportamentais aprovadas neste plano:
 
 1. transportar `wa_id`, `user_id` e username como dados adicionais nos contextos
    já existentes, deixando o resolver escolher para o sender `wa_id` ou, apenas
    antes do compartilhamento obrigatório, `user_id`;
 2. reconciliar um cliente provisório com o cliente global canônico quando um
-   payload conjunto ou o compartilhamento oficial provar o vínculo.
+   payload conjunto ou o compartilhamento oficial provar o vínculo;
+3. preservar uma única janela anti-flood para `user_id` e `wa_id` oficialmente
+   vinculados na mesma unidade, somando as duas rajadas e deduplicando-as por
+   WAMID, sem inferir equivalência por username, nome ou proximidade temporal.
 
 A reconciliação é um efeito de dados executado pelo mesmo cursor dentro da
 transação que `validar_banco_mensagem()` já utiliza. Ela não autoriza novo
@@ -99,9 +102,12 @@ transação que `validar_banco_mensagem()` já utiliza. Ela não autoriza novo
 terminal ou mudança da ordem do ciclo. `validar_banco_mensagem()` continua
 devolvendo o contexto normal esperado pelo restante do `flow_worker`.
 
-O plano não cria tratamento especial para Funil, denylist ou bloqueio durante a
-reconciliação. Esses subsistemas conservam seu comportamento atual; qualquer
-política adicional para eles dependerá de decisão futura e separada.
+O plano não cria tratamento especial para Funil, denylist ou bloqueio dentro da
+transação de reconciliação. Funil e denylist conservam seu comportamento atual.
+A continuidade anti-flood aprovada é executada pelo guard do webhook e pelas
+camadas próprias de cache/repositório, fora da transação do `flow_worker`; a
+reconciliação apenas confirma depois o vínculo permanente que esse guard pode
+usar.
 
 O WAMID continua servindo para deduplicar e correlacionar uma mensagem. Ele não
 substitui a identidade usada pelo turno, que continuará combinando a identidade
@@ -742,8 +748,9 @@ avança. Não se escolhe silenciosamente o primeiro número.
 
 ### 6.3 Ordem das proteções
 
-A ordem atual será preservada. A única ampliação é a extração de `user_id` e
-username junto dos campos que o webhook já normaliza:
+A ordem atual será preservada. O webhook passa a extrair `user_id` e username
+junto dos campos que já normaliza e o anti-flood passa a resolver aliases
+oficialmente vinculados antes de contabilizar a janela:
 
 1. validação de content type, tamanho, assinatura e estrutura JSON;
 2. classificação do evento e extração dos identificadores;
@@ -754,9 +761,13 @@ username junto dos campos que o webhook já normaliza:
 7. regra de turno e inserção idempotente na mesma transação de fila;
 8. resposta HTTP e tratamento atual das exceções.
 
-Não serão alterados limites, TTLs, códigos HTTP nem a posição relativa desses
-guardas. Antes de promover qualquer contato compartilhado, o webhook escolhe uma
-única identidade técnica para o evento pela mesma regra reconstruída no worker:
+O limite de 15 WAMIDs distintos em 5 segundos, o efeito do bloqueio e a posição
+relativa desses guardas não mudam. São acrescentados somente TTLs auxiliares da
+resolução de aliases — ponte pendente por 15 segundos, vínculo confirmado em
+cache por 1 hora e ausência de vínculo por 5 segundos — e o retorno HTTP 503
+fail-safe quando não for possível tomar uma decisão compartilhada segura. Antes
+de promover qualquer contato compartilhado, o webhook escolhe uma única
+identidade técnica para o evento pela mesma regra reconstruída no worker:
 
 ```python
 if tipo_mensagem == "contacts" and origem == "contact_request" and user_id:
@@ -783,13 +794,42 @@ transporte inbound. Isso também vale se a Meta continuar entregando somente use
 ID depois da etapa 2: o webhook não conhece nem decide a etapa antes de
 enfileirar. A limitação às etapas iniciais vale para o avanço de negócio e para o
 fallback de destinatário, não para aceitar e proteger o envelope recebido. Não
-se executam duas consultas, contagens ou locks para a mesma mensagem; username e
-`wa_id_compartilhado` nunca participam.
+se executam duas avaliações, incrementos ou locks independentes para a mesma
+mensagem; username nunca participa da identidade técnica.
 
-No anti-flood, a janela continua pertencendo à identidade técnica resolvida +
-`phone_id_unidade`, e o WAMID continua garantindo que a mesma mensagem conte uma
-única vez. Limite, janela, precedência Redis -> banco -> memória e efeito de
-bloqueio permanecem os atuais.
+No anti-flood, a janela pertence ao sujeito lógico comprovado dentro do mesmo
+`phone_id_unidade`. Antes da prova, user ID e WA ID permanecem separados. Depois
+da associação oficial, os eventos ainda válidos das duas identidades são
+somados, o WA ID torna-se a referência canônica e a troca de identificador não
+reinicia a métrica.
+
+Há duas formas de prova, sem aproximação:
+
+1. vínculo permanente em `chatbot.user_id_cliente`, ligado ao cliente canônico
+   com WA ID na mesma unidade;
+2. durante o intervalo anterior ao commit do worker, `contact_request` oficial,
+   autenticado pela assinatura da Meta, com user ID presente e exatamente um
+   `wa_id_compartilhado` inequívoco.
+
+A segunda prova cria somente uma ponte anti-flood pendente no Redis, escrita
+atomicamente nas duas direções e com TTL de 15 segundos. Ela não promove o WA ID
+no banco, não muda a identidade congelada do item, não autoriza sender e não
+substitui a reconciliação transacional. Após o commit, o vínculo persistido passa
+a ser a prova permanente e o cache confirmado substitui a ponte pendente.
+
+Redis e memória somam os contadores das duas identidades sem duplicar eventos. O
+fallback SQL usa `COUNT(DISTINCT id_hash_msg)` sobre WA ID e user ID associados.
+O WAMID é deduplicado por unidade, de modo que uma reentrega ou o mesmo evento
+visto pelos dois aliases conta uma única vez. Limite, janela e efeito de bloqueio
+permanecem 15 WAMIDs distintos em 5 segundos.
+
+Ausência de vínculo pode receber cache negativo de 5 segundos para evitar uma
+consulta ao RDS por evento; a ponte oficial usa namespace separado e tem
+prioridade imediata. Conflito, Redis indisponível sem prova persistida ou
+qualquer impossibilidade de manter uma decisão compartilhada resulta em HTTP
+503 para reentrega, sem bloqueio Meta e sem abrir um contador paralelo por
+hipótese. Contato manual, username, nome, coincidência temporal ou semelhança de
+valores nunca unem identidades.
 
 O clique no botão gera uma nova mensagem inbound com WAMID e timestamp próprios.
 Ela passa por deduplicação, flood, turno e fila como qualquer outra mensagem.
@@ -1625,10 +1665,13 @@ user ID como destinatário de etapa posterior. Quando WA ID do remetente estiver
 presente no envelope, ele é sempre prioritário.
 
 Essa adaptação é necessária porque todo evento inbound sem WA ID também passa
-pelas proteções do webhook. Ela amplia somente o identificador aceito e o snapshot
-persistido; limites, TTLs, ordem Meta -> banco, quantidade de efeitos e algoritmo
-de flood/bloqueio permanecem os atuais. Não é parte do fluxo transacional do
-`flow_worker`.
+pelas proteções do webhook. Denylist e bloqueio Meta continuam preferindo WA ID e
+usando user ID somente como fallback do próprio envelope. O anti-flood, porém,
+possui um resolvedor próprio de aliases oficialmente comprovados: ele agrega as
+janelas de `user_id` e `wa_id`, deduplica por WAMID e adota o WA ID como referência
+canônica após a prova. O limite de 15 eventos em 5 segundos e a ordem Meta ->
+banco do desbloqueio permanecem; os TTLs auxiliares e o caminho HTTP 503 seguem a
+seção 6.3. Nada disso faz parte do fluxo transacional do `flow_worker`.
 
 Ao excluir um bloqueado no Admin, o sistema continua chamando primeiro o
 desbloqueio na Meta e só exclui localmente após sucesso, conforme a regra atual.
@@ -1703,18 +1746,30 @@ Atualizar, com arquivo completo:
 
 - parser/serviço de POST;
 - população idempotente da fila;
-- flood guard;
+- `callback/webhook/services/flood_guard.py`;
 - bloqueio guard;
 - repositório de turno;
-- caches Redis e fallback em memória que hoje recebem WA ID.
+- `core/cache/runtime/cache_flood_redis.py`;
+- `core/cache/cache_flood_memoria.py`;
+- `core/repositories/seguranca/bloqueio_meta.py`;
+- demais caches Redis e fallbacks em memória que recebem identidade técnica.
 
-Algoritmos, limites, TTLs, status HTTP e ordem permanecem iguais; somente a
-identidade técnica aceita WA ID ou user ID. O parser mantém
-`wa_id_remetente` separado de `wa_id_compartilhado`; turno, flood e bloqueio
-escolhem uma única coluna conforme `tipo_identidade_do_item` e nunca consultam
-os dois aliases para a mesma mensagem. O cache WA conserva sua chave global e o
-novo caminho de user ID usa obrigatoriamente tipo + unidade na chave Redis e no
-fallback em memória.
+Turno e bloqueio escolhem uma única coluna conforme
+`tipo_identidade_do_item`. O parser mantém `wa_id_remetente` separado de
+`wa_id_compartilhado`; este último só participa do anti-flood quando um
+`contact_request` oficial, autenticado e inequívoco fornece a prova pré-commit.
+
+O anti-flood resolve o vínculo permanente por `user_id_cliente` e, antes do
+commit do worker, usa uma ponte Redis pendente de 15 segundos escrita
+atomicamente nas duas direções. Redis, memória e fallback SQL somam os eventos
+dos aliases oficialmente vinculados, com deduplicação por WAMID; novos eventos
+incrementam a referência canônica WA ID. Um cache negativo de 5 segundos evita
+consultar o RDS a cada evento sem vínculo, e o vínculo confirmado permanece em
+cache por 1 hora. Conflito ou indisponibilidade que impeça uma decisão segura
+devolve HTTP 503 para reentrega e nunca cria equivalência ou bloqueio por
+hipótese. O limite continua 15 WAMIDs distintos em 5 segundos. Essa continuidade
+fica nas camadas próprias do webhook/cache/repositório e não cria efeito lateral
+dentro da reconciliação transacional.
 
 ### Passo 4 — Repositórios e transporte do worker
 
@@ -3373,8 +3428,10 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   do cartão separadamente como `wa_id_compartilhado`;
 - teste sintético de `contact_request` com WA ID no envelope, user ID e WA ID no
   cartão ainda congela o item pelo user ID e só usa WA canônico após a prova;
-- `wa_id_compartilhado` não participa de denylist, flood, bloqueio, turno, cache
-  ou autocura antes da validação bancária;
+- `wa_id_compartilhado` não vira identidade de denylist, bloqueio, turno, cache
+  de cliente ou autocura antes da validação bancária; a única exceção é servir
+  como prova efêmera da ponte anti-flood quando vier de `contact_request`
+  oficial, autenticado e inequívoco;
 - `valida_historico()` expõe `wa_id_compartilhado` somente para o item oficial e
   mantém `contexto_historico['wa_id']` reservado ao WA ID canônico do banco;
 - `phone` só é normalizado no último fallback oficial;
@@ -3388,12 +3445,21 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - evento em etapa 3 ou posterior cujo vínculo não devolva WA ID canônico falha
   antes de chamar a Meta;
 - WA ID + user ID + username registra o vínculo proativamente;
-- fora do handoff, proteções recebem somente
-  `wa_id_remetente or user_id`;
+- fora do handoff, denylist, bloqueio e turno recebem somente
+  `wa_id_remetente or user_id`; no handoff, o anti-flood também recebe o
+  `wa_id_compartilhado` exclusivamente como prova da ponte pendente;
 - no handoff, a chave de turno continua sendo a identidade com que o item foi
   enfileirado; não existe consulta dual por aliases;
-- flood mantém a janela por identidade resolvida + unidade e deduplica cada
-  evento pelo WAMID;
+- flood mantém uma única janela lógica por sujeito oficialmente comprovado e
+  unidade, soma os contadores de user ID e WA ID, promove novos incrementos para
+  o WA ID canônico e deduplica cada evento pelo WAMID;
+- 8 eventos por user ID, o `contact_request` oficial e 6 eventos imediatos por
+  WA ID — ainda antes do commit do worker — atingem juntos o limite de 15;
+- a mesma sequência sem vínculo oficial mantém contadores separados;
+- contato manual, contato ambíguo, unidade diferente e identidades de pessoas
+  distintas não criam equivalência;
+- conflito na ponte ou indisponibilidade da prova compartilhada devolve HTTP
+  503 para reentrega e não bloqueia o cliente na Meta;
 - WAMID continua idempotente.
 
 ### 15.2 Banco e snapshots
@@ -3425,6 +3491,9 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   causa do namespace tipado;
 - o mesmo user ID em unidades diferentes não colide em cache, turno, flood nem
   autocura;
+- identidades tipadas diferentes só compartilham a janela anti-flood quando uma
+  prova oficial as vincula ao mesmo cliente e à mesma unidade; coincidência de
+  texto, username, nome ou horário nunca produz essa união;
 - primeiro evento somente-user cria cliente provisório + vínculo + conversa no
   mesmo commit;
 - segundo evento somente-user reutiliza o provisório e não duplica cliente;
@@ -3691,15 +3760,14 @@ O plano só poderá ser aplicado se:
 6. Um conflito realmente contraditório — user ID já ligado a um cliente com WA
    ID não nulo diferente do WA oficial atual — não é fundido automaticamente e
    exige investigação. Esse caso é diferente do provisório com WA ID nulo.
-7. Na promoção oficialmente provada de user ID para WA ID, a identidade
-   prioritária da janela de flood muda uma única vez. Como o plano preserva o
-   algoritmo atual de uma só chave e não soma aliases, eventos imediatamente
-   anteriores contados pelo user ID não são transportados para a janela do WA
-   ID. O WAMID continua impedindo dupla contagem da mesma mensagem; este pequeno
-   reset de janela é um risco residual aceito para não redesenhar o anti-flood.
-8. A segurança aqui assume o requisito operacional atual de exatamente um
+7. A segurança aqui assume o requisito operacional atual de exatamente um
    processo de `flow_worker`. Executar dois flow workers exige nova revisão de
    fencing/posse e não é autorizado por este plano.
+
+O antigo reset da janela anti-flood na promoção `user_id` -> `wa_id` não é mais
+um risco aceito. A implementação prática deve somar as duas rajadas como uma só
+sempre que a associação estiver oficialmente comprovada, inclusive na ponte
+pré-commit criada pelo compartilhamento oficial do contato.
 
 ## 19. Veredito
 
@@ -3718,10 +3786,24 @@ continuam nos mesmos lugares. A reconciliação executa somente os efeitos de da
 aprovados usando a validação e o cursor já existentes, sem novo lock, retorno de
 ciclo, requeue ou ramificação do `flow_worker`.
 
+O anti-flood também preserva a continuidade de identidade: quando a prova
+oficial demonstrar que `user_id` e `wa_id` pertencem ao mesmo cliente na mesma
+unidade, as rajadas dos dois identificadores compõem uma única janela de 15
+WAMIDs distintos em 5 segundos. A ponte pendente protege inclusive a troca
+imediata anterior ao commit do worker; depois dele, o vínculo persistido confirma
+a associação. WAMIDs repetidos contam uma vez, e qualquer conflito ou ausência
+de prova segura gera reentrega por HTTP 503, não união ou bloqueio presumido.
+
 O desenho fecha o caso normal de privacidade sem permitir dois `id_cliente` para
 a mesma pessoa depois da prova oficial. O handoff user ID -> WA ID, a conversa
 canônica anterior, o transporte pelos contextos e o fallback limitado do sender
 exigem os testes integrados listados antes de qualquer deploy.
+
+O único risco funcional conhecido e deliberadamente aceito continua sendo a
+janela rara entre o envio confirmado pela Meta e sua persistência final no banco,
+na qual um retry pode duplicar a resposta externa. A continuidade anti-flood não
+acrescenta um segundo risco aceito e elimina o reset de janela que a versão
+anterior deste plano tolerava.
 
 Sobre essa identidade nova, o comportamento funcional da V1.0.5 permanece
 reconhecível: confirmação binária, tratamentos atuais, triagem por faixa etária,
