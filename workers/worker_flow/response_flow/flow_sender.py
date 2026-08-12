@@ -67,8 +67,8 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    ETAPA_3_CONFIRMACAO_DESTINO,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
 )
 
 
@@ -120,19 +120,27 @@ def flow_sender(contexto_historico):
         if evento_transicao:
             contexto_envio["evento_transicao"] = evento_transicao
 
-        # A confirmação da etapa 3 precisa permanecer idempotente quando a
-        # resposta do bot já existe. O evento recuperado expressa o estado
-        # final absoluto; nunca reconstruímos uma ordem de inversão.
+        # Movimento e efeito são confirmados na mesma transação. No replay da
+        # etapa 3, o status atual da conversa já é o valor final absoluto; não
+        # reinterpretamos "Não" nem reaplicamos uma inversão.
         if (
-            evento_transicao
-            == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+            contexto_historico.get("id_etapa_origem_transicao")
+            == ETAPA_3_CONFIRMACAO_DESTINO
+            and evento_transicao
+            == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
         ):
-            contexto_envio["status_dependente_final"] = True
-        elif (
-            evento_transicao
-            == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR
-        ):
-            contexto_envio["status_dependente_final"] = False
+            status_dependente_final = contexto_historico.get(
+                "status_dependente"
+            )
+            if not isinstance(status_dependente_final, bool):
+                raise ValueError(
+                    "Replay da confirmacao da etapa 3 sem "
+                    "status_dependente booleano persistido "
+                    f"(valor={status_dependente_final!r})"
+                )
+            contexto_envio["status_dependente_final"] = (
+                status_dependente_final
+            )
 
         return contexto_envio
 

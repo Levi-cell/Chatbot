@@ -6,8 +6,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
     EVENTO_PARA_MIM,
@@ -299,15 +298,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
         casos = (
             (
                 False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                5,
                 True,
                 True,
             ),
             (
                 True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                4,
                 False,
                 False,
             ),
@@ -315,12 +310,10 @@ class PersistenciaEssencialTests(unittest.TestCase):
 
         for (
             status_anterior,
-            evento,
-            destino,
             status_final,
             deve_manter_dependente,
         ) in casos:
-            with self.subTest(evento=evento), patch.object(
+            with self.subTest(status_final=status_final), patch.object(
                 efeitos,
                 "atualizar_status_dependente_conversa",
                 return_value=1,
@@ -340,8 +333,10 @@ class PersistenciaEssencialTests(unittest.TestCase):
                             status_dependente=status_anterior,
                         ),
                         {
-                            "id_etapa_resultante": destino,
-                            "evento_transicao": evento,
+                            "id_etapa_resultante": 4,
+                            "evento_transicao": (
+                                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
+                            ),
                             "status_dependente_final": status_final,
                         },
                         object(),
@@ -387,9 +382,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 ),
                 {
                     "resposta_ja_existia": True,
-                    "id_etapa_resultante": 5,
+                    "id_etapa_resultante": 4,
                     "evento_transicao": (
-                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
                     ),
                     "status_dependente_final": True,
                 },
@@ -401,6 +396,26 @@ class PersistenciaEssencialTests(unittest.TestCase):
         self.assertTrue(resultado["status_dependente"])
         self.assertFalse(resultado["status_dependente_alterado"])
         self.assertFalse(resultado["dependente_criado"])
+
+    def test_etapa_tres_recusa_status_anterior_ausente(self):
+        contexto = contexto_historico_base(
+            id_etapa_atual=3,
+            status_dependente=False,
+        )
+        contexto["status_dependente"] = None
+
+        with self.assertRaisesRegex(ValueError, "status_dependente anterior"):
+            efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto,
+                {
+                    "id_etapa_resultante": 4,
+                    "evento_transicao": (
+                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
+                    ),
+                    "status_dependente_final": True,
+                },
+                object(),
+            )
 
     def test_etapa_quatro_persiste_profissao_e_respeita_os_dois_ramos(self):
         casos = (
@@ -446,6 +461,25 @@ class PersistenciaEssencialTests(unittest.TestCase):
             )
             self.assertTrue(resultado["profissao_atualizada"])
             self.assertEqual(resultado["profissao"], "Sou engenheiro")
+
+    def test_etapa_quatro_recusa_status_dependente_ausente(self):
+        contexto = contexto_historico_base(
+            id_etapa_atual=4,
+            texto_cliente="Sou engenheiro",
+            status_dependente=False,
+        )
+        contexto["status_dependente"] = None
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto,
+                {
+                    "id_etapa_resultante": 6,
+                    "evento_transicao": EVENTO_PROFISSAO_TITULAR_VALIDA,
+                    "profissao": "Sou engenheiro",
+                },
+                object(),
+            )
 
     def test_retry_da_profissao_reconstroi_texto_original(self):
         cursor = object()

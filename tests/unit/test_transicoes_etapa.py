@@ -16,9 +16,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_5_NOME_DEPENDENTE,
     ETAPA_6_IDADE_ALUNO,
     ETAPA_7_OFERTA_AULA,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
@@ -50,12 +49,7 @@ def contexto_transicao_etapa3():
     return {
         "id_etapa_origem_transicao": ETAPA_3_CONFIRMACAO_DESTINO,
         "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR: (
-                ETAPA_4_PROFISSAO
-            ),
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE: (
-                ETAPA_5_NOME_DEPENDENTE
-            ),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_4_PROFISSAO,
         },
     }
 
@@ -147,14 +141,14 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(resultado, ETAPA_3_CONFIRMACAO_DESTINO)
 
-    def test_previsao_nao_escolhe_entre_os_ramos_da_confirmacao(self):
+    def test_previsao_da_confirmacao_aponta_para_profissao(self):
         resultado = prever_etapa_resposta(
             ETAPA_3_CONFIRMACAO_DESTINO,
             contexto_transicao_etapa3()["transicoes_permitidas"],
             etapa_inicial=1,
         )
 
-        self.assertIsNone(resultado)
+        self.assertEqual(resultado, ETAPA_4_PROFISSAO)
 
     def test_previsao_nao_escolhe_entre_os_ramos_da_profissao(self):
         resultado = prever_etapa_resposta(
@@ -202,26 +196,14 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(destino, ETAPA_3_CONFIRMACAO_DESTINO)
 
-    def test_confirmacao_resolve_destino_final(self):
-        casos = (
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_4_PROFISSAO,
-            ),
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_5_NOME_DEPENDENTE,
-            ),
+    def test_confirmacao_sempre_resolve_profissao(self):
+        destino = resolver_destino_transicao(
+            contexto_transicao_etapa3(),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            destinos_esperados={ETAPA_4_PROFISSAO},
         )
 
-        for evento, destino_esperado in casos:
-            with self.subTest(evento=evento):
-                destino = resolver_destino_transicao(
-                    contexto_transicao_etapa3(),
-                    evento,
-                    destinos_esperados={destino_esperado},
-                )
-                self.assertEqual(destino, destino_esperado)
+        self.assertEqual(destino, ETAPA_4_PROFISSAO)
 
     def test_profissao_dependente_resolve_nome_dependente(self):
         destino = resolver_destino_transicao(
@@ -342,25 +324,13 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO)
 
-    def test_retry_da_confirmacao_reconstroi_estado_final_pelo_destino(self):
-        casos = (
-            (
-                ETAPA_4_PROFISSAO,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-            ),
-            (
-                ETAPA_5_NOME_DEPENDENTE,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-            ),
+    def test_retry_da_confirmacao_reconstroi_evento_unico(self):
+        evento = identificar_evento_por_destino(
+            contexto_transicao_etapa3(),
+            ETAPA_4_PROFISSAO,
         )
 
-        for destino, esperado in casos:
-            with self.subTest(destino=destino):
-                evento = identificar_evento_por_destino(
-                    contexto_transicao_etapa3(),
-                    destino,
-                )
-                self.assertEqual(evento, esperado)
+        self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO)
 
     def test_retry_da_profissao_reconstroi_cada_evento_pelo_destino(self):
         casos = (

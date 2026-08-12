@@ -9,10 +9,9 @@ logger = logging.getLogger("db.etapa_transicao")
 TRANSICOES_INICIAIS = (
     (1, "nome_cliente_valido", 2),
     (2, "destino_atendimento_definido", 3),
-    (3, "destino_atendimento_confirmado_titular", 4),
-    (3, "destino_atendimento_confirmado_dependente", 5),
-    # As duas saídas da profissão preservam conversas antigas que foram
-    # remapeadas da etapa 3 para a 4 durante a migração.
+    (3, "destino_atendimento_confirmado", 4),
+    # A profissão é obrigatória para titular e dependente. Somente depois dela
+    # o status salvo escolhe nome do dependente (5) ou idade do titular (6).
     (4, "profissao_dependente_valida", 5),
     (4, "profissao_titular_valida", 6),
     (5, "nome_dependente_valido", 6),

@@ -49,7 +49,7 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - Arquivos finais substituídos: 154
 - Arquivos removidos: 10
 - Total de ações, incluindo a migração: 191
-- Validação do protótipo: `compileall`, `git diff --check`, `pip check`, matriz 23 etapas/28 transições, 47 testes focados do anti-flood e 398 testes da descoberta completa.
+- Validação do protótipo: `compileall`, `git diff --check`, `pip check`, matriz futura de 23 etapas/27 transições, 47 testes focados do anti-flood e 398 testes da descoberta completa. A baseline de produção possui 22 etapas/25 transições.
 - PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API `v26.0` são gates explícitos.
 - Os testes offline usam fixtures, fakes e mocks e não exigem credenciais de Meta, Redis ou RDS. Smokes reais ficam separados e controlados.
 
@@ -2680,7 +2680,7 @@ def configurar_role_banco():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `838c868d93001598fd11e5a9c5f1115e3155af615c70eb7a8a171f533c5aa21f`
+SHA-256 do conteúdo UTF-8 normalizado: `8af40063f40370af033d62ece9422f1af82f94e32335e4415534cd3f3421bff3`
 
 ````python
 import logging
@@ -2696,8 +2696,9 @@ TRANSICOES_INICIAIS = (
     (1, "nome_cliente_valido_sem_wa_id", 2),
     (2, "contato_oficial_compartilhado", 3),
     (3, "destino_atendimento_definido", 4),
-    (4, "destino_atendimento_confirmado_titular", 5),
-    (4, "destino_atendimento_confirmado_dependente", 6),
+    # A confirmação sempre leva à profissão. O status final, já absoluto, só
+    # define a saída posterior da etapa 5.
+    (4, "destino_atendimento_confirmado", 5),
     (5, "profissao_dependente_valida", 6),
     (5, "profissao_titular_valida", 7),
     (6, "nome_dependente_valido", 7),
@@ -11592,7 +11593,7 @@ def resolver_destinatario_sender(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cbd095d393a6adbb8a94e08bc25e5745d2781fec563bdd669d7b3fb940d1101e`
+SHA-256 do conteúdo UTF-8 normalizado: `0ebae6a5816268fdff6749cd2b7d2073437c23a51d0fd37e9cf97bb214017891`
 
 ````python
 import logging
@@ -11620,8 +11621,8 @@ from workers.worker_flow.response_flow.etapas.resolver_etapa20 import resolve_et
 from workers.worker_flow.response_flow.etapas.resolver_etapa21 import resolve_etapa21
 from workers.worker_flow.response_flow.etapas.resolver_etapa22 import resolve_etapa22
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    ETAPA_4_CONFIRMACAO_DESTINO,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     identificar_evento_por_destino,
@@ -11683,10 +11684,22 @@ def flow_sender(contexto_historico):
         if evento_transicao:
             contexto_envio["evento_transicao"] = evento_transicao
 
-        if evento_transicao == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-            contexto_envio["status_dependente_final"] = True
-        elif evento_transicao == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
-            contexto_envio["status_dependente_final"] = False
+        if (
+            contexto_historico.get("id_etapa_origem_transicao")
+            == ETAPA_4_CONFIRMACAO_DESTINO
+            and evento_transicao == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
+        ):
+            status_dependente_final = contexto_historico.get(
+                "status_dependente"
+            )
+            if not isinstance(status_dependente_final, bool):
+                raise ValueError(
+                    "Replay da confirmação sem status_dependente booleano "
+                    f"(valor={status_dependente_final!r})"
+                )
+            contexto_envio["status_dependente_final"] = (
+                status_dependente_final
+            )
 
         logger.info(
             "flow_sender_idempotencia_ok | motivo=resposta_bot_ja_registrada "
@@ -12354,7 +12367,7 @@ def reconhecer_contato_oficial_persistido(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `993098c5ac3577ef377de01c3410c1e30e23fb688867b515611308ab714e043f`
+SHA-256 do conteúdo UTF-8 normalizado: `cc9e97eed5679be41fc247a52ca7b4d3a1b447d2e54a9a9b6e8199a934a838e0`
 
 ````python
 import logging
@@ -12435,8 +12448,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
     EVENTO_CONTATO_OFICIAL_COMPARTILHADO,
@@ -12549,7 +12561,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 4
     if etapa_origem == ETAPA_4_CONFIRMACAO_DESTINO:
-        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
+        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
             _exigir_destino(
                 etapa_origem,
                 evento,
@@ -12560,21 +12572,6 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 contexto_envio,
                 cursor,
-                status_dependente_final=False,
-            )
-
-        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_6_NOME_DEPENDENTE,
-            )
-            return _persistir_confirmacao_destino_da_etapa4(
-                contexto_historico,
-                contexto_envio,
-                cursor,
-                status_dependente_final=True,
             )
 
     # ETAPA 5
@@ -13008,32 +13005,27 @@ def _persistir_confirmacao_destino_da_etapa4(
     contexto_historico,
     contexto_envio,
     cursor,
-    *,
-    status_dependente_final,
 ):
     """Aplica o destino final como valor absoluto e seguro para replay.
 
-    O evento e o destino já autorizados definem o valor final. Assim, uma
-    resposta relativa como "não" nunca é invertida novamente quando o worker
-    reconstrói o efeito a partir de uma resposta do bot já persistida.
+    O resolver calcula o valor absoluto no primeiro processamento. Em replay,
+    o flow_sender o reconstrói do status_dependente persistido na mesma
+    transação da resposta do bot, sem reaplicar a resposta relativa "não".
     """
-    status_contexto = contexto_envio.get("status_dependente_final")
-    if status_contexto is not None:
-        if not isinstance(status_contexto, bool):
-            raise ValueError(
-                "status_dependente_final deve ser booleano "
-                f"(valor={status_contexto!r})"
-            )
-        if status_contexto is not status_dependente_final:
-            raise ValueError(
-                "Status final da confirmação incompatível com o evento "
-                f"(evento={contexto_envio.get('evento_transicao')}, "
-                f"status_contexto={status_contexto}, "
-                f"status_evento={status_dependente_final})"
-            )
+    status_dependente_final = contexto_envio.get("status_dependente_final")
+    if not isinstance(status_dependente_final, bool):
+        raise ValueError(
+            "status_dependente_final deve ser booleano "
+            f"(valor={status_dependente_final!r})"
+        )
 
     id_conversa = contexto_historico["id_conversa"]
-    status_anterior = bool(contexto_historico.get("status_dependente"))
+    status_anterior = contexto_historico.get("status_dependente")
+    if not isinstance(status_anterior, bool):
+        raise ValueError(
+            "Confirmacao da etapa 4 sem status_dependente anterior booleano "
+            f"(valor={status_anterior!r})"
+        )
 
     atualizar_status_dependente_conversa(
         id_conversa,
@@ -13093,9 +13085,12 @@ def _persistir_profissao_capturada_na_etapa5(
     *,
     status_dependente_esperado,
 ):
-    status_dependente = bool(
-        contexto_historico.get("status_dependente")
-    )
+    status_dependente = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Profissao sem status_dependente booleano persistido "
+            f"(valor={status_dependente!r})"
+        )
 
     if status_dependente != status_dependente_esperado:
         raise ValueError(
@@ -23619,7 +23614,7 @@ def _logar_tratamento(contexto_historico, motivo):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `521146f47338fc340191dd9058f58bfa3e6e31fc57ab59beb80cc49afeeefcc2`
+SHA-256 do conteúdo UTF-8 normalizado: `caa347b1e343000e00cb9e27efc43db18b3d72425c7e41f335ff84232e01a921`
 
 ````python
 import logging
@@ -23632,9 +23627,6 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
     enviar_etapa5,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
-    enviar_etapa6,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.destinatario_sender import (
@@ -23659,9 +23651,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_r
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_5_PROFISSAO,
-    ETAPA_6_NOME_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -23681,9 +23671,12 @@ def resolve_etapa4(contexto_historico):
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente_atual = bool(
-        contexto_historico.get("status_dependente")
-    )
+    status_dependente_atual = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente_atual, bool):
+        raise ValueError(
+            "Etapa 4 sem status_dependente booleano persistido "
+            f"(valor={status_dependente_atual!r})"
+        )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = resolver_destinatario_sender(contexto_historico)
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -23743,29 +23736,16 @@ def resolve_etapa4(contexto_historico):
 
     status_dependente_final = resultado.status_dependente_final
 
-    if status_dependente_final:
-        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
-        destino_esperado = ETAPA_6_NOME_DEPENDENTE
-    else:
-        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR
-        destino_esperado = ETAPA_5_PROFISSAO
-
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        evento,
-        destinos_esperados={destino_esperado},
+        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+        destinos_esperados={ETAPA_5_PROFISSAO},
     )
 
-    if status_dependente_final:
-        contexto_envio = enviar_etapa6(
-            cliente_telefone,
-            phone_id_unidade,
-        )
-    else:
-        contexto_envio = enviar_etapa5(
-            cliente_telefone,
-            phone_id_unidade,
-        )
+    contexto_envio = enviar_etapa5(
+        cliente_telefone,
+        phone_id_unidade,
+    )
 
     # O efeito transacional usa SET para este valor absoluto. Não carregamos
     # uma ordem de "inverter", que seria insegura durante reaplicações.
@@ -23786,7 +23766,7 @@ def resolve_etapa4(contexto_historico):
         "status_dependente_alterado=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        evento,
+        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
         etapa_destino,
         status_dependente_atual,
         status_dependente_final,
@@ -23796,7 +23776,7 @@ def resolve_etapa4(contexto_historico):
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        evento,
+        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
         etapa_destino,
     )
 
@@ -23828,7 +23808,7 @@ def _logar_tratamento(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `adb799b23b3c0738117a1bd6890b3aaa4852f2fbe38f5bd3a78678ce2afcb0bb`
+SHA-256 do conteúdo UTF-8 normalizado: `e0ee461c62fcdc46ec886c6ec58d5c9b266c8723496da248df3421fd6eb36ebc`
 
 ````python
 import logging
@@ -23886,7 +23866,12 @@ TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
 def resolve_etapa5(contexto_historico):
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente = bool(contexto_historico.get("status_dependente"))
+    status_dependente = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Etapa 5 sem status_dependente booleano persistido "
+            f"(valor={status_dependente!r})"
+        )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = resolver_destinatario_sender(contexto_historico)
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -26640,7 +26625,7 @@ def _normalizar_texto(texto):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e6ee7d7667a5d6307f74d85fcaa34f692e484e50088f0051b64f9853b8e7104d`
+SHA-256 do conteúdo UTF-8 normalizado: `b29bacc88f3fbf5f9d78f6a50ef216aec2a009d6ea296bf8efef7eb5b7a8ffc0`
 
 ````python
 ETAPA_1_NOME_CLIENTE = 1
@@ -26671,12 +26656,7 @@ EVENTO_NOME_CLIENTE_VALIDO_COM_WA_ID = "nome_cliente_valido_com_wa_id"
 EVENTO_NOME_CLIENTE_VALIDO_SEM_WA_ID = "nome_cliente_valido_sem_wa_id"
 EVENTO_CONTATO_OFICIAL_COMPARTILHADO = "contato_oficial_compartilhado"
 EVENTO_DESTINO_ATENDIMENTO_DEFINIDO = "destino_atendimento_definido"
-EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR = (
-    "destino_atendimento_confirmado_titular"
-)
-EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE = (
-    "destino_atendimento_confirmado_dependente"
-)
+EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO = "destino_atendimento_confirmado"
 EVENTO_PARA_MIM = "para_mim"
 EVENTO_PARA_OUTRA_PESSOA = "para_outra_pessoa"
 EVENTO_PROFISSAO_TITULAR_VALIDA = "profissao_titular_valida"
@@ -27111,7 +27091,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `2dd17c1dce9f831eaac182535aca7d1dff9947449a42bd254e14f9b8c75abe96`
+SHA-256 do conteúdo UTF-8 normalizado: `8f7c3645050b3f6a096843834c11c9fb193def8059c75b656bbd1884f663bbbe`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -27589,11 +27569,9 @@ if etapa_origem == ETAPA_3_DESTINO_ATENDIMENTO:
 
 # ETAPA 4
 if etapa_origem == ETAPA_4_CONFIRMACAO_DESTINO:
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
-        # 4 -> 5: aplica status_dependente=False como valor absoluto.
-
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-        # 4 -> 6: aplica status_dependente=True como valor absoluto.
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
+        # 4 -> 5: aplica status_dependente_final como valor absoluto.
+        # A profissão é obrigatória para titular e dependente.
 
 # ETAPA 5
 if etapa_origem == ETAPA_5_PROFISSAO:
@@ -27973,7 +27951,7 @@ regras de negócio.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `80aa0982fb4f59db3e307d16ea132d6c2d1c9508b594f31cdaae6a54a4f0449b`
+SHA-256 do conteúdo UTF-8 normalizado: `53bd2e3953bc052cb7998e8002af225e88527eea8ea1c8fde47e2210f90d4d07`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -28272,12 +28250,11 @@ Implementação principal:
 - A etapa 3 registra a escolha inicial entre titular e dependente. A etapa 4
   aceita exclusivamente `Sim` ou `Não`, por clique nos botões ou pelo mesmo
   texto digitado. `Sim` mantém a escolha; `Não` seleciona o polo oposto.
-  Titular segue para a etapa 5 e dependente para a etapa 6. Mídia, dúvida sobre
-  reforço escolar, pergunta financeira inequívoca ou qualquer outro conteúdo
-  repetem a confirmação.
-- A etapa 5 coleta, em texto livre, a profissão quando o fluxo passa por ela.
-  Ela preserva as duas saídas para que conversas existentes, remapeadas da
-  antiga etapa 4, continuem conforme `status_dependente`.
+  Ambos seguem para a etapa 5. Mídia, dúvida sobre reforço escolar, pergunta
+  financeira inequívoca ou qualquer outro conteúdo repetem a confirmação.
+- A etapa 5 coleta obrigatoriamente, em texto livre, a profissão do cliente.
+  Após uma profissão válida, dependente segue para a etapa 6 e titular segue
+  diretamente para a etapa 7, conforme o `status_dependente` final persistido.
 - A etapa 12 introduz a triagem, as etapas 13 a 18 fazem as seis perguntas e a
   etapa 19 apresenta o agendamento. A etapa 19 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
@@ -29069,7 +29046,7 @@ Antes de modificar o fluxo:
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d538978c921381a5015e83d59aa8e109b1e8091e06a334b5216be26cb627de72`
+SHA-256 do conteúdo UTF-8 normalizado: `f2b86d3278102fc7434d75a40b20ceaacc21555dd0b0564c93eaf838f6acbcd4`
 
 ````markdown
 # Rotina de implementação de novas etapas
@@ -29113,11 +29090,10 @@ origem + evento -> destino
 Exemplo:
 
 ```text
-2 + destino_atendimento_definido -> 3
-3 + destino_atendimento_confirmado_titular    -> 4
-3 + destino_atendimento_confirmado_dependente -> 5
-5 + profissao_dependente_valida  -> 6
-5 + profissao_titular_valida     -> 7
+3 + destino_atendimento_definido -> 4
+4 + destino_atendimento_confirmado -> 5
+5 + profissao_dependente_valida -> 6
+5 + profissao_titular_valida -> 7
 ```
 
 Os tratamentos não produzem aresta:
@@ -29274,7 +29250,7 @@ MENSAGEM_ETAPA5 = "Qual é a sua profissão?"
 
 
 def montar_mensagem_etapa5():
-    return MENSAGEM_ETAPA4
+    return MENSAGEM_ETAPA5
 ```
 
 ### 5. Criar o sender
@@ -29310,7 +29286,7 @@ Contrato esperado:
     "resposta_ja_existia": False,
     "mensagem_bot": mensagem_bot,
     "id_hash_msg_bot": id_hash_msg_bot,
-    "id_etapa_resultante": 4,
+    "id_etapa_resultante": 5,
     "tipo_mensagem": "text",
     "canal": "meta_whatsapp",
     "atualizar_conversa": True,
@@ -29322,8 +29298,8 @@ O worker acrescenta depois:
 
 ```python
 {
-    "id_etapa_origem_transicao": 3,
-    "evento_transicao": "destino_atendimento_confirmado_titular",
+    "id_etapa_origem_transicao": 4,
+    "evento_transicao": "destino_atendimento_confirmado",
 }
 ```
 
@@ -29501,7 +29477,7 @@ Exemplo:
 
 ```python
 if id_etapa_atual == 4:
-    return resolve_etapa5(contexto_historico)
+    return resolve_etapa4(contexto_historico)
 ```
 
 O `flow_sender`:
@@ -29533,26 +29509,23 @@ A navegação já foi escolhida pela tabela. Esse arquivo grava somente os efeit
 específicos da aresta e deve deixar cada ponte visualmente explícita:
 
 ```python
-# ETAPA 2
+# ETAPA 3
 if etapa_origem == ETAPA_3_DESTINO_ATENDIMENTO:
     if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
-        # 2 -> 3: persiste a escolha antes de pedir confirmação.
-
-# ETAPA 3
-if etapa_origem == ETAPA_4_CONFIRMACAO_DESTINO:
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
-        # 3 -> 4
-
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-        # 3 -> 5
+        # 3 -> 4: persiste a escolha antes de pedir confirmação.
 
 # ETAPA 4
+if etapa_origem == ETAPA_4_CONFIRMACAO_DESTINO:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
+        # 4 -> 5: aplica o status final absoluto e exige profissão.
+
+# ETAPA 5
 if etapa_origem == ETAPA_5_PROFISSAO:
     if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
-        # 4 -> 5
+        # 5 -> 6
 
     if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
-        # 4 -> 6
+        # 5 -> 7
 ```
 
 Exemplos:
@@ -31485,7 +31458,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e2535727165c1098bf75718d3a3f3da196975beb38ff155f14c2568af0172a47`
+SHA-256 do conteúdo UTF-8 normalizado: `c004006c8c1314d8dcd2fea7ec29fd3c22b2bc6c1774f00bb6c07f6a407d127a`
 
 ````python
 import inspect
@@ -31591,7 +31564,7 @@ class DeployEssencialTests(unittest.TestCase):
         transicoes = etapa_transicao_script.TRANSICOES_INICIAIS
 
         self.assertEqual(len(ids_etapa), 23)
-        self.assertEqual(len(transicoes), 28)
+        self.assertEqual(len(transicoes), 27)
         self.assertEqual(ids_etapa, list(range(1, len(ids_etapa) + 1)))
         self.assertEqual(
             len({(origem, evento) for origem, evento, _ in transicoes}),
@@ -31609,8 +31582,7 @@ class DeployEssencialTests(unittest.TestCase):
             (1, EVENTO_NOME_CLIENTE_VALIDO_SEM_WA_ID, 2),
             (2, EVENTO_CONTATO_OFICIAL_COMPARTILHADO, 3),
             (3, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO, 4),
-            (4, "destino_atendimento_confirmado_titular", 5),
-            (4, "destino_atendimento_confirmado_dependente", 6),
+            (4, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO, 5),
             (5, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 6),
             (5, EVENTO_PROFISSAO_TITULAR_VALIDA, 7),
             (6, EVENTO_NOME_DEPENDENTE_VALIDO, 7),
@@ -31646,8 +31618,9 @@ class DeployEssencialTests(unittest.TestCase):
             "(23, 'Finalização do atendimento'",
             "nome_cliente_valido_sem_wa_id",
             "contato_oficial_compartilhado",
-            "destino_atendimento_confirmado_titular",
-            "destino_atendimento_confirmado_dependente",
+            "destino_atendimento_confirmado",
+            "transicoes_atuais <> 25",
+            "chatbot.etapa_transicao) <> 27",
             "COMMIT;",
         )
 
@@ -32448,7 +32421,7 @@ Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá perma
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `af843c4ccaefc17dd0bd540a8e307930fad7441f0ea6b943d8e53fab49b053ba`
+SHA-256 do conteúdo UTF-8 normalizado: `2122e41cbccc7b1bd7242eff15403a4ba70a52706b7204b266348265319ed7b8`
 
 ````python
 import unittest
@@ -32473,6 +32446,7 @@ from workers.worker_flow.response_flow import flow_sender as modulo_flow_sender
 from workers.worker_flow.response_flow.etapas import (
     resolver_etapa3,
     resolver_etapa4,
+    resolver_etapa5,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     validar_etapa4,
@@ -32480,9 +32454,7 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_4_CONFIRMACAO_DESTINO,
     ETAPA_5_PROFISSAO,
-    ETAPA_6_NOME_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
 )
 
@@ -32508,12 +32480,7 @@ def _contexto_historico(
         "id_etapa_cliente": ETAPA_4_CONFIRMACAO_DESTINO,
         "id_etapa_origem_transicao": ETAPA_4_CONFIRMACAO_DESTINO,
         "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR: (
-                ETAPA_5_PROFISSAO
-            ),
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE: (
-                ETAPA_6_NOME_DEPENDENTE
-            ),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_5_PROFISSAO,
         },
         "texto_cliente_atual": texto,
         "tipo_mensagem_atual": tipo,
@@ -32553,7 +32520,7 @@ def _contexto_envio(id_etapa, *, tratamento=None):
     return contexto
 
 
-class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
+class Etapa4ConfirmacaoDestinoTests(unittest.TestCase):
     def test_etapa3_entrega_escolha_inicial_para_confirmacao(self):
         casos = (
             ("Para mim", False),
@@ -32736,38 +32703,17 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
 
     def test_resolver_aceita_clique_nos_botoes_sim_e_nao(self):
         casos = (
-            (
-                "interactive",
-                "Sim",
-                "enviar_etapa5",
-                ETAPA_5_PROFISSAO,
-            ),
-            (
-                "button",
-                "Não",
-                "enviar_etapa6",
-                ETAPA_6_NOME_DEPENDENTE,
-            ),
+            ("interactive", "Sim"),
+            ("button", "Não"),
         )
 
-        for tipo, texto, sender_esperado, etapa_esperada in casos:
+        for tipo, texto in casos:
             with self.subTest(tipo=tipo, texto=texto):
-                with (
-                    patch.object(
-                        resolver_etapa4,
-                        "enviar_etapa5",
-                        return_value=_contexto_envio(
-                            ETAPA_5_PROFISSAO
-                        ),
-                    ) as enviar_titular,
-                    patch.object(
-                        resolver_etapa4,
-                        "enviar_etapa6",
-                        return_value=_contexto_envio(
-                            ETAPA_6_NOME_DEPENDENTE
-                        ),
-                    ) as enviar_dependente,
-                ):
+                with patch.object(
+                    resolver_etapa4,
+                    "enviar_etapa5",
+                    return_value=_contexto_envio(ETAPA_5_PROFISSAO),
+                ) as enviar_profissao:
                     resultado = resolver_etapa4.resolve_etapa4(
                         _contexto_historico(
                             texto,
@@ -32776,17 +32722,13 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                         )
                     )
 
-            senders = {
-                "enviar_etapa5": enviar_titular,
-                "enviar_etapa6": enviar_dependente,
-            }
-            senders[sender_esperado].assert_called_once_with(
+            enviar_profissao.assert_called_once_with(
                 "5571999999999",
                 "phone-id",
             )
             self.assertEqual(
                 resultado["id_etapa_resultante"],
-                etapa_esperada,
+                ETAPA_5_PROFISSAO,
             )
 
     def test_resolver_prioriza_midia_financeiro_e_contexto(self):
@@ -32875,66 +32817,26 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
 
     def test_resolver_encaminha_por_estado_final_absoluto(self):
         casos = (
-            (
-                False,
-                "sim",
-                False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_5_PROFISSAO,
-                "enviar_etapa5",
-            ),
-            (
-                False,
-                "não",
-                True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_6_NOME_DEPENDENTE,
-                "enviar_etapa6",
-            ),
-            (
-                True,
-                "sim",
-                True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_6_NOME_DEPENDENTE,
-                "enviar_etapa6",
-            ),
-            (
-                True,
-                "não",
-                False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_5_PROFISSAO,
-                "enviar_etapa5",
-            ),
+            (False, "sim", False),
+            (False, "não", True),
+            (True, "sim", True),
+            (True, "não", False),
         )
 
         for (
             status_atual,
             texto,
             status_final,
-            evento,
-            destino,
-            sender_esperado,
         ) in casos:
             with self.subTest(
                 status_atual=status_atual,
                 texto=texto,
             ):
-                with (
-                    patch.object(
-                        resolver_etapa4,
-                        "enviar_etapa5",
-                        return_value=_contexto_envio(ETAPA_5_PROFISSAO),
-                    ) as enviar_titular,
-                    patch.object(
-                        resolver_etapa4,
-                        "enviar_etapa6",
-                        return_value=_contexto_envio(
-                            ETAPA_6_NOME_DEPENDENTE
-                        ),
-                    ) as enviar_dependente,
-                ):
+                with patch.object(
+                    resolver_etapa4,
+                    "enviar_etapa5",
+                    return_value=_contexto_envio(ETAPA_5_PROFISSAO),
+                ) as enviar_profissao:
                     resultado = resolver_etapa4.resolve_etapa4(
                         _contexto_historico(
                             texto,
@@ -32942,16 +32844,18 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                         )
                     )
 
-            senders = {
-                "enviar_etapa5": enviar_titular,
-                "enviar_etapa6": enviar_dependente,
-            }
-            senders[sender_esperado].assert_called_once_with(
+            enviar_profissao.assert_called_once_with(
                 "5571999999999",
                 "phone-id",
             )
-            self.assertEqual(resultado["evento_transicao"], evento)
-            self.assertEqual(resultado["id_etapa_resultante"], destino)
+            self.assertEqual(
+                resultado["evento_transicao"],
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            )
+            self.assertEqual(
+                resultado["id_etapa_resultante"],
+                ETAPA_5_PROFISSAO,
+            )
             self.assertIs(
                 resultado["status_dependente_final"],
                 status_final,
@@ -32965,41 +32869,58 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                 status_final != status_atual,
             )
 
-    def test_replay_recupera_status_final_pelo_evento_sem_inverter(self):
-        casos = (
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_5_PROFISSAO,
-                False,
-            ),
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_6_NOME_DEPENDENTE,
-                True,
-            ),
-        )
-
-        for evento, destino, status_final in casos:
+    def test_replay_recupera_status_final_persistido_sem_inverter(self):
+        for status_final in (False, True):
             contexto = _contexto_historico(
                 "não",
-                status_dependente=not status_final,
+                status_dependente=status_final,
             )
             contexto["retry_count"] = 2
             contexto["resposta_bot_para_mensagem_atual"] = {
                 "id_mensagem": 99,
                 "id_hash_msg": "wamid.resposta-existente",
-                "id_etapa": destino,
+                "id_etapa": ETAPA_5_PROFISSAO,
             }
 
-            with self.subTest(evento=evento):
+            with self.subTest(status_final=status_final):
                 resultado = modulo_flow_sender.flow_sender(contexto)
 
             self.assertTrue(resultado["resposta_ja_existia"])
-            self.assertEqual(resultado["evento_transicao"], evento)
+            self.assertEqual(
+                resultado["evento_transicao"],
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            )
             self.assertIs(
                 resultado["status_dependente_final"],
                 status_final,
             )
+
+    def test_replay_recusa_status_dependente_ausente(self):
+        contexto = _contexto_historico("sim")
+        contexto["status_dependente"] = None
+        contexto["retry_count"] = 2
+        contexto["resposta_bot_para_mensagem_atual"] = {
+            "id_mensagem": 99,
+            "id_hash_msg": "wamid.resposta-existente",
+            "id_etapa": ETAPA_5_PROFISSAO,
+        }
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            modulo_flow_sender.flow_sender(contexto)
+
+    def test_primeiro_processamento_recusa_status_dependente_ausente(self):
+        contexto = _contexto_historico("sim")
+        contexto["status_dependente"] = None
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            resolver_etapa4.resolve_etapa4(contexto)
+
+    def test_profissao_recusa_status_dependente_ausente(self):
+        contexto = _contexto_historico("Professora")
+        contexto["status_dependente"] = None
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            resolver_etapa5.resolve_etapa5(contexto)
 
 
 if __name__ == "__main__":
@@ -35420,7 +35341,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8ef130ef212b301677cf66a242471165220bbadebe7c85cf98f4050953289b64`
+SHA-256 do conteúdo UTF-8 normalizado: `22a75a68597cfc1e9f3fc468247b1471ee6d36abd84557ed1fc71fc6ab5b5d63`
 
 ````python
 import unittest
@@ -35431,8 +35352,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_NOME_CLIENTE_VALIDO_COM_WA_ID,
     EVENTO_NOME_CLIENTE_VALIDO_SEM_WA_ID,
@@ -35727,14 +35647,14 @@ class PersistenciaEssencialTests(unittest.TestCase):
         casos = (
             (
                 False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                6,
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+                5,
                 True,
                 True,
             ),
             (
                 True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
                 5,
                 False,
                 False,
@@ -35815,9 +35735,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 ),
                 {
                     "resposta_ja_existia": True,
-                    "id_etapa_resultante": 6,
+                    "id_etapa_resultante": 5,
                     "evento_transicao": (
-                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
+                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
                     ),
                     "status_dependente_final": True,
                 },
@@ -35829,6 +35749,40 @@ class PersistenciaEssencialTests(unittest.TestCase):
         self.assertTrue(resultado["status_dependente"])
         self.assertFalse(resultado["status_dependente_alterado"])
         self.assertFalse(resultado["dependente_criado"])
+
+    def test_efeito_da_confirmacao_recusa_status_anterior_ausente(self):
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=4,
+                    status_dependente=None,
+                ),
+                {
+                    "id_etapa_resultante": 5,
+                    "evento_transicao": (
+                        EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
+                    ),
+                    "status_dependente_final": True,
+                },
+                object(),
+            )
+
+    def test_efeito_da_profissao_recusa_status_dependente_ausente(self):
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                contexto_historico_base(
+                    id_etapa_atual=5,
+                    status_dependente=None,
+                ),
+                {
+                    "id_etapa_resultante": 6,
+                    "evento_transicao": (
+                        EVENTO_PROFISSAO_DEPENDENTE_VALIDA
+                    ),
+                    "profissao": "Professora",
+                },
+                object(),
+            )
 
     def test_etapa_cinco_persiste_profissao_e_respeita_os_dois_ramos(self):
         casos = (
@@ -38331,7 +38285,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0dd39962586202446887080fc60355e43d14e781dbc2165e2a0a2553a4847027`
+SHA-256 do conteúdo UTF-8 normalizado: `8f2171b5bb7088edfe08a3dc1156d2299c1a4ec879010d648c832faf5ab91d77`
 
 ````python
 import unittest
@@ -38353,8 +38307,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_7_IDADE_ALUNO,
     ETAPA_8_OFERTA_AULA,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
@@ -38386,12 +38339,7 @@ def contexto_transicao_etapa4():
     return {
         "id_etapa_origem_transicao": ETAPA_4_CONFIRMACAO_DESTINO,
         "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR: (
-                ETAPA_5_PROFISSAO
-            ),
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE: (
-                ETAPA_6_NOME_DEPENDENTE
-            ),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_5_PROFISSAO,
         },
     }
 
@@ -38483,14 +38431,14 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(resultado, ETAPA_4_CONFIRMACAO_DESTINO)
 
-    def test_previsao_nao_escolhe_entre_os_ramos_da_confirmacao(self):
+    def test_previsao_da_confirmacao_aponta_para_profissao(self):
         resultado = prever_etapa_resposta(
             ETAPA_4_CONFIRMACAO_DESTINO,
             contexto_transicao_etapa4()["transicoes_permitidas"],
             etapa_inicial=1,
         )
 
-        self.assertIsNone(resultado)
+        self.assertEqual(resultado, ETAPA_5_PROFISSAO)
 
     def test_previsao_nao_escolhe_entre_os_ramos_da_profissao(self):
         resultado = prever_etapa_resposta(
@@ -38538,26 +38486,14 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(destino, ETAPA_4_CONFIRMACAO_DESTINO)
 
-    def test_confirmacao_resolve_destino_final(self):
-        casos = (
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_5_PROFISSAO,
-            ),
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_6_NOME_DEPENDENTE,
-            ),
+    def test_confirmacao_resolve_profissao_obrigatoria(self):
+        destino = resolver_destino_transicao(
+            contexto_transicao_etapa4(),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            destinos_esperados={ETAPA_5_PROFISSAO},
         )
 
-        for evento, destino_esperado in casos:
-            with self.subTest(evento=evento):
-                destino = resolver_destino_transicao(
-                    contexto_transicao_etapa4(),
-                    evento,
-                    destinos_esperados={destino_esperado},
-                )
-                self.assertEqual(destino, destino_esperado)
+        self.assertEqual(destino, ETAPA_5_PROFISSAO)
 
     def test_profissao_dependente_resolve_nome_dependente(self):
         destino = resolver_destino_transicao(
@@ -38678,25 +38614,13 @@ class TransicoesEtapaTests(unittest.TestCase):
 
         self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO)
 
-    def test_retry_da_confirmacao_reconstroi_estado_final_pelo_destino(self):
-        casos = (
-            (
-                ETAPA_5_PROFISSAO,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-            ),
-            (
-                ETAPA_6_NOME_DEPENDENTE,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-            ),
+    def test_retry_da_confirmacao_reconstroi_evento_unico(self):
+        evento = identificar_evento_por_destino(
+            contexto_transicao_etapa4(),
+            ETAPA_5_PROFISSAO,
         )
 
-        for destino, esperado in casos:
-            with self.subTest(destino=destino):
-                evento = identificar_evento_por_destino(
-                    contexto_transicao_etapa4(),
-                    destino,
-                )
-                self.assertEqual(evento, esperado)
+        self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO)
 
     def test_retry_da_profissao_reconstroi_cada_evento_pelo_destino(self):
         casos = (
@@ -39913,7 +39837,7 @@ if __name__ == "__main__":
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b68287cf1e6a357d12cb9a245edb23266bc5d70e21b174ac6d4b054d906de269`
+SHA-256 do conteúdo UTF-8 normalizado: `d3b64019cb1609baa1f6e6f90c44cbf8749e9f3439740f3f5c12d71cb7e2d9f5`
 
 ````python
 import ast
@@ -39993,8 +39917,8 @@ class ContratoDdlUserIdTests(unittest.TestCase):
         )
 
         self.assertEqual([linha[0] for linha in etapas], list(range(1, 24)))
-        self.assertEqual(len(transicoes), 28)
-        self.assertEqual(len(set(transicoes)), 28)
+        self.assertEqual(len(transicoes), 27)
+        self.assertEqual(len(set(transicoes)), 27)
         self.assertEqual(
             [linha[0] for linha in etapas if linha[4]],
             [19, 20, 21, 22, 23],
@@ -40022,7 +39946,7 @@ class ContratoDdlUserIdTests(unittest.TestCase):
             "SET wa_id = cliente.wa_id",
             "ativou_user_id",
             "IF (SELECT COUNT(*) FROM chatbot.etapa) <> 23",
-            "OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 28",
+            "OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 27",
             "Pós-validação",
         ):
             self.assertIn(fragmento, sql)
@@ -42025,7 +41949,7 @@ Os testes devem provar, no mínimo:
 1. os quatro JSONs reais de `payloads/`, inclusive fallbacks `wa_id/from` e `user_id/from_user_id`, divergência de réplicas e `CONTACT_INFO` ambíguo;
 2. identidade do item congelada, cache/turno tipados e sender usando `user_id` somente nas etapas autorizadas;
 3. promoção e reconciliação provisório/canônico, conversa antiga encerrada por `ativou_user_id`, quatro gates de exclusão, rollback e retry idempotente;
-4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação com estado final absoluto; 23 etapas, 28 arestas, resolvers 1–22 e terminal 23;
+4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
 5. Funil 19–23, username complementar e triagem 13–18 com pergunta/resposta em ordem;
 6. DDL final completo, constraints, FKs, índices e ausência de `ALTER TABLE` histórico nos scripts Python declarativos;
 7. importação dos utilitários sem Redis/RDS/Meta e ausência de nomes físicos legados;
@@ -42066,6 +41990,13 @@ O único risco conhecido aceito por este plano continua sendo a janela rara Meta
 
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
+O preflight aceita exclusivamente a baseline consolidada de 22 etapas/25
+transições e a pós-validação exige exatamente 23 etapas/27 transições. Toda a
+migração ocorre em uma única transação: qualquer erro desfaz inclusive o
+remapeamento de etapas. Depois de um `COMMIT` bem-sucedido, uma reexecução
+aborta no preflight sem alterar dados, pois o schema já não corresponde à
+baseline; ela nunca tenta aplicar parcialmente a promoção uma segunda vez.
+
 Pré-condições obrigatórias:
 
 - concluir todos os gates offline e a execução bem-sucedida em PostgreSQL descartável/clone da baseline;
@@ -42079,7 +42010,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `313e736a1317f1370bb107219e8b5fb5ee5e328d58b6c4aab156a90a88a10d1b`
+SHA-256 do SQL UTF-8 normalizado: `a9e2572c78fd90bb5a6f9791d233c56ce52e0d10e61e1eed76c1eda82b1ad695`
 
 ````sql
 BEGIN;
@@ -42165,8 +42096,7 @@ BEGIN
         VALUES
             (1,  'nome_cliente_valido',                    2),
             (2,  'destino_atendimento_definido',           3),
-            (3,  'destino_atendimento_confirmado_titular', 4),
-            (3,  'destino_atendimento_confirmado_dependente', 5),
+            (3,  'destino_atendimento_confirmado',         4),
             (4,  'profissao_dependente_valida',            5),
             (4,  'profissao_titular_valida',               6),
             (5,  'nome_dependente_valido',                 6),
@@ -42223,8 +42153,8 @@ BEGIN
 
     IF etapas_atuais <> 22
        OR etapas_atuais_corretas <> 22
-       OR transicoes_atuais <> 26
-       OR transicoes_atuais_corretas <> 26
+       OR transicoes_atuais <> 25
+       OR transicoes_atuais_corretas <> 25
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
@@ -42828,8 +42758,7 @@ VALUES
     (1,  'nome_cliente_valido_sem_wa_id',          2),
     (2,  'contato_oficial_compartilhado',          3),
     (3,  'destino_atendimento_definido',           4),
-    (4,  'destino_atendimento_confirmado_titular', 5),
-    (4,  'destino_atendimento_confirmado_dependente', 6),
+    (4,  'destino_atendimento_confirmado',         5),
     (5,  'profissao_dependente_valida',            6),
     (5,  'profissao_titular_valida',               7),
     (6,  'nome_dependente_valido',                 7),
@@ -42861,7 +42790,7 @@ SELECT setval(
 
 SELECT setval(
     pg_get_serial_sequence('chatbot.etapa_transicao', 'id_transicao'),
-    28,
+    COALESCE((SELECT MAX(id_transicao) FROM chatbot.etapa_transicao), 1),
     TRUE
 );
 
@@ -43452,8 +43381,7 @@ BEGIN
             (1,  'nome_cliente_valido_sem_wa_id',          2),
             (2,  'contato_oficial_compartilhado',          3),
             (3,  'destino_atendimento_definido',           4),
-            (4,  'destino_atendimento_confirmado_titular', 5),
-            (4,  'destino_atendimento_confirmado_dependente', 6),
+            (4,  'destino_atendimento_confirmado',         5),
             (5,  'profissao_dependente_valida',            6),
             (5,  'profissao_titular_valida',               7),
             (6,  'nome_dependente_valido',                 7),
@@ -43485,8 +43413,8 @@ BEGIN
        OR etapas_finais_corretas <> 23
        OR (SELECT MIN(id_etapa) FROM chatbot.etapa) <> 1
        OR (SELECT MAX(id_etapa) FROM chatbot.etapa) <> 23
-       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 28
-       OR transicoes_finais_corretas <> 28
+       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 27
+       OR transicoes_finais_corretas <> 27
     THEN
         RAISE EXCEPTION
             'Pós-validação falhou: conteúdo exato do catálogo/mapa divergente.';

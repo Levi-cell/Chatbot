@@ -50,7 +50,12 @@ TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
 def resolve_etapa4(contexto_historico):
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente = bool(contexto_historico.get("status_dependente"))
+    status_dependente = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Etapa 4 sem status_dependente booleano persistido "
+            f"(valor={status_dependente!r})"
+        )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]

@@ -76,8 +76,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_IDADE_VALIDA,
     EVENTO_NOME_CLIENTE_VALIDO,
@@ -158,7 +157,7 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 3
     if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
-        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
+        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
             _exigir_destino(
                 etapa_origem,
                 evento,
@@ -169,21 +168,6 @@ def atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico,
                 contexto_envio,
                 cursor,
-                status_dependente_final=False,
-            )
-
-        if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_5_NOME_DEPENDENTE,
-            )
-            return _persistir_confirmacao_destino_da_etapa3(
-                contexto_historico,
-                contexto_envio,
-                cursor,
-                status_dependente_final=True,
             )
 
     # ETAPA 4
@@ -670,32 +654,29 @@ def _persistir_confirmacao_destino_da_etapa3(
     contexto_historico,
     contexto_envio,
     cursor,
-    *,
-    status_dependente_final,
 ):
     """Aplica o destino final como valor absoluto e seguro para replay.
 
-    O evento e o destino já autorizados definem o valor final. Assim, uma
-    resposta relativa como "não" nunca é invertida novamente quando o worker
-    reconstrói o efeito a partir de uma resposta do bot já persistida.
+    No primeiro processamento, o validador produz o valor absoluto. Em replay,
+    movimento e efeito já foram confirmados juntos, então o worker relê esse
+    mesmo valor da conversa. A resposta relativa nunca é reinterpretada.
     """
-    status_contexto = contexto_envio.get("status_dependente_final")
-    if status_contexto is not None:
-        if not isinstance(status_contexto, bool):
-            raise ValueError(
-                "status_dependente_final deve ser booleano "
-                f"(valor={status_contexto!r})"
-            )
-        if status_contexto is not status_dependente_final:
-            raise ValueError(
-                "Status final da confirmação incompatível com o evento "
-                f"(evento={contexto_envio.get('evento_transicao')}, "
-                f"status_contexto={status_contexto}, "
-                f"status_evento={status_dependente_final})"
-            )
+    status_dependente_final = contexto_envio.get(
+        "status_dependente_final"
+    )
+    if not isinstance(status_dependente_final, bool):
+        raise ValueError(
+            "Confirmacao da etapa 3 sem status_dependente_final booleano "
+            f"(valor={status_dependente_final!r})"
+        )
 
     id_conversa = contexto_historico["id_conversa"]
-    status_anterior = bool(contexto_historico.get("status_dependente"))
+    status_anterior = contexto_historico.get("status_dependente")
+    if not isinstance(status_anterior, bool):
+        raise ValueError(
+            "Confirmacao da etapa 3 sem status_dependente anterior booleano "
+            f"(valor={status_anterior!r})"
+        )
 
     atualizar_status_dependente_conversa(
         id_conversa,
@@ -755,9 +736,12 @@ def _persistir_profissao_capturada_na_etapa4(
     *,
     status_dependente_esperado,
 ):
-    status_dependente = bool(
-        contexto_historico.get("status_dependente")
-    )
+    status_dependente = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Profissao sem status_dependente booleano persistido "
+            f"(valor={status_dependente!r})"
+        )
 
     if status_dependente != status_dependente_esperado:
         raise ValueError(

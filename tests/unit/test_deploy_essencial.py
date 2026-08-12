@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
     EVENTO_EMAIL_VALIDO,
     EVENTO_NOME_CLIENTE_VALIDO,
@@ -99,10 +101,14 @@ class DeployEssencialTests(unittest.TestCase):
         transicoes = etapa_transicao_script.TRANSICOES_INICIAIS
 
         self.assertEqual(len(ids_etapa), 22)
-        self.assertEqual(len(transicoes), 26)
+        self.assertEqual(len(transicoes), 25)
         self.assertEqual(ids_etapa, list(range(1, len(ids_etapa) + 1)))
         self.assertEqual(
             len({(origem, evento) for origem, evento, _ in transicoes}),
+            len(transicoes),
+        )
+        self.assertEqual(
+            len({(origem, destino) for origem, _, destino in transicoes}),
             len(transicoes),
         )
 
@@ -115,8 +121,7 @@ class DeployEssencialTests(unittest.TestCase):
         arestas_criticas = {
             (1, EVENTO_NOME_CLIENTE_VALIDO, 2),
             (2, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO, 3),
-            (3, "destino_atendimento_confirmado_titular", 4),
-            (3, "destino_atendimento_confirmado_dependente", 5),
+            (3, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO, 4),
             (4, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 5),
             (4, EVENTO_PROFISSAO_TITULAR_VALIDA, 6),
             (5, EVENTO_NOME_DEPENDENTE_VALIDO, 6),
@@ -162,6 +167,58 @@ class DeployEssencialTests(unittest.TestCase):
         self.assertNotIn("CASCADE", sql.upper())
         self.assertNotIn("TRUNCATE", sql.upper())
         self.assertNotIn("DROP TABLE", sql.upper())
+
+    def test_migracao_profissao_unifica_confirmacao_e_recusa_estado_parcial(self):
+        caminho = (
+            Path(__file__).resolve().parents[2]
+            / "deploy"
+            / "migrations"
+            / "20260811_tornar_profissao_obrigatoria_apos_confirmacao.sql"
+        )
+        sql = caminho.read_text(encoding="utf-8")
+
+        contratos = (
+            "BEGIN;",
+            "LOCK TABLE",
+            "chatbot.etapa_transicao",
+            "chatbot.fila_mensagens",
+            "chatbot.historico_mensagens",
+            "destino_atendimento_confirmado_titular",
+            "destino_atendimento_confirmado_dependente",
+            "VALUES (3, 'destino_atendimento_confirmado', 4)",
+            "fila.status IN ('pending', 'processing')",
+            "cliente.id_etapa = 3",
+            "bot.id_etapa = 5",
+            "Catálogo de 22 etapas fora do estado esperado",
+            "Mapa de transicoes fora dos estados suportados",
+            "Validacao final do mapa de 25 transicoes falhou",
+            "COMMIT;",
+        )
+
+        for contrato in contratos:
+            with self.subTest(contrato=contrato):
+                self.assertIn(contrato, sql)
+
+        self.assertNotIn("ALTER TABLE", sql.upper())
+        self.assertNotIn("TRUNCATE", sql.upper())
+        self.assertNotIn("CASCADE", sql.upper())
+        self.assertNotIn("DROP TABLE", sql.upper())
+
+        bloco_mapa = sql.split(
+            "INSERT INTO migracao_profissao_mapa_final",
+            1,
+        )[1].split(";", 1)[0]
+        mapa_sql = tuple(
+            (int(origem), evento, int(destino))
+            for origem, evento, destino in re.findall(
+                r"\((\d+), '([^']+)', (\d+)\)",
+                bloco_mapa,
+            )
+        )
+        self.assertEqual(
+            mapa_sql,
+            etapa_transicao_script.TRANSICOES_INICIAIS,
+        )
 
     def test_executor_transacional_confirma_ou_reverte_e_propaga(self):
         conn_sucesso = FakeConn()

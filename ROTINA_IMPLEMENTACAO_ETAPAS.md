@@ -40,8 +40,7 @@ Exemplo:
 
 ```text
 2 + destino_atendimento_definido -> 3
-3 + destino_atendimento_confirmado_titular    -> 4
-3 + destino_atendimento_confirmado_dependente -> 5
+3 + destino_atendimento_confirmado -> 4
 4 + profissao_dependente_valida  -> 5
 4 + profissao_titular_valida     -> 6
 ```
@@ -248,7 +247,7 @@ O worker acrescenta depois:
 ```python
 {
     "id_etapa_origem_transicao": 3,
-    "evento_transicao": "destino_atendimento_confirmado_titular",
+    "evento_transicao": "destino_atendimento_confirmado",
 }
 ```
 
@@ -465,11 +464,8 @@ if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
 
 # ETAPA 3
 if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
-        # 3 -> 4
-
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-        # 3 -> 5
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
+        # 3 -> 4: aplica o status final absoluto e sempre pede a profissão.
 
 # ETAPA 4
 if etapa_origem == ETAPA_4_PROFISSAO:

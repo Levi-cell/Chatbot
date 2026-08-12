@@ -20,6 +20,7 @@ from workers.worker_flow.response_flow import flow_sender as modulo_flow_sender
 from workers.worker_flow.response_flow.etapas import (
     resolver_etapa2,
     resolver_etapa3,
+    resolver_etapa4,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
     validar_etapa3,
@@ -28,9 +29,9 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_3_CONFIRMACAO_DESTINO,
     ETAPA_4_PROFISSAO,
     ETAPA_5_NOME_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
     EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
+    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
 )
 
 
@@ -55,12 +56,7 @@ def _contexto_historico(
         "id_etapa_cliente": ETAPA_3_CONFIRMACAO_DESTINO,
         "id_etapa_origem_transicao": ETAPA_3_CONFIRMACAO_DESTINO,
         "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR: (
-                ETAPA_4_PROFISSAO
-            ),
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE: (
-                ETAPA_5_NOME_DEPENDENTE
-            ),
+            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_4_PROFISSAO,
         },
         "texto_cliente_atual": texto,
         "tipo_mensagem_atual": tipo,
@@ -280,38 +276,17 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
 
     def test_resolver_aceita_clique_nos_botoes_sim_e_nao(self):
         casos = (
-            (
-                "interactive",
-                "Sim",
-                "enviar_etapa4",
-                ETAPA_4_PROFISSAO,
-            ),
-            (
-                "button",
-                "Não",
-                "enviar_etapa5",
-                ETAPA_5_NOME_DEPENDENTE,
-            ),
+            ("interactive", "Sim"),
+            ("button", "Não"),
         )
 
-        for tipo, texto, sender_esperado, etapa_esperada in casos:
+        for tipo, texto in casos:
             with self.subTest(tipo=tipo, texto=texto):
-                with (
-                    patch.object(
-                        resolver_etapa3,
-                        "enviar_etapa4",
-                        return_value=_contexto_envio(
-                            ETAPA_4_PROFISSAO
-                        ),
-                    ) as enviar_titular,
-                    patch.object(
-                        resolver_etapa3,
-                        "enviar_etapa5",
-                        return_value=_contexto_envio(
-                            ETAPA_5_NOME_DEPENDENTE
-                        ),
-                    ) as enviar_dependente,
-                ):
+                with patch.object(
+                    resolver_etapa3,
+                    "enviar_etapa4",
+                    return_value=_contexto_envio(ETAPA_4_PROFISSAO),
+                ) as enviar_profissao:
                     resultado = resolver_etapa3.resolve_etapa3(
                         _contexto_historico(
                             texto,
@@ -320,17 +295,13 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                         )
                     )
 
-            senders = {
-                "enviar_etapa4": enviar_titular,
-                "enviar_etapa5": enviar_dependente,
-            }
-            senders[sender_esperado].assert_called_once_with(
+            enviar_profissao.assert_called_once_with(
                 "5571999999999",
                 "phone-id",
             )
             self.assertEqual(
                 resultado["id_etapa_resultante"],
-                etapa_esperada,
+                ETAPA_4_PROFISSAO,
             )
 
     def test_resolver_prioriza_midia_financeiro_e_contexto(self):
@@ -423,33 +394,21 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                 False,
                 "sim",
                 False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_4_PROFISSAO,
-                "enviar_etapa4",
             ),
             (
                 False,
                 "não",
                 True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_5_NOME_DEPENDENTE,
-                "enviar_etapa5",
             ),
             (
                 True,
                 "sim",
                 True,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_5_NOME_DEPENDENTE,
-                "enviar_etapa5",
             ),
             (
                 True,
                 "não",
                 False,
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_4_PROFISSAO,
-                "enviar_etapa4",
             ),
         )
 
@@ -457,28 +416,16 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
             status_atual,
             texto,
             status_final,
-            evento,
-            destino,
-            sender_esperado,
         ) in casos:
             with self.subTest(
                 status_atual=status_atual,
                 texto=texto,
             ):
-                with (
-                    patch.object(
-                        resolver_etapa3,
-                        "enviar_etapa4",
-                        return_value=_contexto_envio(ETAPA_4_PROFISSAO),
-                    ) as enviar_titular,
-                    patch.object(
-                        resolver_etapa3,
-                        "enviar_etapa5",
-                        return_value=_contexto_envio(
-                            ETAPA_5_NOME_DEPENDENTE
-                        ),
-                    ) as enviar_dependente,
-                ):
+                with patch.object(
+                    resolver_etapa3,
+                    "enviar_etapa4",
+                    return_value=_contexto_envio(ETAPA_4_PROFISSAO),
+                ) as enviar_profissao:
                     resultado = resolver_etapa3.resolve_etapa3(
                         _contexto_historico(
                             texto,
@@ -486,16 +433,18 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                         )
                     )
 
-            senders = {
-                "enviar_etapa4": enviar_titular,
-                "enviar_etapa5": enviar_dependente,
-            }
-            senders[sender_esperado].assert_called_once_with(
+            enviar_profissao.assert_called_once_with(
                 "5571999999999",
                 "phone-id",
             )
-            self.assertEqual(resultado["evento_transicao"], evento)
-            self.assertEqual(resultado["id_etapa_resultante"], destino)
+            self.assertEqual(
+                resultado["evento_transicao"],
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            )
+            self.assertEqual(
+                resultado["id_etapa_resultante"],
+                ETAPA_4_PROFISSAO,
+            )
             self.assertIs(
                 resultado["status_dependente_final"],
                 status_final,
@@ -509,41 +458,119 @@ class Etapa3ConfirmacaoDestinoTests(unittest.TestCase):
                 status_final != status_atual,
             )
 
-    def test_replay_recupera_status_final_pelo_evento_sem_inverter(self):
-        casos = (
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
-                ETAPA_4_PROFISSAO,
-                False,
-            ),
-            (
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-                ETAPA_5_NOME_DEPENDENTE,
-                True,
-            ),
-        )
-
-        for evento, destino, status_final in casos:
+    def test_replay_recupera_status_final_persistido_sem_inverter(self):
+        for status_final in (False, True):
             contexto = _contexto_historico(
                 "não",
-                status_dependente=not status_final,
+                status_dependente=status_final,
             )
             contexto["retry_count"] = 2
             contexto["resposta_bot_para_mensagem_atual"] = {
                 "id_mensagem": 99,
                 "id_hash_msg": "wamid.resposta-existente",
-                "id_etapa": destino,
+                "id_etapa": ETAPA_4_PROFISSAO,
             }
 
-            with self.subTest(evento=evento):
+            with self.subTest(status_final=status_final):
                 resultado = modulo_flow_sender.flow_sender(contexto)
 
             self.assertTrue(resultado["resposta_ja_existia"])
-            self.assertEqual(resultado["evento_transicao"], evento)
+            self.assertEqual(
+                resultado["evento_transicao"],
+                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
+            )
             self.assertIs(
                 resultado["status_dependente_final"],
                 status_final,
             )
+
+    def test_replay_recusa_status_dependente_ausente(self):
+        contexto = _contexto_historico("sim")
+        contexto["status_dependente"] = None
+        contexto["retry_count"] = 2
+        contexto["resposta_bot_para_mensagem_atual"] = {
+            "id_mensagem": 99,
+            "id_hash_msg": "wamid.resposta-existente",
+            "id_etapa": ETAPA_4_PROFISSAO,
+        }
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            modulo_flow_sender.flow_sender(contexto)
+
+    def test_primeiro_processamento_recusa_status_dependente_ausente(self):
+        contexto = _contexto_historico("sim")
+        contexto["status_dependente"] = None
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            resolver_etapa3.resolve_etapa3(contexto)
+
+    def test_dependente_confirma_depois_informa_profissao_antes_do_nome(self):
+        with patch.object(
+            resolver_etapa3,
+            "enviar_etapa4",
+            return_value=_contexto_envio(ETAPA_4_PROFISSAO),
+        ):
+            confirmacao = resolver_etapa3.resolve_etapa3(
+                _contexto_historico("sim", status_dependente=True)
+            )
+
+        self.assertEqual(
+            confirmacao["id_etapa_resultante"],
+            ETAPA_4_PROFISSAO,
+        )
+        self.assertIs(confirmacao["status_dependente_final"], True)
+
+        contexto_profissao = _contexto_historico(
+            "Professora",
+            status_dependente=confirmacao["status_dependente_final"],
+        )
+        contexto_profissao.update(
+            {
+                "id_etapa_atual": ETAPA_4_PROFISSAO,
+                "id_etapa_cliente": ETAPA_4_PROFISSAO,
+                "id_etapa_origem_transicao": ETAPA_4_PROFISSAO,
+                "transicoes_permitidas": {
+                    EVENTO_PROFISSAO_DEPENDENTE_VALIDA: (
+                        ETAPA_5_NOME_DEPENDENTE
+                    ),
+                },
+            }
+        )
+
+        with patch.object(
+            resolver_etapa4,
+            "enviar_etapa5",
+            return_value=_contexto_envio(ETAPA_5_NOME_DEPENDENTE),
+        ) as enviar_nome_dependente:
+            profissao = resolver_etapa4.resolve_etapa4(contexto_profissao)
+
+        enviar_nome_dependente.assert_called_once_with(
+            "5571999999999",
+            "phone-id",
+        )
+        self.assertEqual(
+            profissao["evento_transicao"],
+            EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
+        )
+        self.assertEqual(
+            profissao["id_etapa_resultante"],
+            ETAPA_5_NOME_DEPENDENTE,
+        )
+        self.assertEqual(profissao["profissao"], "Professora")
+
+    def test_profissao_recusa_destino_do_atendimento_ausente(self):
+        contexto = _contexto_historico("Professora")
+        contexto.update(
+            {
+                "id_etapa_atual": ETAPA_4_PROFISSAO,
+                "id_etapa_cliente": ETAPA_4_PROFISSAO,
+                "id_etapa_origem_transicao": ETAPA_4_PROFISSAO,
+                "status_dependente": None,
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "status_dependente"):
+            resolver_etapa4.resolve_etapa4(contexto)
 
 
 if __name__ == "__main__":

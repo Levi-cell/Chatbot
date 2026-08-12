@@ -9,9 +9,6 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa3 import (
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import (
     enviar_etapa4,
 )
-from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
-    enviar_etapa5,
-)
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
     TIPOS_MENSAGEM_ACEITOS_ETAPA3,
@@ -32,9 +29,7 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_r
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_4_PROFISSAO,
-    ETAPA_5_NOME_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR,
+    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -54,9 +49,12 @@ def resolve_etapa3(contexto_historico):
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente_atual = bool(
-        contexto_historico.get("status_dependente")
-    )
+    status_dependente_atual = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente_atual, bool):
+        raise ValueError(
+            "Etapa 3 sem status_dependente booleano persistido "
+            f"(valor={status_dependente_atual!r})"
+        )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -116,12 +114,8 @@ def resolve_etapa3(contexto_historico):
 
     status_dependente_final = resultado.status_dependente_final
 
-    if status_dependente_final:
-        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE
-        destino_esperado = ETAPA_5_NOME_DEPENDENTE
-    else:
-        evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR
-        destino_esperado = ETAPA_4_PROFISSAO
+    evento = EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO
+    destino_esperado = ETAPA_4_PROFISSAO
 
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
@@ -129,16 +123,10 @@ def resolve_etapa3(contexto_historico):
         destinos_esperados={destino_esperado},
     )
 
-    if status_dependente_final:
-        contexto_envio = enviar_etapa5(
-            cliente_telefone,
-            phone_id_unidade,
-        )
-    else:
-        contexto_envio = enviar_etapa4(
-            cliente_telefone,
-            phone_id_unidade,
-        )
+    contexto_envio = enviar_etapa4(
+        cliente_telefone,
+        phone_id_unidade,
+    )
 
     # O efeito transacional usa SET para este valor absoluto. Não carregamos
     # uma ordem de "inverter", que seria insegura durante reaplicações.

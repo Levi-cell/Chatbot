@@ -284,12 +284,13 @@ Implementação principal:
 - A etapa 2 registra a escolha inicial entre titular e dependente. A etapa 3
   aceita exclusivamente `Sim` ou `Não`, por clique nos botões ou pelo mesmo
   texto digitado. `Sim` mantém a escolha; `Não` seleciona o polo oposto.
-  Titular segue para a etapa 4 e dependente para a etapa 5. Mídia, dúvida sobre
-  reforço escolar, pergunta financeira inequívoca ou qualquer outro conteúdo
-  repetem a confirmação.
-- A etapa 4 coleta, em texto livre, a profissão quando o fluxo passa por ela.
-  Ela preserva as duas saídas para que conversas existentes, remapeadas da
-  antiga etapa 3, continuem conforme `status_dependente`.
+  Os dois resultados seguem obrigatoriamente para a etapa 4. Mídia, dúvida
+  sobre reforço escolar, pergunta financeira inequívoca ou qualquer outro
+  conteúdo repetem a confirmação.
+- A etapa 4 sempre coleta, em texto livre, a profissão. Somente depois de
+  persistir esse dado ela consulta o `status_dependente` final: dependente
+  segue para a etapa 5, que pergunta o nome; titular segue para a etapa 6,
+  que pergunta a idade. Assim, nenhum fluxo novo pula a profissão.
 - A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
   etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.

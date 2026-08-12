@@ -90,6 +90,12 @@ referências existentes está em
 executada inteira no DBeaver, em janela de manutenção e com snapshot recente;
 `setup_database.py` não substitui essa migração.
 
+A correção posterior que torna a profissão obrigatória depois da confirmação
+está em
+`deploy/migrations/20260811_tornar_profissao_obrigatoria_apos_confirmacao.sql`.
+Ela troca somente o catálogo de transições, aceita reexecução no estado final e
+não retrocede conversas que já passaram pela profissão.
+
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
 de schema existente exige um script de migração separado ou decisão consciente
 de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL

@@ -446,11 +446,8 @@ if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
 
 # ETAPA 3
 if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR:
-        # 3 -> 4: aplica status_dependente=False como valor absoluto.
-
-    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE:
-        # 3 -> 5: aplica status_dependente=True como valor absoluto.
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
+        # 3 -> 4: aplica o status final absoluto e sempre pede a profissão.
 
 # ETAPA 4
 if etapa_origem == ETAPA_4_PROFISSAO:
@@ -464,6 +461,10 @@ if etapa_origem == ETAPA_4_PROFISSAO:
 Cada comentário de evento deve mostrar `origem -> destino`. A tabela
 `etapa_transicao` continua sendo a fonte de verdade, e o código apenas torna
 visíveis os efeitos de cada aresta autorizada.
+
+Confirmação e profissão não podem transformar ausência de estado em titular.
+Resolvers, replay e efeitos dessas pontes exigem `status_dependente` booleano;
+um valor ausente ou inválido falha para retry em vez de usar `bool(None)`.
 
 ### Tratamento de erros
 

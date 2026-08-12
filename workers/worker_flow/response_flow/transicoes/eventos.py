@@ -23,12 +23,7 @@ ETAPA_22_FINALIZACAO = 22
 
 EVENTO_NOME_CLIENTE_VALIDO = "nome_cliente_valido"
 EVENTO_DESTINO_ATENDIMENTO_DEFINIDO = "destino_atendimento_definido"
-EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_TITULAR = (
-    "destino_atendimento_confirmado_titular"
-)
-EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO_DEPENDENTE = (
-    "destino_atendimento_confirmado_dependente"
-)
+EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO = "destino_atendimento_confirmado"
 EVENTO_PARA_MIM = "para_mim"
 EVENTO_PARA_OUTRA_PESSOA = "para_outra_pessoa"
 EVENTO_PROFISSAO_TITULAR_VALIDA = "profissao_titular_valida"

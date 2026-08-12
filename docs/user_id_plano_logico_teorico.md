@@ -9,12 +9,13 @@ Nesta tarefa, somente este arquivo Markdown é alterado. Todos os caminhos de
 código, banco, testes e deploy citados abaixo descrevem impacto futuro; não são
 arquivos a modificar agora.
 
-A baseline operacional usada nesta revisão é a V1.0.5, commit `345e876`, já
-implantada com 22 etapas e 26 transições. Ela inclui a confirmação do destino,
-os tratamentos atuais, a triagem por faixa etária e o detalhamento das perguntas
-no Funil. A futura implementação deste plano acrescentará somente a etapa de
-compartilhamento oficial do contato após o nome; por isso o estado final terá 23
-etapas e 28 transições.
+A baseline operacional usada nesta revisão é a V1.0.5 com a correção que
+torna a profissão obrigatória para titular e dependente, totalizando 22 etapas e
+25 transições. Ela inclui a confirmação do destino, os tratamentos atuais, a
+triagem por faixa etária e o detalhamento das perguntas no Funil. A futura
+implementação deste plano acrescentará somente a etapa de compartilhamento
+oficial do contato após o nome; por isso o estado final terá 23 etapas e 27
+transições.
 
 Os contratos de payload usados como referência são:
 
@@ -1207,10 +1208,12 @@ atuais:
   A etapa 23 é terminal e não possui resolver. `flow_sender()` acrescenta os
   três snapshots antes de todo retorno, inclusive o idempotente. Ele também
   preserva a reconstrução idempotente já existente da confirmação do destino:
-  ao recuperar uma resposta do bot, o evento persistido repõe o
-  `status_dependente_final` absoluto, sem reaplicar uma inversão. Fora esse
-  contrato existente, ele não valida conteúdo, executa SQL nem chama a Meta
-  diretamente;
+  ao recuperar uma resposta do bot, o evento único identifica a transição e o
+  `status_dependente` booleano, já persistido na mesma transação da resposta,
+  repõe o `status_dependente_final` absoluto sem reaplicar uma inversão. Valor
+  ausente ou não booleano é inconsistência e falha de forma fechada; nunca é
+  convertido silenciosamente para titular. Fora esse contrato existente, ele
+  não valida conteúdo, executa SQL nem chama a Meta diretamente;
 - `transicoes/eventos.py` e `chatbot.etapa_transicao` definem nomes e arestas,
   sem conter efeitos de dados;
 - `persistencia_resposta.py` e `efeitos_transicao.py` continuam sendo os donos
@@ -1425,8 +1428,7 @@ TRANSICOES = (
     (1, "nome_cliente_valido_sem_wa_id", 2),
     (2, "contato_oficial_compartilhado", 3),
     (3, "destino_atendimento_definido", 4),
-    (4, "destino_atendimento_confirmado_titular", 5),
-    (4, "destino_atendimento_confirmado_dependente", 6),
+    (4, "destino_atendimento_confirmado", 5),
     (5, "profissao_dependente_valida", 6),
     (5, "profissao_titular_valida", 7),
     (6, "nome_dependente_valido", 7),
@@ -1473,7 +1475,10 @@ validador contextual:
 ### 9.2 Confirmação do destino preservada
 
 A confirmação implantada na V1.0.4 e presente na baseline V1.0.5 passa da etapa
-atual 3 para a futura etapa 4 sem ampliar sua gramática:
+atual 3 para a futura etapa 4 sem ampliar sua gramática. Na baseline corrigida,
+ela produz o evento único `destino_atendimento_confirmado` e sempre segue de 3
+para a profissão atual 4; depois da renumeração, a mesma regra segue da
+confirmação futura 4 para a profissão futura 5:
 
 - aceita somente o clique nos botões `Sim`/`Não` ou o texto digitado
   `Sim`/`Não`, após a normalização já existente;
@@ -1487,8 +1492,18 @@ atual 3 para a futura etapa 4 sem ampliar sua gramática:
   inversão. O efeito transacional faz `SET` idempotente, cria o placeholder do
   dependente quando o valor final é verdadeiro e remove o placeholder quando o
   valor final é falso;
-- o caminho de resposta do bot já existente reconstrói esse mesmo valor
-  absoluto pelo evento persistido, preservando a segurança em retry.
+- titular e dependente produzem o mesmo evento
+  `destino_atendimento_confirmado` e seguem obrigatoriamente para a profissão na
+  etapa 5. Somente a resposta da profissão bifurca para o nome do dependente na
+  etapa 6 ou para a idade do titular na etapa 7;
+- o caminho de resposta do bot já existente reconstrói esse mesmo valor absoluto
+  a partir do `status_dependente` booleano persistido na conversa. Ausência ou
+  tipo inválido interrompe o ciclo para retry, sem assumir `False` e sem inverter
+  novamente a resposta original.
+
+Essa convergência não altera a identidade nem o destinatário do atendimento:
+as regras de WA ID canônico, fallback de user ID antes do compartilhamento e
+exigência de WA ID da futura etapa 3 em diante permanecem exatamente as mesmas.
 
 ### 9.3 Triagem por faixa etária preservada
 
@@ -1590,11 +1605,19 @@ reforço escolar, não o financeiro. Tratamentos ficam na etapa atual, retornam
 contadores além do comportamento transversal já existente. As mensagens
 financeiras preservam a expressão atual “valores de investimento”.
 
-A profissão atual da etapa 4 passa à futura etapa 5. Seus adaptadores
+A profissão atual da etapa 4 passa à futura etapa 5 e continua obrigatória para
+titular e dependente. A confirmação sempre apresenta essa pergunta; depois de
+persisti-la, `status_dependente` escolhe a futura etapa 6, com o nome do
+dependente, ou a futura etapa 7, com a idade do titular. Seus adaptadores
 contextuais de reforço e financeiro também são renumerados e continuam
 protegendo declarações inequívocas de vínculo profissional com banca, cursinho,
 supletivo ou reforço. O classificador universal não é enfraquecido para as
 demais etapas.
+
+Essa bifurcação também é fail-closed: `status_dependente` precisa ser um
+booleano persistido tanto no resolver quanto no efeito da profissão. Ausência
+ou tipo inválido interrompe o ciclo para retry, sem transformar `None` em
+titular por coerção.
 
 Cada mensagem de tratamento deve reapresentar a pergunta de forma neutra. Não é
 permitido concatenar cegamente a mensagem inaugural quando ela começa com
@@ -1833,12 +1856,16 @@ arquivo da etapa 2, evitando sobrescrever módulos da baseline.
 A renumeração inclui explicitamente:
 
 - a confirmação atual 3 -> futura 4, seu bloco idempotente em
-  `flow_sender.py`, seus dois eventos e os efeitos de valor absoluto;
+  `flow_sender.py`, seu evento único `destino_atendimento_confirmado`, a saída
+  obrigatória para a profissão e os efeitos de valor absoluto reconstruídos
+  somente de `status_dependente` booleano persistido;
 - a profissão atual 4 -> futura 5 e os adaptadores contextuais
   `validador_reforco_escolar_etapa4.py` ->
   `validador_reforco_escolar_etapa5.py` e
   `validador_financeiro_etapa4.py` ->
-  `validador_financeiro_etapa5.py`, com imports e testes ajustados;
+  `validador_financeiro_etapa5.py`, com imports e testes ajustados. A etapa 5
+  permanece obrigatória nos dois fluxos e somente ela bifurca dependente para 6
+  ou titular para 7;
 - a introdução à triagem atual 11 -> futura 12;
 - `core/triagem/perguntas.py`, cujas chaves atuais 12..17 passam a 13..18;
 - `valida_historico.ETAPAS_TRIAGEM`, que passa de 11..17 para 12..18;
@@ -1976,8 +2003,7 @@ BEGIN
         VALUES
             (1,  'nome_cliente_valido',                    2),
             (2,  'destino_atendimento_definido',           3),
-            (3,  'destino_atendimento_confirmado_titular', 4),
-            (3,  'destino_atendimento_confirmado_dependente', 5),
+            (3,  'destino_atendimento_confirmado',          4),
             (4,  'profissao_dependente_valida',            5),
             (4,  'profissao_titular_valida',               6),
             (5,  'nome_dependente_valido',                 6),
@@ -2034,8 +2060,8 @@ BEGIN
 
     IF etapas_atuais <> 22
        OR etapas_atuais_corretas <> 22
-       OR transicoes_atuais <> 26
-       OR transicoes_atuais_corretas <> 26
+       OR transicoes_atuais <> 25
+       OR transicoes_atuais_corretas <> 25
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
@@ -2639,8 +2665,7 @@ VALUES
     (1,  'nome_cliente_valido_sem_wa_id',          2),
     (2,  'contato_oficial_compartilhado',          3),
     (3,  'destino_atendimento_definido',           4),
-    (4,  'destino_atendimento_confirmado_titular', 5),
-    (4,  'destino_atendimento_confirmado_dependente', 6),
+    (4,  'destino_atendimento_confirmado',          5),
     (5,  'profissao_dependente_valida',            6),
     (5,  'profissao_titular_valida',               7),
     (6,  'nome_dependente_valido',                 7),
@@ -2672,7 +2697,7 @@ SELECT setval(
 
 SELECT setval(
     pg_get_serial_sequence('chatbot.etapa_transicao', 'id_transicao'),
-    28,
+    27,
     TRUE
 );
 
@@ -3263,8 +3288,7 @@ BEGIN
             (1,  'nome_cliente_valido_sem_wa_id',          2),
             (2,  'contato_oficial_compartilhado',          3),
             (3,  'destino_atendimento_definido',           4),
-            (4,  'destino_atendimento_confirmado_titular', 5),
-            (4,  'destino_atendimento_confirmado_dependente', 6),
+            (4,  'destino_atendimento_confirmado',          5),
             (5,  'profissao_dependente_valida',            6),
             (5,  'profissao_titular_valida',               7),
             (6,  'nome_dependente_valido',                 7),
@@ -3296,8 +3320,8 @@ BEGIN
        OR etapas_finais_corretas <> 23
        OR (SELECT MIN(id_etapa) FROM chatbot.etapa) <> 1
        OR (SELECT MAX(id_etapa) FROM chatbot.etapa) <> 23
-       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 28
-       OR transicoes_finais_corretas <> 28
+       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 27
+       OR transicoes_finais_corretas <> 27
     THEN
         RAISE EXCEPTION
             'Pós-validação falhou: conteúdo exato do catálogo/mapa divergente.';
@@ -3581,8 +3605,12 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - qualquer outra frase que não tenha sido classificada antes como reforço
   escolar ou financeiro, inclusive tentativas de linguagem natural, repete a
   confirmação como tratamento de contexto;
-- retry da confirmação reconstrói o valor final absoluto pelo evento e nunca
-  reaplica uma inversão;
+- titular e dependente produzem `destino_atendimento_confirmado` e sempre seguem
+  da confirmação 4 para a profissão 5; somente a profissão bifurca dependente
+  para 6 ou titular para 7;
+- retry da confirmação exige `status_dependente` booleano persistido, reconstrói
+  dele o valor final absoluto e nunca reaplica uma inversão; valor ausente ou de
+  outro tipo falha de forma fechada;
 - trocar para dependente cria o placeholder necessário de forma idempotente e
   trocar para titular remove somente o placeholder da conversa;
 - em etapas com financeiro, a prioridade permanece mídia -> reforço escolar ->
@@ -3678,13 +3706,15 @@ O plano só poderá ser aplicado se:
 - username nunca for identidade técnica;
 - WA ID for obrigatório para chegar ao funil;
 - somente a etapa especial 2 for adicionada sobre a baseline V1.0.5;
-- catálogo tiver 23 etapas e mapa 28 transições;
+- catálogo tiver 23 etapas e mapa 27 transições;
 - somente etapa 23 encerrar e bloquear por 30 dias;
 - etapa 23 não tiver resolver;
 - a confirmação futura 4 continuar aceitando exclusivamente `Sim`/`Não` e
-  persistir o valor final absoluto de forma idempotente;
+  persistir o valor final absoluto de forma idempotente, sempre avançar para a
+  profissão futura 5 e exigir `status_dependente` booleano no replay;
 - a profissão futura 5 conservar seus validadores contextuais para não barrar
-  vínculos profissionais inequívocos com serviços escolares;
+  vínculos profissionais inequívocos com serviços escolares e ser a única
+  etapa que bifurca dependente para 6 ou titular para 7;
 - contato oficial válido ser reconhecido antes dos tratamentos da etapa 2 e,
   nas entradas comuns, a prioridade permanecer mídia -> reforço -> financeiro
   -> contexto;

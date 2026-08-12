@@ -19,7 +19,7 @@ PERGUNTAS_INFANTIS = (
     "ou atividades escolares?",
     "Com que frequência Ana tem dificuldade para concluir uma atividade "
     "que começou?",
-    "Com que frequência Ana esquece com frequência orientações ou "
+    "Com que frequência Ana esquece orientações ou "
     "conteúdos que acabou de aprender?",
     "Com que frequência Ana precisa que as instruções sejam repetidas "
     "várias vezes para conseguir realizá-las?",
