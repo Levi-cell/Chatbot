@@ -243,8 +243,22 @@ class PesquisaSatisfacao(models.Model):
 
 
 class Unidade(models.Model):
+    class Genero(models.TextChoices):
+        MASCULINO = "masculino", "Masculino"
+        FEMININO = "feminino", "Feminino"
+
     id_unidade = models.AutoField(primary_key=True)
-    nome = models.CharField(unique=True, max_length=300)
+    nome_unidade = models.CharField(
+        "nome da unidade",
+        unique=True,
+        max_length=300,
+    )
+    nome_agente = models.CharField("nome do agente", max_length=100)
+    genero = models.CharField(
+        "gênero do agente",
+        max_length=9,
+        choices=Genero.choices,
+    )
     cnpj = models.CharField(unique=True, max_length=50)
     email_responsavel = models.CharField(unique=True, max_length=255)
     telefone = models.CharField(unique=True, max_length=20)
@@ -268,7 +282,7 @@ class Unidade(models.Model):
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
     def __str__(self):
-        return self.nome
+        return self.nome_unidade
 
     class Meta:
         managed = False

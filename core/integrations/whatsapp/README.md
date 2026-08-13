@@ -56,6 +56,11 @@ mensagem não deve mover a responsabilidade de envio para `messages`.
 Cada etapa mantém seu próprio arquivo, como
 `etapa1_messages.py` e `etapa2_messages.py`.
 
+As apresentações inicial padrão, de mídia, financeira e de tratamento de
+reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
+argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
+formata o texto; não consulta o banco nem conhece a conversa.
+
 ## PyWa functions
 
 Único local permitido para importação e chamada direta da PyWa.

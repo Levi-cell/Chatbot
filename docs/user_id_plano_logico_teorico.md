@@ -1,5 +1,16 @@
 # Plano autoritativo — `user_id`, WA ID e PyWa 4.x
 
+> **Adendo de baseline — apresentação por unidade:** o estado final também
+> preservará `unidade.nome_unidade`, `unidade.nome_agente` e
+> `unidade.genero`, com gênero restrito a `masculino` ou `feminino`. Esses
+> campos configuram somente as apresentações iniciais padrão, de mídia,
+> financeira e de tratamento de reforço escolar da etapa 1. Eles não
+> identificam cliente e não entram em turno, lock, fila, cache de identidade,
+> anti-flood ou reconciliação. Qualquer bloco de
+> código ou SQL deste plano que ainda use `unidade.nome` pertence à baseline
+> anterior e deverá ser regenerado, junto com o plano prático, antes da
+> implementação de `user_id`.
+
 ## 1. Estado deste documento
 
 Este plano substitui integralmente as versões anteriores do desenho de

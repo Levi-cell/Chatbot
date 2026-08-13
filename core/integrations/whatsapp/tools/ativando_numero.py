@@ -34,6 +34,7 @@ def registrar_numero_whatsapp(phone_number_id, pin=None):
         json=payload,
         timeout=get_meta_http_timeout(),
     )
+    # print(response.json())
 
     logger.info(
         "whatsapp_numero_registro_resposta | acao=registrar_numero phone_number_id=%s status=%s",
@@ -53,3 +54,5 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
+
+# registrar_numero_whatsapp(1238343616032627, pin=None)

@@ -41,6 +41,9 @@ def ativar_waba_id(waba_id):
     )
     resposta = _normalizar_resposta(response)
 
+    # print(resposta)
+    # print(response)
+
     logger.info(
         "whatsapp_waba_subscribe_resposta | acao=subscribe_apps "
         "waba_id=%s status=%s sucesso=%s",
@@ -69,3 +72,5 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
+
+# ativar_waba_id(1334896588725096)

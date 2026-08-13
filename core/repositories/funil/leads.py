@@ -8,7 +8,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         SELECT
             c.id_conversa,
             c.id_unidade,
-            u.nome AS nome_unidade,
+            u.nome_unidade,
             COALESCE(c.status_dependente, FALSE) AS status_dependente,
             cl.nome AS nome_cliente,
             cl.waid_telefone AS telefone_cliente,

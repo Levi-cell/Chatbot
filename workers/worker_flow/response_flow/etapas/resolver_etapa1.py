@@ -69,12 +69,31 @@ def resolve_etapa1(contexto_historico):
 
     conversa_sem_etapa = id_etapa_atual is None
     nome_unidade = contexto_historico.get("nome_unidade")
+    nome_agente = contexto_historico.get("nome_agente")
+    genero = contexto_historico.get("genero")
 
-    if conversa_sem_etapa and not nome_unidade:
-        raise ValueError(
-            "Etapa 1 inicial sem nome da unidade "
-            f"(id_conversa={id_conversa})"
-        )
+    if conversa_sem_etapa:
+        campos_ausentes = [
+            campo
+            for campo, valor in (
+                ("nome_unidade", nome_unidade),
+                ("nome_agente", nome_agente),
+                ("genero", genero),
+            )
+            if not valor
+        ]
+        if campos_ausentes:
+            raise ValueError(
+                "Etapa 1 inicial sem dados de apresentacao da unidade "
+                f"(id_conversa={id_conversa}, "
+                f"campos_ausentes={campos_ausentes})"
+            )
+
+        if genero not in {"masculino", "feminino"}:
+            raise ValueError(
+                "Etapa 1 inicial com genero de agente invalido "
+                f"(id_conversa={id_conversa}, genero={genero!r})"
+            )
 
     # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
@@ -85,6 +104,8 @@ def resolve_etapa1(contexto_historico):
                 cliente_telefone,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_midia(
@@ -104,6 +125,8 @@ def resolve_etapa1(contexto_historico):
                 cliente_telefone,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_reforco_escolar(
@@ -122,6 +145,8 @@ def resolve_etapa1(contexto_historico):
                 cliente_telefone,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_financeiro(
@@ -135,6 +160,8 @@ def resolve_etapa1(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             nome_unidade,
+            nome_agente,
+            genero,
         )
 
     ### VALIDANDO NOME

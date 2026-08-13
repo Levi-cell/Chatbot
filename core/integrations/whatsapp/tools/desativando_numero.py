@@ -26,6 +26,9 @@ def desregistrar_numero_whatsapp(phone_number_id):
         headers=headers,
         timeout=get_meta_http_timeout(),
     )
+
+    # print(response)
+
     logger.info(
         "whatsapp_numero_desregistro_resposta | acao=desregistrar_numero phone_number_id=%s status=%s",
         short_value(phone_number_id),
@@ -44,3 +47,5 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
+
+# desregistrar_numero_whatsapp(1238343616032627)

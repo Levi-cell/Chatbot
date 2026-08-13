@@ -142,6 +142,11 @@ O Admin é majoritariamente somente leitura. As exceções operacionais são:
 - criação, edição e exclusão individual de unidade;
 - desbloqueio individual de cliente bloqueado na Meta.
 
+Cada unidade exige `nome_unidade`, `nome_agente` e `genero`. O campo `genero`
+oferece no formulário somente `Masculino` e `Feminino`; ele controla o artigo
+usado para apresentar o agente nos inícios padrão, de mídia, financeiro e de
+tratamento de reforço escolar da etapa 1.
+
 Operações externas são Meta-first. Se a Meta falhar, a alteração correspondente
 não deve ser confirmada no banco ou Redis.
 

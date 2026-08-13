@@ -504,7 +504,7 @@ def _buscar_conversas(cursor, args, inicio, fim, possui_turnos):
             cl.nome AS nome_cliente,
             cl.waid_telefone,
             c.id_unidade,
-            u.nome AS nome_unidade,
+            u.nome_unidade,
             u.waba_id,
             u.phone_number_id,
             c.id_etapa_atual,

@@ -167,7 +167,9 @@ def criar_tabelas():
 
         CREATE TABLE IF NOT EXISTS chatbot.unidade (
             id_unidade SERIAL PRIMARY KEY,
-            nome VARCHAR(300) UNIQUE NOT NULL,
+            nome_unidade VARCHAR(300) NOT NULL,
+            nome_agente VARCHAR(100) NOT NULL,
+            genero VARCHAR(9) NOT NULL,
             cnpj VARCHAR(50) UNIQUE NOT NULL,
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
@@ -177,7 +179,19 @@ def criar_tabelas():
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             link_instagram VARCHAR(400),
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
-            status_pagamento BOOLEAN DEFAULT TRUE
+            status_pagamento BOOLEAN DEFAULT TRUE,
+
+            CONSTRAINT uq_unidade_nome_unidade
+                UNIQUE (nome_unidade),
+
+            CONSTRAINT ck_unidade_nome_unidade_nao_vazio
+                CHECK (nome_unidade ~ '[^[:space:]]'),
+
+            CONSTRAINT ck_unidade_nome_agente_nao_vazio
+                CHECK (nome_agente ~ '[^[:space:]]'),
+
+            CONSTRAINT ck_unidade_genero
+                CHECK (genero IN ('masculino', 'feminino'))
         );
 
         CREATE TABLE IF NOT EXISTS chatbot.etapa (

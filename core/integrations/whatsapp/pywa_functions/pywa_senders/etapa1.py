@@ -33,9 +33,20 @@ TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 ###  CENARIO NORMAL
 
-def enviar_etapa1(cliente_telefone, phone_id_unidade, nome_unidade):
+def enviar_etapa1(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = montar_mensagem_etapa1(saudacao, nome_unidade)
+    mensagem_bot = montar_mensagem_etapa1(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
 
     return _enviar_texto_etapa1(
         cliente_telefone,
@@ -50,9 +61,16 @@ def enviar_etapa1_midia_inicio(
     cliente_telefone,
     phone_id_unidade,
     nome_unidade,
+    nome_agente,
+    genero,
 ):
     saudacao = obter_saudacao_por_horario()
-    mensagem_bot = montar_mensagem_midia_inicio(saudacao, nome_unidade)
+    mensagem_bot = montar_mensagem_midia_inicio(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
 
     return _enviar_texto_etapa1(
         cliente_telefone,
@@ -68,11 +86,15 @@ def enviar_etapa1_financeiro_inicio(
     cliente_telefone,
     phone_id_unidade,
     nome_unidade,
+    nome_agente,
+    genero,
 ):
     saudacao = obter_saudacao_por_horario()
     mensagem_bot = montar_mensagem_financeiro_inicio(
         saudacao,
         nome_unidade,
+        nome_agente,
+        genero,
     )
 
     return _enviar_texto_etapa1(
@@ -90,11 +112,15 @@ def enviar_etapa1_reforco_escolar_inicio(
     cliente_telefone,
     phone_id_unidade,
     nome_unidade,
+    nome_agente,
+    genero,
 ):
     saudacao = obter_saudacao_por_horario()
     mensagem_bot = montar_mensagem_reforco_escolar_inicio(
         saudacao,
         nome_unidade,
+        nome_agente,
+        genero,
     )
 
     return _enviar_texto_etapa1(

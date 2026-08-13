@@ -106,8 +106,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
     )
     contexto_especifico_etapa = {}
 
-    # O nome da unidade vem do banco somente no primeiro contato. Respostas
-    # posteriores da etapa 1 usam mensagens de tratamento sem nova saudacao.
+    # Os dados de apresentação da unidade vêm do banco somente no primeiro
+    # contato. Respostas posteriores da etapa 1 não repetem essa apresentação.
     if contexto_conversa.get("id_etapa_atual") is None:
         contexto_especifico_etapa.update(
             buscar_contexto_etapa1(

@@ -19,6 +19,8 @@ Commit: 440d5e0971cbd76841a764030fe510dc4861fa5a
 V1.0.5 - Triagem etária, Funil, tratamentos e validações
 Commit: 345e8767946a4cab41c9f31359db137c40fb60e7
 
+Correção V1.0.5 - Profissão obrigatória após confirmação
+Commit: 5f1889f5e2c81f3c233b3ea81940cbab98a84620
 
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================

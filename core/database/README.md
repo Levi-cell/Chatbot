@@ -96,6 +96,12 @@ está em
 Ela troca somente o catálogo de transições, aceita reexecução no estado final e
 não retrocede conversas que já passaram pela profissão.
 
+A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
+apresentação configurável do agente está em
+`deploy/migrations/20260812_personalizar_agente_unidade.sql`. Ela preserva os
+nomes das unidades existentes, aplica `Suh`/`feminino` somente no primeiro
+backfill e recusa schemas parciais antes de publicar o novo contrato.
+
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
 de schema existente exige um script de migração separado ou decisão consciente
 de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL

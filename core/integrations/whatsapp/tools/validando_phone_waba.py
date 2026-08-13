@@ -44,6 +44,9 @@ def validar_phone_number_id_da_waba(waba_id, phone_number_id):
         paginas_consultadas += 1
         resposta = _normalizar_resposta(response)
 
+        # print(response)
+        # print(resposta)
+
         if not 200 <= response.status_code < 300:
             logger.error(
                 "whatsapp_phone_waba_validacao_falhou | "
@@ -141,3 +144,5 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
+
+# validar_phone_number_id_da_waba(1334896588725096,1238343616032627)

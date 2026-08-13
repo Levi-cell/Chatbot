@@ -461,11 +461,24 @@ Quando a conversa ainda não possui etapa atual persistida, qualquer mensagem de
 texto comum poderá iniciar o atendimento e receber a saudação normal da etapa 1.
 
 Essa regra vale mesmo que o texto inicial seja estranho, curto, tenha símbolos ou
-pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar a Su e
-pedir o nome do cliente.
+pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar o
+agente virtual configurado para a unidade e pedir o nome do cliente.
 
 A exceção é texto com intenção financeira. Nesse caso, o sistema já responde a
 dúvida sobre valores e, na mesma mensagem, apresenta a etapa 1.
+
+Nas mensagens iniciais padrão, de mídia, de intenção financeira e de tratamento
+de reforço escolar, a apresentação é formada exclusivamente pelos dados
+persistidos em `chatbot.unidade`:
+
+- `nome_unidade`: nome público da unidade;
+- `nome_agente`: nome público do agente virtual;
+- `genero`: seleciona `Sou o {nome_agente}` para `masculino` e
+  `Sou a {nome_agente}` para `feminino`.
+
+Esses campos não alteram evento, transição, turno, retry ou transação. Eles são
+apenas dados de apresentação lidos pelo contexto da etapa 1. As demais mensagens
+mantêm seus textos próprios.
 
 ### 11.2. Exceção para conversa iniciada com mídia
 
@@ -478,10 +491,12 @@ uma etapa atual persistida. Nesse caso:
 4. a próxima interação válida será interpretada como resposta da etapa 1 e
    poderá direcionar o fluxo para a etapa 2.
 
-Mensagem esperada:
+Mensagem esperada, usando uma das duas primeiras linhas conforme o gênero do
+agente:
 
 ```text
-Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
 Me diz, qual o seu nome?
 ```
@@ -534,10 +549,12 @@ mensalidade, investimento ou termo equivalente:
 4. a conversa não avançará por causa da pergunta de valor;
 5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
 
-Se a conversa iniciar com pergunta de valor, a resposta esperada será:
+Se a conversa iniciar com pergunta de valor, a resposta esperada usará uma das
+duas primeiras linhas conforme o gênero do agente:
 
 ```text
-Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
 Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
 Me diz, qual o seu nome?
 ```

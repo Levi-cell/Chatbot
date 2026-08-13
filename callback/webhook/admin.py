@@ -75,7 +75,7 @@ class IntegracaoFunilUnidadeAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        "id_unidade__nome",
+        "id_unidade__nome_unidade",
         "nome_widget",
         "codigo_widget",
         "codigo_canal_venda",
@@ -132,7 +132,9 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     list_display = (
         "id_unidade",
-        "nome",
+        "nome_unidade",
+        "nome_agente",
+        "genero",
         "cnpj",
         "telefone",
         "numero_comercial",
@@ -146,7 +148,8 @@ class UnidadeAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        "nome",
+        "nome_unidade",
+        "nome_agente",
         "cnpj",
         "telefone",
         "numero_comercial",
@@ -157,8 +160,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_instagram",
     )
 
-    list_filter = ("bpa_ativo", "status_pagamento")
-    ordering = ("nome",)
+    list_filter = ("genero", "bpa_ativo", "status_pagamento")
+    ordering = ("nome_unidade",)
 
     list_per_page = 50
     empty_value_display = "-"
@@ -1248,11 +1251,11 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
         "phone_id_unidade",
         "id_cliente__waid_telefone",
         "id_cliente__nome",
-        "id_unidade__nome",
+        "id_unidade__nome_unidade",
     )
 
     list_filter = ("id_unidade",)
-    ordering = ("wa_id_cliente", "id_unidade__nome")
+    ordering = ("wa_id_cliente", "id_unidade__nome_unidade")
     list_per_page = 50
     empty_value_display = "-"
 

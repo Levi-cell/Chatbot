@@ -37,7 +37,7 @@ def carregar_estado_banco(*, connection_factory=None):
         )
         cursor.execute(
             """
-            SELECT id_unidade, nome, waba_id, phone_number_id
+            SELECT id_unidade, nome_unidade, waba_id, phone_number_id
             FROM chatbot.unidade
             WHERE waba_id IS NOT NULL
               AND BTRIM(waba_id) <> ''
@@ -65,7 +65,7 @@ def carregar_estado_banco(*, connection_factory=None):
                 cbm.wa_id_cliente,
                 cbm.id_unidade,
                 cbm.phone_id_unidade,
-                u.nome,
+                u.nome_unidade,
                 u.waba_id,
                 u.phone_number_id,
                 c.nome

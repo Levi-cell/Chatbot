@@ -1,6 +1,12 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
 > Documento de implementação preparado sobre a baseline `e12f48c` (V1.0.5). Este arquivo não altera o runtime: ele registra o estado final completo que deverá ser aplicado em um prompt futuro.
+>
+> **Atenção — baseline posterior:** a personalização do agente por unidade
+> renomeou `unidade.nome` para `nome_unidade` e acrescentou `nome_agente` e
+> `genero`. Como este plano contém arquivos integrais e hashes da estrutura
+> anterior, ele não deve ser aplicado nem corrigido parcialmente. O apêndice
+> prático deverá ser regenerado sobre o commit definitivo dessa mudança.
 
 A lógica e os critérios autoritativos permanecem preservados em [`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver qualquer divergência interpretativa, o plano teórico vence; os blocos abaixo são a materialização prática dessa mesma lógica. O plano teórico já incorpora a decisão definitiva de continuidade anti-flood entre `user_id` e `wa_id`, e este documento implementa integralmente essa regra.
 
