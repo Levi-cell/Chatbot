@@ -29,8 +29,8 @@ A API pode devolver HTTP 200 com `response = failure`; esse caso não confirma
 O teste completo usa dados fictícios e só envia com confirmação explícita:
 
 ```bash
-python -m operations.integrations.funil_probe payload
-python -m operations.integrations.funil_probe send-test --confirm-real-send
+python -m utilitarios.integrations.funil_probe payload
+python -m utilitarios.integrations.funil_probe send-test --confirm-real-send
 ```
 
 Ele cria uma oportunidade claramente marcada como teste. Antes de ativar o

@@ -85,7 +85,7 @@ def _montar_conteudo(
 ):
     if meta_ok is True:
         acao_recomendada = (
-            "executar python -m operations.monitoring.blocked_users "
+            "executar python -m utilitarios.monitoring.blocked_users "
             "blocked-users quando o banco voltar"
         )
     elif meta_ok is False:

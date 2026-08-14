@@ -17,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from operations.bootstrap import configure_local_operations
+from utilitarios.bootstrap import configurar_ambiente_local
 
 MAX_CONVERSAS = 2000
 MAX_MENSAGENS_POR_CONVERSA = 1000
@@ -663,7 +663,7 @@ def _buscar_mensagens(cursor, ids_conversa, args, inicio, fim):
 
 def gerar_relatorio(args, *, connection_factory=None):
     if connection_factory is None:
-        configure_local_operations()
+        configurar_ambiente_local()
         from core.database.connection_aws import get_conn
 
         connection_factory = get_conn

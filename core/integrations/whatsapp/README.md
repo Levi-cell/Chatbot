@@ -91,7 +91,7 @@ Ferramentas administrativas usadas pelo Django Admin:
 - bloquear e desbloquear usuários na Meta.
 
 Relatórios conscientes e somente leitura ficam em
-[`operations/monitoring/blocked_users.py`](../../../operations/monitoring/blocked_users.py).
+[`utilitarios/monitoring/blocked_users.py`](../../../utilitarios/monitoring/blocked_users.py).
 Eles comparam bloqueios pela chave completa
 `(waba_id, phone_id_unidade, wa_id_cliente)` e reconciliam registros Cloud API.
 
@@ -127,5 +127,9 @@ Esta integração não deve:
 
 ## Testes relacionados
 
-- `tests/unit/test_roteamento_essencial.py`;
-- `tests/unit/test_roteamento_essencial.py`.
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.

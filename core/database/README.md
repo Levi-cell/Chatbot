@@ -29,7 +29,7 @@ core/database/
 - `connection_check.py` valida acesso ao PostgreSQL;
 - `deploy_database/` cria schema, tabelas, índices e funções;
 - partições mensais são mantidas pelo comando manual
-  `operations.maintenance.message_partitions`;
+  `utilitarios.maintenance.message_partitions`;
 - SQL de negócio executado durante atendimento fica em `core/repositories`.
 
 ## Setup
@@ -153,7 +153,9 @@ gerenciador de segredos.
 
 ## Testes relacionados
 
-- `tests/unit/test_deploy_essencial.py`;
-- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_persistencia_essencial.py`;
-- `tests/unit/test_funil_essencial.py`.
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.

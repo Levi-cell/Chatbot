@@ -7133,7 +7133,7 @@ Para impedir varreduras acidentais, a CLI exige ao menos um
 mensagens por conversa e mensagens totais; e usa uma janela temporal
 obrigatória, derivada de `--ultimas-horas` ou de `--inicio`/`--fim`.
 
-### Arquivo completo: `operations/monitoring/suspicious_conversations.py`
+### Arquivo completo: `utilitarios/monitoring/suspicious_conversations.py`
 
 Criar na raiz do projeto:
 
@@ -8127,9 +8127,9 @@ if __name__ == "__main__":
 Exemplos manuais:
 
 ```bash
-python -m operations.monitoring.suspicious_conversations --id-conversa 123 --formato texto
-python -m operations.monitoring.suspicious_conversations --id-unidade 2 --id-unidade 7 --ultimas-horas 6 --formato json
-python -m operations.monitoring.suspicious_conversations --todas-unidades --inicio 2025-01-15T00:00:00Z --fim 2025-01-16T00:00:00Z --limiar 65 --formato csv --saida suspeitas.csv
+python -m utilitarios.monitoring.suspicious_conversations --id-conversa 123 --formato texto
+python -m utilitarios.monitoring.suspicious_conversations --id-unidade 2 --id-unidade 7 --ultimas-horas 6 --formato json
+python -m utilitarios.monitoring.suspicious_conversations --todas-unidades --inicio 2025-01-15T00:00:00Z --fim 2025-01-16T00:00:00Z --limiar 65 --formato csv --saida suspeitas.csv
 ```
 
 ### Arquivo completo: `tests/unit/test_relatorio_conversas_suspeitas.py`
@@ -8145,26 +8145,25 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
-from operations.monitoring import suspicious_conversations as relatorio
-
+from utilitarios.monitoring import suspicious_conversations as relatorio
 
 UTC = timezone.utc
 BASE = datetime(2025, 1, 15, 12, 0, tzinfo=UTC)
 
 
 def mensagem(
-    indice,
-    *,
-    segundos,
-    quem,
-    etapa=4,
-    fingerprint=None,
-    tamanho=20,
-    texto=None,
-    tipo="text",
-    id_fila=None,
-    tem_url=False,
-    tem_marcador_automacao=False,
+        indice,
+        *,
+        segundos,
+        quem,
+        etapa=4,
+        fingerprint=None,
+        tamanho=20,
+        texto=None,
+        tipo="text",
+        id_fila=None,
+        tem_url=False,
+        tem_marcador_automacao=False,
 ):
     return {
         "id_mensagem": indice,
@@ -8770,9 +8769,9 @@ class CliELimitesTests(unittest.TestCase):
             "conversas": [],
         }
         with patch.object(
-            relatorio,
-            "gerar_relatorio",
-            return_value=documento,
+                relatorio,
+                "gerar_relatorio",
+                return_value=documento,
         ), patch.object(relatorio.sys, "stdout", new_callable=io.StringIO) as saida:
             codigo = relatorio.main(["--id-conversa", "10"])
         self.assertEqual(codigo, 0)
@@ -8787,7 +8786,7 @@ Validação planejada para este passo, sem conexão com o RDS:
 
 ```bash
 python -m unittest tests.unit.test_relatorio_conversas_suspeitas
-python -m py_compile operations/monitoring/suspicious_conversations.py tests/unit/test_relatorio_conversas_suspeitas.py
+python -m py_compile utilitarios/monitoring/suspicious_conversations.py tests/unit/test_relatorio_conversas_suspeitas.py
 git diff --check
 ```
 

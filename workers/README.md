@@ -225,11 +225,8 @@ terceiro terminal exclusivamente para ele.
 ## Testes relacionados
 
 - `tests/unit/test_worker_flow_runtime.py`;
-- `tests/unit/test_roteamento_essencial.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_lastfrom_semantico.py`;
-- `tests/unit/test_validadores_essenciais.py`;
-- `tests/unit/test_efeitos_triagem.py`;
-- `tests/unit/test_transicoes_etapa.py`;
-- `tests/unit/test_funil_essencial.py`.
+- `tests/unit/test_fluxo_turno_abc.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.

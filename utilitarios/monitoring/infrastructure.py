@@ -9,18 +9,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from operations.bootstrap import configure_local_operations
+from utilitarios.bootstrap import configurar_ambiente_local
 
 
 def verificar_postgresql(*, connection_factory=None):
     if connection_factory is None:
-        configure_local_operations()
+        configurar_ambiente_local()
         from core.database.connection_aws import get_conn
 
         connection_factory = get_conn
 
     conn = connection_factory(
-        application_name="operations_infrastructure_readonly",
+        application_name="utilitarios_infrastructure_readonly",
     )
     try:
         cursor = conn.cursor()
@@ -49,7 +49,7 @@ def verificar_postgresql(*, connection_factory=None):
 
 def verificar_redis(*, redis_factory=None):
     if redis_factory is None:
-        configure_local_operations()
+        configurar_ambiente_local()
         from core.cache.redis_client import (
             get_redis_safe,
             validar_redis_remoto,

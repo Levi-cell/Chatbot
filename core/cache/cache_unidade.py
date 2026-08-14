@@ -117,10 +117,6 @@ def carregar_cache_redis(cursor, redis_retries=3, redis_delay=2):
     return total
 
 
-def carregar_unidades_cache_webhook(cursor):
-    return carregar_cache_redis(cursor)
-
-
 def obter_id_unidade_redis_ou_plsql(id_phone_unidade, cursor):
     phone_key = _normalizar_phone_number_id(id_phone_unidade)
 

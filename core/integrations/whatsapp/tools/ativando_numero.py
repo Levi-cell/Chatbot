@@ -55,4 +55,4 @@ def _normalizar_resposta(response):
             "text": response.text,
         }
 
-# registrar_numero_whatsapp(1238343616032627, pin=None)
+# registrar_numero_whatsapp(1217356894795355, pin=None)

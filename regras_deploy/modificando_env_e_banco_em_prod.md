@@ -161,7 +161,7 @@ O segundo comando não deve produzir saída.
 Valide a presença das configurações essenciais:
 
 ```bash
-sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new'); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_GRAPH_API_VERSION','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
+sudo -u chatbot /opt/chatbot/venv/bin/python -c "from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new',interpolate=False); required=('DJANGO_SECRET_KEY','DJANGO_ALLOWED_HOSTS','DJANGO_CSRF_TRUSTED_ORIGINS','DB_HOST','DB_NAME','DB_USER','DB_PASSWORD','DB_SSLMODE','DB_SSLROOTCERT','PGSSLCERTMODE','REDIS_HOST','META_ACCESS_TOKEN','META_GRAPH_API_VERSION','META_WEBHOOK_VERIFY_TOKEN','META_APP_SECRET','FUNIL_WORKER_ENABLED'); missing=[k for k in required if not c.get(k)]; print('AMBIENTE_OK' if not missing else 'FALTANDO: '+','.join(missing)); raise SystemExit(bool(missing))"
 ```
 
 O comando deve imprimir `AMBIENTE_OK`.
@@ -172,9 +172,9 @@ Este teste injeta o arquivo `.new` apenas no processo de validação. Ele ainda
 não altera os serviços ativos:
 
 ```bash
-sudo -u chatbot env \
+sudo -u chatbot env -i \
   PYTHONPATH=/opt/chatbot/app \
-  /opt/chatbot/venv/bin/python -c "import os,sys; sys.path.insert(0,'/opt/chatbot/app/callback'); from dotenv import dotenv_values; os.environ.update({k:v for k,v in dotenv_values('/etc/chatbot/chatbot.env.new').items() if v is not None}); from core.database.connection_aws import get_conn; from operations.monitoring.infrastructure import verificar_redis; conn=get_conn('env_preflight'); assert conn.execute('SELECT 1').fetchone()[0] == 1; conn.close(); assert verificar_redis()['ok']; os.environ.setdefault('DJANGO_SETTINGS_MODULE','callback.settings'); import django; django.setup(); from django.core.management import call_command; call_command('check', deploy=True); print('PREFLIGHT_ENV_RDS_REDIS_OK')"
+  /opt/chatbot/venv/bin/python -c "import os,sys; from dotenv import dotenv_values; c=dotenv_values('/etc/chatbot/chatbot.env.new',interpolate=False); invalid=[k for k,v in c.items() if v is None]; assert not invalid, 'VALORES_INVALIDOS: '+','.join(invalid); os.environ.update({k:str(v) for k,v in c.items()}); os.environ['PYTHON_DOTENV_DISABLED']='1'; sys.path.insert(0,'/opt/chatbot/app/callback'); from core.database.connection_aws import get_conn; conn=get_conn('env_preflight'); cursor=conn.cursor(); cursor.execute('SELECT 1'); assert cursor.fetchone()[0] == 1; conn.close(); from core.cache.redis_client import get_redis_safe,validar_redis_remoto; redis=get_redis_safe(retries=1,delay=0,validate=True); validar_redis_remoto(redis); assert redis.ping() is True; redis.close(); os.environ.setdefault('DJANGO_SETTINGS_MODULE','callback.settings'); import django; django.setup(); from django.core.management import call_command; call_command('check',deploy=True); print('PREFLIGHT_ENV_RDS_REDIS_OK')"
 ```
 
 Não instale o arquivo se esse preflight terminar com erro.
@@ -636,8 +636,11 @@ Depois do `COMMIT`, execute uma vez na Lightsail:
 
 ```bash
 cd /opt/chatbot/app
-sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
-  /opt/chatbot/venv/bin/python -m operations.maintenance.cache_reset --operacional
+sudo -u chatbot env -i PYTHONPATH=/opt/chatbot/app \
+  /opt/chatbot/venv/bin/python -m utilitarios.maintenance.cache_reset \
+  --env-file /etc/chatbot/chatbot.env \
+  --operacional \
+  --confirmar
 ```
 
 Esse comando remove somente cache de cliente, bloqueios temporários de conversa

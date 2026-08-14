@@ -86,6 +86,7 @@ core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
 core/cache        -> Redis, fallback e autocura detectável
 core/integrations -> comunicação com serviços externos
+utilitarios       -> diagnóstico, monitoramento e manutenção manuais
 tests             -> testes, mocks, fakes e contratos
 ```
 
@@ -96,7 +97,7 @@ webhook ─┐
          ├──> core/repositories
 worker  ─┤──> core/cache
 admin   ─┤──> core/integrations
-tools   ─┘
+utilitários ─┘
 
 core nunca importa webhook ou worker
 ```
@@ -605,12 +606,18 @@ Separação interna recomendada:
 
 ### `tools`
 
-Contém scripts administrativos ou operacionais executados de forma consciente,
-como ativação de número, inscrição do WABA e reconciliação de bloqueios.
+Dentro de uma integração, contém operações administrativas que pertencem ao
+domínio daquela integração e são reutilizadas pelo Django Admin, como ativação
+de número e inscrição do WABA.
 
-Um `tool` não deve se tornar dependência do fluxo normal. Quando uma operação é
-reutilizada em runtime, mova a implementação para a camada apropriada e faça o
-tool chamá-la.
+Um `tool` não deve se tornar dependência do webhook ou dos workers. Quando uma
+operação é reutilizada por esses runtimes, mova a implementação para a camada
+apropriada e faça o `tool` e os orquestradores chamarem essa primitiva.
+
+Comandos iniciados conscientemente por uma pessoa apenas para diagnóstico,
+monitoramento, manutenção ou probe pertencem à pasta `utilitarios`, não a
+`core/integrations/<serviço>/tools`. Nenhum dos quatro pontos de entrada —
+webhook, `worker_flow`, `worker_funil` e Django Admin — importa `utilitarios`.
 
 Configuração operacional:
 
@@ -773,7 +780,8 @@ Use esta sequência:
 6. Define texto ou callback do WhatsApp? `messages`.
 7. Trata entrada HTTP? `callback/webhook`.
 8. Decide processamento assíncrono ou etapa? `workers`.
-9. É script manual operacional? `tools`.
+9. É comando humano de diagnóstico, monitoramento, manutenção ou probe?
+   `utilitarios`.
 10. Existe apenas para validar comportamento? `tests`.
 
 Se a função responder positivamente a mais de uma pergunta, provavelmente deve

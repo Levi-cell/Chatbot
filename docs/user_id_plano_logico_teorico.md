@@ -1,32 +1,29 @@
 # Plano autoritativo — `user_id`, WA ID e PyWa 4.x
 
-> **Adendo de baseline — apresentação por unidade:** o estado final também
-> preservará `unidade.nome_unidade`, `unidade.nome_agente` e
-> `unidade.genero`, com gênero restrito a `masculino` ou `feminino`. Esses
-> campos configuram somente as apresentações iniciais padrão, de mídia,
-> financeira e de tratamento de reforço escolar da etapa 1. Eles não
-> identificam cliente e não entram em turno, lock, fila, cache de identidade,
-> anti-flood ou reconciliação. Qualquer bloco de
-> código ou SQL deste plano que ainda use `unidade.nome` pertence à baseline
-> anterior e deverá ser regenerado, junto com o plano prático, antes da
-> implementação de `user_id`.
+> **Baseline autoritativa — V1.0.6 (`e052625`):** o estado inicial deste plano
+> já possui `unidade.nome_unidade`, `unidade.nome_agente` e `unidade.genero`,
+> com gênero restrito a `masculino` ou `feminino`. Esses campos configuram
+> somente as apresentações iniciais padrão, de mídia, financeira e de
+> tratamento de reforço escolar da etapa 1. Eles não identificam cliente e não
+> entram em turno, lock, fila, cache de identidade, anti-flood ou
+> reconciliação. A implementação de `user_id` deve preservar esse contrato e
+> nunca restaurar a coluna legada `unidade.nome`.
 
 ## 1. Estado deste documento
 
 Este plano substitui integralmente as versões anteriores do desenho de
 `user_id`.
-Ele ainda **não foi aplicado ao código operacional**.
-Nesta tarefa, somente este arquivo Markdown é alterado. Todos os caminhos de
-código, banco, testes e deploy citados abaixo descrevem impacto futuro; não são
-arquivos a modificar agora.
+Ele ainda **não foi aplicado ao runtime**. Nesta revisão, os dois planos
+Markdown são sincronizados com a baseline; todos os caminhos de código, banco,
+testes e deploy citados abaixo continuam descrevendo impacto futuro.
 
-A baseline operacional usada nesta revisão é a V1.0.5 com a correção que
-torna a profissão obrigatória para titular e dependente, totalizando 22 etapas e
-25 transições. Ela inclui a confirmação do destino, os tratamentos atuais, a
-triagem por faixa etária e o detalhamento das perguntas no Funil. A futura
-implementação deste plano acrescentará somente a etapa de compartilhamento
-oficial do contato após o nome; por isso o estado final terá 23 etapas e 27
-transições.
+A baseline operacional usada nesta revisão é a V1.0.6, commit `e052625`, com 22
+etapas e 25 transições. Ela inclui a profissão obrigatória para titular e
+dependente, a confirmação do destino, os tratamentos atuais, a triagem por faixa
+etária, o detalhamento das perguntas no Funil e a apresentação inicial
+configurável por unidade. A futura implementação deste plano acrescentará
+somente a etapa de compartilhamento oficial do contato após o nome; por isso o
+estado final terá 23 etapas e 27 transições.
 
 Os contratos de payload usados como referência são:
 
@@ -88,16 +85,17 @@ O plano não autoriza:
 - deslocar ou remover `bot_resposta_atual()`;
 - criar advisory lock novo no worker;
 - mudar a posição de `chatbot.lock_conversa()`;
-- alterar os fluxos A/B/C de turno;
+- alterar os resultados funcionais dos fluxos A/B/C de turno;
 - criar salto, retorno ou avanço fora de `chatbot.etapa_transicao`;
 - usar username como identidade, lock, destinatário Meta ou chave de conversa;
 - usar `user_id` como fallback de sender depois da etapa obrigatória de
   compartilhamento do WA ID;
 - usar WAMID como identidade da pessoa;
 - executar `ALTER TABLE` em Python;
-- usar `metadata.display_phone_number` como telefone do cliente.
+- usar `metadata.display_phone_number` como telefone do cliente, fallback de
+  `metadata.phone_number_id` ou argumento `sender` da Meta.
 
-Há somente três extensões comportamentais aprovadas neste plano:
+As extensões comportamentais aprovadas neste plano são:
 
 1. transportar `wa_id`, `user_id` e username como dados adicionais nos contextos
    já existentes, deixando o resolver escolher para o sender `wa_id` ou, apenas
@@ -106,24 +104,43 @@ Há somente três extensões comportamentais aprovadas neste plano:
    payload conjunto ou o compartilhamento oficial provar o vínculo;
 3. preservar uma única janela anti-flood para `user_id` e `wa_id` oficialmente
    vinculados na mesma unidade, somando as duas rajadas e deduplicando-as por
-   WAMID, sem inferir equivalência por username, nome ou proximidade temporal.
+   WAMID, sem inferir equivalência por username, nome ou proximidade temporal;
+4. resolver turno, ordem, bloqueios e denylist pelo conjunto de aliases
+   oficialmente comprovado do cliente na unidade, sem exigir que clientes
+   legados passem a possuir user ID;
+5. tornar a reconciliação consciente da posse das conversas envolvidas: o merge
+   reutiliza exatamente o limiar da V1.0.6, no qual um lock só é stale quando
+   `processing_started_at < NOW() - INTERVAL '110.0 seconds'`; antes disso ele
+   nunca é removido. O takeover incrementa `lock_version`, preservando a proteção
+   já existente no `unlock` sem prometer cancelamento de um trabalho externo já
+   iniciado.
 
 A reconciliação é um efeito de dados executado pelo mesmo cursor dentro da
-transação que `validar_banco_mensagem()` já utiliza. Ela não autoriza novo
-`commit`, `rollback`, lock, prazo, contador de retry, requeue, `continue`, retorno
-terminal ou mudança da ordem do ciclo. `validar_banco_mensagem()` continua
-devolvendo o contexto normal esperado pelo restante do `flow_worker`.
+transação que `validar_banco_mensagem()` já utiliza e não cria um novo ponto de
+`commit` ou `rollback`. Existem duas saídas controladas. Se qualquer conversa que
+o merge precise alterar estiver com lock fresco, a transação não faz mutação e o
+item volta a `pending` pelo requeue sem erro de 5 segundos, compensando a
+tentativa consumida. Se a reconciliação comprovar um bloqueio anterior ainda
+vigente, ela encerra a conversa nova com `bloqueio_reconciliado`, remove o item
+atual da fila na mesma transação e devolve um resultado terminal; o commit que já
+existe logo depois da validação confirma o conjunto atômico e o ciclo não chega
+a histórico, lock normal, resolver ou sender. Fora desses dois casos,
+`validar_banco_mensagem()` devolve o contexto normal esperado pelo restante do
+`flow_worker`.
 
-O plano não cria tratamento especial para Funil, denylist ou bloqueio dentro da
-transação de reconciliação. Funil e denylist conservam seu comportamento atual.
-A continuidade anti-flood aprovada é executada pelo guard do webhook e pelas
-camadas próprias de cache/repositório, fora da transação do `flow_worker`; a
-reconciliação apenas confirma depois o vínculo permanente que esse guard pode
-usar.
+O plano não cria tratamento especial para Funil dentro da transação de
+reconciliação. Denylist, bloqueio temporário, bloqueio de 30 dias e bloqueio Meta
+passam a consultar os aliases comprovados da mesma pessoa/unidade. A
+reconciliação não reinicia prazo nem inventa bloqueio: ela apenas preserva um
+bloqueio canônico anterior e consolida a referência operacional necessária para
+que ambos os aliases o reconheçam. A continuidade anti-flood aprovada continua
+nas camadas próprias de webhook/cache/repositório.
 
 O WAMID continua servindo para deduplicar e correlacionar uma mensagem. Ele não
-substitui a identidade usada pelo turno, que continuará combinando a identidade
-técnica do cliente com `id_phone_unidade`.
+substitui a identidade usada pelo turno. Antes de existir prova, o turno usa o
+único alias tipado disponível com `id_phone_unidade`; depois da prova, qualquer
+alias recebido resolve o mesmo sujeito lógico `(id_cliente, id_unidade)` e o
+mesmo conjunto de aliases daquela unidade.
 
 ## 3. Contrato dos payloads
 
@@ -131,13 +148,30 @@ técnica do cliente com `id_phone_unidade`.
 
 Dentro de `entry[].changes[].value`:
 
-- `metadata.phone_number_id`: ID técnico do número da unidade e fonte
-  autoritativa para localizar a unidade;
-- `metadata.display_phone_number`: número público da unidade;
+- `metadata.phone_number_id`: ID técnico obrigatório do número da unidade e
+  única fonte autoritativa para localizar a unidade;
+- `metadata.display_phone_number`: texto público opcional, apenas para
+  observabilidade/apresentação;
 - `entry[].id`: WABA ID;
-- `id_portfolio`: não vem no webhook; será lido do cadastro da unidade.
+- `id_portfolio`: não vem no webhook; será lido do cadastro da unidade;
+- `nome_unidade`, `nome_agente` e `genero`: não vêm no webhook; são lidos da
+  unidade localizada por `metadata.phone_number_id` somente para montar a
+  apresentação inicial da etapa 1.
 
-Nenhum desses campos identifica o cliente.
+`nome_unidade` é o nome institucional exibido, `nome_agente` é o nome editorial
+do atendente virtual e `genero` aceita somente `masculino` ou `feminino`, para
+selecionar o artigo da apresentação. Nenhum desses campos identifica o cliente,
+escolhe destinatário ou participa de turno, lock, fila, cache de identidade,
+anti-flood ou reconciliação.
+
+Sem `metadata.phone_number_id`, o evento estruturalmente inválido recebe HTTP 200
+e não entra na fila: a Meta reenviaria o mesmo envelope, não um envelope
+“corrigido”. `metadata.display_phone_number` jamais substitui esse ID, jamais
+identifica cliente ou unidade e jamais é passado como `sender`; todo envio usa o
+`phone_number_id` canônico da unidade validada no banco. HTTP 503 fica reservado
+a falha transitória depois de uma entrada estruturalmente válida quando não
+existir fallback seguro, como RDS indisponível, falha de `INSERT` ou de commit.
+Falha isolada do Redis continua usando os fallbacks já definidos pela V1.0.6.
 
 ### 3.2 Campos do cliente
 
@@ -215,8 +249,10 @@ Os três papéis abaixo são distintos e não podem ser intercambiados antes da
 validação bancária:
 
 - `identidade_do_item`: identidade técnica pela qual o evento entrou. Ela é
-  definida uma única vez, reconstruída a partir do snapshot da fila e permanece
-  congelada durante turno, ordem, retry, logs e autocura daquele item;
+  definida uma única vez na entrada, persistida pelos snapshots originais da
+  fila e reconstruída deterministicamente sem consultar valores enriquecidos
+  depois. Ela permanece congelada durante turno, ordem, retry, logs e autocura
+  daquele item;
 - `wa_id_compartilhado`: candidato extraído exclusivamente do
   `contacts/contact_request`. Antes da prova bancária, não é destinatário, chave
   de turno, chave de cache nem identidade da conversa;
@@ -234,9 +270,12 @@ wa_id_canonico      = cliente.wa_id relido depois da validação
 
 Persistir ou descobrir o WA ID canônico não recalcula a identidade do item no
 meio do ciclo. Um retry do mesmo item reconstrói a mesma identidade original.
-Essa separação é apenas de papel lógico; não cria uma quarta coluna de snapshot.
+Fila e histórico daquele item nunca recebem backfill de WA ID, user ID ou
+username. Essa separação é apenas de papel lógico; não cria uma quarta coluna de
+snapshot: no `contact_request`, o marcador persistido + o user ID identificam o
+alias de entrada, enquanto o WA ID do mesmo evento permanece o candidato oficial.
 
-### 4.2 User ID é escopado ao negócio
+### 4.2 User ID escopado e conjunto de aliases
 
 O `user_id` não é global como o WA ID. O vínculo canônico será:
 
@@ -256,16 +295,35 @@ Cada linha de `chatbot.user_id_cliente` liga exatamente um `id_cliente` a um
 - `id_portfolio` permanece na unidade para consultas de monitoramento e não
   entra no caminho transacional online.
 
-O fluxo online continua isolado por:
+O sujeito lógico da unidade é `(id_cliente, id_unidade)`. Seus aliases
+comprovados são o conjunto:
 
 ```text
-(wa_id, id_phone_unidade)
-ou, sem WA ID,
-(user_id, id_phone_unidade)
+{ ('wa_id', cliente.wa_id), ('user_id', user_id_cliente.user_id) }
 ```
 
-`id_portfolio` não será colocado na fila, nas chaves de turno nem nos locks.
-Ele servirá a consultas futuras de monitoramento.
+Somente membros existentes entram no conjunto. Isso é uma relação de
+equivalência, não uma chave concatenada e não uma exigência de coexistência:
+
+- cliente legado apenas com WA ID continua válido com um conjunto de um alias;
+- cliente privado provisório apenas com user ID continua válido temporariamente
+  com um conjunto de um alias;
+- depois da prova oficial, WA ID e user ID da mesma unidade resolvem o mesmo
+  cliente e o mesmo turno/bloqueio;
+- o mesmo user ID em outra unidade pertence a outro escopo;
+- o WA ID continua global no cadastro de cliente, mas toda proteção online o
+  combina com o `phone_id_unidade` recebido e validado;
+- igualdade textual entre um WA ID e um user ID não prova associação.
+
+Quando não existe prova persistida, o fluxo online usa
+somente o alias tipado do evento: `(tipo, valor, phone_id_unidade)`. Quando existe
+prova, turno, ordem, anti-flood, bloqueios e denylist recebem o conjunto inteiro,
+adquirem os locks de aliases em ordem determinística e consultam qualquer membro
+do conjunto. Não se cria uma string `wa_id+user_id`, não se exige user ID de dados
+legados e não se executam duas decisões independentes para a mesma mensagem.
+
+`id_portfolio` não será colocado na fila, nas chaves de turno nem nos locks. Ele
+servirá a consultas futuras de monitoramento.
 
 ### 4.3 Username não é identidade
 
@@ -278,20 +336,21 @@ Username:
 - nunca é usado no campo `to` da Meta;
 - é mostrado no funil com exatamente um `@`, quando existir.
 
-Somente `cliente.username` representa o valor canônico mais recente. Quando um
-novo payload trouxer username diferente, apenas essa coluna será atualizada.
-Payload sem username preserva o valor canônico anterior.
+Somente `cliente.username` representa o valor canônico mais recente. Todo novo
+payload com username não vazio sobrescreve essa coluna; payload sem username
+preserva o valor anterior.
 
 As demais tabelas guardam snapshots históricos:
 
-- fila, histórico e flood: username daquele evento;
-- conversa: primeiro username não vazio observado naquela conversa;
+- fila, histórico e flood: username daquele evento, imutável após o `INSERT`;
+- conversa: username presente na criação da conversa, imutável; se a conversa
+  nasceu sem username, permanece `NULL`;
 - bloqueio: username conhecido no instante em que o bloqueio foi criado.
 
-Durante uma reconciliação oficialmente provada, fila e histórico da conversa
-atual podem receber preenchimento retroativo **somente onde a coluna ainda for
-NULL**. Um valor não nulo nunca é reescrito. Isso enriquece os primeiros eventos
-da conversa sem apagar qual username já havia sido observado em outro momento.
+Reconciliação oficialmente provada não preenche nem reescreve fila, histórico ou
+`conversa.username`. O contexto do sender pode reler os aliases canônicos do
+banco, mas isso não altera o registro histórico do evento. A única coluna
+mutável de username é `cliente.username`, sempre pelo último valor não vazio.
 
 ### 4.4 Handoff seguro de user ID para WA ID
 
@@ -300,29 +359,47 @@ O evento `CONTACT_INFO.json` contém o `user_id` do remetente e o novo WA ID em
 
 Esse evento deve:
 
-1. localizar a conversa atual pelo `user_id` + unidade;
-2. validar que se trata de `contacts + contact_request` oficial;
-3. tratar o número do cartão como `wa_id_compartilhado`, persistir o WA ID
-   comprovado e o vínculo `user_id_cliente`;
-4. reconciliar o cliente provisório, se necessário, como efeito de dados dentro
+1. exigir que a assinatura do webhook já tenha sido validada, exigir
+   `metadata.phone_number_id` e localizar por ele uma única unidade;
+2. localizar a conversa atual pelo vínculo `(user_id, id_unidade)`;
+3. confirmar, antes de qualquer mutação, que a conversa está ativa na etapa 2 e
+   que o item pertence exatamente a essa conversa/unidade;
+4. validar que se trata de `type='contacts'`, com conjunto de origens exatamente
+   `{'contact_request'}`, user ID presente e exatamente um WA ID oficial não
+   ambíguo; `display_phone_number` nunca completa essa prova;
+5. validar o estado dos dois vínculos, dos clientes envolvidos, dos aliases e das
+   conversas sob row locks adquiridos em ordem determinística;
+6. somente depois desse gate completo tratar o número do cartão como
+   `wa_id_compartilhado`, persistir o WA ID comprovado e consolidar
+   `user_id_cliente`;
+7. reconciliar o cliente provisório, se necessário, como efeito de dados dentro
    da validação de banco já existente;
-5. reconstruir `wa_id`, `user_id` e username a partir do banco no
+8. reconstruir `wa_id`, `user_id` e username a partir do banco no
    `contexto_historico`;
-6. usar o WA ID persistido como destinatário da resposta que avança o fluxo;
-7. manter o `user_id` e o username apenas como snapshots no `contexto_envio`.
+9. usar o WA ID persistido como destinatário da resposta que avança o fluxo;
+10. manter o `user_id` e o username apenas como dados refletidos no
+    `contexto_envio`, sem reescrever snapshots históricos.
+
+O gate é indivisível: origem ausente/desconhecida, contato manual, múltiplos
+candidatos, user ID sem vínculo, unidade divergente, etapa divergente ou conflito
+de WA ID não executam `UPDATE`, `INSERT` ou `DELETE` de identidade. Entrada apenas
+inválida recebe o tratamento de contexto da etapa; contradição entre vínculos ou
+indisponibilidade que impeça decidir com segurança falha de forma fechada e segue
+rollback/reentrega, nunca merge parcial.
 
 O item continua seguindo exatamente o turno que já foi adquirido para a
-mensagem. Não se troca chave de turno no meio do ciclo, não se consulta a fila
-pelos dois aliases, não se desloca `reagendar_se_houver_mensagem_anterior()` e
-não se cria lock, commit, status, prazo ou retry. A identidade do item continua
-sendo o user ID; somente o destinatário muda para o WA ID canônico depois de o
-valor ter sido confirmado e relido do banco.
+mensagem. Sua identidade primária continua sendo o user ID para logs, cache,
+retry e autocura; não é recalculada no meio do ciclo. A consulta de ordem, porém,
+usa o conjunto de aliases oficialmente provado da pessoa/unidade para que um item
+WA e um item user ID não ultrapassem um ao outro. Somente o destinatário muda
+para o WA ID canônico depois de o valor ter sido confirmado e relido do banco.
 
 Existem três resultados idempotentes:
 
 - WA ID novo: completar o próprio cliente provisório e manter a conversa;
-- WA ID do mesmo cliente: somente preencher snapshots nulos e confirmar o
-  vínculo;
+- WA ID do mesmo cliente: confirmar o vínculo e enriquecer apenas o cadastro e os
+  aliases canônicos permitidos, sem backfill de fila/histórico/username da
+  conversa;
 - WA ID de um cliente global antigo: executar a reconciliação canônica descrita
   na seção 4.5.
 
@@ -349,42 +426,76 @@ máximo uma vez por cliente/unidade enquanto aquele vínculo permanecer válido.
 
 Nesse caso, a conversa nova é legítima e será preservada. Usando o mesmo cursor
 e a mesma transação que já existem em `validar_banco_mensagem()`, a reconciliação
-executa somente estes efeitos de dados:
+executa somente estes efeitos de dados, depois do gate completo da seção 4.4:
 
-1. confirmar que o WA ID veio junto do user ID no payload ou de um
-   `contacts/contact_request` oficial; username nunca prova vínculo;
-2. localizar o vínculo `(user_id, id_unidade)`, o cliente provisório da conversa
-   atual e o cliente canônico que já possui o WA ID;
-3. confirmar que o provisório ainda não possui outro WA ID e que a conversa que
-   será preservada é exatamente a conversa atual;
-4. localizar eventual conversa anterior ainda ativa do cliente canônico na mesma
-   unidade;
-5. se ela existir e for diferente da atual, encerrá-la pelo mecanismo de
-   encerramento já existente com `motivo_encerramento='ativou_user_id'`; essa
-   conversa antiga é preservada e não é retomada;
-6. atualizar **somente a conversa nova atual** para usar o `id_cliente`
-   canônico, mantendo o mesmo `id_conversa`, a mesma etapa e os mesmos vínculos
-   de fila e histórico;
-7. consolidar `user_id_cliente` para ligar o user ID atual e a unidade ao cliente
-   canônico: se ainda não houver linha canônica, reatribuir a linha provisória;
-   se o canônico já tiver outro user ID na mesma unidade, remover primeiro a
-   linha provisória comprovada e atualizar a linha canônica para o novo user ID.
-   Essa ordem usa o mesmo cursor/transação e evita violar as duas restrições
-   `UNIQUE`, sem criar lock ou ramo de controle;
-8. preencher `wa_id`, `user_id` e username apenas nas colunas ainda `NULL` da
-   conversa atual e de seus registros de fila/histórico;
-9. preservar os dados já existentes do cliente canônico; o username só é
-   atualizado quando o payload trouxer um valor não vazio;
-10. excluir o cliente provisório somente depois de executar verificações
+1. localizar por leitura pura e depois bloquear em ordem global determinística:
+   clientes provisório/canônico por `id_cliente`, vínculo
+   `(user_id, id_unidade)` e, por fim, conversa nova atual e eventual conversa
+   canônica anterior por `id_conversa`;
+2. confirmar que o provisório ainda possui `wa_id IS NULL`, que a conversa nova é
+   exatamente a conversa da etapa 2 e que o WA ID pertence ao cliente canônico;
+3. inspecionar `processing`, `processing_started_at` e `lock_version` das duas
+   conversas. Se qualquer lock ainda não satisfizer literalmente
+   `processing_started_at < NOW() - INTERVAL '110.0 seconds'`, não executar
+   nenhuma mutação e devolver contenção para requeue sem erro de 5 segundos;
+4. somente quando o predicado anterior for verdadeiro, considerar o lock stale,
+   limpar a posse sob o row lock e incrementar atomicamente `lock_version` antes
+   de alterar a conversa. O `unlock` de um dono anterior, que ainda possua
+   a versão antiga, não poderá liberar uma posse mais nova. O merge não antecipa
+   o lock normal do sender nem redesenha todas as escritas pós-lock existentes;
+5. copiar o nome capturado na etapa 1 do cliente provisório para o cliente
+   canônico **sempre sobrescrevendo** `cliente.nome`, inclusive quando o canônico
+   já possuía outro nome. Nome/username de perfil Meta nunca substitui esse nome;
+6. se existir conversa canônica anterior ativa e diferente da atual, encerrá-la
+   com `motivo_encerramento='ativou_privacidade'`; ela é preservada e não é
+   retomada;
+7. atualizar a conversa nova atual para usar o `id_cliente` canônico, mantendo o
+   mesmo `id_conversa`, etapa, fila, histórico e respostas já ligadas a ela;
+8. se, **no snapshot bloqueado antes das mutações**, a última conversa canônica
+   anterior já estiver encerrada e ainda dentro de um bloqueio por dias,
+   preservar integralmente `finalizou_em`, etapa e expiração daquela conversa e
+   encerrar também a conversa nova com
+   `motivo_encerramento='bloqueio_reconciliado'` e não reiniciar nem ampliar o
+   prazo. `ativou_privacidade` não é usado neste caso: ele fica reservado ao
+   encerramento de outra conversa canônica que ainda estava ativa. O item segue
+   o tratamento de conversa bloqueada e não envia a etapa 3. A data de
+   encerramento da conversa nova serve somente à auditoria; ela e sua etapa não
+   entram no cálculo da expiração herdada. O item atual da fila é excluído na
+   mesma transação da reconciliação. Depois do commit já existente após
+   `validar_banco_mensagem()`, o worker apenas confirma no cache os aliases com a
+   expiração original e encerra esse ciclo antes de histórico, lock normal,
+   `bot_resposta_atual()`, resolver, sender e persistência final;
+9. se não houver bloqueio vigente, manter a conversa nova ativa e continuar o
+   fluxo normalmente;
+10. consolidar `user_id_cliente` para ligar o user ID atual e a unidade ao cliente
+    canônico: se ainda não houver linha canônica, reatribuir a linha provisória;
+    se o canônico já tiver outro user ID na mesma unidade, remover primeiro a
+    linha provisória comprovada e atualizar a linha canônica para o novo user ID;
+11. preencher apenas `conversa.wa_id`/`conversa.user_id` que ainda forem `NULL`.
+    Não alterar fila, histórico ou `conversa.username`;
+12. preservar `cliente.username` como o último valor não vazio: o username não
+    vazio do evento atual vence; na ausência dele, o username não vazio do
+    provisório vence o valor canônico anterior; se ambos faltarem, manter o
+    canônico. Essa cópia ocorre antes de excluir o provisório;
+13. consolidar eventual `cliente_bloqueado_meta` do provisório na única linha
+    canônica da unidade, preservando o bloqueio e ambos os aliases conhecidos;
+    nunca desbloquear como efeito do merge;
+14. excluir o cliente provisório somente depois de executar verificações
     explícitas de ausência de referência em `conversa`, `dependente`,
     `cliente_bloqueado_meta` e `user_id_cliente`; não basta confiar na ação da
     FK nem em uma verificação genérica não enumerada;
-11. devolver o contexto normal da conversa nova para que o `flow_worker`
-    continue na ordem atual e o sender envie “Para quem é o atendimento?” pelo
-    WA ID lido do banco.
+15. devolver o contexto normal da conversa nova somente quando ela não estiver
+     bloqueada, para que o sender envie “Para quem é o atendimento?” pelo WA ID
+     lido do banco. Se a conversa permanecer ativa, o passo normal posterior de
+     `lock_conversa()` adquire uma nova versão antes do sender; se outro worker a
+     adquirir primeiro, o requeue de lock recusado já existente prevalece. Se o
+     bloqueio comercial ou Meta ainda estiver vigente, devolver o resultado
+     terminal `bloqueio_reconciliado`, sem resposta da etapa 3.
 
-Histórico e fila não trocam de `id_conversa`, portanto não precisam ser movidos.
-Pelo fluxo normal, o cliente provisório permanece na primeira conversa/etapa
+No caminho normal, histórico e fila não trocam de `id_conversa`, portanto não
+precisam ser movidos. No caminho terminal, somente o item atual da fila é
+excluído; snapshots históricos já persistidos continuam intactos. Pelo fluxo
+normal, o cliente provisório permanece na primeira conversa/etapa
 especial até provar o WA ID, logo não deve possuir outra conversa. Se uma
 referência extra impedir sua exclusão, a operação não usa cascata nem apaga dados;
 o erro segue o tratamento transacional já existente.
@@ -395,22 +506,24 @@ O gate anterior é obrigatório porque `conversa.id_cliente` e
 `user_id_cliente.id_cliente` será `ON DELETE RESTRICT`. Antes do `DELETE`, a
 conversa atual já deve apontar ao cliente canônico, a linha provisória do vínculo
 deve ter sido consolidada e cada uma dessas quatro consultas deve retornar zero.
-Fila e histórico não entram nessa lista de FKs diretas porque continuam ligados
-à conversa preservada. Qualquer resultado diferente de zero impede o `DELETE` e
-segue o rollback/tratamento já existente, sem cascata e sem política nova.
+Fila, histórico, respostas e itens de funil não entram nessa lista de FKs diretas
+porque continuam ligados à conversa preservada e nunca são reparentados
+individualmente. Qualquer resultado diferente de zero impede o `DELETE` e segue
+o rollback/tratamento já existente, sem cascata.
 
-Se a conversa canônica anterior já estiver encerrada, ela permanece intacta e a
-conversa nova continua. Se um vínculo `(user_id, unidade)` apontar para cliente
-com outro WA ID não nulo e incompatível, não ocorre merge por username nem por
-aproximação. A inconsistência segue o rollback e o tratamento de erro que o
-worker já possui; este plano não cria retorno terminal, remoção especial de fila
-ou exceção nova.
+Se a conversa canônica anterior estiver encerrada e liberada, ela permanece
+intacta e a conversa nova continua. Se estiver bloqueada, vale o item 8: a
+expiração original vence. Se um vínculo `(user_id, unidade)` apontar para cliente
+com outro WA ID não nulo e incompatível, ou se WA e user ID resolverem clientes
+canônicos distintos, não ocorre merge por username, nome ou aproximação. A
+transação faz rollback e falha de forma fechada.
 
 Quando um payload normal já trouxer WA ID + user ID, o contrato roda de forma
-simplificada: resolve pelo WA ID, cria/atualiza `user_id_cliente`, grava os três
-snapshots disponíveis e preenche somente colunas `NULL` da conversa atual, fila
-e histórico. Isso evita criar um provisório numa volta futura somente por user ID
-sem reescrever snapshots históricos.
+simplificada: depois do mesmo gate de consistência, resolve pelo WA ID,
+cria/atualiza `user_id_cliente`, grava os snapshots do próprio evento somente no
+momento de cada `INSERT` e preenche apenas aliases nulos permitidos da conversa.
+Fila, histórico e username da conversa nunca sofrem backfill. Isso evita criar um
+provisório numa volta futura somente por user ID sem falsificar registros antigos.
 
 O repositório não usa `UPSERT` cego. Ele compara tanto o vínculo de
 `(user_id, unidade)` quanto o de `(cliente, unidade)`. Se o mesmo cliente passou
@@ -432,8 +545,25 @@ Estado final:
 `chatbot.unidade`:
 
 ```sql
+nome_unidade VARCHAR(300) NOT NULL
+nome_agente VARCHAR(100) NOT NULL
+genero VARCHAR(9) NOT NULL
 id_portfolio VARCHAR(100) NOT NULL
+
+CONSTRAINT uq_unidade_nome_unidade
+    UNIQUE (nome_unidade)
+CONSTRAINT ck_unidade_nome_unidade_nao_vazio
+    CHECK (nome_unidade ~ '[^[:space:]]')
+CONSTRAINT ck_unidade_nome_agente_nao_vazio
+    CHECK (nome_agente ~ '[^[:space:]]')
+CONSTRAINT ck_unidade_genero
+    CHECK (genero IN ('masculino', 'feminino'))
 ```
+
+As três primeiras colunas e suas quatro constraints já pertencem à baseline
+V1.0.6 e são preservadas sem nova migração ou backfill por este plano.
+`id_portfolio` é a única ampliação futura da unidade pertencente à feature de
+`user_id`.
 
 `chatbot.cliente`:
 
@@ -503,12 +633,18 @@ Contrato existente ampliado sem coluna nova:
 
 ```sql
 chatbot.conversa.motivo_encerramento
-    IN ('idade_invalida', 'foi_agendado', 'ativou_user_id')
+    IN (
+        'idade_invalida',
+        'foi_agendado',
+        'ativou_privacidade',
+        'bloqueio_reconciliado'
+    )
 ```
 
-O contrato final soma 22 campos listados nesta seção, contando chaves/FKs da
-tabela de vínculo e colunas renomeadas. Renome não cria uma segunda cópia do
-WA ID legado.
+O delta da feature de `user_id` soma 22 campos listados nesta seção, contando
+chaves/FKs da tabela de vínculo e colunas renomeadas. As três colunas de
+apresentação da unidade já existentes na baseline V1.0.6 não entram nessa conta.
+Renome não cria uma segunda cópia do WA ID legado.
 
 Não existirão `telefone_informado`, `username_informado`,
 `telefone_contato_compartilhado`, `wa_id_contato_compartilhado`,
@@ -548,6 +684,9 @@ em `user_id_cliente` e a conversa guarda seu snapshot.
 
 Também são exceções à nulabilidade:
 
+- `unidade.nome_unidade` e `unidade.nome_agente` são obrigatórios, não vazios e
+  `nome_unidade` permanece único;
+- `unidade.genero` é obrigatório e aceita somente `masculino` ou `feminino`;
 - `unidade.id_portfolio` é obrigatório e não vazio;
 - `user_id_cliente.id_cliente`, `user_id` e `id_unidade` são obrigatórios;
 - `user_id_cliente.user_id` não aceita string vazia.
@@ -569,10 +708,16 @@ unidade. A segunda mantém um único user ID atual por cliente/unidade. Uma troc
 só é aceita quando WA ID + user ID chegam juntos ou quando o
 `contact_request` oficial prova o vínculo.
 
+Essas unicidades modelam aliases, não uma chave composta obrigatória entre WA ID
+e user ID. Nenhuma constraint exige que `cliente.wa_id` e uma linha
+`user_id_cliente` coexistam. Isso preserva tanto o legado WA-only quanto o período
+provisório user-only.
+
 ### 5.3 Índices
 
-Não se indexa username. Os índices de identidade são duplicados por caminho,
-preservando filtros e ordenações atuais:
+Não se indexa username. Os índices de identidade são mantidos por caminho para
+que o resolvedor monte o conjunto comprovado e execute a consulta alias-aware
+sem transformar os valores em uma concatenação:
 
 - fila aberta por `(wa_id, id_phone_unidade, ...)`;
 - fila aberta por `(user_id, id_phone_unidade, ...)`;
@@ -596,7 +741,9 @@ preservando filtros e ordenações atuais:
   índice por identidade sem consulta operacional concreta que o justifique.
 
 A fila continua usando `id_phone_unidade`. Não será adicionada uma coluna
-redundante `id_unidade`.
+redundante `id_unidade`. Toda consulta de turno/bloqueio exige
+`id_phone_unidade`; `unidade_telefone`/`display_phone_number` não participa da
+chave nem serve de fallback.
 
 ### 5.4 DDL e migração
 
@@ -606,23 +753,39 @@ haverá `ALTER TABLE` em Python.
 O último passo do plano conterá um único SQL puro, transacional, para produção,
 com:
 
-1. preflight do schema atual;
+1. preflight exato do schema V1.0.6, inclusive das três colunas de apresentação
+   da unidade, suas quatro constraints e a ausência de `unidade.nome`;
 2. serviços parados e filas operacionais vazias;
 3. renome das cinco colunas existentes de WA ID;
-4. criação das colunas novas e de `user_id_cliente`;
-5. preenchimento explícito de `id_portfolio` para todas as unidades e aplicação
+4. preservação, sem renome ou recriação, de `nome_unidade`, `nome_agente` e
+   `genero`;
+5. criação das colunas novas e de `user_id_cliente`;
+6. preenchimento explícito de `id_portfolio` para todas as unidades e aplicação
    de `NOT NULL`;
-6. remoção de `NOT NULL` dos WA IDs de snapshot;
-7. inclusão de `ativou_user_id` no CHECK de encerramento;
-8. constraints, FKs e índices finais;
-9. atualização preservada do catálogo/mapa de etapas;
-10. recriação controlada de `chatbot.dequeue_message()`;
-11. pós-validação completa, incluindo ações das FKs e definição dos índices;
-12. `COMMIT` apenas depois de todas as validações.
+7. remoção de `NOT NULL` dos WA IDs de snapshot;
+8. inclusão de `ativou_privacidade` e `bloqueio_reconciliado` no CHECK de
+   encerramento;
+9. constraints, FKs e índices finais;
+10. atualização preservada do catálogo/mapa de etapas;
+11. recriação controlada de `chatbot.dequeue_message()` e preservação semântica
+    de `chatbot.lock_conversa()`/`chatbot.unlock_conversa()`: a fila mantém sua
+    recuperação própria de 2 minutos, enquanto a conversa conserva o predicado
+    exato da V1.0.6, `processing_started_at < NOW() - INTERVAL '110.0 seconds'`,
+    com `lock_version` no takeover e `unlock` condicionado à versão vigente;
+12. pós-validação completa, incluindo apresentação da unidade, ações das FKs e
+    definição dos índices;
+13. `COMMIT` apenas depois de todas as validações.
+
+A migração `deploy/migrations/20260812_personalizar_agente_unidade.sql` já
+pertence à baseline e não será incorporada, repetida nem reexecutada pela
+migração de `user_id`. O SQL futuro apenas prova que seu estado final continua
+íntegro antes e depois da mudança.
 
 A transação desse SQL pertence exclusivamente à futura janela de migração com
-os serviços parados. Ela não representa nem altera commits, rollbacks, locks ou
-retries do `flow_worker` em runtime.
+os serviços parados. Ela não move commits, rollbacks, ponto do lock ou política
+de retry do `flow_worker`; preserva os dois limiares distintos da V1.0.6 — 2
+minutos para recuperação da fila e 110 segundos para posse da conversa — e a
+proteção de versão já exigida para o `unlock`.
 
 Como `historico_mensagens` é particionada, a migração validará pai e partições.
 Como a assinatura de retorno de `dequeue_message()` mudará, não será usado
@@ -655,10 +818,10 @@ Ordem do WA ID do remetente (`wa_id_remetente`):
 
 Ordem do WA ID compartilhado (`wa_id_compartilhado`):
 
-1. somente em `type="contacts"` com origem `contact_request`,
-   `messages[].contacts[].phones[].wa_id`;
-2. somente se esse valor faltar, o `phones[].phone` do mesmo contato oficial,
-   depois da normalização restrita descrita abaixo.
+1. somente em `type="contacts"` com origem `contact_request`, aceitar
+   `messages[].contacts[].phones[].wa_id` explícito;
+2. exigir exatamente uma ocorrência, em texto ASCII com 10 a 15 dígitos;
+3. ausência, valor inválido ou mais de uma ocorrência não produz candidato.
 
 O parser mantém esses dois resultados separados. O WA ID compartilhado não
 participa de `wa_id_remetente or user_id` usado pelos guardas do webhook, pelo
@@ -689,24 +852,10 @@ Regras:
   espaços externos;
 - nenhum dígito é acrescentado ou removido de um WA ID explícito.
 
-O `phone` formatado é último fallback e somente na resposta oficial quando
-nenhum `phones[].wa_id` explícito existir no contato oficial. Por ser fallback,
-ele não é comparado nem preferido quando `phones[].wa_id` vier no mesmo contato.
-
-Sua normalização remove caracteres de apresentação (`+`, espaço, `(`, `)`,
-`-`) e valida de 10 a 15 dígitos. Para o padrão brasileiro atual do projeto:
-
-- `DDD + 8 dígitos`: acrescentar `55`;
-- `DDD + 9 + 8 dígitos`: remover somente esse nono dígito móvel e acrescentar
-  `55`;
-- `55 + DDD + 9 + 8 dígitos`: remover somente o nono dígito móvel;
-- outro número internacional já em E.164: preservar os dígitos.
-
-Essa transformação jamais é aplicada a um WA ID explícito. Assim, o fixture
-`CONTACT_INFO.json` usa diretamente seu `phones[].wa_id`; o campo formatado
-`phone` nem participa da seleção do candidato nesse caso. A regra brasileira do
-fallback deverá ser confirmada com um payload real sem `phones[].wa_id` antes da
-implementação.
+`phones[].phone` é apenas apresentação do cartão e nunca prova o vínculo. Ele não
+é normalizado nem usado como fallback. Assim, o fixture `CONTACT_INFO.json` usa
+diretamente seu único `phones[].wa_id`; sem esse campo explícito, a etapa 2 não
+promove, não reconcilia e apenas reapresenta o pedido oficial.
 
 ### 6.2 Mensagem `contacts`
 
@@ -752,11 +901,12 @@ origem estiver no nível da mensagem, todos os contatos pertencem à resposta
 oficial; se estiver no contato, somente os contatos cujo `origin` seja
 `contact_request` fornecem candidatos.
 
-O parser coleta os valores distintos de `wa_id_compartilhado` apenas nesses
-contatos oficiais: exatamente um valor avança; mais de um é ambíguo e recebe
-tratamento de contexto. Somente quando não existir nenhum WA ID explícito serão
-normalizados os valores distintos de `phone`; novamente, exatamente um valor
-avança. Não se escolhe silenciosamente o primeiro número.
+O parser coleta apenas ocorrências explícitas de `wa_id_compartilhado` nesses
+contatos oficiais: exatamente uma ocorrência ASCII com 10 a 15 dígitos avança;
+ausência, formato inválido ou mais de uma ocorrência recebe tratamento de
+contexto. `phones[].phone` é exclusivamente apresentação do cartão e nunca é
+normalizado nem usado como fallback. Não se escolhe silenciosamente o primeiro
+número.
 
 ### 6.3 Ordem das proteções
 
@@ -765,19 +915,22 @@ junto dos campos que já normaliza e o anti-flood passa a resolver aliases
 oficialmente vinculados antes de contabilizar a janela:
 
 1. validação de content type, tamanho, assinatura e estrutura JSON;
-2. classificação do evento e extração dos identificadores;
-3. denylist e tentativa de bloqueio na Meta;
+2. classificação do evento, extração dos identificadores e exigência de
+   `metadata.phone_number_id`;
+3. denylist/bloqueio alias-aware e tentativa de bloqueio na Meta;
 4. deduplicação e flood por WAMID;
-5. validação da unidade por `metadata.phone_number_id`;
+5. validação da unidade ativa;
 6. bloqueio temporário da conversa;
 7. regra de turno e inserção idempotente na mesma transação de fila;
 8. resposta HTTP e tratamento atual das exceções.
 
 O limite de 15 WAMIDs distintos em 5 segundos, o efeito do bloqueio e a posição
 relativa desses guardas não mudam. São acrescentados somente TTLs auxiliares da
-resolução de aliases — ponte pendente por 15 segundos, vínculo confirmado em
-cache por 1 hora e ausência de vínculo por 5 segundos — e o retorno HTTP 503
-fail-safe quando não for possível tomar uma decisão compartilhada segura. Antes
+resolução de aliases — vínculo confirmado em cache por 1 hora e ausência de
+vínculo por 5 segundos — e o retorno HTTP 503 fail-safe quando o RDS não puder
+decidir o vínculo ou quando outra falha transitória impedir a persistência. Uma
+falha isolada do Redis depois de o RDS provar a ausência do vínculo não rejeita
+o evento: ele continua como identidade unitária pelo fallback atual. Antes
 de promover qualquer contato compartilhado, o webhook escolhe uma única
 identidade técnica para o evento pela mesma regra reconstruída no worker:
 
@@ -806,8 +959,10 @@ transporte inbound. Isso também vale se a Meta continuar entregando somente use
 ID depois da etapa 2: o webhook não conhece nem decide a etapa antes de
 enfileirar. A limitação às etapas iniciais vale para o avanço de negócio e para o
 fallback de destinatário, não para aceitar e proteger o envelope recebido. Não
-se executam duas avaliações, incrementos ou locks independentes para a mesma
-mensagem; username nunca participa da identidade técnica.
+se executam duas avaliações ou incrementos independentes para a mesma mensagem;
+quando o sujeito possui dois aliases, os advisory locks necessários são
+adquiridos como um único protocolo, em ordem determinística. Username nunca
+participa da identidade técnica.
 
 No anti-flood, a janela pertence ao sujeito lógico comprovado dentro do mesmo
 `phone_id_unidade`. Antes da prova, user ID e WA ID permanecem separados. Depois
@@ -815,19 +970,20 @@ da associação oficial, os eventos ainda válidos das duas identidades são
 somados, o WA ID torna-se a referência canônica e a troca de identificador não
 reinicia a métrica.
 
-Há duas formas de prova, sem aproximação:
+Existe uma única prova operacional para unir aliases fora da transação que está
+validando o próprio item: o vínculo persistido em `chatbot.user_id_cliente`,
+ligado ao cliente canônico com WA ID na mesma unidade. O envelope conjunto e o
+`contact_request` fornecem candidatos à prova, mas não autorizam o webhook a
+publicar uma ponte de identidade antes do gate bancário completo. Até o commit do
+worker, flood e denylist tratam o item pelo alias congelado com que ele entrou.
 
-1. vínculo permanente em `chatbot.user_id_cliente`, ligado ao cliente canônico
-   com WA ID na mesma unidade;
-2. durante o intervalo anterior ao commit do worker, `contact_request` oficial,
-   autenticado pela assinatura da Meta, com user ID presente e exatamente um
-   `wa_id_compartilhado` inequívoco.
-
-A segunda prova cria somente uma ponte anti-flood pendente no Redis, escrita
-atomicamente nas duas direções e com TTL de 15 segundos. Ela não promove o WA ID
-no banco, não muda a identidade congelada do item, não autoriza sender e não
-substitui a reconciliação transacional. Após o commit, o vínculo persistido passa
-a ser a prova permanente e o cache confirmado substitui a ponte pendente.
+Depois de validar o par e antes de qualquer mutação, o worker executa uma segunda
+barreira de predecessor sobre os snapshots WA/user da mesma unidade. Se existir
+item anterior `pending` ou `processing` em qualquer alias, o item de prova sofre
+rollback e requeue de 5 segundos sem consumir retry. Essa barreira fecha a janela
+anterior ao vínculo sem conceder ao webhook autoridade de etapa ou reconciliação.
+Após o commit, o vínculo persistido passa a unir os aliases no anti-flood, turno,
+ordem, bloqueios e denylist.
 
 Redis e memória somam os contadores das duas identidades sem duplicar eventos. O
 fallback SQL usa `COUNT(DISTINCT id_hash_msg)` sobre WA ID e user ID associados.
@@ -836,20 +992,21 @@ visto pelos dois aliases conta uma única vez. Limite, janela e efeito de bloque
 permanecem 15 WAMIDs distintos em 5 segundos.
 
 Ausência de vínculo pode receber cache negativo de 5 segundos para evitar uma
-consulta ao RDS por evento; a ponte oficial usa namespace separado e tem
-prioridade imediata. Conflito, Redis indisponível sem prova persistida ou
-qualquer impossibilidade de manter uma decisão compartilhada resulta em HTTP
-503 para reentrega, sem bloqueio Meta e sem abrir um contador paralelo por
-hipótese. Contato manual, username, nome, coincidência temporal ou semelhança de
-valores nunca unem identidades.
+consulta ao RDS por evento. Se o RDS responder autoritativamente que não existe
+vínculo, falha do Redis conserva o alias unitário e deixa o anti-flood seguir seu
+fallback banco -> memória da V1.0.6; o cache negativo e sua releitura são apenas
+otimizações. Conflito determinístico é descartado com HTTP 200, sem mutação ou
+bloqueio Meta. HTTP 503 fica reservado à indisponibilidade transitória do RDS ou
+de outra fonte indispensável à decisão. Contato manual, username, nome,
+coincidência temporal ou semelhança de valores nunca unem identidades.
 
 O clique no botão gera uma nova mensagem inbound com WAMID e timestamp próprios.
 Ela passa por deduplicação, flood, turno e fila como qualquer outra mensagem.
 
-### 6.4 Turno e identidade do item
+### 6.4 Turno, aliases e identidade do item
 
-As consultas mantêm o algoritmo atual e recebem uma única identidade tipada por
-item. A reconstrução usa os campos já persistidos; não cria coluna adicional:
+Cada item conserva uma identidade primária tipada e imutável. A reconstrução usa
+somente os campos persistidos no `INSERT` e não cria coluna adicional:
 
 ```python
 if (
@@ -873,22 +1030,37 @@ chave_turno = (
 )
 ```
 
-No item de `contact_request`, a identidade do turno continua sendo a identidade
-com a qual a mensagem foi enfileirada, normalmente o `user_id`. O WA ID
-compartilhado não entra nessa chave; somente o WA ID canônico é usado como
-destinatário do sender depois de lido do banco. Ele não recalcula a chave do
-turno e não altera
-`reagendar_se_houver_mensagem_anterior()`. A chave efetiva permanece congelada
-durante todo o ciclo.
+`chave_turno` acima é a referência primária do item para logs, cache, retry e
+autocura; ela não vira `wa_id+user_id`. Para exclusão mútua e ordem, o repositório
+resolve adicionalmente `aliases_turno`:
 
-O tipo faz parte do namespace lógico: uma string igual observada como WA ID e
-como user ID não representa a mesma chave. Na consulta SQL, o repositório escolhe
-exatamente uma coluna (`wa_id` ou `user_id`) e mantém os mesmos filtros de
-unidade, status, data e desempate; nunca executa busca dual por aliases.
+```text
+sem prova: { (tipo_identidade_do_item, identidade_do_item) }
+com prova: aliases existentes de (id_cliente, id_unidade)
+```
+
+Cliente legacy WA-only e provisório user-only possuem conjunto unitário. Cliente
+com vínculo comprovado pode possuir os dois aliases. O webhook adquire
+`pg_advisory_xact_lock` para cada par tipado do conjunto, sempre ordenado por
+`(tipo, valor)`, e executa **uma** decisão de turno que consulta as filas abertas
+por qualquer alias com o mesmo `id_phone_unidade`. Assim, requisições simultâneas
+que entram uma por WA e outra por user ID convergem para os mesmos locks; não há
+duas decisões nem duas cotas.
+
+A ordem no worker usa o mesmo conjunto comprovado e os filtros atuais de status,
+data e desempate. A consulta pode conter os dois predicados, mas produz uma única
+resposta. O alias primário do item continua congelado, inclusive no
+`contact_request`; antes do primeiro commit, o WA ID candidato participa somente
+da segunda barreira transacional de predecessor e não se torna destinatário,
+vínculo, identidade de flood/denylist ou chave de cache prematuramente.
+
+O tipo permanece no namespace lógico: strings iguais sem prova não colidem.
+Falha ao resolver uma equivalência compartilhada não reduz silenciosamente o
+conjunto para um alias: retorna 503 para reentrega antes da inserção.
 
 ### 6.5 Persistência na fila
 
-Cada item recebe snapshots:
+Cada item recebe snapshots de criação:
 
 ```python
 {
@@ -899,6 +1071,8 @@ Cada item recebe snapshots:
 ```
 
 Ao menos `wa_id` ou `user_id` deve existir. Username ausente não causa erro.
+Depois do `INSERT`, `wa_id`, `user_id` e username dessa linha são imutáveis; retry
+e reconciliação não os enriquecem nem corrigem retroativamente.
 
 No `contact_request` representado pelos fixtures, `fila_mensagens.wa_id` pode
 transportar o candidato compartilhado sem criar `wa_id_compartilhado` físico. A
@@ -908,11 +1082,16 @@ combinação persistida `tipo_mensagem='contacts'`,
 valor candidato a WA ID comprovado; até lá, nenhuma lógica de turno, cache,
 bloqueio ou autocura pode tratá-lo como identidade canônica.
 
+O histórico do cliente copia os snapshots imutáveis da fila. O histórico do bot
+grava, no próprio `INSERT`, os valores canônicos então presentes no contexto;
+nenhum dos dois é atualizado depois. Essa política garante que um retry
+reconstrua o mesmo item mesmo após a associação dos aliases.
+
 ## 7. `flow_worker`: núcleo congelado e reconciliação delimitada
 
 ### 7.1 Sequência congelada
 
-A sequência abaixo permanece exatamente no mesmo lugar:
+A sequência abaixo permanece exatamente no mesmo lugar no caminho normal:
 
 1. `dequeue_message()` e commit atual;
 2. `reagendar_se_houver_mensagem_anterior()` imediatamente após o dequeue;
@@ -928,6 +1107,33 @@ A sequência abaixo permanece exatamente no mesmo lugar:
 12. marcação `sent` no ponto atual;
 13. mesmos rollbacks, retries e autocura.
 
+No passo 2, encontrar predecessor sempre interrompe o ciclo atual. O retorno de
+`reagendar_mensagem_sem_erro()` diferente de uma linha continua gerando o alerta
+de corrida `mensagem_ordem_nao_reagendada`; ele não autoriza ultrapassar a
+mensagem anterior e não muda o `return True` da V1.0.6.
+
+Durante o passo 3, a reconciliação pode devolver dois resultados controlados:
+
+1. `conversa_em_processamento`, antes de qualquer mutação, quando uma das
+   conversas envolvidas tiver lock fresco. O ciclo faz rollback, usa o requeue
+   sem erro de 5 segundos, compensa o incremento de retry e segue para o próximo
+   item. Isso não antecipa o lock normal do passo 6 e não permite ao merge limpar
+   a posse de outro worker;
+2. `bloqueio_reconciliado`, depois de validar e consolidar a identidade quando
+   existir bloqueio comercial ou Meta ainda vigente. A mesma transação já fecha
+   a conversa nova e exclui sua fila atual. O commit normal imediatamente após a
+   validação confirma esses efeitos; em seguida o worker confirma no cache os
+   aliases do bloqueio — usando a expiração original e o TTL restante quando se
+   tratar dos 30 dias — e usa `continue`, sem executar os passos normais 4 a 13,
+   sem criar histórico e sem chamar lock, `bot_resposta_atual()`, resolver ou
+   sender.
+
+Se houver stale takeover dentro da reconciliação, as linhas são mantidas sob
+row lock, `processing` é limpo e `lock_version` é incrementado. A conversa nova
+que permanecer ativa ainda precisa adquirir uma versão no `lock_conversa()`
+normal do passo 6. Isso preserva o ponto arquitetural do lock e impede que o
+merge contorne a disputa normal com outro item.
+
 Também permanecem:
 
 - requeue sem erro de 30 segundos para mensagem anterior;
@@ -936,18 +1142,34 @@ Também permanecem:
 - retry genérico de 2 minutos;
 - limite atual de tentativas;
 - espera atual de 1,5 segundo quando a fila está vazia;
-- exatamente um processo de `flow_worker` em produção;
 - toda a verdade lógica de `tests/unit/test_fluxo_turno_abc.py`.
 
-Nenhum passo ganha retorno especial. O item de handoff passa pelo mesmo passo 2
-com a identidade pela qual foi enfileirado e segue para a mesma validação, lock,
-histórico, sender e persistência dos demais itens. Não se adiciona retorno de
-ciclo, `continue` ou reagendamento específico desta feature.
+A janela de posse da conversa permanece exatamente a da V1.0.6 e não deve ser
+confundida com os 2 minutos de recuperação da fila. O takeover da conversa só é
+permitido quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`;
+enquanto esse predicado não for verdadeiro, o lock é fresco e recusado. A
+retomada incrementa `lock_version`. O contrato já existente de posse é mantido:
+`unlock_conversa()`
+só libera `processing` quando recebe a versão vigente. Incrementar a versão no
+takeover impede que um `unlock` tardio com o token anterior solte a posse nova.
+Este plano não condiciona retroativamente cada escrita pós-lock ao token e não
+afirma que consiga cancelar uma chamada Meta já iniciada.
+
+Se um worker ultrapassar a janela e outro adquirir a versão seguinte, a versão
+mais nova vence. Uma chamada externa que já tenha sido confirmada pela Meta antes
+da perda de posse continua dentro da rara janela Meta -> banco já documentada;
+o plano não afirma que um efeito externo em andamento possa ser cancelado.
+
+Fora dos dois resultados controlados descritos acima, o item de handoff passa
+pelo mesmo passo 2 com a identidade pela qual foi enfileirado e segue para a
+mesma validação, lock, histórico, sender e persistência dos demais itens. Não se
+adiciona outra política de retorno, `continue` ou reagendamento específica desta
+feature.
 
 ### 7.2 Transporte de contexto
 
-Os três valores percorrem a cadeia existente, sem criar uma etapa nova no
-worker:
+Os três valores de identidade (`wa_id`, `user_id` e username) percorrem a cadeia
+existente, sem criar uma etapa nova no worker:
 
 ```text
 fila -> validar_banco_mensagem() -> contexto_banco
@@ -973,6 +1195,21 @@ três chaves, ainda que o valor de alguma delas seja `None`:
 `cliente.username` continua sendo o valor global mais recente para cadastro e
 Admin, mas não substitui silenciosamente o snapshot da conversa no contexto nem
 no histórico do bot.
+
+Em paralelo e sem integrar esse trio de identidade, a baseline V1.0.6 conserva
+o contexto editorial da etapa 1. Quando `id_etapa_atual is None`, e somente
+nesse primeiro contato, `valida_historico()` chama
+`core/repositories/fluxo/contextos/etapa1.py` e acrescenta ao
+`contexto_historico`:
+
+- `nome_unidade`;
+- `nome_agente`;
+- `genero`.
+
+Esses valores são lidos pelo `id_unidade`, validados de forma fechada e usados
+apenas pelo resolver/sender para a apresentação inicial. Eles não são snapshots
+de identidade, não entram em `estado_ciclo`, não alteram a projeção bancária
+final e não são usados para escolher `wa_id` ou `user_id`.
 
 ```python
 identidades_banco = buscar_identidades_para_contexto(
@@ -1131,17 +1368,21 @@ Regras finais:
 - username só é transportado e persistido; nunca entra em `to`;
 - retry reconstrói os valores do banco;
 - sender e resolver não executam SQL;
-- não se cria commit, lock, retorno de ciclo, exceção de retry ou política de
-  retry;
+- o transporte de contexto não cria commit, lock, retorno de ciclo, exceção de
+  retry ou política de retry; a contenção do merge e a terminação por bloqueio
+  reconciliado são as duas exceções controladas, definidas fora do sender na
+  seção 7.1;
 - `dequeue_message()` apenas amplia/renomeia os dados retornados;
-- CTE, `WHERE`, `ORDER BY`, `FOR UPDATE SKIP LOCKED`, posse, retry e timestamps
-  permanecem semanticamente idênticos.
+- CTE, `ORDER BY`, `FOR UPDATE SKIP LOCKED`, posse, retry e timestamps permanecem
+  semanticamente idênticos; a fila conserva sua fronteira stale própria de 2
+  minutos, sem reutilizá-la como limiar do lock da conversa.
 
 ### 7.3 Resolução e reconciliação dentro da validação existente
 
 `validar_banco_mensagem()` passa a resolver na seguinte ordem:
 
-1. localizar a unidade pelo mesmo `id_phone_unidade` atual;
+1. exigir `id_phone_unidade`, localizar por ele a unidade e nunca usar
+   `unidade_telefone`/`display_phone_number` como fallback;
 2. se houver user ID, consultar `(user_id, id_unidade)`;
 3. em evento de handoff, usar primeiro esse vínculo para reencontrar a conversa
    provisória; somente depois consultar o cliente canônico pelo WA ID;
@@ -1151,43 +1392,57 @@ Regras finais:
    vínculo e conversa na mesma transação;
 6. em retorno somente-user-ID já mapeado, reutilizar o cliente e a conversa
    canônicos; se o cliente já possuir WA ID, acumulá-lo e não abrir a etapa 2;
-7. devolver ao restante do ciclo o `id_cliente` e `id_conversa` finais.
+7. em qualquer associação WA + user, validar o conjunto completo e falhar de
+   forma fechada se os aliases apontarem para clientes canônicos incompatíveis;
+8. em merge, aplicar o protocolo de posse, versão, nome e bloqueio da seção 4.5;
+9. devolver ao restante do ciclo o `id_cliente` e `id_conversa` finais.
 
 As restrições de unicidade de `(user_id, id_unidade)` e
-`(id_cliente, id_unidade)` continuam sendo a proteção de integridade. O plano não
-cria lock nem ramo de retry para disputas; qualquer violação segue o rollback e o
-tratamento atuais. O nome do cliente passa a ser atualizado por `id_cliente`,
-pois a versão atual por telefone não atende clientes provisórios com WA ID nulo.
+`(id_cliente, id_unidade)` continuam sendo a proteção de integridade. Violação ou
+contradição nunca cai para um alias isolado. Contenção por lock fresco retorna o
+resultado controlado de requeue sem erro; demais conflitos seguem rollback e
+reentrega. O nome capturado continua atualizado por `id_cliente`; durante merge,
+o valor do provisório sempre sobrescreve o canônico antes da exclusão.
 
 Quando WA ID e user ID provarem que o cliente provisório corresponde a cliente
 antigo, aplica-se exatamente a seção 4.5. O commit já existente depois de
 `validar_banco_mensagem()` confirma os efeitos; o rollback e o retry atuais
-continuam responsáveis por falhas, sem ramificação específica desta feature.
+continuam responsáveis por falhas. A contenção por lock fresco e a terminação
+por bloqueio reconciliado são os dois resultados controlados da seção 7.1.
 
 O banco é a fonte da verdade do vínculo e dos identificadores passados aos
-contextos. Esta reconciliação não consulta nem modifica `funil_envios`, não cria
-exceção para denylist ou bloqueio, não remove fila antecipadamente e não encerra
-o ciclo antes do lock, histórico, resolver ou sender. Esses componentes seguem
-as regras que já possuem.
+contextos. Esta reconciliação não consulta nem modifica `funil_envios`. No
+caminho normal, não remove fila antecipadamente. No caminho terminal, ela fecha
+a conversa nova e exclui somente o item atual da fila na mesma transação, para
+que ele não seja retomado após o commit. Ela consulta bloqueio/conversa anterior
+apenas para preservar a expiração canônica e consolida a linha de bloqueio Meta
+quando necessário para excluir o provisório sem perder proteção. Uma conversa
+nova fechada por bloqueio vigente não alcança histórico, lock normal,
+`bot_resposta_atual()`, resolver ou sender.
 
 ### 7.4 Persistência dos snapshots
 
 - fila: snapshot normalizado/resolvido pelo webhook antes de existir conversa;
-- histórico do cliente: snapshot do item da fila;
-- histórico do bot: snapshots refletidos no `contexto_envio`, originados do
-  `contexto_historico` que foi reconstruído pelo banco;
-- conversa: preenche `user_id`, `wa_id` e o primeiro username não vazio; username
-  da conversa não é sobrescrito;
+  todos os seus identificadores permanecem imutáveis após o `INSERT`;
+- histórico do cliente: cópia imutável do snapshot do item da fila;
+- histórico do bot: snapshot imutável gravado no próprio `INSERT`, refletindo o
+  `contexto_envio` daquele instante;
+- conversa: pode preencher `user_id`/`wa_id` nulos após prova oficial, mas o
+  `UPDATE` é condicionado à existência de um valor novo para uma coluna ainda
+  nula; quando ambos já estão preenchidos, o caminho é no-op e não adquire row
+  lock desnecessário. `username` é exclusivamente o valor recebido na criação;
+  não há preenchimento posterior nem sobrescrita;
 - cliente: atualiza `wa_id` quando ocorre promoção válida e atualiza username
-  sempre que a Meta trouxer um valor novo não vazio;
+  sempre que a Meta trouxer um valor novo não vazio; no merge, o evento atual
+  não vazio vence, senão o username não vazio do provisório vence o canônico
+  anterior. O nome capturado do provisório sempre sobrescreve o nome canônico;
 - `user_id_cliente`: relação canônica atual do cliente naquela unidade;
 - resolver: recebe os valores pelo `contexto_historico`, escolhe o destinatário
   pelo helper e passa somente o escalar ao sender;
 - sender: não persiste nem consulta identificadores; devolve seu contexto técnico
   normal, que `flow_sender()` enriquece com os snapshots no `contexto_envio`;
-- na prova oficial, fila e histórico da conversa recebem cada identificador
-  conhecido somente onde a respectiva coluna estiver `NULL`;
-- valores não nulos de fila/histórico/conversa nunca são sobrescritos;
+- prova oficial nunca executa backfill em fila ou histórico;
+- valores de fila/histórico e `conversa.username` nunca são sobrescritos;
 - flood continua sendo snapshot do evento e não sofre backfill, pois não possui
   `id_conversa`;
 - conflito realmente contraditório entre dois clientes com WA IDs não nulos e
@@ -1240,8 +1495,12 @@ A divisão transacional fica fixada desta forma:
 1. `validar_banco_mensagem()` resolve, promove e, quando comprovado, reconcilia a
    identidade necessária antes do sender, usando o cursor, a transação e o
    commit que já existem depois da validação. Não escolhe evento, não movimenta
-   etapa, não registra resposta do bot e não persiste o nome capturado;
-2. resolver e sender produzem `contexto_envio` sem SQL;
+   etapa nem registra resposta do bot. O nome da mensagem atual continua sendo
+   efeito da transição; a única cópia de nome feita aqui é o valor já persistido
+   no provisório que, durante o merge, sobrescreve o canônico;
+2. após o lock normal da conversa, resolver e sender produzem
+   `contexto_envio` sem SQL; a posse continua representada pelo
+   `lock_version` devolvido por `lock_conversa()` e usada pelo `unlock` atual;
 3. `atualizar_banco_com_contexto_final()` mantém internamente a ordem atual:
    registrar/recuperar histórico do bot -> `persistir_movimento_conversa()` ->
    turnos sem avanço -> `atualizar_banco_conforme_transicao_de_etapa()` ->
@@ -1252,7 +1511,9 @@ A reconciliação de identidade não é movida para `efeitos_transicao.py`, porq
 sender da etapa 3 precisa do WA ID canônico antes do envio. Ela também não é
 duplicada: `atualizar_banco_conforme_transicao_de_etapa()` reconhece a aresta e
 aplica somente os efeitos finais próprios da transição. Uma falha continua
-seguindo o rollback/retry da transação correspondente, sem política nova.
+seguindo o rollback/retry da transação correspondente. As únicas políticas novas
+são a contenção sem erro quando o merge encontra lock fresco e o encerramento
+terminal quando ele comprova bloqueio vigente, definidos na seção 7.1.
 
 ## 8. Etapa especial obrigatória
 
@@ -1420,10 +1681,19 @@ O catálogo final terá 23 etapas:
 | 22 | Satisfação — comentário | sim | não |
 | 23 | Finalização | sim | sim, bloqueio de 30 dias |
 
-A baseline V1.0.5 já possui 22 etapas. Na migração futura, as etapas atuais
+A baseline V1.0.6 já possui 22 etapas. Na migração futura, as etapas atuais
 2..22 serão remapeadas para 3..23 sem apagar dados. A etapa 1 permanece no
 mesmo ID e a única etapa realmente adicionada sobre essa baseline é a etapa 2
 de compartilhamento oficial.
+
+Essa renumeração é uma **regra de negócio deliberada**, não uma limitação
+técnica do mapa. A tabela `etapa` representa a sequência integral percorrida por
+um cliente elegível a todas as perguntas; por isso seus IDs acompanham a ordem
+editorial e cronológica 1..23. O mapa `etapa_transicao` continua sendo a fonte de
+verdade para desvios: o cliente que já possui WA ID salta a nova etapa 2, enquanto
+o cliente somente com `user_id` percorre 1, 2, 3 ... 23. Inserir a etapa especial
+como ID 23 apenas para evitar a migração contrariaria essa convenção do negócio,
+mesmo sendo tecnicamente possível.
 
 Conversas já existentes conservam seu progresso: uma conversa atual na etapa 2
 vai para a futura etapa 3, a atual 3 vai para a futura 4 e assim por diante. Elas
@@ -1485,7 +1755,7 @@ validador contextual:
 
 ### 9.2 Confirmação do destino preservada
 
-A confirmação implantada na V1.0.4 e presente na baseline V1.0.5 passa da etapa
+A confirmação implantada na V1.0.4 e preservada na baseline V1.0.6 passa da etapa
 atual 3 para a futura etapa 4 sem ampliar sua gramática. Na baseline corrigida,
 ela produz o evento único `destino_atendimento_confirmado` e sempre segue de 3
 para a profissão atual 4; depois da renumeração, a mesma regra segue da
@@ -1564,8 +1834,18 @@ não estiver no contexto bancário, nenhuma mensagem da etapa 3 é enviada. O
 helper devolve apenas o escalar usado no mesmo método PyWa atual. Username não
 participa.
 
+Ortogonalmente à escolha do destinatário, os quatro envios de primeiro contato
+da etapa 1 — padrão, mídia, financeiro e reforço escolar — recebem também
+`nome_unidade`, `nome_agente` e `genero` do contexto bancário da unidade. O
+builder escolhe `o`/`a` a partir do gênero e monta a mesma apresentação dinâmica
+nos quatro ramos. Tratamentos posteriores da etapa 1 não repetem essa abertura.
+Nenhum sender infere apresentação a partir do destinatário, nem usa esses três
+campos para decidir fallback entre WA ID e user ID.
+
 Regras:
 
+- `sender` é sempre o `phone_number_id` canônico da unidade localizada no banco;
+  ausência do ID falha antes da Meta e `display_phone_number` nunca o substitui;
 - antes do contato oficial, sem WA ID: user ID lido do banco;
 - no evento válido de compartilhamento: WA ID primeiro persistido e depois lido
   do banco no contexto;
@@ -1579,13 +1859,15 @@ O sender de etapa devolve seu contexto técnico normal. A fronteira de
 antes de qualquer retorno, inclusive no caminho idempotente, sem consultar banco
 e sem alterar a persistência. O helper é exclusivo da resolução de destinatário
 outbound e é chamado pelo resolver; bloqueio, desbloqueio e flood não o
-reutilizam. Esses componentes recebem somente a identidade tipada do evento
-inbound, que pode continuar sendo user ID quando a Meta omitir WA ID mesmo após
-a etapa 2, sem mudar seus algoritmos nem autorizar fallback no sender.
+reutilizam. Esses componentes resolvem a identidade tipada do evento para o
+conjunto alias-aware quando houver prova persistida; isso não
+autoriza fallback no sender. O evento inbound pode continuar chegando somente
+com user ID depois da etapa 2, mas qualquer outbound posterior exige o WA ID
+canônico relido do banco.
 
 ### 10.1 Tratamentos atuais preservados
 
-A implementação futura não volta ao conjunto de validadores anterior à V1.0.5.
+A implementação futura não volta ao conjunto de validadores anterior à V1.0.6.
 Toda etapa que possui tratamento financeiro continua possuindo também o
 tratamento universal de dúvida sobre reforço escolar, inclusive a nova etapa 2.
 O tipo técnico permanece `duvida_reforco_escolar`.
@@ -1665,7 +1947,7 @@ do atendimento, devolve ambos no dicionário do snapshot e filtra
 `respostas_desafios.id_etapa BETWEEN 13 AND 18`. Não usa
 `cliente.username` como atalho e não projeta `user_id` para a integração.
 
-O detalhamento implantado na V1.0.5 também é obrigatório:
+O detalhamento preservado na V1.0.6 também é obrigatório:
 
 - `buscar_dados_lead_funil()` lê as respostas das futuras etapas 13..18 em
   ordem crescente;
@@ -1682,48 +1964,104 @@ O detalhamento implantado na V1.0.5 também é obrigatório:
 
 ## 12. Bloqueio, desbloqueio e Django Admin
 
-`cliente_bloqueado_meta` exige WA ID ou user ID. Para bloquear/desbloquear:
+`cliente_bloqueado_meta` exige WA ID ou user ID. Toda proteção recebe primeiro o
+`phone_id_unidade` obrigatório e resolve o mesmo conjunto da seção 4.2:
 
-1. carregar os snapshots do registro;
-2. usar WA ID se existir;
-3. senão usar user ID;
-4. combinar com `phone_id_unidade`;
-5. username serve somente à exibição.
+1. sem prova, consultar somente o alias tipado do evento;
+2. com prova, consultar por `id_cliente + id_unidade` e por qualquer WA/user ID
+   conhecido daquela unidade;
+3. considerar a pessoa bloqueada se qualquer membro do conjunto estiver na
+   denylist, no bloqueio Meta, no cache temporário ou em conversa dentro do prazo;
+4. username servir somente à exibição.
 
-O guard não carrega nem decide etapa. Ele usa user ID somente quando o envelope
-do próprio evento não possui WA ID. Essa condição ocorre no período inicial e
-pode continuar ocorrendo depois da etapa 2 se a Meta mantiver o WA ID privado.
-Nesse caso, o uso é apenas para proteger e transportar o evento inbound; no
-worker, `user_id_cliente` resolve o cliente e o WA ID canônico. Isso não autoriza
-user ID como destinatário de etapa posterior. Quando WA ID do remetente estiver
-presente no envelope, ele é sempre prioritário.
+Assim, depois do vínculo, entrar por user ID não contorna bloqueio criado por WA
+ID, e entrar por WA ID não contorna bloqueio criado por user ID. Isso não torna
+user ID destinatário de sender posterior: aliases de proteção e destinatário
+outbound continuam contratos diferentes.
 
-Essa adaptação é necessária porque todo evento inbound sem WA ID também passa
-pelas proteções do webhook. Denylist e bloqueio Meta continuam preferindo WA ID e
-usando user ID somente como fallback do próprio envelope. O anti-flood, porém,
-possui um resolvedor próprio de aliases oficialmente comprovados: ele agrega as
-janelas de `user_id` e `wa_id`, deduplica por WAMID e adota o WA ID como referência
-canônica após a prova. O limite de 15 eventos em 5 segundos e a ordem Meta ->
-banco do desbloqueio permanecem; os TTLs auxiliares e o caminho HTTP 503 seguem a
-seção 6.3. Nada disso faz parte do fluxo transacional do `flow_worker`.
+Ao promover uma pessoa à denylist/Meta, vale o seguinte contrato de persistência:
+
+- existe uma única linha canônica por pessoa comprovada e unidade, ancorada por
+  `(id_cliente, id_unidade)` quando o cliente já foi resolvido;
+- a linha exige pelo menos um entre `wa_id` e `user_id`;
+- se o evento de bloqueio trouxer os dois aliases, ambos são gravados na mesma
+  linha e ambos são enviados à operação de bloqueio da Meta;
+- se inicialmente existir somente WA ID ou somente user ID, a linha pode nascer
+  com o outro campo `NULL`. Uma prova oficial posterior preenche apenas esse
+  campo nulo; nunca sobrescreve silenciosamente um alias não nulo divergente;
+- se antes da prova existirem linhas separadas que depois forem demonstradas
+  como a mesma pessoa/unidade, elas são bloqueadas em ordem determinística,
+  consolidadas na linha canônica e a linha equivalente excedente é removida sem
+  apagar a intenção de bloqueio;
+- unidades diferentes mantêm linhas diferentes. O mesmo WA ID pode aparecer em
+  mais de uma unidade, enquanto o user ID continua específico de cada unidade;
+- contradição entre aliases já não nulos falha de forma fechada e não provoca
+  merge por nome, username ou coincidência temporal.
+
+Antes de enriquecer uma linha ou chamar a Meta, o guard compara os aliases
+explícitos do envelope com qualquer vínculo já persistido. Um par contraditório
+gera log crítico e descarte determinístico sem `UPDATE`, bloqueio externo ou
+merge. Toda seleção, preenchimento de campo `NULL` e consolidação de linhas usa o
+mesmo advisory lock transacional da unidade/sujeito; o `LIMIT 1` nunca decide
+sozinho em presença de possíveis linhas equivalentes.
+
+Um envelope assinado WA+user que já esteja barrado no webhook não cria
+`user_id_cliente`, pois o worker continua sendo o único dono da identidade
+canônica. Os dois aliases ficam, entretanto, preservados na linha de denylist.
+No desbloqueio administrativo, uma pré-validação resolve de forma inequívoca
+`id_cliente + id_unidade`; após desbloquear todos os aliases na Meta e antes de
+apagar a linha local, a mesma transação consolida `user_id_cliente` quando houver
+cliente canônico. Conflito preserva a linha e falha de forma fechada; ausência de
+cliente canônico não inventa cadastro nem vínculo.
+
+A tentativa na Meta é feita para cada alias conhecido em ordem determinística,
+com resultado individual observável; falha parcial mantém o registro local e
+provoca nova tentativa, nunca libera o alias que falhou. Durante merge, uma
+eventual linha do provisório é reatribuída/consolidada com a linha canônica, sem
+apagar a intenção de bloqueio. Se esse bloqueio Meta for descoberto no handoff,
+a conversa nova também é encerrada com `bloqueio_reconciliado`, sua fila atual é
+removida atomicamente e nenhuma resposta é enviada.
+
+O bloqueio de conversa por dias também é alias-aware. Se a reconciliação descobrir
+uma conversa canônica que **já estava encerrada antes do merge** e ainda está
+dentro do prazo, a data `finalizou_em` original é a única origem da expiração: a
+conversa nova é encerrada sem criar novo prazo, sem
+reiniciar 30 dias e sem avançar/sender, usando
+`motivo_encerramento='bloqueio_reconciliado'`. Bloqueio expirado não impede que a
+nova conversa continue. `ativou_privacidade` só encerra outra conversa canônica
+que ainda estava ativa no momento da reconciliação; esse encerramento novo não é
+reinterpretado como bloqueio preexistente.
+
+Para isso, a consulta de proteção não pode continuar escolhendo simplesmente a
+conversa encerrada mais recente. Ela procura, no sujeito canônico e em todos os
+aliases comprovados da unidade, conversas já encerradas cuja etapa tenha
+`bloqueio_dias > 0`, calcula `finalizou_em + bloqueio_dias` e considera vigente
+qualquer expiração maior que `NOW()`. Se houver mais de uma, prevalece a maior
+expiração original. A conversa fechada com `bloqueio_reconciliado` não cria uma
+nova fonte de prazo; serve apenas para registrar por que aquele atendimento novo
+não continuou.
 
 Ao excluir um bloqueado no Admin, o sistema continua chamando primeiro o
-desbloqueio na Meta e só exclui localmente após sucesso, conforme a regra atual.
-
-Esta tarefa não cria consolidação especial de bloqueios durante a reconciliação,
-nem adiciona row lock ou desvio no worker para esse fim. O guard, a ordem
-Meta -> banco do desbloqueio e o comportamento atual do Admin permanecem.
+desbloqueio na Meta para **todos** os aliases registrados e só exclui localmente
+após sucesso integral, conforme a ordem Meta -> banco. Uma falha em qualquer
+alias preserva a linha canônica inteira para retry. Cliente legacy com apenas WA
+ID e provisório com apenas user ID continuam funcionando como conjuntos
+unitários.
 
 Admin:
 
-- Unidade exige, exibe e edita `id_portfolio`;
+- Unidade exige, exibe e edita `nome_unidade`, `nome_agente`, `genero` e
+  `id_portfolio`; pesquisa por nome da unidade/agente, filtra por gênero e ordena
+  por `nome_unidade`;
 - Cliente exibe WA ID anulável e username opcional;
 - Fila, histórico, conversa, bloqueio e flood exibem os três snapshots;
 - `user_id_cliente` é consultável, pesquisável por cliente/unidade/user ID e
   somente leitura; vínculos são alterados apenas pelo fluxo transacional;
 - buscas aceitam WA ID, user ID e username;
 - `__str__` não presume WA ID e usa fallback legível para user ID/chave;
-- username não altera ações, filtros de identidade ou permissões.
+- username não altera ações, filtros de identidade ou permissões;
+- relações administrativas com unidade usam `id_unidade__nome_unidade`, nunca o
+  caminho legado `id_unidade__nome`.
 
 ## 13. PyWa 4.x
 
@@ -1735,11 +2073,13 @@ Antes do deploy serão validados:
 - criação de `WhatsApp(...)` com Graph API v26.0 central;
 - envio normal para WA ID;
 - envio inicial para user ID somente antes do compartilhamento obrigatório;
-- `request_contact_info(to=user_id, sender=phone_id, ...)`;
+- `request_contact_info(to=user_id, sender=phone_id_unidade, ...)`, com o sender
+  obrigatoriamente vindo da unidade validada e nunca de `display_phone_number`;
 - parsing de `ContactsOrigin.CONTACT_REQUEST`;
-- `ContactList.first_wa_id` e fallback controlado de `Phone.phone`;
-- bloqueio e desbloqueio com WA ID e, quando o envelope inbound não o possuir,
-  user ID escopado pela unidade, sem ampliar o fallback dos senders;
+- extração do `phones[].wa_id` explícito, com validação própria de cardinalidade
+  e formato; `Phone.phone` não serve de fallback;
+- bloqueio e desbloqueio com todos os aliases comprovados da unidade, inclusive
+  conjuntos unitários WA-only/user-only, sem ampliar o fallback dos senders;
 - ativação/desativação de WABA e número;
 - um smoke test real em ambiente de teste.
 
@@ -1767,12 +2107,20 @@ Atualizar, com arquivo completo:
 - `callback/webhook/models.py`;
 - `callback/webhook/admin.py`.
 
+Ao mesclar o estado final, `bank_script.py`, models e Admin devem partir do
+contrato já implantado na V1.0.6: `nome_unidade`, `nome_agente`, `genero`, suas
+quatro constraints e todos os caminhos ORM com `nome_unidade` são preservados.
+Este passo acrescenta `id_portfolio` e o contrato de identidade sem restaurar
+`unidade.nome` nem reaplicar a migração de apresentação.
+
 O DDL cria `chatbot.user_id_cliente`; o model correspondente usa
 `id_user_id_cliente = models.BigAutoField(primary_key=True)`, `models.PROTECT` na
 FK de cliente e `models.CASCADE` na FK de unidade, em correspondência a
 `ON DELETE RESTRICT`/`ON DELETE CASCADE` do PostgreSQL. Ele será registrado no
-Admin em modo somente leitura. O mesmo passo inclui `ativou_user_id` no
-CHECK/choices de conversa.
+Admin em modo somente leitura. O mesmo passo inclui `ativou_privacidade` e
+`bloqueio_reconciliado` no CHECK/choices de conversa: o primeiro encerra outra
+conversa canônica ativa durante o merge; o segundo encerra a conversa nova ao
+herdar um bloqueio canônico ainda vigente, sem alterar a data-base do prazo.
 
 ### Passo 3 — Webhook e fila
 
@@ -1788,20 +2136,27 @@ Atualizar, com arquivo completo:
 - `core/repositories/seguranca/bloqueio_meta.py`;
 - demais caches Redis e fallbacks em memória que recebem identidade técnica.
 
-Turno e bloqueio escolhem uma única coluna conforme
-`tipo_identidade_do_item`. O parser mantém `wa_id_remetente` separado de
-`wa_id_compartilhado`; este último só participa do anti-flood quando um
-`contact_request` oficial, autenticado e inequívoco fornece a prova pré-commit.
+Turno, denylist e bloqueios preservam o alias primário do item, mas resolvem uma
+única decisão sobre todo o conjunto comprovado da pessoa/unidade. Os advisory
+locks dos aliases são adquiridos em ordem determinística e a consulta usa WA/user
+como alternativas, nunca como duas decisões nem como chave concatenada. O parser
+mantém `wa_id_remetente` separado de `wa_id_compartilhado`; este último só integra
+a prova candidata quando um `contact_request` oficial, autenticado e inequívoco
+chega ao worker; ele não cria vínculo no webhook.
 
-O anti-flood resolve o vínculo permanente por `user_id_cliente` e, antes do
-commit do worker, usa uma ponte Redis pendente de 15 segundos escrita
-atomicamente nas duas direções. Redis, memória e fallback SQL somam os eventos
-dos aliases oficialmente vinculados, com deduplicação por WAMID; novos eventos
+O anti-flood resolve o vínculo permanente por `user_id_cliente`. Redis, memória
+e fallback SQL somam os eventos dos aliases oficialmente vinculados, com
+deduplicação por WAMID; novos eventos
 incrementam a referência canônica WA ID. Um cache negativo de 5 segundos evita
 consultar o RDS a cada evento sem vínculo, e o vínculo confirmado permanece em
 cache por 1 hora. Conflito ou indisponibilidade que impeça uma decisão segura
-devolve HTTP 503 para reentrega e nunca cria equivalência ou bloqueio por
-hipótese. O limite continua 15 WAMIDs distintos em 5 segundos. Essa continuidade
+falha de forma fechada sem criar equivalência ou bloqueio por hipótese: conflito
+determinístico recebe HTTP 200 e indisponibilidade transitória do RDS recebe HTTP
+503. Quando o RDS prova que ainda não existe vínculo, Redis indisponível não
+descarta a mensagem válida; o alias unitário continua pelo fallback banco ->
+memória da V1.0.6. O limite continua 15 WAMIDs distintos em 5 segundos. Antes do primeiro
+commit, a segunda barreira de predecessor do worker impede que a prova posterior
+ultrapasse item anterior do outro alias. Essa continuidade
 fica nas camadas próprias do webhook/cache/repositório e não cria efeito lateral
 dentro da reconciliação transacional.
 
@@ -1819,6 +2174,14 @@ Atualizar, com arquivo completo:
 - validação de histórico;
 - contexto de envio.
 
+Entre os arquivos completos deste passo estão explicitamente
+`core/repositories/fluxo/contextos/etapa1.py` e
+`workers/worker_flow/valida_historico.py`. A primeira consulta continua
+retornando `nome_unidade`, `nome_agente` e `genero`; a segunda continua fazendo
+essa carga somente quando a conversa ainda não possui etapa. O transporte novo
+de identidade deve ser mesclado a esse comportamento, sem substituir nem
+reclassificar os três campos editoriais como identidade.
+
 Criar também o repositório de `user_id_cliente` e os helpers restritos de
 reconciliação. A resolução pelo vínculo deve acontecer antes da criação de
 cliente provisório; no handoff, antes da busca prioritária do cliente pelo WA
@@ -1828,8 +2191,11 @@ ID, para não perder a conversa nova.
 trafegam pelo ciclo. `contexto_banco` alimenta `contexto_historico`, o resolver
 recebe esse contexto, passa somente o destinatário escalar ao sender e
 `flow_sender()` faz `contexto_envio` refletir os mesmos snapshots. Não se
-adicionam retornos terminais, requeues, `continue`, commits, locks ou tratamento
-genérico novo.
+adicionam commits nem tratamento genérico novo. Acrescentam-se apenas os dois
+resultados controlados: lock fresco causa rollback, requeue sem erro de 5
+segundos e `continue`, antes de qualquer mutação; bloqueio reconciliado usa o
+commit pós-validação já existente e então faz `continue`, depois de confirmar o
+cache e antes de histórico, lock normal ou sender.
 
 `montar_mensagem_fila()` calcula a identidade tipada/congelada e sua única
 referência de cache; `atualizar_estado_com_mensagem()` registra ambas antes da
@@ -1839,7 +2205,29 @@ do item; o reparo stale remove somente a referência registrada. A implementaç�
 não pode reconstruir essa chave pelo WA ID compartilhado/canônico nem remover
 cache de outra unidade.
 
+Os mesmos arquivos preservam `lock_version` no contrato atual de posse e
+`unlock`. Os helpers de reconciliação bloqueiam linhas em ordem determinística,
+recusam todo lock que ainda não satisfaça o predicado stale de 110 segundos da
+V1.0.6 e, no takeover stale, incrementam a versão antes de limpar a posse. Assim,
+um `unlock` tardio com a
+versão anterior não libera um lock novo; esta feature não reescreve toda a
+persistência pós-lock. Os helpers também copiam o nome provisório para o canônico
+e nunca fazem backfill de fila/histórico/username da conversa.
+
 ### Passo 5 — Etapa especial e renumeração
+
+Antes de criar a etapa especial, atualizar e entregar completos os arquivos da
+etapa 1 já personalizados na baseline V1.0.6:
+
+- `core/integrations/whatsapp/messages/etapa1_messages.py`;
+- `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa1.py`;
+- `workers/worker_flow/response_flow/etapas/resolver_etapa1.py`.
+
+O merge preserva as apresentações dinâmicas nos quatro ramos iniciais — padrão,
+mídia, financeiro e reforço escolar — e mantém as retomadas posteriores sem
+repetir a abertura. O resolver combina duas decisões independentes: recebe o
+destinatário escalar já autorizado pelo contrato `wa_id`/`user_id` e, somente no
+primeiro contato, passa os três dados editoriais da unidade ao sender.
 
 Criar e entregar completos, com as fronteiras da seção 7.5:
 
@@ -1908,16 +2296,32 @@ o destinatário escalar ao sender. O sender não recebe o contexto inteiro para
 decidir fallback. `flow_sender()` acrescenta os snapshots ao retorno de todo
 resolver e ao retorno idempotente antes de devolver `contexto_envio`.
 
+Nas assinaturas da etapa 1, conservar `nome_unidade`, `nome_agente` e `genero`
+nos quatro senders iniciais. Esses argumentos são de apresentação e não entram
+no helper de destinatário; o destinatário continua sendo um único escalar
+resolvido antes da chamada.
+
 ### Passo 7 — Funil, bloqueio e Admin
 
 No Funil, manter WA ID obrigatório e acrescentar username somente como
 informação opcional quando existir. Preservar o relatório atual com as seis
 perguntas e respostas em ordem, usando o catálogo compartilhado e nunca o
 resumo quantitativo antigo. Não transferir, reagendar ou conciliar itens de
-`funil_envios` durante a reconciliação. Bloqueio e Admin recebem apenas as
-adaptações declarativas necessárias aos campos anuláveis. Na implementação
-futura, atualizar as choices e `MOTIVOS_ENCERRAMENTO_VALIDOS` com
-`ativou_user_id`.
+`funil_envios` durante a reconciliação. Bloqueio, desbloqueio, denylist e Admin
+recebem a resolução alias-aware e a consolidação segura da linha do provisório.
+`cliente_bloqueado_meta` mantém uma linha canônica por pessoa/unidade após a
+prova, exige ao menos um alias, grava ambos quando conhecidos e somente enriquece
+campos `NULL`; linhas equivalentes são consolidadas e unidades distintas
+continuam isoladas. Bloqueio e desbloqueio chamam todos os aliases conhecidos,
+e o Admin só exclui a linha local depois do desbloqueio Meta integral.
+Na implementação futura, atualizar as choices e
+`MOTIVOS_ENCERRAMENTO_VALIDOS` com `ativou_privacidade` e
+`bloqueio_reconciliado`, mantendo os usos distintos definidos na seção 4.5.
+
+No Admin de unidade, preservar ainda os campos V1.0.6 `nome_unidade`,
+`nome_agente` e `genero`, incluindo pesquisa, filtro, ordenação e referências
+ORM por `id_unidade__nome_unidade`; acrescentar `id_portfolio` sem reduzir esse
+contrato.
 
 ### Passo 8 — PyWa
 
@@ -1926,9 +2330,11 @@ smokes reais antes de produção.
 
 ### Passo 9 — SQL manual final
 
-O SQL abaixo é a migração-base completa para o schema atual. Ele deverá ser
-revalidado contra o commit definitivo antes da execução, porque os serviços e o
-banco ainda não receberam esta feature.
+O SQL abaixo é a migração-base completa para o schema da V1.0.6, commit
+`e052625`. Ele deverá ser revalidado contra o commit definitivo antes da
+execução, porque os serviços e o banco ainda não receberam a feature de
+`user_id`. A personalização da unidade já é pré-condição e não é reaplicada por
+este SQL.
 
 ```sql
 BEGIN;
@@ -1951,6 +2357,27 @@ LOCK TABLE
     chatbot.funil_envios
 IN ACCESS EXCLUSIVE MODE;
 
+-- Contrato canônico já implantado pela V1.0.6. A tabela temporária permite
+-- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
+-- formatação textual manual e sem alterar chatbot.unidade.
+CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
+    nome_unidade VARCHAR(300),
+    nome_agente VARCHAR(100),
+    genero VARCHAR(9),
+
+    CONSTRAINT uq_unidade_nome_unidade
+        UNIQUE (nome_unidade),
+
+    CONSTRAINT ck_unidade_nome_unidade_nao_vazio
+        CHECK (nome_unidade ~ '[^[:space:]]'),
+
+    CONSTRAINT ck_unidade_nome_agente_nao_vazio
+        CHECK (nome_agente ~ '[^[:space:]]'),
+
+    CONSTRAINT ck_unidade_genero
+        CHECK (genero IN ('masculino', 'feminino'))
+) ON COMMIT DROP;
+
 DO $preflight$
 DECLARE
     etapas_atuais INTEGER;
@@ -1963,7 +2390,132 @@ DECLARE
     definicao_motivo TEXT;
     motivos_atuais TEXT[];
     corpo_dequeue_atual TEXT;
+    corpo_lock_atual TEXT;
+    corpo_unlock_atual TEXT;
 BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            VALUES
+                ('nome_unidade', 'character varying', 300),
+                ('nome_agente',   'character varying', 100),
+                ('genero',        'character varying',   9)
+        ) AS esperado(column_name, data_type, max_length)
+        LEFT JOIN information_schema.columns AS coluna
+          ON coluna.table_schema = 'chatbot'
+         AND coluna.table_name = 'unidade'
+         AND coluna.column_name = esperado.column_name
+        WHERE coluna.column_name IS NULL
+           OR coluna.data_type <> esperado.data_type
+           OR coluna.character_maximum_length IS DISTINCT FROM esperado.max_length
+           OR coluna.is_nullable <> 'NO'
+           OR coluna.column_default IS NOT NULL
+    ) OR EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'chatbot'
+          AND table_name = 'unidade'
+          AND column_name = 'nome'
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.6 e052625.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM chatbot.unidade
+        WHERE nome_unidade !~ '[^[:space:]]'
+           OR nome_agente !~ '[^[:space:]]'
+           OR genero NOT IN ('masculino', 'feminino')
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: dados de apresentação da unidade violam a V1.0.6 e052625.';
+    END IF;
+
+    IF EXISTS (
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_constraint AS extra
+        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
+          AND extra.contype <> 'n'
+          AND extra.conname NOT IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+          AND EXISTS (
+              SELECT 1
+              FROM UNNEST(extra.conkey) AS chave(attnum)
+              JOIN pg_attribute AS coluna
+                ON coluna.attrelid = extra.conrelid
+               AND coluna.attnum = chave.attnum
+              WHERE coluna.attname IN (
+                  'nome_unidade',
+                  'nome_agente',
+                  'genero'
+              )
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.6 e052625.';
+    END IF;
+
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
     SELECT COUNT(*) INTO transicoes_atuais FROM chatbot.etapa_transicao;
 
@@ -2076,7 +2628,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.5 (etapas=%/%; transições=%/%).',
+            'à V1.0.6 e052625 (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -2093,7 +2645,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.5.';
+            'Migração recusada: etapa final atual não corresponde à V1.0.6 e052625.';
     END IF;
 
     IF EXISTS (
@@ -2102,7 +2654,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.5.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.6 e052625.';
     END IF;
 
     IF NOT EXISTS (
@@ -2257,6 +2809,37 @@ BEGIN
             'Migração recusada: assinatura ou algoritmo atual de dequeue_message diverge da base esperada.';
     END IF;
 
+    SELECT p.prosrc
+    INTO corpo_lock_atual
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_lock_atual IS NULL
+       OR POSITION('PROCESSING = TRUE' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_atual)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Migração recusada: lock_conversa atual diverge do contrato de versão de posse.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_unlock_atual
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_unlock_atual IS NULL
+       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_atual)) = 0
+       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_atual)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Migração recusada: unlock_conversa atual diverge do contrato de versão de posse.';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM chatbot.fila_mensagens
@@ -2272,9 +2855,17 @@ BEGIN
 END
 $preflight$;
 
+-- O snapshot vem depois do gate das colunas para que uma baseline incompatível
+-- seja recusada pela mensagem controlada, em vez de falhar com undefined_column.
+CREATE TEMP TABLE migracao_apresentacao_unidade_antes
+ON COMMIT DROP
+AS
+SELECT id_unidade, nome_unidade, nome_agente, genero
+FROM chatbot.unidade;
+
 -- Mapa explícito do estado atual. Antes do deploy, revisar este bloco e incluir
 -- exatamente uma linha para cada unidade existente. Não inferir pelo WABA.
-CREATE TEMP TABLE pg_temp.migracao_portfolios (
+CREATE TEMP TABLE migracao_portfolios (
     id_unidade INTEGER PRIMARY KEY,
     id_portfolio VARCHAR(100) NOT NULL,
     CONSTRAINT ck_migracao_portfolio_nao_vazio
@@ -2301,7 +2892,7 @@ BEGIN
 END
 $validar_mapa_portfolios$;
 
-CREATE TEMP TABLE pg_temp.migracao_user_id_contagens
+CREATE TEMP TABLE migracao_user_id_contagens
 ON COMMIT DROP
 AS
 SELECT 'cliente' AS tabela, COUNT(*)::BIGINT AS registros
@@ -2325,7 +2916,7 @@ FROM chatbot.webhook_flood_evento
 UNION ALL
 SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios;
 
-CREATE TEMP TABLE pg_temp.migracao_respostas_etapas (
+CREATE TEMP TABLE migracao_respostas_etapas (
     id_resposta_desafio INTEGER PRIMARY KEY,
     id_etapa INTEGER NOT NULL
 ) ON COMMIT DROP;
@@ -2383,13 +2974,15 @@ ALTER TABLE chatbot.fila_mensagens
     ADD COLUMN user_id VARCHAR(255) NULL,
     ADD COLUMN username VARCHAR(255) NULL,
     ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL;
+    ALTER COLUMN wa_id DROP NOT NULL,
+    ALTER COLUMN unidade_telefone DROP NOT NULL;
 
 ALTER TABLE chatbot.historico_mensagens
     ADD COLUMN user_id VARCHAR(255) NULL,
     ADD COLUMN username VARCHAR(255) NULL,
     ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL;
+    ALTER COLUMN wa_id DROP NOT NULL,
+    ALTER COLUMN unidade_telefone DROP NOT NULL;
 
 ALTER TABLE chatbot.conversa
     ADD COLUMN wa_id VARCHAR(50) NULL,
@@ -2454,7 +3047,8 @@ ALTER TABLE chatbot.conversa
             OR motivo_encerramento IN (
                 'idade_invalida',
                 'foi_agendado',
-                'ativou_user_id'
+                'ativou_privacidade',
+                'bloqueio_reconciliado'
             )
         );
 
@@ -2712,6 +3306,66 @@ SELECT setval(
     TRUE
 );
 
+CREATE OR REPLACE FUNCTION chatbot.lock_conversa(p_id_conversa INT)
+RETURNS TABLE (
+    lock_ok BOOLEAN,
+    lock_version_atual INT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_lock_version INT;
+BEGIN
+    UPDATE chatbot.conversa AS conversa
+    SET
+        processing = TRUE,
+        processing_started_at = NOW(),
+        lock_version = COALESCE(conversa.lock_version, 0) + 1
+    WHERE conversa.id_conversa = p_id_conversa
+      AND conversa.status_ativa IS TRUE
+      AND (
+          COALESCE(conversa.processing, FALSE) IS FALSE
+          OR (
+              conversa.processing IS TRUE
+              AND conversa.processing_started_at IS NOT NULL
+              AND conversa.processing_started_at
+                  < NOW() - INTERVAL '110.0 seconds'
+          )
+      )
+    RETURNING conversa.lock_version INTO v_lock_version;
+
+    IF v_lock_version IS NULL THEN
+        RETURN QUERY SELECT FALSE, NULL::INT;
+        RETURN;
+    END IF;
+
+    RETURN QUERY SELECT TRUE, v_lock_version;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(
+    p_id_conversa INT,
+    p_lock_version INT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    updated_rows INTEGER;
+BEGIN
+    UPDATE chatbot.conversa
+    SET
+        processing = FALSE,
+        processing_started_at = NULL
+    WHERE id_conversa = p_id_conversa
+      AND processing IS TRUE
+      AND lock_version = p_lock_version;
+
+    GET DIAGNOSTICS updated_rows = ROW_COUNT;
+    RETURN updated_rows = 1;
+END;
+$$;
+
 CREATE FUNCTION chatbot.dequeue_message()
 RETURNS TABLE (
     id_mensagem INT,
@@ -2785,6 +3439,8 @@ DECLARE
     transicoes_finais_corretas INTEGER;
     referencias_invalidas RECORD;
     corpo_dequeue_final TEXT;
+    corpo_lock_final TEXT;
+    corpo_unlock_final TEXT;
     definicao_motivo_final TEXT;
     motivos_finais TEXT[];
 BEGIN
@@ -2797,9 +3453,11 @@ BEGIN
             ('fila_mensagens',          'wa_id',         50),
             ('fila_mensagens',          'user_id',      255),
             ('fila_mensagens',          'username',     255),
+            ('fila_mensagens',          'unidade_telefone', 100),
             ('historico_mensagens',     'wa_id',         50),
             ('historico_mensagens',     'user_id',      255),
             ('historico_mensagens',     'username',     255),
+            ('historico_mensagens',     'unidade_telefone', 100),
             ('conversa',                'wa_id',         50),
             ('conversa',                'user_id',      255),
             ('conversa',                'username',     255),
@@ -2830,6 +3488,9 @@ BEGIN
     INTO colunas_obrigatorias_invalidas
     FROM (
         VALUES
+            ('unidade',          'nome_unidade',      'character varying', 300),
+            ('unidade',          'nome_agente',       'character varying', 100),
+            ('unidade',          'genero',            'character varying',   9),
             ('unidade',          'id_portfolio',       'character varying', 100),
             ('user_id_cliente',  'id_user_id_cliente', 'bigint',            NULL),
             ('user_id_cliente',  'id_cliente',         'integer',           NULL),
@@ -2867,6 +3528,7 @@ BEGIN
         SELECT 1
         FROM (
             VALUES
+                ('unidade',               'nome'),
                 ('cliente',                'waid_telefone'),
                 ('fila_mensagens',         'cliente_telefone'),
                 ('historico_mensagens',    'cliente_telefone'),
@@ -2879,7 +3541,7 @@ BEGIN
          AND coluna.column_name = legado.column_name
     ) THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: coluna legada de identidade permaneceu.';
+            'Pós-validação falhou: coluna legada de identidade ou apresentação permaneceu.';
     END IF;
 
     IF EXISTS (
@@ -2914,15 +3576,122 @@ BEGIN
         SELECT 1
         FROM chatbot.unidade
         WHERE NULLIF(BTRIM(id_portfolio), '') IS NULL
+           OR nome_unidade !~ '[^[:space:]]'
+           OR nome_agente !~ '[^[:space:]]'
+           OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: unidade sem id_portfolio válido.';
+            'Pós-validação falhou: cadastro ou apresentação da unidade inválido.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_temp.migracao_apresentacao_unidade_antes AS antes
+        FULL JOIN chatbot.unidade AS depois
+          ON depois.id_unidade = antes.id_unidade
+        WHERE antes.id_unidade IS NULL
+           OR depois.id_unidade IS NULL
+           OR depois.nome_unidade IS DISTINCT FROM antes.nome_unidade
+           OR depois.nome_agente IS DISTINCT FROM antes.nome_agente
+           OR depois.genero IS DISTINCT FROM antes.genero
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: apresentação da unidade mudou durante a migração de user_id.';
+    END IF;
+
+    IF EXISTS (
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_constraint AS extra
+        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
+          AND extra.contype <> 'n'
+          AND extra.conname NOT IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero',
+              'ck_unidade_id_portfolio_nao_vazio'
+          )
+          AND EXISTS (
+              SELECT 1
+              FROM UNNEST(extra.conkey) AS chave(attnum)
+              JOIN pg_attribute AS coluna
+                ON coluna.attrelid = extra.conrelid
+               AND coluna.attnum = chave.attnum
+              WHERE coluna.attname IN (
+                  'nome_unidade',
+                  'nome_agente',
+                  'genero'
+              )
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: constraints de apresentação da unidade divergentes.';
     END IF;
 
     SELECT COUNT(*)
     INTO constraints_obrigatorias
     FROM (
         VALUES
+            ('unidade',                 'uq_unidade_nome_unidade',                    'u'),
+            ('unidade',                 'ck_unidade_nome_unidade_nao_vazio',          'c'),
+            ('unidade',                 'ck_unidade_nome_agente_nao_vazio',           'c'),
+            ('unidade',                 'ck_unidade_genero',                          'c'),
             ('unidade',                 'ck_unidade_id_portfolio_nao_vazio',         'c'),
             ('cliente',                 'cliente_wa_id_key',                         'u'),
             ('cliente',                 'ck_cliente_wa_id_nao_vazio',                'c'),
@@ -2964,9 +3733,9 @@ BEGIN
      AND constraint_atual.contype::TEXT = esperado.constraint_type
      AND constraint_atual.convalidated IS TRUE;
 
-    IF constraints_obrigatorias <> 32 THEN
+    IF constraints_obrigatorias <> 36 THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: esperado 32 constraints do contrato; obtido %.',
+            'Pós-validação falhou: esperado 36 constraints do contrato; obtido %.',
             constraints_obrigatorias;
     END IF;
 
@@ -3016,7 +3785,8 @@ BEGIN
            IN UPPER(definicao_motivo_final)
        ) = 0
        OR motivos_finais IS DISTINCT FROM ARRAY[
-           'ativou_user_id',
+           'ativou_privacidade',
+           'bloqueio_reconciliado',
            'foi_agendado',
            'idade_invalida'
        ]::TEXT[]
@@ -3428,10 +4198,45 @@ BEGIN
        OR POSITION('LIMIT 1' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('RETRY_COUNT = F.RETRY_COUNT + 1' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_dequeue_final)) = 0
+       OR POSITION('< NOW() - INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
     THEN
         RAISE EXCEPTION
             'Pós-validação falhou: assinatura ou invariantes da dequeue divergentes.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_lock_final
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_lock_final IS NULL
+       OR POSITION('STATUS_ATIVA IS TRUE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('COALESCE(CONVERSA.PROCESSING, FALSE) IS FALSE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('PROCESSING_STARTED_AT IS NOT NULL' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_final)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: lock_conversa não preserva o limiar de 110 segundos e a versão de posse.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_unlock_final
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_unlock_final IS NULL
+       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_unlock_final)) = 0
+       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_final)) = 0
+       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_final)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: unlock_conversa não protege a posse por lock_version.';
     END IF;
 END
 $pos_validacao$;
@@ -3440,13 +4245,41 @@ COMMIT;
 ```
 
 Esse comando **não deve ser executado agora**. Antes da futura execução será
-comparado ao DDL efetivamente implementado e receberá um SQL de reversão próprio.
+comparado ao DDL efetivamente implementado e aplicado integralmente em um
+ambiente dev controlado. Este plano não inclui SQL inverso nem kill switch: a
+promoção para produção só poderá usar o mesmo artefato já validado em dev.
+O SQL garante aquisição/takeover e `unlock` por versão. A implementação Python
+preserva o uso atual do `lock_version` na posse e no `unlock`. Para esta feature,
+o requisito adicional é delimitado: o merge nunca limpa um lock enquanto não for
+verdadeiro o predicado stale de 110 segundos da V1.0.6; depois disso, o takeover
+incrementa a versão sob row lock, de modo que um `unlock` atrasado com a versão
+anterior não solte a posse nova.
+Não se inclui neste plano uma conversão de cada escrita pós-lock em CAS.
 
 ## 15. Testes essenciais
+
+Os itens abaixo são critérios de aceitação, não autorização para criar um teste
+isolado por linha. A implementação deve agrupá-los em poucas suítes
+parametrizadas: preservar A/B/C, acrescentar somente cenários controlados de
+identidade/handoff, bloqueio e dois workers, e evitar multiplicação combinatória
+de testes que repitam a mesma regra. O plano prático consolida essa cobertura nos
+quatro arquivos essenciais já definidos, com 64 métodos no total; esta lista não
+autoriza ampliar esse número automaticamente.
+
+Três desses métodos formam uma prova diferencial explícita da V1.0.6: depois de
+normalizar somente a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles
+comparam o catálogo e o mapa legados, os textos e botões das 22 etapas existentes
+e o payload do Funil no caminho WA-only sem username. Essa prova complementa os
+testes funcionais de destinatário, persistência, retry e turno; ela não autoriza
+copiar a implementação antiga nem enfraquecer os testes aditivos de `user_id`.
 
 ### 15.1 Payload e webhook
 
 - cada um dos quatro fixtures é interpretado corretamente;
+- ausência estrutural de `metadata.phone_number_id` responde HTTP 200 e não
+  enfileira; falha transitória de RDS/insert/commit responde HTTP 503. Redis
+  indisponível só produz 503 quando não existir fallback seguro;
+  `display_phone_number` não serve de fallback nem de `sender`;
 - WA ID principal vence `from` equivalente;
 - user ID principal vence `from_user_id` equivalente;
 - campos equivalentes divergentes são descartados com HTTP 200;
@@ -3458,20 +4291,19 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - origem em `messages[0].origin` e em `contacts[*].origin` é reconhecida;
 - origens ausentes, desconhecidas ou conflitantes persistem `other`;
 - um único WA ID explícito de `contacts[*].phones[*]` é aceito;
-- múltiplos WA IDs distintos não escolhem o primeiro e não avançam;
+- duas ou mais ocorrências, inclusive repetindo o mesmo WA ID, não escolhem o
+  primeiro e não avançam;
 - `CONTACT_INFO.json` mantém `user_id` como identidade do item e extrai o número
   do cartão separadamente como `wa_id_compartilhado`;
 - teste sintético de `contact_request` com WA ID no envelope, user ID e WA ID no
   cartão ainda congela o item pelo user ID e só usa WA canônico após a prova;
 - `wa_id_compartilhado` não vira identidade de denylist, bloqueio, turno, cache
-  de cliente ou autocura antes da validação bancária; a única exceção é servir
-  como prova efêmera da ponte anti-flood quando vier de `contact_request`
-  oficial, autenticado e inequívoco;
+  de cliente, autocura ou anti-flood antes da validação bancária;
 - `valida_historico()` expõe `wa_id_compartilhado` somente para o item oficial e
   mantém `contexto_historico['wa_id']` reservado ao WA ID canônico do banco;
-- `phone` só é normalizado no último fallback oficial;
+- ausência, Unicode numérico, valor formatado, `phones[].phone` sem WA ID ou
+  mais de uma ocorrência explícita não promovem identidade;
 - WA ID explícito preserva todos os dígitos, inclusive o nono;
-- `phone` brasileiro sem WA ID explícito segue a normalização `55 + DDD + 8`;
 - os arrays externos continuam processando somente um evento por POST;
 - somente user ID já mapeado é resolvido pelo banco no worker sem criar outro
   cliente provisório;
@@ -3480,26 +4312,35 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - evento em etapa 3 ou posterior cujo vínculo não devolva WA ID canônico falha
   antes de chamar a Meta;
 - WA ID + user ID + username registra o vínculo proativamente;
-- fora do handoff, denylist, bloqueio e turno recebem somente
-  `wa_id_remetente or user_id`; no handoff, o anti-flood também recebe o
-  `wa_id_compartilhado` exclusivamente como prova da ponte pendente;
-- no handoff, a chave de turno continua sendo a identidade com que o item foi
-  enfileirado; não existe consulta dual por aliases;
+- sem vínculo comprovado, denylist, bloqueio e turno recebem somente o alias
+  tipado pelo qual o item entrou; com vínculo persistido,
+  resolvem uma única decisão sobre todos os aliases da pessoa/unidade;
+- no handoff, a identidade primária do item continua sendo o user ID com que foi
+  enfileirado, mas ordem, turno e proteção consultam o conjunto comprovado para
+  impedir ultrapassagem por um item contemporâneo do alias WA ID;
 - flood mantém uma única janela lógica por sujeito oficialmente comprovado e
   unidade, soma os contadores de user ID e WA ID, promove novos incrementos para
   o WA ID canônico e deduplica cada evento pelo WAMID;
-- 8 eventos por user ID, o `contact_request` oficial e 6 eventos imediatos por
-  WA ID — ainda antes do commit do worker — atingem juntos o limite de 15;
+- depois do commit do vínculo, eventos ainda válidos de user ID e WA ID compõem
+  juntos o limite de 15; antes do commit não se presume equivalência;
 - a mesma sequência sem vínculo oficial mantém contadores separados;
 - contato manual, contato ambíguo, unidade diferente e identidades de pessoas
   distintas não criam equivalência;
-- conflito na ponte ou indisponibilidade da prova compartilhada devolve HTTP
-  503 para reentrega e não bloqueia o cliente na Meta;
+- conflito ou indisponibilidade da prova persistida devolve HTTP 503 somente
+  quando a falha é transitória e não bloqueia o cliente na Meta;
 - WAMID continua idempotente.
 
 ### 15.2 Banco e snapshots
 
 - todas as colunas finais existem com os nomes exatos;
+- `unidade.nome` não existe e `nome_unidade VARCHAR(300)`,
+  `nome_agente VARCHAR(100)` e `genero VARCHAR(9)` permanecem `NOT NULL`, sem
+  default e com as quatro constraints canônicas da V1.0.6 validadas;
+- `nome_unidade` e `nome_agente` rejeitam valores sem caractere não branco,
+  `nome_unidade` permanece único e `genero` rejeita qualquer valor diferente de
+  `masculino`/`feminino`;
+- a migração de `user_id` preserva os valores de apresentação existentes e não
+  tenta recriar, renomear ou repovoar essas três colunas;
 - colunas individuais de snapshot aceitam `NULL`;
 - `unidade.id_portfolio` e as três colunas de negócio de `user_id_cliente`
   rejeitam `NULL`; `id_portfolio` e `user_id` também rejeitam vazio;
@@ -3510,12 +4351,23 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - registros operacionais rejeitam ausência simultânea de WA ID e user ID;
 - username novo atualiza o valor canônico mutável em `cliente.username`; os
   snapshots seguem a política histórica desta seção;
-- backfill de reconciliação preenche somente snapshots `NULL` da conversa
-  atual; qualquer valor não nulo permanece intacto;
-- payload normal com WA ID + user ID executa imediatamente o mesmo backfill
-  `NULL-only`, além de registrar o vínculo;
-- snapshots antigos não ligados à conversa reconciliada não mudam;
+- reconciliação preenche somente `conversa.wa_id`/`conversa.user_id` que estejam
+  `NULL`; `conversa.username` é o snapshot imutável da criação, inclusive quando
+  nasceu `NULL`;
+- payload normal com WA ID + user ID registra imediatamente o vínculo e pode
+  preencher apenas aliases nulos da conversa; não atualiza fila, histórico,
+  flood nem username da conversa;
+- fila, histórico e flood nunca sofrem backfill; seus snapshots permanecem os
+  do evento original;
 - ausência posterior de username preserva o canônico;
+- todo username posterior não vazio sobrescreve `cliente.username`;
+- no merge, username não vazio do evento atual vence; se ele faltar, o valor não
+  vazio do provisório é copiado antes da exclusão; somente então o canônico
+  anterior é preservado;
+- no merge, o nome capturado no provisório sempre sobrescreve `cliente.nome` do
+  canônico, mesmo quando o canônico já tinha nome;
+- não existe coluna física `wa_id_compartilhado` nem deadline no banco: o papel
+  do candidato é derivado do item oficial e não cria vínculo antes do gate;
 - pai e partições do histórico permanecem alinhados.
 
 ### 15.3 Turno, retry e atomicidade
@@ -3536,12 +4388,33 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   user ID oficialmente provado sem violar nenhuma das duas unicidades;
 - evento de contato reencontra primeiro a conversa pelo vínculo, preserva o
   turno e promove WA ID;
+- cada falha do gate de `contact_request` — phone ID, unidade, etapa 2, tipo,
+  origem, user ID, cardinalidade do contato ou consistência dos aliases — ocorre
+  antes da primeira mutação de identidade; contradição causa rollback fail-closed;
+- a primeira prova WA/user consulta, depois do gate e antes da mutação, qualquer
+  predecessor aberto dos dois aliases na unidade; predecessor existente causa
+  rollback e requeue de 5 segundos sem consumir retry;
 - WA ID novo completa o provisório idempotentemente;
 - WA ID do cliente canônico reatribui a conversa nova, preservando seu
   `id_conversa`, etapa, fila e histórico;
 - conversa canônica antiga ativa é encerrada antes da reatribuição com
-  `ativou_user_id`, limpando também `processing/processing_started_at`, sem
+  `ativou_privacidade`; lock fresco impede o merge e uma posse stale somente é
+  limpa sob row lock após incrementar `lock_version`, sem
   violar `idx_conversa_unica_ativa`;
+- conversa canônica já encerrada e ainda bloqueada conserva seu `finalizou_em` e
+  expiração originais; a conversa nova é encerrada com
+  `bloqueio_reconciliado`, sem sender e sem criar/reiniciar prazo;
+- no resultado terminal, a fila atual é excluída na mesma transação do merge; o
+  commit pós-validação confirma tudo, o cache recebe os aliases comprovados —
+  com o TTL restante da expiração original no bloqueio de 30 dias — e o ciclo
+  não cria histórico nem chama lock normal,
+  `bot_resposta_atual()`, resolver ou sender;
+- a busca de bloqueio considera qualquer conversa canônica/alias cuja etapa
+  tenha `bloqueio_dias > 0`, escolhe a maior expiração original e não é enganada
+  pela conversa nova mais recente fechada com `bloqueio_reconciliado`;
+- conversa canônica com bloqueio expirado não bloqueia a conversa nova;
+- o nome capturado no provisório sempre sobrescreve o nome canônico antes da
+  exclusão do provisório;
 - conversa adicional inesperada do provisório impede `DELETE`, não é reatribuída
   por aproximação;
 - cliente provisório só é excluído depois de `NOT EXISTS` explícito para
@@ -3550,12 +4423,14 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   `DELETE`, sem acionar `CASCADE` nem `SET NULL`;
 - conflito real entre WA IDs não nulos diferentes não funde clientes;
 - testes A/B/C passam sem mudança de verdade;
-- ordem de commits/rollbacks é idêntica;
+- no caminho normal, a ordem de commits/rollbacks é idêntica; contenção usa o
+  rollback já existente e terminação usa o commit pós-validação já existente;
 - `bot_resposta_atual()` permanece no mesmo ponto;
 - reagendamentos mantêm 30 s, 5 s, 300 s e 2 min conforme o ramo atual;
 - retry reconstrói WA ID/user ID/username do banco;
 - no retry do mesmo `contact_request`, `identidade_do_item` continua sendo o
-  user ID original mesmo depois de `fila_mensagens.wa_id` ter sido comprovado;
+  user ID original mesmo depois de o candidato já persistido em
+  `fila_mensagens.wa_id` ter sido comprovado; a fila não é atualizada;
 - `identidade_do_item` não muda depois de `validar_banco_mensagem()`;
 - cache hit de cliente ainda executa a projeção final das identidades no banco;
 - reparo de cache stale remove somente `referencia_cache_cliente`, sem remover a
@@ -3575,7 +4450,18 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
   retorno idempotente;
 - a anexação dos snapshots ocorre antes do retorno antecipado de resposta já
   registrada em `flow_sender()`;
-- nenhuma ação terminal ou requeue novo é criada;
+- advisory locks de todos os aliases comprovados são adquiridos na mesma ordem
+  determinística em webhook/turno/bloqueio, sem duas decisões concorrentes;
+- merge que encontra lock ainda não elegível pelo limiar de 110 segundos não
+  altera nenhuma conversa, compensa a tentativa e usa somente o requeue
+  controlado de 5 s;
+- lock com `processing_started_at < NOW() - INTERVAL '110.0 seconds'` pode sofrer
+  stale takeover, sempre incrementando `lock_version`;
+- um `unlock` atrasado com a versão anterior não limpa a posse criada depois do
+  stale takeover; o teste não presume CAS em todas as escritas pós-lock;
+- o único requeue acrescentado é o resultado controlado de lock fresco no merge;
+- o único encerramento antecipado acrescentado é o resultado terminal
+  `bloqueio_reconciliado`, que usa o commit pós-validação já existente;
 - nenhuma mensagem é marcada `sent` antes do ponto atual;
 - a ordem interna de `atualizar_banco_com_contexto_final()` permanece histórico
   do bot -> movimento -> turnos sem avanço -> efeitos da transição -> intenção
@@ -3583,6 +4469,13 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 
 ### 15.4 Etapa especial
 
+- no primeiro contato da etapa 1, os ramos padrão, mídia, financeiro e reforço
+  escolar usam `nome_unidade`, `nome_agente` e o artigo coerente com `genero`;
+- a matriz dos quatro ramos é testada com `masculino` e `feminino`, tanto quando
+  o destinatário escalar é WA ID quanto no fallback autorizado para user ID;
+- campos editoriais ausentes ou gênero fora do domínio falham antes de chamar a
+  Meta, sem fallback para nome hardcoded;
+- tratamentos posteriores da etapa 1 não repetem a apresentação inicial;
 - WA ID acumulado, inclusive via `user_id_cliente`, pula 1 -> 3;
 - somente user ID desconhecido e sem WA acumulado leva 1 -> 2;
 - 1 -> 2 e 1 -> 3 usam o mesmo efeito por `id_cliente`, nunca por telefone; a
@@ -3638,6 +4531,11 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 
 ### 15.6 Arquitetura
 
+- `core/repositories/fluxo/contextos/etapa1.py` lê e valida os três campos de
+  apresentação somente pelo `id_unidade`, e `valida_historico()` só o chama no
+  primeiro contato (`id_etapa_atual is None`);
+- dados de apresentação não entram em identidade, turno, lock, fila, cache,
+  anti-flood, reconciliação ou escolha de destinatário;
 - `etapa2_messages.py` contém o texto/builder e não chama Meta nem banco;
 - o sender da etapa 2 usa o builder, realiza somente I/O Meta e não escolhe
   evento ou destino;
@@ -3675,28 +4573,52 @@ comparado ao DDL efetivamente implementado e receberá um SQL de reversão próp
 - o resumo quantitativo antigo por quantidade de alternativas não reaparece;
 - reconciliação não move nem altera `funil_envios` e não cria regra concorrente
   nova no `worker_funil`;
-- bloqueio/desbloqueio prioriza WA ID e usa user ID como fallback;
-- exclusão Admin preserva a ordem Meta -> banco;
+- denylist, bloqueio temporário, bloqueio por dias e bloqueio Meta reconhecem
+  qualquer alias comprovado da pessoa/unidade; WA ID e user ID não são consultas
+  alternativas independentes nem uma cadeia de prioridade/fallback;
+- `cliente_bloqueado_meta` rejeita uma linha sem WA ID e sem user ID;
+- evento de bloqueio com WA ID + user ID grava ambos na mesma linha canônica da
+  unidade e tenta bloquear ambos na Meta;
+- linha criada só com WA ID ou só com user ID recebe o alias faltante somente
+  após prova oficial e apenas se a coluna estiver `NULL`;
+- duas linhas anteriormente separadas, mas depois provadas como a mesma
+  pessoa/unidade, são consolidadas sem perder o bloqueio; aliases não nulos
+  divergentes falham de forma fechada;
+- envelope cujo user ID contradiz o vínculo persistido do WA ID não enriquece a
+  denylist e não chama bloqueio Meta;
+- o mesmo WA ID em unidades diferentes permanece em linhas distintas, cada uma
+  com o user ID específico daquela unidade;
+- bloqueio Meta descoberto durante o handoff fecha a conversa nova, remove a
+  fila atual e não chama sender;
+- promoção ao bloqueio Meta tenta todos os aliases conhecidos e conserva a
+  proteção local em falha parcial;
+- exclusão Admin preserva a ordem Meta -> banco, tenta todos os aliases e somente
+  remove o registro local após sucesso integral; antes da remoção, transfere a
+  prova WA/user coerente para `user_id_cliente` quando existir cliente canônico;
+  falha parcial ou conflito preserva a linha;
 - models/Admin não quebram com WA ID nulo;
-- unidade exige e exibe `id_portfolio`;
+- unidade exige e exibe `nome_unidade`, `nome_agente`, `genero` e `id_portfolio`,
+  usa `id_unidade__nome_unidade` nas relações e oferece filtro por gênero;
 - Admin de `user_id_cliente` é somente leitura.
 
 ## 16. Sequência de deploy futura
 
-1. congelar e commitar a baseline definitiva posterior à V1.0.5;
+1. congelar e commitar a baseline definitiva derivada da V1.0.6 `e052625`;
 2. regenerar o apêndice de código completo deste plano;
 3. implementar em branch separada;
 4. executar testes unitários e de integração;
 5. capturar payloads reais em ambiente de teste;
 6. validar PyWa/Graph v26.0;
-7. gerar e revisar SQL final e SQL de reversão;
-8. garantir fila, conversa processing e funil sem trabalho aberto;
-9. parar webhook, flow worker e funil worker;
-10. executar SQL;
-11. atualizar código e dependências;
-12. subir webhook e executar smoke;
-13. subir flow worker e funil worker;
-14. verificar logs, fila, transições e funil.
+7. gerar e revisar o SQL final;
+8. aplicar e validar código, dependências e SQL em ambiente dev controlado;
+9. promover para produção somente o mesmo artefato aprovado em dev;
+10. garantir fila, conversa processing e funil sem trabalho aberto;
+11. parar webhook, flow worker e funil worker;
+12. atualizar código e o virtualenv pelo `requirements.txt` versionado;
+13. executar SQL e checks de produção;
+14. subir webhook e executar smoke;
+15. subir flow worker e funil worker;
+16. verificar logs, fila, transições e funil.
 
 ## 17. Gates finais
 
@@ -3704,19 +4626,27 @@ O plano só poderá ser aplicado se:
 
 - não existir `telefone_informado` nem `username_informado`;
 - os nomes das colunas forem exatamente os da seção 5;
+- não existir `unidade.nome`, e `nome_unidade`, `nome_agente` e `genero`
+  corresponderem exatamente aos tipos, à nulabilidade, aos dados e às quatro
+  constraints da V1.0.6 `e052625`;
 - `id_portfolio` estiver escrito corretamente, obrigatório e preenchido em toda
   unidade;
 - `user_id_cliente` possuir PK técnica, duas unicidades, FKs e CHECK definidos
   neste plano;
 - WA ID explícito nunca sofrer alteração de dígitos;
-- `phone` só for fallback de `contact_request` oficial;
+- `metadata.phone_number_id` for obrigatório e resolver uma única unidade antes
+  de enfileirar; `display_phone_number` não for fallback nem `sender`;
+- ausência estrutural de identidade ou `phone_number_id` responder HTTP 200 sem
+  fila, e HTTP 503 ficar restrito a falhas transitórias de processamento;
+- `phones[].phone` nunca for fallback de `contact_request`; somente um
+  `phones[].wa_id` explícito ASCII de 10 a 15 dígitos puder provar o handoff;
 - `wa_id_remetente`, `wa_id_compartilhado` e `wa_id_canonico` permanecerem
   separados até a validação bancária;
 - o validador da etapa 2 receber `wa_id_compartilhado` separado e nunca usar o
   WA ID canônico como prova da origem do payload;
 - username nunca for identidade técnica;
 - WA ID for obrigatório para chegar ao funil;
-- somente a etapa especial 2 for adicionada sobre a baseline V1.0.5;
+- somente a etapa especial 2 for adicionada sobre a baseline V1.0.6;
 - catálogo tiver 23 etapas e mapa 27 transições;
 - somente etapa 23 encerrar e bloquear por 30 dias;
 - etapa 23 não tiver resolver;
@@ -3740,14 +4670,18 @@ O plano só poderá ser aplicado se:
 - somente os resolvers dos envios da etapa 1 e do pedido/repetição de
   compartilhamento da etapa 2 habilitarem explicitamente o fallback para user
   ID e passarem o escalar ao sender;
+- os quatro ramos iniciais da etapa 1 preservarem a apresentação dinâmica por
+  unidade e mantiverem essa decisão independente do escalar WA ID/user ID;
+- retomadas posteriores da etapa 1 não repetirem a abertura, e ausência ou
+  invalidade dos três campos editoriais falhar de forma fechada antes do envio;
 - a resposta `contato_oficial_compartilhado` e a etapa 3 em diante exigirem WA
   ID antes de chamar a Meta;
 - `contexto_historico` receber os identificadores do banco e
   `contexto_envio` refletir os mesmos snapshots em todos os caminhos;
 - a projeção bancária final ocorrer mesmo em cache hit e não possuir fallback
   silencioso para fila ou payload;
-- o item de handoff conservar a mesma chave e consulta de turno, sem busca dual
-  por aliases;
+- o item de handoff conservar sua identidade primária tipada, enquanto turno e
+  ordem produzem uma única decisão alias-aware sobre o conjunto comprovado;
 - `identidade_do_item` permanecer tipada e imutável durante turno, logs, retry,
   finalização e autocura do item;
 - cache por WA ID conservar escopo global e cache por user ID incluir tipo e
@@ -3758,17 +4692,54 @@ O plano só poderá ser aplicado se:
 - payload conjunto criar/atualizar vínculo imediatamente;
 - troca oficialmente provada de user ID na mesma unidade consolidar primeiro a
   linha provisória e manter uma única linha canônica;
-- conversa canônica ativa ser encerrada antes de reatribuir a nova;
+- o gate completo de `contact_request` validar phone ID/unidade, vínculo user,
+  conversa ativa na etapa 2, tipo, origem oficial, candidato único e ausência de
+  contradição antes de qualquer mutação de identidade;
+- aliases serem representados como conjunto por `(id_cliente, id_unidade)`, sem
+  chave concatenada obrigatória e sem exigir user ID de cliente legacy;
+- conversa canônica ativa ser encerrada com `ativou_privacidade` antes de
+  reatribuir a nova;
+- conversa canônica encerrada mas ainda bloqueada conservar `finalizou_em` e a
+  expiração originais, enquanto a conversa nova fecha com
+  `bloqueio_reconciliado`, sem sender nem reinício do prazo;
+- a proteção por dias consultar a maior expiração ainda vigente entre as
+  conversas bloqueantes do conjunto, em vez de assumir que a conversa encerrada
+  mais recente é a fonte do prazo;
+- o nome capturado no provisório sempre sobrescrever o nome canônico, e somente
+  `cliente.username` aceitar o último username não vazio, usando no merge a
+  precedência evento atual -> provisório -> canônico anterior;
+- fila, histórico, flood e `conversa.username` permanecerem snapshots imutáveis;
+  apenas aliases `NULL` da conversa podem ser preenchidos após prova;
 - nenhuma exclusão de provisório depender de `ON DELETE CASCADE` ou
   `ON DELETE SET NULL`, e os quatro gates explícitos de `conversa`, `dependente`,
   `cliente_bloqueado_meta` e `user_id_cliente` retornarem zero;
-- reconciliação não alterar `funil_envios`, não criar bypass de bloqueio e não
-  consolidar bloqueios como efeito lateral;
-- não existir requeue ou retorno terminal novo no `flow_worker`;
-- nenhuma função SQL de lock/unlock tiver seu algoritmo alterado;
-- `dequeue_message()` mantiver seu CTE e comportamento;
-- commits, rollbacks, retries, locks, turnos e autocura permanecerem nos mesmos
-  pontos;
+- reconciliação não alterar `funil_envios`, não criar bypass de bloqueio e
+  consolidar eventual linha de bloqueio provisória na canônica sem desbloquear;
+- denylist, bloqueio temporário, bloqueio por dias, bloqueio Meta e Admin
+  reconhecerem todos os aliases comprovados da unidade;
+- `cliente_bloqueado_meta` exigir ao menos um alias, manter uma linha canônica
+  por pessoa/unidade após a prova, preencher somente alias `NULL`, consolidar
+  equivalentes e manter unidades diferentes em linhas separadas;
+- bloqueio/desbloqueio Meta operar sobre todos os aliases conhecidos; o Admin
+  só excluir localmente depois do desbloqueio integral Meta-first;
+- existirem somente os dois resultados controlados do merge: lock fresco causa
+  rollback, requeue sem erro de 5 s e compensação da tentativa, sem mutação;
+  bloqueio vigente fecha a conversa, exclui a fila atual na mesma transação, usa
+  o commit pós-validação e interrompe o ciclo antes de histórico, lock normal,
+  `bot_resposta_atual()` e sender;
+- `lock_conversa()` preservar o predicado exato da V1.0.6: lock fresco enquanto
+  `processing_started_at >= NOW() - INTERVAL '110.0 seconds'` e stale takeover
+  somente com `<`, incrementando `lock_version`; `unlock_conversa()` exige o
+  token;
+- o merge nunca limpar posse fresca e um `unlock` atrasado com versão anterior
+  não liberar a posse criada depois do takeover stale, sem exigir nesta feature
+  a conversão de toda escrita pós-lock em CAS;
+- `dequeue_message()` mantiver seu CTE, ordem, `SKIP LOCKED` e retry, com seu
+  limiar próprio de 2 minutos, enquanto `lock_conversa()` preservar literalmente
+  o limiar de 110 segundos da V1.0.6;
+- no caminho normal, commits, rollbacks, retries, locks, turnos e autocura
+  permanecerem nos mesmos pontos; os dois ramos controlados reutilizarem o
+  rollback/commit da validação, sem nova fronteira transacional;
 - `atualizar_banco_com_contexto_final()` preservar sua ordem interna atual e
   continuar chamando `atualizar_banco_conforme_transicao_de_etapa()` como único
   dono dos efeitos finais;
@@ -3801,39 +4772,52 @@ O plano só poderá ser aplicado se:
 6. Um conflito realmente contraditório — user ID já ligado a um cliente com WA
    ID não nulo diferente do WA oficial atual — não é fundido automaticamente e
    exige investigação. Esse caso é diferente do provisório com WA ID nulo.
-7. A segurança aqui assume o requisito operacional atual de exatamente um
-   processo de `flow_worker`. Executar dois flow workers exige nova revisão de
-   fencing/posse e não é autorizado por este plano.
+7. Dois `flow_worker` podem alcançar a mesma conversa. Esse risco operacional
+   permanece permitido. Esta feature fecha a brecha nova do merge: respeita lock
+   fresco, incrementa a versão no stale takeover e impede que um `unlock` tardio
+   com a versão antiga solte a posse nova. Ela não redesenha todas as escritas
+   pós-lock nem cancela chamada externa já iniciada; esta última continua coberta
+   pela janela Meta -> banco do item 4.
 
 O antigo reset da janela anti-flood na promoção `user_id` -> `wa_id` não é mais
 um risco aceito. A implementação prática deve somar as duas rajadas como uma só
-sempre que a associação estiver oficialmente comprovada, inclusive na ponte
-pré-commit criada pelo compartilhamento oficial do contato.
+depois que a associação estiver persistida; antes disso, a barreira de
+predecessor impede a prova posterior de ultrapassar um item anterior do outro
+alias sem publicar identidade provisória no webhook.
 
 ## 19. Veredito
 
-Com estes limites, `user_id` entra como fallback de destinatário e identidade de
-negócio somente nas etapas iniciais e como vínculo canônico por
-cliente/unidade. No transporte inbound, ele continua aceito em qualquer etapa
-quando for o único identificador entregue pela Meta; o worker então exige o WA
-ID canônico do banco antes de qualquer envio posterior. Username entra apenas
-como snapshot e informação adicional opcional no Funil. WA ID continua sendo o
+Com estes limites, `user_id` entra como identidade lógica temporária quando o WA
+ID está ausente e como alias canônico escopado por cliente/unidade. Ele pode ser
+fallback de destinatário somente nos envios explicitamente autorizados das
+etapas iniciais. No transporte inbound, continua aceito em qualquer etapa quando
+for o único identificador entregue pela Meta; o worker então exige o WA ID
+canônico do banco antes de qualquer envio posterior. `cliente.username` guarda o
+último valor não vazio, enquanto fila, histórico, flood e conversa preservam seus
+snapshots; o Funil usa o snapshot imutável da conversa. WA ID continua sendo o
 destinatário prioritário, torna-se obrigatório depois do compartilhamento e
 permanece obrigatório para o Funil.
 
-A lógica transacional central não é redesenhada: pontos de commit, rollback,
-retry, dequeue, turno, lock da conversa, `bot_resposta_atual()` e `sent`
-continuam nos mesmos lugares. A reconciliação executa somente os efeitos de dados
-aprovados usando a validação e o cursor já existentes, sem novo lock, retorno de
-ciclo, requeue ou ramificação do `flow_worker`.
+A lógica transacional central não é redesenhada: no caminho normal, pontos de
+commit, rollback, retry, dequeue, turno, lock da conversa,
+`bot_resposta_atual()` e `sent` continuam nos mesmos lugares. A reconciliação
+executa os efeitos de dados aprovados usando a validação e o cursor já existentes.
+Há somente duas ramificações delimitadas: lock fresco interrompe o merge antes
+de mutação e usa rollback/requeue sem erro de 5 segundos; bloqueio vigente fecha
+a conversa e remove sua fila na transação de validação, usa o commit já existente
+e termina o ciclo sem histórico, lock normal ou sender. No stale takeover da
+conversa, a janela de 110 segundos da V1.0.6 é mantida e `lock_version` é
+incrementado antes de limpar a posse.
 
 O anti-flood também preserva a continuidade de identidade: quando a prova
 oficial demonstrar que `user_id` e `wa_id` pertencem ao mesmo cliente na mesma
 unidade, as rajadas dos dois identificadores compõem uma única janela de 15
-WAMIDs distintos em 5 segundos. A ponte pendente protege inclusive a troca
-imediata anterior ao commit do worker; depois dele, o vínculo persistido confirma
-a associação. WAMIDs repetidos contam uma vez, e qualquer conflito ou ausência
-de prova segura gera reentrega por HTTP 503, não união ou bloqueio presumido.
+WAMIDs distintos em 5 segundos. A barreira de predecessor protege a troca
+imediata anterior ao commit do worker sem publicar um vínculo prematuro; depois
+dele, o vínculo persistido confirma a associação. WAMIDs repetidos contam uma
+vez. Conflito determinístico recebe HTTP 200 sem mutação; ausência transitória da
+fonte autoritativa gera reentrega por HTTP 503. Redis indisponível depois de o
+RDS provar ausência de vínculo não invalida o alias unitário.
 
 O desenho fecha o caso normal de privacidade sem permitir dois `id_cliente` para
 a mesma pessoa depois da prova oficial. O handoff user ID -> WA ID, a conversa
@@ -3846,7 +4830,8 @@ na qual um retry pode duplicar a resposta externa. A continuidade anti-flood nã
 acrescenta um segundo risco aceito e elimina o reset de janela que a versão
 anterior deste plano tolerava.
 
-Sobre essa identidade nova, o comportamento funcional da V1.0.5 permanece
-reconhecível: confirmação binária, tratamentos atuais, triagem por faixa etária,
-perguntas e respostas detalhadas no Funil e terminalidade de 30 dias são apenas
-renumerados, nunca redesenhados.
+Sobre essa identidade nova, o comportamento funcional da V1.0.6 permanece
+reconhecível: a apresentação inicial dinâmica por unidade é preservada nos
+quatro ramos, enquanto confirmação binária, tratamentos atuais, triagem por
+faixa etária, perguntas e respostas detalhadas no Funil e terminalidade de 30
+dias são apenas renumerados, nunca redesenhados.

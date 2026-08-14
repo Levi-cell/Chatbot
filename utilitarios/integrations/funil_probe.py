@@ -13,10 +13,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.integrations.funil.cliente import enviar_oportunidade
-from core.integrations.funil.oportunidades import (
-    montar_dados_lead_teste,
-    montar_payload_oportunidade,
-)
+from core.integrations.funil.oportunidades import montar_payload_oportunidade
+from utilitarios.montar_lead_teste import montar_dados_lead_teste
 
 
 URL_CONSULTA_INTEGRACOES = (

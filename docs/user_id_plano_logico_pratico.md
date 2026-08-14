@@ -1,22 +1,40 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
-> Documento de implementação preparado sobre a baseline `e12f48c` (V1.0.5). Este arquivo não altera o runtime: ele registra o estado final completo que deverá ser aplicado em um prompt futuro.
+> Documento de implementação preparado sobre a baseline funcional V1.0.6,
+> commit `e052625`. A pasta local `utilitarios/` e todos os seus arquivos ficam
+> integralmente fora deste plano: nenhum passo os cria, substitui, remove, importa
+> ou executa. Este arquivo não altera o runtime; ele registra o estado final
+> completo a aplicar em uma tarefa futura.
 >
-> **Atenção — baseline posterior:** a personalização do agente por unidade
-> renomeou `unidade.nome` para `nome_unidade` e acrescentou `nome_agente` e
-> `genero`. Como este plano contém arquivos integrais e hashes da estrutura
-> anterior, ele não deve ser aplicado nem corrigido parcialmente. O apêndice
-> prático deverá ser regenerado sobre o commit definitivo dessa mudança.
+> A baseline já possui `unidade.nome_unidade`, `unidade.nome_agente` e
+> `unidade.genero`. O estado final abaixo preserva essas colunas, suas constraints
+> e as apresentações iniciais dinâmica padrão, de mídia, financeira e de reforço
+> escolar da etapa 1. Esses dados editoriais não participam da identidade, turno,
+> lock, fila, cache, anti-flood, reconciliação ou atomicidade.
+
+> **Regra de negócio da numeração:** a tabela `etapa` representa, em ordem
+> cronológica, o percurso integral do cliente elegível a todas as etapas. Por
+> isso, a nova solicitação de contato ocupa o ID 2 e as etapas atuais 2..22 são
+> migradas para 3..23. O mapa de transições faz o cliente que já possui WA ID
+> saltar a etapa 2; o cliente somente com `user_id` percorre a sequência completa.
+> Usar o ID 23 para a etapa nova apenas para evitar renumeração é tecnicamente
+> possível, mas contraria esta convenção deliberada do negócio.
 
 A lógica e os critérios autoritativos permanecem preservados em [`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver qualquer divergência interpretativa, o plano teórico vence; os blocos abaixo são a materialização prática dessa mesma lógica. O plano teórico já incorpora a decisão definitiva de continuidade anti-flood entre `user_id` e `wa_id`, e este documento implementa integralmente essa regra.
 
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
+- Antes de aplicar, confirmar `e052625` como baseline, gerar um manifesto SHA-256
+  dos caminhos versionados de entrada e recusar qualquer árvore divergente. A
+  pasta local `utilitarios/` não participa do manifesto nem da aplicação.
 - Preservar as fronteiras transacionais, retries, ordem do worker, idempotência e contratos descritos no plano teórico.
 - Não executar o SQL antes de todo o código estar revisado, testado e pronto para publicação.
 - O último passo contém tanto o arquivo versionado da migração quanto o comando manual integral para execução no DBeaver.
 - Não transformar este documento em uma coleção de remendos: cada bloco representa o estado final e organizado do respectivo arquivo.
+- Este plano será aplicado e validado primeiro em ambiente dev controlado. Por
+  decisão de escopo, não cria kill switch nem SQL inverso e não autoriza mudar
+  os pontos, a ordem ou a semântica dos `rollback()` atuais do `flow_worker`.
 
 ## Garantias de arquitetura, legibilidade e comentários
 
@@ -25,23 +43,35 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - Messages constroem texto e componentes; senders fazem somente o envio e devolvem o contrato; resolvers escolhem evento/mapa/sender; efeitos transacionais persistem o resultado final.
 - Nenhum sender, validador ou resolver recebe autorização para fazer `commit`, reconciliar clientes ou promover um WA ID candidato.
 - Comentários novos explicam invariantes, riscos e o motivo de uma decisão. Eles não narram linha por linha nem escondem regra de negócio em comentário.
-- Nomes de módulos, funções, constantes e etapas acompanham a numeração final. Imports legados, aliases mortos e utilitários que executam por simples importação são removidos.
+- Nomes de módulos, funções, constantes e etapas de runtime acompanham a numeração final. Imports legados e aliases mortos do runtime são removidos; `utilitarios/` permanece intocado.
 - Dicionários de contexto como `identidade_do_item`, `wa_id_compartilhado` e `wa_id_canonico` são contratos de runtime, não novas colunas com esses nomes.
 
 ## Continuidade anti-flood na promoção de identidade
 
-- A melhoria está materializada principalmente nos passos 12, 16, 19 e 22. Os passos 36, 37 e 50 fornecem a prova oficial já persistida, mas não recebem efeito de cache dentro da transação.
-- Antes do vínculo, o user ID é a referência disponível. O `contact_request` oficial, autenticado e inequívoco abre no Redis uma ponte pendente de 15 segundos entre esse user ID e o único WA ID compartilhado, fechando a janela anterior ao commit do worker. Depois que `user_id_cliente`, o cliente canônico e a unidade provam a associação permanente, o WA ID continua como referência canônica sem zerar os eventos ainda válidos do user ID.
+- A melhoria está materializada principalmente nos passos 12, 16, 19, 22, 28,
+  36 e 45. Os passos 31, 32 e 45 fornecem a prova oficial persistida; o webhook
+  nunca publica um vínculo provisório antes do gate bancário.
+- Antes do vínculo, o user ID é a referência disponível. O `contact_request` ou
+  envelope conjunto autenticado fornece somente um candidato. Depois do gate e
+  antes da mutação, o worker consulta uma segunda barreira de predecessor nos
+  snapshots WA/user da unidade; item anterior aberto causa rollback e requeue de
+  5 segundos. Depois que `user_id_cliente` prova a associação permanente, o WA ID
+  continua como referência canônica sem zerar eventos ainda válidos do user ID.
 - Redis e memória somam as duas janelas; o banco usa `COUNT(DISTINCT id_hash_msg)`. A deduplicação por WAMID impede que a mesma mensagem seja contada duas vezes.
 - A associação é estritamente limitada à mesma unidade e nunca é inferida por username, nome, coincidência temporal ou semelhança de valores. Identidades sem vínculo permanecem separadas.
-- O cache confirmado dura uma hora; a ponte pré-commit usa namespace próprio e escrita atômica nas duas direções. Ausências recebem um marcador negativo de 5 segundos para impedir uma consulta ao RDS por evento, mas a ponte oficial tem prioridade imediata sobre esse marcador.
-- Em cache miss, o banco revalida a prova. Conflito no vínculo pendente, Redis indisponível sem prova persistida ou qualquer impossibilidade de compartilhar uma decisão segura faz o webhook devolver HTTP 503 para reentrega, sem bloquear o cliente e sem abrir contador paralelo por hipótese.
+- O cache confirmado dura uma hora. Ausências recebem um marcador negativo de 5
+  segundos para impedir uma consulta ao RDS por evento.
+- Em cache miss, o banco revalida a prova persistida. Se o RDS confirmar que não
+  existe vínculo, uma falha isolada do Redis conserva o alias unitário e o
+  anti-flood segue pelo fallback banco -> memória da V1.0.6. Conflito
+  determinístico recebe HTTP 200 sem mutação; HTTP 503 fica reservado à
+  indisponibilidade transitória de uma fonte autoritativa necessária.
 - O limite continua exatamente 15 WAMIDs distintos em 5 segundos. Portanto, um cliente real não ganha uma nova causa de bloqueio; apenas deixa de poder dividir a mesma rajada entre duas identidades oficialmente vinculadas.
 - A melhoria não exige DDL, coluna nem alteração no SQL final. Ela reutiliza `user_id_cliente`, os snapshots de evento existentes e as chaves efêmeras do cache.
 
 ## Estado dos dados na migração
 
-- Na baseline V1.0.5 do projeto, `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna `VARCHAR(100) NOT NULL` de `unidade`.
+- Na baseline V1.0.6 (`e052625`) do projeto, `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna `VARCHAR(100) NOT NULL` de `unidade`.
 - O “mapa de `id_portfolio`” não é outra tabela: é somente a lista de pares `(id_unidade, id_portfolio)` usada para preencher cada unidade que já existe antes de aplicar `NOT NULL`.
 - O valor de portfolio de cada unidade precisa ser conferido com a Meta. O gate detecta unidade ausente ou valor vazio, mas não consegue provar que um número não vazio pertence semanticamente à unidade correta.
 - Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
@@ -51,11 +81,14 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 
 ## Inventário preparado
 
-- Arquivos finais criados: 27
-- Arquivos finais substituídos: 154
-- Arquivos removidos: 10
-- Total de ações, incluindo a migração: 191
-- Validação do protótipo: `compileall`, `git diff --check`, `pip check`, matriz futura de 23 etapas/27 transições, 47 testes focados do anti-flood e 398 testes da descoberta completa. A baseline de produção possui 22 etapas/25 transições.
+- Arquivos finais criados: 21
+- Arquivos finais substituídos: 130
+- Arquivos removidos: 8
+- Total de ações, incluindo a migração: 159
+- Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
+  `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
+  identidade/anti-flood/apresentação e descoberta offline completa. A baseline
+  V1.0.6 possui 22 etapas/25 transições.
 - PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API `v26.0` são gates explícitos.
 - Os testes offline usam fixtures, fakes e mocks e não exigem credenciais de Meta, Redis ou RDS. Smokes reais ficam separados e controlados.
 
@@ -91,19 +124,27 @@ tzdata==2025.3
 urllib3==2.6.3
 ````
 
+No deploy futuro, com os três serviços parados, executar no virtualenv usado
+pelos serviços o comando `pip install --upgrade -r requirements.txt`. Como o arquivo fixa
+`pywa==4.4.0`, o pip substitui a versão 3.8.0 já instalada; não é necessário um
+`pip uninstall` separado. Executar o gate de versão/assinatura desta fase antes
+de qualquer migração ou restart. Não se admite prosseguir se `pywa==4.4.0` e
+`request_contact_info` não forem comprovados no ambiente efetivamente usado
+pelos serviços.
+
 # Fase 2 — DDL declarativo, modelos e catálogo
 
 ## Passo 2 — `callback/webhook/admin.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `c4eef928c6ad857f28750f06c601a9283303df8c7a43d79454a126e4d0aeaf6a`
+SHA-256 do conteúdo UTF-8 normalizado: `cc5974c40ef1e8d4a9d3948277cabafb3491645d404523c9de65b87dc4609e0b`
 
 ````python
 import logging
 
 from django.contrib import admin, messages
-from django.db import DatabaseError, connection
+from django.db import DatabaseError, connection, transaction
 from django.http import HttpResponseRedirect
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html
@@ -118,7 +159,7 @@ from core.integrations.whatsapp.tools.ativando_waba_id import ativar_waba_id
 from core.integrations.whatsapp.tools.desativa_waba_id import desativar_waba_id
 from core.integrations.whatsapp.tools.desativando_numero import desregistrar_numero_whatsapp
 from core.integrations.whatsapp.tools.usuarios import (
-    desbloquear_usuario_meta,
+    desbloquear_usuarios_meta,
 )
 from core.integrations.whatsapp.tools.validando_phone_waba import (
     validar_phone_number_id_da_waba,
@@ -126,6 +167,9 @@ from core.integrations.whatsapp.tools.validando_phone_waba import (
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
     incrementar_versao_cache_unidades,
+)
+from core.repositories.seguranca.bloqueio_meta import (
+    consolidar_prova_bloqueio_meta_antes_desbloqueio,
 )
 
 from .models import (
@@ -178,7 +222,7 @@ class IntegracaoFunilUnidadeAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        "id_unidade__nome",
+        "id_unidade__nome_unidade",
         "nome_widget",
         "codigo_widget",
         "codigo_canal_venda",
@@ -235,7 +279,9 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     list_display = (
         "id_unidade",
-        "nome",
+        "nome_unidade",
+        "nome_agente",
+        "genero",
         "cnpj",
         "telefone",
         "numero_comercial",
@@ -250,7 +296,8 @@ class UnidadeAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        "nome",
+        "nome_unidade",
+        "nome_agente",
         "cnpj",
         "telefone",
         "numero_comercial",
@@ -262,8 +309,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_instagram",
     )
 
-    list_filter = ("bpa_ativo", "status_pagamento")
-    ordering = ("nome",)
+    list_filter = ("genero", "bpa_ativo", "status_pagamento")
+    ordering = ("nome_unidade",)
 
     list_per_page = 50
     empty_value_display = "-"
@@ -1011,7 +1058,7 @@ class UserIdClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "user_id",
         "id_cliente__nome",
         "id_cliente__wa_id",
-        "id_unidade__nome",
+        "id_unidade__nome_unidade",
     )
     list_filter = ("id_unidade",)
     ordering = ("id_unidade", "id_cliente")
@@ -1403,11 +1450,11 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
         "phone_id_unidade",
         "id_cliente__wa_id",
         "id_cliente__nome",
-        "id_unidade__nome",
+        "id_unidade__nome_unidade",
     )
 
     list_filter = ("id_unidade",)
-    ordering = ("wa_id", "user_id", "id_unidade__nome")
+    ordering = ("wa_id", "user_id", "id_unidade__nome_unidade")
     list_per_page = 50
     empty_value_display = "-"
 
@@ -1431,14 +1478,51 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
     def delete_view(self, request, object_id, extra_context=None):
         if request.method == "POST":
             obj = self.get_object(request, object_id)
-
-            if obj and not self._desbloquear_meta_antes_de_excluir(request, obj):
+            if obj and not self._desbloquear_meta_antes_de_excluir(
+                request,
+                obj,
+            ):
                 return HttpResponseRedirect(
                     reverse(
                         "admin:webhook_clientebloqueadometa_change",
                         args=[object_id],
                     )
                 )
+
+            try:
+                # A API Meta ja respondeu. Agora prova e exclusao local ficam
+                # atomicas, sem manter transacao aberta durante I/O externo.
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        consolidar_prova_bloqueio_meta_antes_desbloqueio(
+                            int(object_id),
+                            cursor,
+                        )
+                    return super().delete_view(
+                        request,
+                        object_id,
+                        extra_context,
+                    )
+            except Exception as exc:
+                logger.exception(
+                    "admin_consolidacao_prova_desbloqueio_falhou | "
+                    "acao=manter_registro id_bloqueio=%s erro=%s",
+                    object_id,
+                    exc,
+                )
+                self.message_user(
+                    request,
+                    "Aliases foram desbloqueados na Meta, mas a prova local "
+                    f"nao foi consolidada. Registro mantido: {exc}",
+                    level=messages.ERROR,
+                )
+                if obj:
+                    return HttpResponseRedirect(
+                        reverse(
+                            "admin:webhook_clientebloqueadometa_change",
+                            args=[object_id],
+                        )
+                    )
 
         return super().delete_view(request, object_id, extra_context)
 
@@ -1498,21 +1582,21 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
     def _desbloquear_meta_antes_de_excluir(self, request, obj):
         try:
-            identidade = obj.wa_id or obj.user_id
-            desbloquear_usuario_meta(identidade, obj.phone_id_unidade)
+            identidades = [
+                valor for valor in (obj.wa_id, obj.user_id) if valor
+            ]
+            desbloquear_usuarios_meta(
+                identidades,
+                obj.phone_id_unidade,
+            )
 
             logger.warning(
                 "admin_cliente_desbloqueado_meta | acao=desbloquear_meta_antes_excluir usuario=%s identidade_meta=%s phone_id_unidade=%s",
                 request.user,
-                short_value(identidade),
+                [short_value(valor) for valor in identidades],
                 short_value(obj.phone_id_unidade),
             )
 
-            self.message_user(
-                request,
-                f"Cliente {identidade} desbloqueado na Meta. Registro removido do banco.",
-                level=messages.SUCCESS,
-            )
             return True
 
         except Exception as exc:
@@ -1535,7 +1619,7 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8f73aa7ce2ed56f5631d96d4f0cebc7db1b08cadc4ad651e64421c0f6df05edc`
+SHA-256 do conteúdo UTF-8 normalizado: `8b64304098e45ff12ed0a4abcd3b1301d14ff5b3ebfde99f4f0fd2fd00dc2a95`
 
 ````python
 from django.db import models
@@ -1623,7 +1707,8 @@ class Conversa(models.Model):
         choices=[
             ("idade_invalida", "Idade inválida"),
             ("foi_agendado", "Foi agendado"),
-            ("ativou_user_id", "Ativou user ID"),
+            ("ativou_privacidade", "Ativou privacidade"),
+            ("bloqueio_reconciliado", "Bloqueio reconciliado"),
         ],
     )
 
@@ -1674,7 +1759,7 @@ class FilaMensagens(models.Model):
     tipo_mensagem = models.CharField(max_length=20)
     id_hash_msg = models.CharField(unique=True, max_length=255)
     id_phone_unidade = models.CharField(max_length=100)
-    unidade_telefone = models.CharField(max_length=100)
+    unidade_telefone = models.CharField(max_length=100, blank=True, null=True)
     last_error = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -1717,7 +1802,7 @@ class HistoricoMensagens(models.Model):
     )
     id_hash_cliente_origem = models.CharField(max_length=255, blank=True, null=True)
     id_phone_unidade = models.CharField(max_length=100)
-    unidade_telefone = models.CharField(max_length=100)
+    unidade_telefone = models.CharField(max_length=100, blank=True, null=True)
     quem_enviou = models.CharField(
         max_length=10,
         choices=[
@@ -1797,8 +1882,22 @@ class PesquisaSatisfacao(models.Model):
 
 
 class Unidade(models.Model):
+    class Genero(models.TextChoices):
+        MASCULINO = "masculino", "Masculino"
+        FEMININO = "feminino", "Feminino"
+
     id_unidade = models.AutoField(primary_key=True)
-    nome = models.CharField(unique=True, max_length=300)
+    nome_unidade = models.CharField(
+        "nome da unidade",
+        unique=True,
+        max_length=300,
+    )
+    nome_agente = models.CharField("nome do agente", max_length=100)
+    genero = models.CharField(
+        "gênero do agente",
+        max_length=9,
+        choices=Genero.choices,
+    )
     cnpj = models.CharField(unique=True, max_length=50)
     email_responsavel = models.CharField(unique=True, max_length=255)
     telefone = models.CharField(unique=True, max_length=20)
@@ -1823,7 +1922,7 @@ class Unidade(models.Model):
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
     def __str__(self):
-        return self.nome
+        return self.nome_unidade
 
     class Meta:
         managed = False
@@ -1957,6 +2056,13 @@ class ClienteBloqueadoMeta(models.Model):
         managed = False
         db_table = 'cliente_bloqueado_meta'
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(wa_id__isnull=False)
+                    | models.Q(user_id__isnull=False)
+                ),
+                name="ck_bloqueio_identidade_meta",
+            ),
             models.UniqueConstraint(
                 fields=["wa_id", "id_unidade"],
                 name="uq_cliente_bloqueado_meta_wa_id_unidade",
@@ -2009,7 +2115,7 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b8e49a71b8c71850bf716d18133a9685ce961b8e584deba5b0fef26fe62ec292`
+SHA-256 do conteúdo UTF-8 normalizado: `499f385a47d1caeed07f015f32a20fc9f319a465d23f03e491b783ee6688b48a`
 
 ````python
 import logging
@@ -2047,6 +2153,7 @@ def criar_funcoes_lock():
                     OR c.processing_started_at
                         < NOW() - INTERVAL '110.0 seconds'
                 )
+                AND c.status_ativa = TRUE
             RETURNING c.lock_version INTO v_lock_version;
 
             IF v_lock_version IS NULL THEN
@@ -2192,7 +2299,9 @@ def criar_tabelas():
 
         CREATE TABLE IF NOT EXISTS chatbot.unidade (
             id_unidade SERIAL PRIMARY KEY,
-            nome VARCHAR(300) UNIQUE NOT NULL,
+            nome_unidade VARCHAR(300) NOT NULL,
+            nome_agente VARCHAR(100) NOT NULL,
+            genero VARCHAR(9) NOT NULL,
             cnpj VARCHAR(50) UNIQUE NOT NULL,
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
@@ -2204,6 +2313,18 @@ def criar_tabelas():
             id_portfolio VARCHAR(100) NOT NULL,
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
+
+            CONSTRAINT uq_unidade_nome_unidade
+                UNIQUE (nome_unidade),
+
+            CONSTRAINT ck_unidade_nome_unidade_nao_vazio
+                CHECK (nome_unidade ~ '[^[:space:]]'),
+
+            CONSTRAINT ck_unidade_nome_agente_nao_vazio
+                CHECK (nome_agente ~ '[^[:space:]]'),
+
+            CONSTRAINT ck_unidade_genero
+                CHECK (genero IN ('masculino', 'feminino')),
 
             CONSTRAINT ck_unidade_id_portfolio_nao_vazio
                 CHECK (BTRIM(id_portfolio) <> '')
@@ -2329,7 +2450,8 @@ def criar_tabelas():
                     OR motivo_encerramento IN (
                         'idade_invalida',
                         'foi_agendado',
-                        'ativou_user_id'
+                        'ativou_privacidade',
+                        'bloqueio_reconciliado'
                     )
                 ),
 
@@ -2441,7 +2563,7 @@ def criar_tabelas():
             tipo_mensagem VARCHAR(20) NOT NULL,
             id_hash_msg VARCHAR(255) UNIQUE NOT NULL,
             id_phone_unidade VARCHAR(100) NOT NULL,
-            unidade_telefone VARCHAR(100) NOT NULL,
+            unidade_telefone VARCHAR(100) NULL,
             last_error TEXT,
 
             FOREIGN KEY (id_conversa)
@@ -2500,7 +2622,7 @@ def criar_tabelas():
             id_mensagem_fila INT,
             id_hash_cliente_origem VARCHAR(255),
             id_phone_unidade VARCHAR(100) NOT NULL,
-            unidade_telefone VARCHAR(100) NOT NULL,
+            unidade_telefone VARCHAR(100) NULL,
             quem_enviou VARCHAR(10) NOT NULL,
             status_envio VARCHAR(20),
 
@@ -3122,7 +3244,7 @@ def criar_indices_turno_cliente():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5d2fc9e962557edd0667e123a6bbcff8a27ba69f6a8d13bd10b1e6c7c89dc0b8`
+SHA-256 do conteúdo UTF-8 normalizado: `82550c5c65043a052fcc76b656c9d0bc9285af2f7cab6d2e3e6739093bad0bbc`
 
 ````markdown
 # Banco de dados
@@ -3156,7 +3278,7 @@ core/database/
 - `connection_check.py` valida acesso ao PostgreSQL;
 - `deploy_database/` cria schema, tabelas, índices e funções;
 - partições mensais são mantidas pelo comando manual
-  `operations.maintenance.message_partitions`;
+  `utilitarios.maintenance.message_partitions`;
 - SQL de negócio executado durante atendimento fica em `core/repositories`.
 
 ## Setup
@@ -3217,9 +3339,21 @@ referências existentes está em
 executada inteira no DBeaver, em janela de manutenção e com snapshot recente;
 `setup_database.py` não substitui essa migração.
 
+A correção posterior que torna a profissão obrigatória depois da confirmação
+está em
+`deploy/migrations/20260811_tornar_profissao_obrigatoria_apos_confirmacao.sql`.
+Ela troca somente o catálogo de transições, aceita reexecução no estado final e
+não retrocede conversas que já passaram pela profissão.
+
+A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
+apresentação configurável do agente está em
+`deploy/migrations/20260812_personalizar_agente_unidade.sql`. Ela preserva os
+nomes das unidades existentes, aplica `Suh`/`feminino` somente no primeiro
+backfill e recusa schemas parciais antes de publicar o novo contrato.
+
 A migração incremental seguinte insere o compartilhamento oficial como nova
 etapa 2, remapeia as antigas etapas 2 a 22 para 3 a 23 e adiciona os contratos
-de user ID em `deploy/migrations/20260811_adicionar_user_id_whatsapp.sql`. Ela
+de user ID em `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql`. Ela
 também deve ser executada inteira no DBeaver com os serviços parados.
 
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
@@ -3273,10 +3407,12 @@ gerenciador de segredos.
 
 ## Testes relacionados
 
-- `tests/unit/test_deploy_essencial.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_retry_essencial.py`;
 - `tests/unit/test_persistencia_essencial.py`;
-- `tests/unit/test_funil_essencial.py`.
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
 ````
 
 # Fase 3 — Webhook, identidade de entrada, segurança e cache
@@ -3285,7 +3421,7 @@ gerenciador de segredos.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `533f42d94b8bdfb9a678e869952c8289d3cd8f6e0ea7a48c23337ed699bc7d29`
+SHA-256 do conteúdo UTF-8 normalizado: `0431c00f50401637891f46e919354d13573cb52d4e0b9a8ac0a4e5a8e7903b5f`
 
 ````python
 import logging
@@ -3380,7 +3516,7 @@ def _montar_conteudo(
 ):
     if meta_ok is True:
         acao_recomendada = (
-            "executar python -m operations.monitoring.blocked_users "
+            "executar python -m utilitarios.monitoring.blocked_users "
             "blocked-users quando o banco voltar"
         )
     elif meta_ok is False:
@@ -3425,7 +3561,7 @@ def _montar_conteudo(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `64b8ea60fc0fcfbb55753edfb2d9d407747f9789c78e91d0e4390b0949f1ba20`
+SHA-256 do conteúdo UTF-8 normalizado: `af1d6ee9b1790ceb2544ceef82320a28a6245eb321597c441b8edc40ff25bae1`
 
 ````python
 import logging
@@ -3433,10 +3569,11 @@ import logging
 from django.http import JsonResponse
 
 from core.database.connection_aws import get_conn
-from core.integrations.whatsapp.tools.usuarios import bloquear_usuario_meta
+from core.integrations.whatsapp.tools.usuarios import bloquear_usuarios_meta
 from core.logging_config import short_value
 from core.repositories.seguranca.bloqueio_meta import (
-    cliente_bloqueado_meta_existe_banco,
+    ConflitoAliasesBloqueioMeta,
+    buscar_cliente_bloqueado_meta_banco,
     registrar_cliente_bloqueado_meta_banco,
 )
 from core.repositories.seguranca.suspeita_bot import (
@@ -3474,6 +3611,19 @@ def responder_se_cliente_marcado_para_bloqueio(
         user_id=user_id,
         username=username,
     )
+    if consulta.get("conflito"):
+        logger.critical(
+            "mensagem_ignorada | motivo=conflito_aliases_bloqueio_meta "
+            "acao=nao_enfileirar tipo_identidade=%s identidade=%s "
+            "phone_id_unidade=%s",
+            tipo_identidade,
+            short_value(identidade),
+            short_value(phone_id_unidade),
+        )
+        return JsonResponse({
+            "status": "ignored",
+            "reason": "identity_conflict",
+        })
     if not consulta["banco_ok"]:
         return JsonResponse(
             {
@@ -3482,21 +3632,27 @@ def responder_se_cliente_marcado_para_bloqueio(
             },
             status=503,
         )
-    if not consulta["marcado"]:
+    bloqueio = consulta["bloqueio"]
+    if not bloqueio:
         return None
 
     meta_ok = False
     try:
-        bloquear_usuario_meta(identidade, phone_id_unidade)
+        bloquear_usuarios_meta(
+            bloqueio["identidades_meta"],
+            phone_id_unidade,
+        )
         meta_ok = True
     except Exception as exc:
         logger.warning(
             "bloqueio_meta_retentativa_falhou | "
             "acao=ignorar_e_tentar_na_proxima_mensagem "
-            "tipo_identidade=%s identidade=%s phone_id_unidade=%s erro=%s",
+            "tipo_identidade=%s identidade=%s phone_id_unidade=%s "
+            "aliases=%s erro=%s",
             tipo_identidade,
             short_value(identidade),
             short_value(phone_id_unidade),
+            len(bloqueio["identidades_meta"]),
             exc,
         )
 
@@ -3529,14 +3685,16 @@ def _consultar_cliente_marcado_para_bloqueio(
     try:
         conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
-        marcado = cliente_bloqueado_meta_existe_banco(
+        bloqueio = buscar_cliente_bloqueado_meta_banco(
             tipo_identidade,
             identidade,
             phone_id_unidade,
             cursor,
+            wa_id=wa_id,
+            user_id=user_id,
         )
 
-        if not marcado:
+        if not bloqueio:
             suspeita = buscar_conversa_no_limite_sem_avanco(
                 tipo_identidade,
                 identidade,
@@ -3544,10 +3702,12 @@ def _consultar_cliente_marcado_para_bloqueio(
                 cursor,
             )
             if suspeita:
+                wa_id_bloqueio = suspeita.get("wa_id") or wa_id
+                user_id_bloqueio = suspeita.get("user_id") or user_id
                 id_bloqueio = registrar_cliente_bloqueado_meta_banco(
                     suspeita["id_cliente"],
-                    wa_id,
-                    user_id,
+                    wa_id_bloqueio,
+                    user_id_bloqueio,
                     username,
                     suspeita["id_unidade"],
                     suspeita["phone_id_unidade"],
@@ -3558,10 +3718,39 @@ def _consultar_cliente_marcado_para_bloqueio(
                     raise RuntimeError(
                         "Promocao de suspeita nao retornou id_bloqueio"
                     )
-                marcado = True
+                bloqueio = {
+                    "id_bloqueio": id_bloqueio,
+                    "id_cliente": suspeita["id_cliente"],
+                    "id_unidade": suspeita["id_unidade"],
+                    "phone_id_unidade": suspeita["phone_id_unidade"],
+                    "wa_id": wa_id_bloqueio,
+                    "user_id": user_id_bloqueio,
+                    "username": username,
+                    "identidades_meta": [
+                        valor
+                        for valor in (wa_id_bloqueio, user_id_bloqueio)
+                        if valor
+                    ],
+                }
 
         conn.commit()
-        return {"banco_ok": True, "marcado": marcado}
+        return {"banco_ok": True, "bloqueio": bloqueio}
+    except ConflitoAliasesBloqueioMeta as exc:
+        if conn:
+            conn.rollback()
+        logger.critical(
+            "bloqueio_meta_conflito_aliases | acao=ignorar_sem_meta "
+            "tipo_identidade=%s identidade=%s phone_id_unidade=%s erro=%s",
+            tipo_identidade,
+            short_value(identidade),
+            short_value(phone_id_unidade),
+            exc,
+        )
+        return {
+            "banco_ok": True,
+            "bloqueio": None,
+            "conflito": True,
+        }
     except Exception as exc:
         if conn:
             conn.rollback()
@@ -3574,7 +3763,7 @@ def _consultar_cliente_marcado_para_bloqueio(
             short_value(phone_id_unidade),
             exc,
         )
-        return {"banco_ok": False, "marcado": False}
+        return {"banco_ok": False, "bloqueio": None}
     finally:
         if conn:
             conn.close()
@@ -3584,7 +3773,7 @@ def _consultar_cliente_marcado_para_bloqueio(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `9843b39a21ad1cdc53c049ed217719b09eb85ac53afc5ef08e1bf12c884e2851`
+SHA-256 do conteúdo UTF-8 normalizado: `cddef6734becfca8f805e42e73b069f00a4781e4475fe02eca96f5c2bc911ec3`
 
 ````python
 import logging
@@ -3597,12 +3786,12 @@ from core.cache.runtime.cache_flood_redis import (
     buscar_vinculo_flood_redis,
     salvar_ausencia_vinculo_flood_redis,
     salvar_vinculo_flood_redis,
-    salvar_vinculo_pendente_flood_redis,
 )
 from core.database.connection_aws import get_conn
-from core.integrations.whatsapp.tools.usuarios import bloquear_usuario_meta
+from core.integrations.whatsapp.tools.usuarios import bloquear_usuarios_meta
 from core.logging_config import short_value
 from core.repositories.seguranca.bloqueio_meta import (
+    ConflitoAliasesBloqueioMeta,
     buscar_cliente_por_identidade,
     buscar_unidade_bloqueio_por_phone_id,
     buscar_vinculo_flood_oficial,
@@ -3610,6 +3799,7 @@ from core.repositories.seguranca.bloqueio_meta import (
     limpar_eventos_flood_antigos,
     registrar_cliente_bloqueado_meta_banco,
     registrar_evento_flood_banco,
+    validar_aliases_explicitos_bloqueio_meta,
 )
 from .alerta_flood_memoria import registrar_alerta_flood_memoria
 from .identidade_meta import (
@@ -3624,6 +3814,7 @@ logger = logging.getLogger("webhook.flood_guard")
 REGRAS_FLOOD = (
     {"nome": "rajada_curta", "limite": 15, "janela_segundos": 5},
 )
+_REGISTRO_BLOQUEIO_CONFLITO = object()
 
 
 def responder_se_flood(data, identidade_meta=None):
@@ -3654,6 +3845,20 @@ def responder_se_flood(data, identidade_meta=None):
             {"status": "unavailable", "reason": flood["motivo"]},
             status=503,
         )
+
+    if flood.get("ignorar"):
+        logger.critical(
+            "mensagem_ignorada | motivo=%s acao=nao_enfileirar_sem_meta "
+            "tipo_identidade=%s identidade=%s phone_number_id=%s",
+            flood["motivo"],
+            identidade_meta["tipo_identidade_do_item"],
+            short_value(identidade_meta["identidade_do_item"]),
+            short_value(phone_id_unidade),
+        )
+        return JsonResponse({
+            "status": "ignored",
+            "reason": flood["motivo"],
+        })
 
     if not flood["bloqueado"]:
         return None
@@ -3695,20 +3900,27 @@ def bloquear_cliente_se_flood(
     ):
         return _resultado_sem_bloqueio("dados_invalidos", 0)
 
-    if wa_id_compartilhado is not None:
-        resolucao_identidades = _resolver_contato_oficial_flood(
-            tipo_identidade,
-            identidade,
-            phone_id_unidade,
-            user_id=user_id,
-            wa_id_compartilhado=wa_id_compartilhado,
-        )
-    else:
-        resolucao_identidades = _resolver_identidades_flood(
-            tipo_identidade,
-            identidade,
-            phone_id_unidade,
-        )
+    # ``wa_id_compartilhado`` pertence ao conteudo de um contact_request e
+    # ainda nao e alias do remetente. Ate o gate e o commit do worker, flood
+    # conta esse item somente pela identidade congelada (normalmente user ID).
+    resolucao_identidades = _resolver_identidades_flood(
+        tipo_identidade,
+        identidade,
+        phone_id_unidade,
+        wa_id=wa_id,
+        user_id=user_id,
+    )
+    if resolucao_identidades.get("conflito"):
+        return {
+            "bloqueado": False,
+            "motivo": "flood_conflito_aliases",
+            "total": 0,
+            "regra": None,
+            "persistencia_ok": False,
+            "meta_ok": None,
+            "reentregar": False,
+            "ignorar": True,
+        }
     if not resolucao_identidades["resolucao_ok"]:
         return {
             "bloqueado": False,
@@ -3969,6 +4181,21 @@ def _bloquear_e_registrar(
         dados["id_unidade"],
         dados["phone_id_unidade"],
     )
+    if id_bloqueio is _REGISTRO_BLOQUEIO_CONFLITO:
+        return {
+            "bloqueado": False,
+            "motivo": "flood_conflito_aliases",
+            "total": total,
+            "regra": regra,
+            "id_bloqueio": None,
+            "id_cliente": dados["id_cliente"],
+            "id_unidade": dados["id_unidade"],
+            "persistencia_ok": False,
+            "meta_ok": None,
+            "erro_meta": None,
+            "reentregar": False,
+            "ignorar": True,
+        }
     if not id_bloqueio:
         return {
             "bloqueado": True,
@@ -3986,16 +4213,20 @@ def _bloquear_e_registrar(
 
     meta_ok = False
     erro_meta = None
+    identidades_meta = [
+        valor for valor in (wa_id, user_id) if valor
+    ] or [identidade]
     try:
-        bloquear_usuario_meta(identidade, phone_id_unidade)
+        bloquear_usuarios_meta(identidades_meta, phone_id_unidade)
         meta_ok = True
     except Exception as exc:
         erro_meta = str(exc)
         logger.exception(
             "bloqueio_meta_falhou | acao=manter_bloqueio_local "
-            "tipo_identidade=%s identidade=%s erro=%s",
+            "tipo_identidade=%s identidade=%s aliases=%s erro=%s",
             tipo_identidade,
             short_value(identidade),
+            len(identidades_meta),
             exc,
         )
 
@@ -4060,6 +4291,13 @@ def _buscar_dados_bloqueio(
             "phone_id_unidade": phone_id_cadastrado,
             "motivo": "ok",
         }
+    except ConflitoAliasesBloqueioMeta:
+        if conn:
+            conn.rollback()
+        logger.critical(
+            "bloqueio_local_conflito_aliases | acao=ignorar_sem_meta"
+        )
+        return _REGISTRO_BLOQUEIO_CONFLITO
     except Exception:
         logger.exception(
             "bloqueio_meta_dados_falharam | motivo=banco_indisponivel "
@@ -4123,9 +4361,83 @@ def _resolver_identidades_flood(
     tipo_identidade,
     identidade,
     phone_id_unidade,
+    *,
+    wa_id=None,
+    user_id=None,
 ):
     """Une identidades somente quando o banco ou cache provam o vínculo."""
     atual = [(tipo_identidade, identidade)]
+    wa_id = str(wa_id or "").strip() or None
+    user_id = str(user_id or "").strip() or None
+    identidade = str(identidade or "").strip()
+
+    if (
+        (tipo_identidade == "wa_id" and wa_id and wa_id != identidade)
+        or (
+            tipo_identidade == "user_id"
+            and user_id
+            and user_id != identidade
+        )
+    ):
+        return {
+            "resolucao_ok": False,
+            "identidades": [],
+            "conflito": True,
+        }
+
+    # O par do envelope normal e prova explicita apenas para este evento. O
+    # webhook nao publica esse vinculo; o worker o persiste depois dos gates.
+    if wa_id and user_id:
+        conn = None
+        try:
+            conn = get_conn(application_name="webhook_chatbot")
+            cursor = conn.cursor()
+            validar_aliases_explicitos_bloqueio_meta(
+                wa_id,
+                user_id,
+                phone_id_unidade,
+                cursor,
+            )
+            conn.rollback()
+            return {
+                "resolucao_ok": True,
+                "identidades": [
+                    ("wa_id", wa_id),
+                    ("user_id", user_id),
+                ],
+            }
+        except ConflitoAliasesBloqueioMeta as exc:
+            if conn:
+                conn.rollback()
+            logger.critical(
+                "flood_conflito_aliases | acao=ignorar_sem_meta "
+                "wa_id=%s user_id=%s phone_id_unidade=%s erro=%s",
+                short_value(wa_id),
+                short_value(user_id),
+                short_value(phone_id_unidade),
+                exc,
+            )
+            return {
+                "resolucao_ok": False,
+                "identidades": [],
+                "conflito": True,
+            }
+        except Exception as exc:
+            if conn:
+                conn.rollback()
+            logger.warning(
+                "flood_validacao_aliases_falhou | acao=pedir_reentrega "
+                "wa_id=%s user_id=%s phone_id_unidade=%s erro=%s",
+                short_value(wa_id),
+                short_value(user_id),
+                short_value(phone_id_unidade),
+                exc,
+            )
+            return {"resolucao_ok": False, "identidades": []}
+        finally:
+            if conn:
+                conn.close()
+
     cache = buscar_vinculo_flood_redis(
         tipo_identidade,
         identidade,
@@ -4153,37 +4465,32 @@ def _resolver_identidades_flood(
             cursor,
         )
         if not vinculo:
-            # Um cache indisponível não consegue preservar a conclusão
-            # "ainda sem vínculo" entre processos. Nesse caso, aceitar o
-            # evento reabriria a janela de contadores separados; a Meta deve
-            # reentregar a mensagem quando a prova compartilhada voltar.
-            if not cache.get("redis_ok", False):
-                return {"resolucao_ok": False, "identidades": []}
+            # O RDS acabou de provar que ainda não existe vínculo. A falha do
+            # Redis não invalida essa decisão nem pode transformar uma mensagem
+            # legítima WA-only/user-only em HTTP 503. O cache negativo e sua
+            # releitura são otimizações; só são usados enquanto o Redis responde.
+            if cache.get("redis_ok", False):
+                salvar_ausencia_vinculo_flood_redis(
+                    tipo_identidade,
+                    identidade,
+                    phone_id_unidade,
+                )
 
-            salvar_ausencia_vinculo_flood_redis(
-                tipo_identidade,
-                identidade,
-                phone_id_unidade,
-            )
-
-            # Releia para absorver atomicamente um vínculo oficial que possa
-            # ter sido publicado enquanto o banco era consultado. O pendente
-            # tem prioridade sobre o marcador negativo e fecha essa corrida.
-            cache_atualizado = buscar_vinculo_flood_redis(
-                tipo_identidade,
-                identidade,
-                phone_id_unidade,
-            )
-            if not cache_atualizado.get("redis_ok", False):
-                return {"resolucao_ok": False, "identidades": []}
-            if cache_atualizado.get("encontrado"):
-                return {
-                    "resolucao_ok": True,
-                    "identidades": [
-                        ("wa_id", cache_atualizado["wa_id"]),
-                        ("user_id", cache_atualizado["user_id"]),
-                    ],
-                }
+                # Absorve um vínculo confirmado publicado depois da consulta.
+                # Falha nessa releitura conserva a decisão autoritativa do RDS.
+                cache_atualizado = buscar_vinculo_flood_redis(
+                    tipo_identidade,
+                    identidade,
+                    phone_id_unidade,
+                )
+                if cache_atualizado.get("encontrado"):
+                    return {
+                        "resolucao_ok": True,
+                        "identidades": [
+                            ("wa_id", cache_atualizado["wa_id"]),
+                            ("user_id", cache_atualizado["user_id"]),
+                        ],
+                    }
             return {"resolucao_ok": True, "identidades": atual}
 
         salvar_vinculo_flood_redis(
@@ -4213,48 +4520,6 @@ def _resolver_identidades_flood(
             conn.close()
 
 
-def _resolver_contato_oficial_flood(
-    tipo_identidade,
-    identidade,
-    phone_id_unidade,
-    *,
-    user_id,
-    wa_id_compartilhado,
-):
-    """Abre a ponte prÃ©-commit somente com contact_request inequÃ­voco."""
-    user_id = str(user_id).strip() if user_id is not None else ""
-    wa_id_compartilhado = (
-        str(wa_id_compartilhado).strip()
-        if wa_id_compartilhado is not None
-        else ""
-    )
-    if (
-        tipo_identidade != "user_id"
-        or str(identidade).strip() != user_id
-        or not user_id
-        or not wa_id_compartilhado
-    ):
-        return {"resolucao_ok": False, "identidades": []}
-
-    cache_ok = salvar_vinculo_pendente_flood_redis(
-        wa_id_compartilhado,
-        user_id,
-        phone_id_unidade,
-    )
-    if not cache_ok:
-        # Sem a ponte compartilhada, aceitar o contato criaria justamente a
-        # janela user ID -> WA ID. A reentrega Ã© segura e nÃ£o bloqueia na Meta.
-        return {"resolucao_ok": False, "identidades": []}
-
-    return {
-        "resolucao_ok": True,
-        "identidades": [
-            ("wa_id", wa_id_compartilhado),
-            ("user_id", user_id),
-        ],
-    }
-
-
 def _normalizar_nome_cliente(nome_cliente):
     if nome_cliente is None:
         return None
@@ -4266,12 +4531,10 @@ def _normalizar_nome_cliente(nome_cliente):
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `765c9bf353ca3da9a50138ef77ca1f27d8e3ce2a5730a8e93c800a1f3f1066ce`
+SHA-256 do conteúdo UTF-8 normalizado: `3bb10f5cab567d712d1a28833ecf88e4c697a65270724a3f2a01b77edb0b3f62`
 
 ````python
 """Extracao deterministica dos identificadores do primeiro evento Meta."""
-
-import re
 
 from core.integrations.whatsapp.identidade import (
     escolher_identidade_do_item,
@@ -4329,8 +4592,9 @@ def extrair_identidade_meta(data):
     profile = contact_remetente.get("profile")
     profile = profile if isinstance(profile, dict) else {}
 
-    # No contact_request privado, a coluna wa_id da fila transporta somente o
-    # candidato oficial. O user_id preserva a identidade original do item.
+    # No contact_request privado, ``wa_id`` da propria linha guarda o valor
+    # oficialmente compartilhado. Linhas anteriores permanecem imutaveis e a
+    # identidade tipada deste item continua sendo o user ID do envelope.
     wa_id_fila = (
         wa_id_compartilhado
         if (
@@ -4439,7 +4703,8 @@ def _extrair_wa_id_compartilhado(message, tipo_mensagem, origem_contato):
             contatos_oficiais.append(contact)
 
     wa_ids = set()
-    telefones = set()
+    total_wa_id_explicito = 0
+    encontrou_wa_id_invalido = False
     for contact in contatos_oficiais:
         phones = contact.get("phones")
         if not isinstance(phones, list):
@@ -4447,42 +4712,30 @@ def _extrair_wa_id_compartilhado(message, tipo_mensagem, origem_contato):
         for phone in phones:
             if not isinstance(phone, dict):
                 continue
-            wa_id = normalizar_identificador(phone.get("wa_id"))
-            if wa_id:
-                wa_ids.add(wa_id)
+            if "wa_id" not in phone:
                 continue
-            telefone = normalizar_phone_compartilhado(phone.get("phone"))
-            if telefone:
-                telefones.add(telefone)
+            total_wa_id_explicito += 1
+            wa_id = normalizar_wa_id_compartilhado(phone.get("wa_id"))
+            if not wa_id:
+                encontrou_wa_id_invalido = True
+                continue
+            wa_ids.add(wa_id)
 
-    if wa_ids:
-        return (next(iter(wa_ids)), False) if len(wa_ids) == 1 else (None, True)
-    if telefones:
-        return (
-            (next(iter(telefones)), False)
-            if len(telefones) == 1
-            else (None, True)
-        )
+    if encontrou_wa_id_invalido or total_wa_id_explicito > 1:
+        return None, True
+    if total_wa_id_explicito == 1 and len(wa_ids) == 1:
+        return next(iter(wa_ids)), False
     return None, False
 
 
-def normalizar_phone_compartilhado(phone):
-    """Normaliza somente o fallback ``Phone.phone`` do contato oficial."""
-    phone = normalizar_identificador(phone)
-    if not phone:
+def normalizar_wa_id_compartilhado(wa_id):
+    """Aceita somente a prova explicita de 10 a 15 digitos ASCII."""
+    wa_id = normalizar_identificador(wa_id)
+    if not wa_id:
         return None
-
-    digitos = re.sub(r"[+\s()\-]", "", phone)
-    if not digitos.isdigit() or not 10 <= len(digitos) <= 15:
+    if not wa_id.isascii() or not wa_id.isdecimal():
         return None
-
-    if len(digitos) == 10:
-        return f"55{digitos}"
-    if len(digitos) == 11 and digitos[2] == "9":
-        return f"55{digitos[:2]}{digitos[3:]}"
-    if len(digitos) == 13 and digitos.startswith("55") and digitos[4] == "9":
-        return f"{digitos[:4]}{digitos[5:]}"
-    return digitos
+    return wa_id if 10 <= len(wa_id) <= 15 else None
 
 
 def _normalizar_nome(nome):
@@ -4494,7 +4747,7 @@ def _normalizar_nome(nome):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `862679954c9bae26d442e58d5512314c3424a751b318947d60f53367d9d7376d`
+SHA-256 do conteúdo UTF-8 normalizado: `6bdc8655ce5260ac7a8f35ce0713679111eaccfccb5dcc1ef877375b81f5065c`
 
 ````python
 import logging
@@ -4634,7 +4887,6 @@ def extrair_dados_whatsapp(data, identidade_meta=None):
             identidade_meta["identidade_do_item"],
             message_id,
             id_phone_unidade,
-            unidade_telefone,
             tipo,
         ]):
             return {"erro": "dados_incompletos", "raw": data}
@@ -4736,7 +4988,7 @@ def povoando_fila(dados, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `186e08de5c66ca0ea2150197233c712c829bb08f24af1746ae240993abc2ca27`
+SHA-256 do conteúdo UTF-8 normalizado: `6f25dcaef41c2640c457603307a257df8ce1ffe132839572a71ac7e79d6a8b64`
 
 ````python
 import json
@@ -4856,6 +5108,21 @@ def responder_post_webhook(request):
                 "reason": "missing_identity",
             })
 
+        # ``phone_number_id`` e a identidade canonica da unidade e tambem o
+        # sender exigido pela Meta. O display_phone_number e apenas snapshot;
+        # um reenvio do mesmo WAMID nao corrigiria essa ausencia estrutural.
+        if not phone_number_id:
+            logger.info(
+                "mensagem_ignorada | motivo=missing_phone_number_id "
+                "acao=nao_enfileirar tipo_identidade=%s identidade=%s",
+                tipo_identidade_do_item,
+                short_value(identidade_do_item),
+            )
+            return JsonResponse({
+                "status": "ignored",
+                "reason": "missing_phone_number_id",
+            })
+
         if resposta_bloqueio := responder_se_cliente_marcado_para_bloqueio(
             tipo_identidade_do_item,
             identidade_do_item,
@@ -4875,7 +5142,8 @@ def responder_post_webhook(request):
 
         if not unidade_esta_ativa(phone_number_id):
             logger.info(
-                "mensagem_ignorada | motivo=unidade_inativa acao=nao_enfileirar cliente=%s phone_number_id=%s",
+                "mensagem_ignorada | motivo=unidade_inativa "
+                "acao=nao_enfileirar cliente=%s phone_number_id=%s",
                 short_value(identidade_do_item),
                 short_value(phone_number_id),
             )
@@ -5519,15 +5787,15 @@ def _id_cliente_valido(id_cliente):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b4cc72ae0019e82525efd6b716057e2a70a11b8173318eec9a39080eb02c3ebd`
+SHA-256 do conteúdo UTF-8 normalizado: `99f53c554ec06ff32f26d12fb8ce652995514ab091ca7ad9d6234e3da33a0e91`
 
 ````python
 import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 
-from core.database.connection_aws import get_conn
 from core.cache.redis_client import get_redis_safe
+from core.database.connection_aws import get_conn
 from core.logging_config import short_value
 from core.repositories.fluxo.politicas import (
     buscar_bloqueio_ativo_por_cliente_unidade,
@@ -5549,22 +5817,26 @@ def conversa_esta_bloqueada_cache(
     id_phone_unidade,
 ):
     key = _cache_key(tipo_identidade, identidade, id_phone_unidade)
-
     if key is None:
         return False
 
     try:
-        r = get_redis_safe(retries=1, delay=0, validate=False)
-        return bool(r.exists(key))
-
+        redis = get_redis_safe(retries=1, delay=0, validate=False)
+        # Mantém a semântica da V1.0.6: miss válido significa "não bloqueado"
+        # e não transforma toda mensagem normal em consulta ao PostgreSQL.
+        return bool(redis.exists(key))
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_indisponivel | acao=fallback_banco cliente=%s phone_number_id=%s erro=%s",
+            "cache_bloqueio_indisponivel | acao=fallback_banco cliente=%s "
+            "phone_number_id=%s erro=%s",
             short_value(identidade),
             short_value(id_phone_unidade),
             exc,
         )
 
+    # O PostgreSQL continua sendo fallback somente quando o Redis está
+    # indisponível. A reconciliação consulta o bloqueio histórico diretamente
+    # no banco e repara os dois aliases depois do commit.
     return _conversa_esta_bloqueada_banco_e_repara_cache(
         tipo_identidade,
         identidade,
@@ -5580,46 +5852,69 @@ def registrar_bloqueio_conversa_cache(
     bloqueio_dias,
     redis_retries=1,
     redis_delay=0,
+    *,
+    aliases=None,
+    bloqueado_ate=None,
 ):
-    key = _cache_key(tipo_identidade, identidade, id_phone_unidade)
-
-    if key is None:
+    pares = _normalizar_aliases(
+        aliases,
+        tipo_identidade=tipo_identidade,
+        identidade=identidade,
+    )
+    if not pares:
         return False
 
-    ttl = _calcular_ttl(finalizou_em, bloqueio_dias)
-
+    ttl = _calcular_ttl(
+        finalizou_em,
+        bloqueio_dias,
+        bloqueado_ate=bloqueado_ate,
+    )
     if ttl <= 0:
         logger.info(
-            "cache_bloqueio_ignorado | motivo=ttl_expirado acao=nao_registrar cliente=%s phone_number_id=%s",
+            "cache_bloqueio_ignorado | motivo=ttl_expirado "
+            "acao=nao_registrar cliente=%s phone_number_id=%s",
             short_value(identidade),
             short_value(id_phone_unidade),
         )
         return False
 
-    payload = {
-        "tipo_identidade": str(tipo_identidade),
-        "identidade": str(identidade),
-        "id_phone_unidade": str(id_phone_unidade),
-        "finalizou_em": str(finalizou_em) if finalizou_em else "",
-        "bloqueio_dias": str(bloqueio_dias),
-    }
-
     try:
-        r = get_redis_safe(retries=redis_retries, delay=redis_delay, validate=False)
-        r.hset(key, mapping=payload)
-        r.expire(key, ttl)
+        redis = get_redis_safe(
+            retries=redis_retries,
+            delay=redis_delay,
+            validate=False,
+        )
+        total = 0
+        for tipo, valor in pares:
+            key = _cache_key(tipo, valor, id_phone_unidade)
+            if key is None:
+                continue
+            redis.hset(
+                key,
+                mapping={
+                    "tipo_identidade": tipo,
+                    "identidade": valor,
+                    "id_phone_unidade": str(id_phone_unidade),
+                    "finalizou_em": str(finalizou_em or ""),
+                    "bloqueio_dias": str(bloqueio_dias or 0),
+                    "bloqueado_ate": str(bloqueado_ate or ""),
+                },
+            )
+            redis.expire(key, ttl)
+            total += 1
 
         logger.info(
-            "cache_bloqueio_registrado | acao=registrar cliente=%s phone_number_id=%s ttl=%s",
-            short_value(identidade),
+            "cache_bloqueio_registrado | acao=registrar aliases=%s "
+            "phone_number_id=%s ttl=%s",
+            total,
             short_value(id_phone_unidade),
             ttl,
         )
-        return True
-
+        return total == len(pares)
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_registrar_falhou | acao=ignorar cliente=%s phone_number_id=%s erro=%s",
+            "cache_bloqueio_registrar_falhou | acao=ignorar cliente=%s "
+            "phone_number_id=%s erro=%s",
             short_value(identidade),
             short_value(id_phone_unidade),
             exc,
@@ -5633,19 +5928,33 @@ def remover_bloqueio_conversa_cache(
     id_phone_unidade,
     redis_retries=1,
     redis_delay=0,
+    *,
+    aliases=None,
 ):
-    key = _cache_key(tipo_identidade, identidade, id_phone_unidade)
-
-    if key is None:
+    pares = _normalizar_aliases(
+        aliases,
+        tipo_identidade=tipo_identidade,
+        identidade=identidade,
+    )
+    if not pares:
         return False
 
     try:
-        r = get_redis_safe(retries=redis_retries, delay=redis_delay, validate=False)
-        return bool(r.delete(key))
-
+        redis = get_redis_safe(
+            retries=redis_retries,
+            delay=redis_delay,
+            validate=False,
+        )
+        keys = [
+            _cache_key(tipo, valor, id_phone_unidade)
+            for tipo, valor in pares
+        ]
+        keys = [key for key in keys if key]
+        return bool(keys and redis.delete(*keys))
     except Exception as exc:
         logger.warning(
-            "cache_bloqueio_remover_falhou | acao=ignorar cliente=%s phone_number_id=%s erro=%s",
+            "cache_bloqueio_remover_falhou | acao=ignorar cliente=%s "
+            "phone_number_id=%s erro=%s",
             short_value(identidade),
             short_value(id_phone_unidade),
             exc,
@@ -5659,18 +5968,15 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
     id_phone_unidade,
 ):
     conn = None
-
     try:
         conn = get_conn(application_name="webhook_chatbot")
         cursor = conn.cursor()
-
         bloqueio = buscar_bloqueio_ativo_por_cliente_unidade(
             tipo_identidade,
             identidade,
             id_phone_unidade,
             cursor,
         )
-
         if bloqueio is None:
             remover_bloqueio_conversa_cache(
                 tipo_identidade,
@@ -5689,13 +5995,15 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
             bloqueio.bloqueio_dias,
             redis_retries=1,
             redis_delay=0,
+            aliases=bloqueio.aliases,
+            bloqueado_ate=bloqueio.bloqueado_ate,
         )
-
         return True
-
     except Exception as exc:
         logger.exception(
-            "fallback_banco_bloqueio_falhou | acao=levantar_indisponibilidade cliente=%s phone_number_id=%s erro=%s",
+            "fallback_banco_bloqueio_falhou | "
+            "acao=levantar_indisponibilidade cliente=%s "
+            "phone_number_id=%s erro=%s",
             short_value(identidade),
             short_value(id_phone_unidade),
             exc,
@@ -5703,7 +6011,6 @@ def _conversa_esta_bloqueada_banco_e_repara_cache(
         raise ValidacaoBloqueioConversaIndisponivel(
             "Nao foi possivel validar o bloqueio da conversa no Redis nem no banco"
         ) from exc
-
     finally:
         if conn:
             conn.close()
@@ -5713,48 +6020,67 @@ def _cache_key(tipo_identidade, identidade, id_phone_unidade):
     tipo = _normalizar(tipo_identidade)
     cliente = _normalizar(identidade)
     unidade = _normalizar(id_phone_unidade)
-
     if tipo not in {"wa_id", "user_id"} or not cliente or not unidade:
         return None
 
     raw = f"{tipo}:{unidade}:{cliente}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
     return f"{REDIS_PREFIX}:{digest}"
+
+
+def _normalizar_aliases(aliases, *, tipo_identidade, identidade):
+    pares = []
+    if isinstance(aliases, dict):
+        candidatos = (
+            ("wa_id", aliases.get("wa_id")),
+            ("user_id", aliases.get("user_id")),
+        )
+    else:
+        candidatos = aliases or ((tipo_identidade, identidade),)
+
+    for tipo, valor in candidatos:
+        tipo = _normalizar(tipo)
+        valor = _normalizar(valor)
+        par = (tipo, valor)
+        if tipo in {"wa_id", "user_id"} and valor and par not in pares:
+            pares.append(par)
+    return pares
 
 
 def _normalizar(valor):
     if valor is None:
         return None
-
     texto = str(valor).strip()
     return texto or None
 
 
-def _calcular_ttl(finalizou_em, bloqueio_dias):
-    if bloqueio_dias <= 0:
-        return 0
+def _calcular_ttl(finalizou_em, bloqueio_dias, *, bloqueado_ate=None):
+    if bloqueado_ate is None:
+        if int(bloqueio_dias or 0) <= 0:
+            return 0
+        if finalizou_em is None:
+            return int(bloqueio_dias) * 24 * 60 * 60
+        finalizou_em = _normalizar_instante(finalizou_em)
+        bloqueado_ate = finalizou_em + timedelta(days=int(bloqueio_dias))
+    else:
+        bloqueado_ate = _normalizar_instante(bloqueado_ate)
 
-    if finalizou_em is None:
-        return bloqueio_dias * 24 * 60 * 60
+    return int((bloqueado_ate - datetime.now(timezone.utc)).total_seconds())
 
-    if isinstance(finalizou_em, str):
-        finalizou_em = datetime.fromisoformat(finalizou_em)
 
-    if finalizou_em.tzinfo is None:
-        finalizou_em = finalizou_em.replace(tzinfo=timezone.utc)
-
-    bloqueado_ate = finalizou_em + timedelta(days=bloqueio_dias)
-    agora = datetime.now(timezone.utc)
-
-    return int((bloqueado_ate - agora).total_seconds())
+def _normalizar_instante(valor):
+    if isinstance(valor, str):
+        valor = datetime.fromisoformat(valor)
+    if valor.tzinfo is None:
+        valor = valor.replace(tzinfo=timezone.utc)
+    return valor.astimezone(timezone.utc)
 ````
 
 ## Passo 19 — `core/cache/runtime/cache_flood_redis.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `77f4a2ab12d5264309e187722fac0df0986796feff3cab0de7e25a1a9e07c69e`
+SHA-256 do conteúdo UTF-8 normalizado: `6f2732a719102896fade58435dfd77eaa22f9f92d6e6abe43c9328fba7030c17`
 
 ````python
 import hashlib
@@ -5770,40 +6096,10 @@ logger = logging.getLogger("cache.bloqueio_meta")
 
 RATE_PREFIX = "webhook_flood_rate"
 VINCULO_PREFIX = f"{RATE_PREFIX}:vinculo:v1"
-VINCULO_PENDENTE_PREFIX = f"{RATE_PREFIX}:vinculo_pendente:v1"
 DEDUPLICACAO_TTL_SEGUNDOS = 2 * 60 * 60
 VINCULO_TTL_SEGUNDOS = 60 * 60
-VINCULO_PENDENTE_TTL_SEGUNDOS = 15
 VINCULO_AUSENTE_TTL_SEGUNDOS = 5
 _VINCULO_AUSENTE = "-"
-
-_SALVAR_VINCULO_PENDENTE_LUA = """
-local valor = ARGV[1]
-local ttl = tonumber(ARGV[2])
-local ausente = ARGV[3]
-local confirmado_a = redis.call("GET", KEYS[1])
-local confirmado_b = redis.call("GET", KEYS[2])
-
-if confirmado_a == ausente then confirmado_a = nil end
-if confirmado_b == ausente then confirmado_b = nil end
-
-if confirmado_a or confirmado_b then
-    if confirmado_a == valor and confirmado_b == valor then
-        return 2
-    end
-    return -1
-end
-
-local pendente_a = redis.call("GET", KEYS[3])
-local pendente_b = redis.call("GET", KEYS[4])
-if (pendente_a and pendente_a ~= valor) or (pendente_b and pendente_b ~= valor) then
-    return -1
-end
-
-redis.call("SET", KEYS[3], valor, "EX", ttl)
-redis.call("SET", KEYS[4], valor, "EX", ttl)
-return 1
-"""
 
 _AVALIAR_FLOOD_LUA = """
 local dedupe_key = KEYS[1]
@@ -6007,28 +6303,22 @@ def buscar_vinculo_flood_redis(
 
     try:
         redis = get_redis_safe(retries=1, delay=0, validate=False)
-        key_pendente = _vinculo_key(
-            VINCULO_PENDENTE_PREFIX,
-            tipo_identidade,
-            identidade,
-            phone_id_unidade,
-        )
-        valor_confirmado, valor_pendente = redis.mget(key, key_pendente)
-        valor = (
-            valor_confirmado
-            if valor_confirmado not in {None, _VINCULO_AUSENTE}
-            else valor_pendente
-        )
+        valor = redis.get(key)
         if valor is None:
             return _resultado_vinculo_cache(
                 redis_ok=True,
-                cache_hit=valor_confirmado == _VINCULO_AUSENTE,
+                cache_hit=False,
+            )
+        if valor == _VINCULO_AUSENTE:
+            return _resultado_vinculo_cache(
+                redis_ok=True,
+                cache_hit=True,
             )
         dados = json.loads(valor)
         wa_id = _normalizar(dados.get("wa_id"))
         user_id = _normalizar(dados.get("user_id"))
         if not wa_id or not user_id:
-            redis.delete(key, key_pendente)
+            redis.delete(key)
             return _resultado_vinculo_cache(redis_ok=True, cache_hit=False)
         return _resultado_vinculo_cache(
             redis_ok=True,
@@ -6036,7 +6326,7 @@ def buscar_vinculo_flood_redis(
             encontrado=True,
             wa_id=wa_id,
             user_id=user_id,
-            fonte=("confirmado" if valor == valor_confirmado else "pendente"),
+            fonte="confirmado",
         )
     except Exception as exc:
         logger.warning(
@@ -6092,14 +6382,6 @@ def salvar_vinculo_flood_redis(
                 ttl_segundos,
                 valor,
             )
-            pipeline.delete(
-                _vinculo_key(
-                    VINCULO_PENDENTE_PREFIX,
-                    tipo,
-                    identidade,
-                    phone_id_unidade,
-                )
-            )
         pipeline.execute()
         return True
     except Exception as exc:
@@ -6114,63 +6396,12 @@ def salvar_vinculo_flood_redis(
         return False
 
 
-def salvar_vinculo_pendente_flood_redis(
-    wa_id,
-    user_id,
-    phone_id_unidade,
-):
-    """Registra contact_request oficial em ambas as direÃ§Ãµes atomicamente."""
-    wa_id = _normalizar(wa_id)
-    user_id = _normalizar(user_id)
-    phone_id_unidade = _normalizar(phone_id_unidade)
-    if not wa_id or not user_id or not phone_id_unidade:
-        return False
-
-    valor = json.dumps(
-        {"wa_id": wa_id, "user_id": user_id},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    try:
-        redis = get_redis_safe(retries=1, delay=0, validate=False)
-        chaves = []
-        for prefixo in (VINCULO_PREFIX, VINCULO_PENDENTE_PREFIX):
-            for tipo, identidade in (("wa_id", wa_id), ("user_id", user_id)):
-                chaves.append(
-                    _vinculo_key(
-                        prefixo,
-                        tipo,
-                        identidade,
-                        phone_id_unidade,
-                    )
-                )
-        resultado = redis.eval(
-            _SALVAR_VINCULO_PENDENTE_LUA,
-            len(chaves),
-            *chaves,
-            valor,
-            VINCULO_PENDENTE_TTL_SEGUNDOS,
-            _VINCULO_AUSENTE,
-        )
-        return int(resultado) in {1, 2}
-    except Exception as exc:
-        logger.warning(
-            "flood_vinculo_pendente_falhou | acao=pedir_reentrega "
-            "wa_id=%s user_id=%s phone_id_unidade=%s erro=%s",
-            short_value(wa_id),
-            short_value(user_id),
-            short_value(phone_id_unidade),
-            exc,
-        )
-        return False
-
-
 def salvar_ausencia_vinculo_flood_redis(
     tipo_identidade,
     identidade,
     phone_id_unidade,
 ):
-    """Cache negativo curto; o pendente oficial usa namespace separado."""
+    """Cache negativo curto para ausencia de vinculo persistido."""
     key = _vinculo_key(
         VINCULO_PREFIX,
         tipo_identidade,
@@ -6435,7 +6666,7 @@ def selecionar_destinatario(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `48f85de78780f8ab08ac243ca6ea5064f0f892579792fecb8086eb6909daf918`
+SHA-256 do conteúdo UTF-8 normalizado: `746e447c9101243f05e97f70570b5eb62c9b89ad117d338f40a515d4b22202e7`
 
 ````python
 import logging
@@ -6447,11 +6678,12 @@ from core.logging_config import short_value
 logger = logging.getLogger("whatsapp.block")
 
 
-def bloquear_usuario_meta(identidade_meta, phone_id_unidade):
+def bloquear_usuarios_meta(identidades_meta, phone_id_unidade):
+    identidades = _normalizar_identidades(identidades_meta)
     cliente_wa = conta_wa(phone_id_unidade)
 
     resultado = cliente_wa.block_users(
-        users=[str(identidade_meta)],
+        users=identidades,
         phone_id=str(phone_id_unidade),
     )
 
@@ -6460,19 +6692,21 @@ def bloquear_usuario_meta(identidade_meta, phone_id_unidade):
         raise RuntimeError(f"PyWa retornou erro ao bloquear usuario: {erros}")
 
     logger.warning(
-        "whatsapp_usuario_bloqueado | acao=bloquear identidade_meta=%s phone_id_unidade=%s",
-        short_value(identidade_meta),
+        "whatsapp_usuarios_bloqueados | acao=bloquear aliases=%s "
+        "phone_id_unidade=%s",
+        [short_value(valor) for valor in identidades],
         short_value(phone_id_unidade),
     )
 
     return resultado
 
 
-def desbloquear_usuario_meta(identidade_meta, phone_id_unidade):
+def desbloquear_usuarios_meta(identidades_meta, phone_id_unidade):
+    identidades = _normalizar_identidades(identidades_meta)
     cliente_wa = conta_wa(phone_id_unidade)
 
     resultado = cliente_wa.unblock_users(
-        users=[str(identidade_meta)],
+        users=identidades,
         phone_id=str(phone_id_unidade),
     )
 
@@ -6481,19 +6715,35 @@ def desbloquear_usuario_meta(identidade_meta, phone_id_unidade):
         raise RuntimeError(f"PyWa retornou erro ao desbloquear usuario: {erros}")
 
     logger.warning(
-        "whatsapp_usuario_desbloqueado | acao=desbloquear identidade_meta=%s phone_id_unidade=%s",
-        short_value(identidade_meta),
+        "whatsapp_usuarios_desbloqueados | acao=desbloquear aliases=%s "
+        "phone_id_unidade=%s",
+        [short_value(valor) for valor in identidades],
         short_value(phone_id_unidade),
     )
 
     return resultado
+
+
+def _normalizar_identidades(identidades_meta):
+    if isinstance(identidades_meta, (str, bytes)):
+        identidades_meta = [identidades_meta]
+
+    identidades = []
+    for identidade in identidades_meta or ():
+        valor = str(identidade or "").strip()
+        if valor and valor not in identidades:
+            identidades.append(valor)
+
+    if not identidades:
+        raise ValueError("A operacao Meta exige ao menos uma identidade")
+    return identidades
 ````
 
 ## Passo 22 — `core/repositories/seguranca/bloqueio_meta.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `09bb22f55f116140f0760c16b579abb6fdea1ba1c6c92c0df8fa38716d916916`
+SHA-256 do conteúdo UTF-8 normalizado: `af79ac9c1130dd51626c240ed07bc2d54e6432585ef399b96920311b77e57ecc`
 
 ````python
 import logging
@@ -6503,9 +6753,93 @@ from core.integrations.whatsapp.identidade import (
     validar_identidade_tipificada,
 )
 from core.logging_config import short_value
+from core.repositories.atendimento.user_id_cliente import (
+    consolidar_vinculo_user_id,
+    resolver_aliases_comprovados,
+)
 
 
 logger = logging.getLogger("db.bloqueio_meta")
+
+
+class ConflitoAliasesBloqueioMeta(RuntimeError):
+    """Impede que um par explicito sobrescreva um vinculo ja comprovado."""
+
+
+def validar_aliases_explicitos_bloqueio_meta(
+    wa_id,
+    user_id,
+    phone_id_unidade,
+    cursor,
+):
+    """Valida aliases do evento sem criar ou alterar ``user_id_cliente``.
+
+    Um envelope normal com WA ID e user ID pode coordenar flood e denylist
+    naquele evento. Antes disso, cada lado e confrontado com o vinculo
+    persistido da mesma unidade. Divergencias abortam antes da chamada Meta.
+    """
+    wa_id = _normalizar_id(wa_id)
+    user_id = _normalizar_id(user_id)
+    phone_id_unidade = _normalizar_id(phone_id_unidade)
+    if not phone_id_unidade or (not wa_id and not user_id):
+        return None
+
+    aliases_wa = (
+        resolver_aliases_comprovados(
+            "wa_id",
+            wa_id,
+            phone_id_unidade,
+            cursor,
+        )
+        if wa_id
+        else None
+    )
+    aliases_user = (
+        resolver_aliases_comprovados(
+            "user_id",
+            user_id,
+            phone_id_unidade,
+            cursor,
+        )
+        if user_id
+        else None
+    )
+
+    if aliases_wa and aliases_wa.get("wa_id") != wa_id:
+        raise ConflitoAliasesBloqueioMeta(
+            "WA ID explicito diverge do cliente resolvido"
+        )
+    if (
+        aliases_wa
+        and aliases_wa.get("user_id")
+        and user_id
+        and aliases_wa["user_id"] != user_id
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "user ID explicito diverge do vinculo persistido do WA ID"
+        )
+    if aliases_user and aliases_user.get("user_id") != user_id:
+        raise ConflitoAliasesBloqueioMeta(
+            "user ID explicito diverge do cliente resolvido"
+        )
+    if (
+        aliases_user
+        and aliases_user.get("wa_id")
+        and wa_id
+        and aliases_user["wa_id"] != wa_id
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "WA ID explicito diverge do vinculo persistido do user ID"
+        )
+    if aliases_wa and aliases_user and (
+        aliases_wa["id_cliente"] != aliases_user["id_cliente"]
+        or aliases_wa["id_unidade"] != aliases_user["id_unidade"]
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "WA ID e user ID explicitos resolvem pessoas diferentes"
+        )
+
+    return aliases_wa or aliases_user
 
 
 def registrar_evento_flood_banco(
@@ -6688,96 +7022,182 @@ def registrar_cliente_bloqueado_meta_banco(
     cursor,
     nome_cliente=None,
 ):
+    wa_id = _normalizar_id(wa_id)
+    user_id = _normalizar_id(user_id)
+    phone_id_unidade = _normalizar_id(phone_id_unidade)
     if not wa_id and not user_id:
         raise ValueError("bloqueio exige wa_id ou user_id")
-
-    # Se a pessoa ja possui uma linha na unidade, atualizamos essa linha antes
-    # de tentar inserir. Isso respeita o indice parcial cliente/unidade sem
-    # criar uma consolidacao lateral durante reconciliacao de clientes.
-    if id_cliente is not None:
-        cursor.execute(
-            """
-            UPDATE chatbot.cliente_bloqueado_meta
-            SET
-                nome = COALESCE(%s, nome),
-                wa_id = COALESCE(%s, wa_id),
-                user_id = COALESCE(%s, user_id),
-                username = COALESCE(%s, username),
-                phone_id_unidade = %s
-            WHERE id_cliente = %s
-              AND id_unidade = %s
-            RETURNING id_bloqueio;
-            """,
-            (
-                nome_cliente,
-                wa_id,
-                user_id,
-                username,
-                phone_id_unidade,
-                id_cliente,
-                id_unidade,
-            ),
+    aliases = validar_aliases_explicitos_bloqueio_meta(
+        wa_id,
+        user_id,
+        phone_id_unidade,
+        cursor,
+    )
+    if aliases and aliases["id_unidade"] != id_unidade:
+        raise ConflitoAliasesBloqueioMeta(
+            "Identidades explicitas pertencem a outra unidade"
         )
-        resultado = cursor.fetchone()
-        if resultado:
-            return resultado[0]
+    if id_cliente and aliases and aliases["id_cliente"] != id_cliente:
+        raise ConflitoAliasesBloqueioMeta(
+            "Identidades explicitas pertencem a outro cliente"
+        )
+    if aliases:
+        wa_id = wa_id or aliases.get("wa_id")
+        user_id = user_id or aliases.get("user_id")
+    id_cliente = id_cliente or (aliases.get("id_cliente") if aliases else None)
+    bloqueio = _consolidar_linhas_bloqueio_meta(
+        id_cliente_destino=id_cliente,
+        ids_cliente_equivalentes={id_cliente} if id_cliente else set(),
+        id_unidade=id_unidade,
+        phone_id_unidade=phone_id_unidade,
+        wa_id=wa_id,
+        user_id=user_id,
+        username=username,
+        nome=nome_cliente,
+        cursor=cursor,
+        criar_se_ausente=True,
+    )
+    return bloqueio["id_bloqueio"] if bloqueio else None
 
-    if wa_id:
-        conflito = "(wa_id, id_unidade)"
-        predicado = ""
-    else:
-        conflito = "(user_id, id_unidade)"
-        predicado = " WHERE user_id IS NOT NULL"
+
+def consolidar_bloqueio_meta_reconciliacao(
+    *,
+    id_cliente_origem,
+    id_cliente_destino,
+    id_unidade,
+    wa_id,
+    user_id,
+    username,
+    cursor,
+):
+    """Move/enriquece a denylist sem criar um bloqueio durante o merge."""
+    wa_id = _normalizar_id(wa_id)
+    user_id = _normalizar_id(user_id)
+    cursor.execute(
+        "SELECT phone_number_id FROM chatbot.unidade WHERE id_unidade = %s;",
+        (id_unidade,),
+    )
+    unidade = cursor.fetchone()
+    if not unidade:
+        raise RuntimeError("Unidade ausente ao consolidar bloqueio Meta")
+
+    aliases = validar_aliases_explicitos_bloqueio_meta(
+        wa_id,
+        user_id,
+        unidade[0],
+        cursor,
+    )
+    if aliases and (
+        aliases["id_unidade"] != id_unidade
+        or aliases["id_cliente"] not in {
+            id_cliente_origem,
+            id_cliente_destino,
+        }
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "Aliases da reconciliacao apontam para outra pessoa/unidade"
+        )
+
+    return _consolidar_linhas_bloqueio_meta(
+        id_cliente_destino=id_cliente_destino,
+        ids_cliente_equivalentes={id_cliente_origem, id_cliente_destino},
+        id_unidade=id_unidade,
+        phone_id_unidade=unidade[0],
+        wa_id=wa_id,
+        user_id=user_id,
+        username=username,
+        nome=None,
+        cursor=cursor,
+        criar_se_ausente=False,
+    )
+
+
+def consolidar_prova_bloqueio_meta_antes_desbloqueio(id_bloqueio, cursor):
+    """Promove a prova duravel da denylist antes da exclusao pelo Admin.
+
+    A chamada ocorre somente depois de a Meta desbloquear todos os aliases.
+    Se a linha completa nao resolver inequivocamente a mesma pessoa/unidade,
+    a excecao preserva o registro local e impede a exclusao.
+    """
+    cursor.execute(
+        """
+        SELECT id_cliente, id_unidade, phone_id_unidade, wa_id, user_id
+        FROM chatbot.cliente_bloqueado_meta
+        WHERE id_bloqueio = %s
+        """,
+        (id_bloqueio,),
+    )
+    linha = cursor.fetchone()
+    if not linha:
+        raise RuntimeError("Bloqueio Meta nao encontrado antes do desbloqueio")
+
+    id_cliente, id_unidade, phone_id_unidade, wa_id, user_id = linha
+    if not all((id_cliente, id_unidade, phone_id_unidade, wa_id, user_id)):
+        return None
 
     cursor.execute(
-        f"""
-        INSERT INTO chatbot.cliente_bloqueado_meta (
-            id_cliente,
-            nome,
-            wa_id,
-            user_id,
-            username,
-            id_unidade,
-            phone_id_unidade
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT {conflito}{predicado} DO UPDATE
-        SET
-            id_cliente = COALESCE(
-                EXCLUDED.id_cliente,
-                chatbot.cliente_bloqueado_meta.id_cliente
-            ),
-            nome = COALESCE(
-                EXCLUDED.nome,
-                chatbot.cliente_bloqueado_meta.nome
-            ),
-            wa_id = COALESCE(
-                EXCLUDED.wa_id,
-                chatbot.cliente_bloqueado_meta.wa_id
-            ),
-            user_id = COALESCE(
-                EXCLUDED.user_id,
-                chatbot.cliente_bloqueado_meta.user_id
-            ),
-            username = COALESCE(
-                EXCLUDED.username,
-                chatbot.cliente_bloqueado_meta.username
-            ),
-            phone_id_unidade = EXCLUDED.phone_id_unidade
-        RETURNING id_bloqueio;
+        """
+        SELECT cliente.wa_id, unidade.phone_number_id
+        FROM chatbot.cliente AS cliente
+        JOIN chatbot.unidade AS unidade
+          ON unidade.id_unidade = %s
+        WHERE cliente.id_cliente = %s
+        FOR UPDATE OF cliente;
         """,
-        (
-            id_cliente,
-            nome_cliente,
-            wa_id,
-            user_id,
-            username,
-            id_unidade,
-            phone_id_unidade,
-        ),
+        (id_unidade, id_cliente),
     )
-    resultado = cursor.fetchone()
-    return resultado[0] if resultado else None
+    ancora = cursor.fetchone()
+    if (
+        not ancora
+        or _normalizar_id(ancora[0]) != _normalizar_id(wa_id)
+        or _normalizar_id(ancora[1]) != _normalizar_id(phone_id_unidade)
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "Denylist nao resolve cliente, WA ID e unidade inequivocamente"
+        )
+
+    aliases = validar_aliases_explicitos_bloqueio_meta(
+        wa_id,
+        user_id,
+        phone_id_unidade,
+        cursor,
+    )
+    if aliases and (
+        aliases["id_cliente"] != id_cliente
+        or aliases["id_unidade"] != id_unidade
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "Aliases da denylist apontam para outra pessoa ou unidade"
+        )
+
+    id_vinculo = consolidar_vinculo_user_id(
+        id_cliente_destino=id_cliente,
+        user_id=user_id,
+        id_unidade=id_unidade,
+        cursor=cursor,
+    )
+    # A ordem de locks acompanha o worker: vinculo primeiro, denylist depois.
+    # Revalidar a fotografia sob advisory/row lock faz qualquer corrida
+    # abortar a transacao inteira, inclusive a consolidacao acima.
+    cursor.execute(
+        "SELECT pg_advisory_xact_lock(hashtext('bloqueio_meta'), %s);",
+        (id_unidade,),
+    )
+    cursor.execute(
+        """
+        SELECT id_cliente, id_unidade, phone_id_unidade, wa_id, user_id
+        FROM chatbot.cliente_bloqueado_meta
+        WHERE id_bloqueio = %s
+        FOR UPDATE;
+        """,
+        (id_bloqueio,),
+    )
+    linha_confirmada = cursor.fetchone()
+    if linha_confirmada != linha:
+        raise RuntimeError(
+            "Bloqueio Meta mudou durante a consolidacao do desbloqueio"
+        )
+    return id_vinculo
 
 
 def cliente_bloqueado_meta_existe_banco(
@@ -6786,34 +7206,322 @@ def cliente_bloqueado_meta_existe_banco(
     phone_id_unidade,
     cursor,
 ):
+    return buscar_cliente_bloqueado_meta_banco(
+        tipo_identidade,
+        identidade,
+        phone_id_unidade,
+        cursor,
+    ) is not None
+
+
+def buscar_cliente_bloqueado_meta_banco(
+    tipo_identidade,
+    identidade,
+    phone_id_unidade,
+    cursor,
+    *,
+    wa_id=None,
+    user_id=None,
+):
+    """Retorna a denylist pelo sujeito comprovado, sem inferir aliases."""
     tipo_identidade, identidade = validar_identidade_tipificada(
         tipo_identidade,
         identidade,
     )
-    coluna = "wa_id" if tipo_identidade == TIPO_IDENTIDADE_WA_ID else "user_id"
+    wa_id = _normalizar_id(wa_id)
+    user_id = _normalizar_id(user_id)
+    if tipo_identidade == TIPO_IDENTIDADE_WA_ID:
+        if wa_id and wa_id != identidade:
+            raise ConflitoAliasesBloqueioMeta(
+                "WA ID primario diverge do WA ID explicito"
+            )
+        wa_id = identidade
+    else:
+        if user_id and user_id != identidade:
+            raise ConflitoAliasesBloqueioMeta(
+                "user ID primario diverge do user ID explicito"
+            )
+        user_id = identidade
+
+    aliases = validar_aliases_explicitos_bloqueio_meta(
+        wa_id,
+        user_id,
+        phone_id_unidade,
+        cursor,
+    )
+    wa_id = wa_id or (aliases.get("wa_id") if aliases else None)
+    user_id = user_id or (aliases.get("user_id") if aliases else None)
+    id_cliente = aliases.get("id_cliente") if aliases else None
+
     cursor.execute(
-        f"""
-        SELECT EXISTS (
-            SELECT 1
-            FROM chatbot.cliente_bloqueado_meta
-            WHERE {coluna} = %s
-              AND phone_id_unidade = %s
-            LIMIT 1
-        );
+        """
+        SELECT
+            bloqueio.id_bloqueio,
+            bloqueio.id_cliente,
+            bloqueio.id_unidade,
+            bloqueio.phone_id_unidade,
+            bloqueio.wa_id,
+            bloqueio.user_id,
+            bloqueio.username
+        FROM chatbot.cliente_bloqueado_meta AS bloqueio
+        WHERE bloqueio.phone_id_unidade = %s
+          AND (
+              (%s IS NOT NULL AND bloqueio.id_cliente = %s)
+              OR (%s IS NOT NULL AND bloqueio.wa_id = %s)
+              OR (%s IS NOT NULL AND bloqueio.user_id = %s)
+          )
+        ORDER BY bloqueio.id_bloqueio
+        LIMIT 1;
         """,
-        (identidade, phone_id_unidade),
+        (
+            phone_id_unidade,
+            id_cliente,
+            id_cliente,
+            wa_id,
+            wa_id,
+            user_id,
+            user_id,
+        ),
     )
     resultado = cursor.fetchone()
-    existe = bool(resultado[0]) if resultado else False
+    if not resultado:
+        logger.debug(
+            "bloqueio_meta_consulta | acao=nao_encontrado "
+            "tipo_identidade=%s identidade=%s phone_id_unidade=%s",
+            tipo_identidade,
+            short_value(identidade),
+            short_value(phone_id_unidade),
+        )
+        return None
+
+    if resultado[4] and wa_id and resultado[4] != wa_id:
+        raise ConflitoAliasesBloqueioMeta(
+            "WA ID explicito diverge da linha de denylist"
+        )
+    if resultado[5] and user_id and resultado[5] != user_id:
+        raise ConflitoAliasesBloqueioMeta(
+            "user ID explicito diverge da linha de denylist"
+        )
+    if resultado[1] and id_cliente and resultado[1] != id_cliente:
+        raise ConflitoAliasesBloqueioMeta(
+            "Cliente resolvido diverge da linha de denylist"
+        )
+
+    wa_id_final = wa_id or resultado[4]
+    user_id_final = user_id or resultado[5]
+    if (wa_id_final and not resultado[4]) or (user_id_final and not resultado[5]):
+        bloqueio_enriquecido = _consolidar_linhas_bloqueio_meta(
+            id_cliente_destino=resultado[1] or id_cliente,
+            ids_cliente_equivalentes={
+                valor for valor in (resultado[1], id_cliente) if valor
+            },
+            id_unidade=resultado[2],
+            phone_id_unidade=resultado[3],
+            wa_id=wa_id_final,
+            user_id=user_id_final,
+            username=resultado[6],
+            nome=None,
+            cursor=cursor,
+            criar_se_ausente=False,
+        )
+        if bloqueio_enriquecido:
+            return bloqueio_enriquecido
+    identidades_meta = [
+        valor for valor in (wa_id_final, user_id_final) if valor
+    ]
+    bloqueio = {
+        "id_bloqueio": resultado[0],
+        "id_cliente": resultado[1] or id_cliente,
+        "id_unidade": resultado[2],
+        "phone_id_unidade": resultado[3],
+        "wa_id": wa_id_final,
+        "user_id": user_id_final,
+        "username": resultado[6],
+        "identidades_meta": identidades_meta,
+    }
     logger.debug(
         "bloqueio_meta_consulta | acao=existe tipo_identidade=%s "
-        "identidade=%s phone_id_unidade=%s existe=%s",
+        "identidade=%s phone_id_unidade=%s aliases=%s",
         tipo_identidade,
         short_value(identidade),
         short_value(phone_id_unidade),
-        existe,
+        len(identidades_meta),
     )
-    return existe
+    return bloqueio
+
+
+def _consolidar_linhas_bloqueio_meta(
+    *,
+    id_cliente_destino,
+    ids_cliente_equivalentes,
+    id_unidade,
+    phone_id_unidade,
+    wa_id,
+    user_id,
+    username,
+    nome,
+    cursor,
+    criar_se_ausente,
+):
+    """Mantém uma linha por pessoa/unidade e só completa campos nulos."""
+    ids_cliente_equivalentes = {
+        valor for valor in ids_cliente_equivalentes if valor is not None
+    }
+    cursor.execute(
+        "SELECT pg_advisory_xact_lock(hashtext('bloqueio_meta'), %s);",
+        (id_unidade,),
+    )
+    cursor.execute(
+        """
+        SELECT
+            id_bloqueio,
+            id_cliente,
+            nome,
+            wa_id,
+            user_id,
+            username,
+            phone_id_unidade
+        FROM chatbot.cliente_bloqueado_meta
+        WHERE id_unidade = %s
+          AND (
+              id_cliente = ANY(%s::bigint[])
+              OR (%s IS NOT NULL AND wa_id = %s)
+              OR (%s IS NOT NULL AND user_id = %s)
+          )
+        ORDER BY
+            CASE WHEN id_cliente = %s THEN 0 ELSE 1 END,
+            id_bloqueio
+        FOR UPDATE;
+        """,
+        (
+            id_unidade,
+            sorted(ids_cliente_equivalentes),
+            wa_id,
+            wa_id,
+            user_id,
+            user_id,
+            id_cliente_destino,
+        ),
+    )
+    linhas = cursor.fetchall()
+    if not linhas:
+        if not criar_se_ausente:
+            return None
+        cursor.execute(
+            """
+            INSERT INTO chatbot.cliente_bloqueado_meta (
+                id_cliente, nome, wa_id, user_id, username,
+                id_unidade, phone_id_unidade
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id_bloqueio;
+            """,
+            (
+                id_cliente_destino,
+                nome,
+                wa_id,
+                user_id,
+                username,
+                id_unidade,
+                phone_id_unidade,
+            ),
+        )
+        criado = cursor.fetchone()
+        if not criado:
+            raise RuntimeError("Bloqueio Meta não foi registrado")
+        return {
+            "id_bloqueio": criado[0],
+            "id_cliente": id_cliente_destino,
+            "id_unidade": id_unidade,
+            "phone_id_unidade": phone_id_unidade,
+            "wa_id": wa_id,
+            "user_id": user_id,
+            "username": username,
+            "identidades_meta": [valor for valor in (wa_id, user_id) if valor],
+        }
+
+    wa_existentes = {linha[3] for linha in linhas if linha[3]}
+    user_existentes = {linha[4] for linha in linhas if linha[4]}
+    clientes_existentes = {linha[1] for linha in linhas if linha[1]}
+    phones_existentes = {linha[6] for linha in linhas if linha[6]}
+    if len(phones_existentes) > 1 or (
+        phone_id_unidade
+        and phones_existentes - {phone_id_unidade}
+    ):
+        raise ConflitoAliasesBloqueioMeta(
+            "Bloqueios Meta possuem phone IDs contraditorios"
+        )
+    if len(wa_existentes) > 1 or (wa_id and wa_existentes - {wa_id}):
+        raise ConflitoAliasesBloqueioMeta(
+            "Bloqueios Meta possuem WA IDs contraditórios"
+        )
+    if len(user_existentes) > 1 or (user_id and user_existentes - {user_id}):
+        raise ConflitoAliasesBloqueioMeta(
+            "Bloqueios Meta possuem user IDs contraditórios"
+        )
+    if (
+        ids_cliente_equivalentes
+        and clientes_existentes - ids_cliente_equivalentes
+    ) or (not ids_cliente_equivalentes and len(clientes_existentes) > 1):
+        raise ConflitoAliasesBloqueioMeta(
+            "Bloqueios Meta apontam para clientes contraditórios"
+        )
+
+    alvo = linhas[0]
+    ids_extras = [linha[0] for linha in linhas[1:]]
+    if ids_extras:
+        cursor.execute(
+            "DELETE FROM chatbot.cliente_bloqueado_meta WHERE id_bloqueio = ANY(%s::int[]);",
+            (ids_extras,),
+        )
+        if cursor.rowcount != len(ids_extras):
+            raise RuntimeError("Bloqueios Meta duplicados não foram consolidados")
+
+    wa_final = alvo[3] or wa_id or next(iter(wa_existentes), None)
+    user_final = alvo[4] or user_id or next(iter(user_existentes), None)
+    username_final = alvo[5] or str(username or "").strip() or None
+    nome_final = alvo[2] or nome
+    id_cliente_final = (
+        id_cliente_destino
+        or alvo[1]
+        or next(iter(clientes_existentes), None)
+    )
+    cursor.execute(
+        """
+        UPDATE chatbot.cliente_bloqueado_meta
+        SET
+            id_cliente = %s,
+            nome = %s,
+            wa_id = %s,
+            user_id = %s,
+            username = %s,
+            phone_id_unidade = %s
+        WHERE id_bloqueio = %s
+        RETURNING id_bloqueio;
+        """,
+        (
+            id_cliente_final,
+            nome_final,
+            wa_final,
+            user_final,
+            username_final,
+            phone_id_unidade,
+            alvo[0],
+        ),
+    )
+    atualizado = cursor.fetchone()
+    if not atualizado:
+        raise RuntimeError("Bloqueio Meta não foi enriquecido")
+    return {
+        "id_bloqueio": atualizado[0],
+        "id_cliente": id_cliente_final,
+        "id_unidade": id_unidade,
+        "phone_id_unidade": phone_id_unidade,
+        "wa_id": wa_final,
+        "user_id": user_final,
+        "username": username_final,
+        "identidades_meta": [valor for valor in (wa_final, user_final) if valor],
+    }
 
 
 def _normalizar_identidades_flood(
@@ -6834,18 +7542,28 @@ def _normalizar_identidades_flood(
     if atual not in pares:
         pares.append(atual)
     return pares
+
+
+def _normalizar_id(valor):
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    return texto or None
 ````
 
 ## Passo 23 — `core/repositories/seguranca/suspeita_bot.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f5301f82fcafba7d060e82032cab84bd84ea007f4d5f68a796241b3873a61f28`
+SHA-256 do conteúdo UTF-8 normalizado: `685d3c817fe0eb5b3e61bd32f71422638d91fed85f92c5ff234887e8bbc6bcf2`
 
 ````python
 import logging
 
 from core.logging_config import short_value
+from core.repositories.atendimento.user_id_cliente import (
+    resolver_aliases_comprovados,
+)
 
 
 logger = logging.getLogger("db.suspeita_bot")
@@ -6913,25 +7631,19 @@ def buscar_conversa_no_limite_sem_avanco(
     phone_id_unidade,
     cursor,
 ):
-    if tipo_identidade == "wa_id":
-        join_identidade = """
-        JOIN chatbot.cliente AS cliente
-          ON cliente.id_cliente = conversa.id_cliente
-        """
-        filtro_identidade = "cliente.wa_id = %s"
-    elif tipo_identidade == "user_id":
-        join_identidade = """
-        JOIN chatbot.cliente AS cliente
-          ON cliente.id_cliente = conversa.id_cliente
-        JOIN chatbot.user_id_cliente AS vinculo
-          ON vinculo.id_cliente = conversa.id_cliente
-         AND vinculo.id_unidade = conversa.id_unidade
-        """
-        filtro_identidade = "vinculo.user_id = %s"
-    else:
+    if tipo_identidade not in {"wa_id", "user_id"}:
         raise ValueError("tipo de identidade invalido para suspeita")
 
-    cursor.execute(f"""
+    aliases = resolver_aliases_comprovados(
+        tipo_identidade,
+        identidade,
+        phone_id_unidade,
+        cursor,
+    )
+    if not aliases:
+        return None
+
+    cursor.execute("""
         SELECT
             conversa.id_conversa,
             conversa.id_cliente,
@@ -6940,17 +7652,20 @@ def buscar_conversa_no_limite_sem_avanco(
             unidade.phone_number_id,
             conversa.turnos_sem_avanco
         FROM chatbot.conversa AS conversa
-        {join_identidade}
+        JOIN chatbot.cliente AS cliente
+          ON cliente.id_cliente = conversa.id_cliente
         JOIN chatbot.unidade AS unidade
           ON unidade.id_unidade = conversa.id_unidade
-        WHERE {filtro_identidade}
+        WHERE conversa.id_cliente = %s
+          AND conversa.id_unidade = %s
           AND unidade.phone_number_id = %s
           AND conversa.status_ativa = TRUE
           AND conversa.turnos_sem_avanco >= %s
         ORDER BY conversa.id_conversa DESC
         LIMIT 1;
     """, (
-        identidade,
+        aliases["id_cliente"],
+        aliases["id_unidade"],
         phone_id_unidade,
         LIMITE_TURNOS_SEM_AVANCO,
     ))
@@ -6975,6 +7690,13 @@ def buscar_conversa_no_limite_sem_avanco(
         "id_unidade": resultado[3],
         "phone_id_unidade": resultado[4],
         "turnos_sem_avanco": int(resultado[5]),
+        "wa_id": aliases.get("wa_id"),
+        "user_id": aliases.get("user_id"),
+        "identidades_meta": [
+            valor
+            for valor in (aliases.get("wa_id"), aliases.get("user_id"))
+            if valor
+        ],
     }
     logger.warning(
         "turnos_sem_avanco_limite_encontrado | "
@@ -6998,7 +7720,7 @@ def buscar_conversa_no_limite_sem_avanco(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e9f1ca2f52884264ef17ef840cf8f4b5d805c635118c9767c87987837ad17ff8`
+SHA-256 do conteúdo UTF-8 normalizado: `a7865f62f9f0914b90c74684800dda832ea83fcfdf4576d099b94b8dbbc791d6`
 
 ````python
 import logging
@@ -7009,6 +7731,9 @@ from core.integrations.whatsapp.identidade import (
     validar_identidade_tipificada,
 )
 from core.logging_config import short_value
+from core.repositories.atendimento.user_id_cliente import (
+    resolver_aliases_comprovados,
+)
 
 
 logger = logging.getLogger("db.turno_cliente")
@@ -7041,12 +7766,20 @@ def avaliar_turno_cliente_para_fila(
     if not id_phone_unidade:
         return {"pode_enfileirar": False, "motivo": "dados_invalidos"}
 
+    sujeito = _resolver_sujeito_turno(
+        cursor,
+        tipo_identidade,
+        identidade,
+        id_phone_unidade,
+    )
+
     if usar_lock:
         adquirir_lock_turno_cliente(
             cursor,
             tipo_identidade,
             identidade,
             id_phone_unidade,
+            sujeito=sujeito,
         )
 
     if received_data_hora is not None:
@@ -7056,6 +7789,7 @@ def avaliar_turno_cliente_para_fila(
             identidade,
             id_phone_unidade,
             received_data_hora,
+            sujeito=sujeito,
         )
         if interacao_posterior is not None:
             return {
@@ -7068,6 +7802,7 @@ def avaliar_turno_cliente_para_fila(
         tipo_identidade,
         identidade,
         id_phone_unidade,
+        sujeito=sujeito,
     )
     if not turno["existe_fila_aberta"]:
         return {"pode_enfileirar": True, "motivo": "sem_fila_aberta"}
@@ -7087,10 +7822,18 @@ def adquirir_lock_turno_cliente(
     tipo_identidade,
     identidade,
     id_phone_unidade,
+    *,
+    sujeito=None,
 ):
     tipo_identidade, identidade = validar_identidade_tipificada(
         tipo_identidade,
         identidade,
+    )
+    sujeito = sujeito or _resolver_sujeito_turno(
+        cursor,
+        tipo_identidade,
+        identidade,
+        id_phone_unidade,
     )
     cursor.execute(
         """
@@ -7098,7 +7841,7 @@ def adquirir_lock_turno_cliente(
         """,
         (
             str(id_phone_unidade),
-            f"{tipo_identidade}:{identidade}",
+            sujeito["chave_lock"],
         ),
     )
 
@@ -7109,41 +7852,52 @@ def buscar_interacao_posterior_a_mensagem(
     identidade,
     id_phone_unidade,
     received_data_hora,
+    *,
+    sujeito=None,
 ):
     tipo_identidade, identidade = validar_identidade_tipificada(
         tipo_identidade,
         identidade,
     )
 
-    if tipo_identidade == TIPO_IDENTIDADE_WA_ID:
+    sujeito = sujeito or _resolver_sujeito_turno(
+        cursor,
+        tipo_identidade,
+        identidade,
+        id_phone_unidade,
+    )
+
+    if sujeito["id_cliente"] is not None:
         cursor.execute(
             """
             SELECT c.last_interaction_at
             FROM chatbot.conversa AS c
-            JOIN chatbot.cliente AS cl
-              ON cl.id_cliente = c.id_cliente
-            JOIN chatbot.unidade AS u
-              ON u.id_unidade = c.id_unidade
-            WHERE cl.wa_id = %s
-              AND u.phone_number_id = %s
+            WHERE c.id_cliente = %s
+              AND c.id_unidade = %s
               AND c.last_interaction_at IS NOT NULL
               AND %s < c.last_interaction_at
             ORDER BY c.last_interaction_at DESC, c.id_conversa DESC
             LIMIT 1;
             """,
-            (identidade, id_phone_unidade, received_data_hora),
+            (
+                sujeito["id_cliente"],
+                sujeito["id_unidade"],
+                received_data_hora,
+            ),
         )
     else:
+        coluna = (
+            "wa_id"
+            if tipo_identidade == TIPO_IDENTIDADE_WA_ID
+            else "user_id"
+        )
         cursor.execute(
-            """
+            f"""
             SELECT c.last_interaction_at
             FROM chatbot.conversa AS c
             JOIN chatbot.unidade AS u
               ON u.id_unidade = c.id_unidade
-            JOIN chatbot.user_id_cliente AS vinculo
-              ON vinculo.id_cliente = c.id_cliente
-             AND vinculo.id_unidade = c.id_unidade
-            WHERE vinculo.user_id = %s
+            WHERE c.{coluna} = %s
               AND u.phone_number_id = %s
               AND c.last_interaction_at IS NOT NULL
               AND %s < c.last_interaction_at
@@ -7162,18 +7916,23 @@ def avaliar_filas_abertas_turno(
     tipo_identidade,
     identidade,
     id_phone_unidade,
+    *,
+    sujeito=None,
 ):
     tipo_identidade, identidade = validar_identidade_tipificada(
         tipo_identidade,
         identidade,
     )
-    coluna = (
-        "wa_id"
-        if tipo_identidade == TIPO_IDENTIDADE_WA_ID
-        else "user_id"
+    sujeito = sujeito or _resolver_sujeito_turno(
+        cursor,
+        tipo_identidade,
+        identidade,
+        id_phone_unidade,
     )
+    wa_ids = [sujeito["wa_id"]] if sujeito["wa_id"] else []
+    user_ids = [sujeito["user_id"]] if sujeito["user_id"] else []
     cursor.execute(
-        f"""
+        """
         WITH filas_abertas AS (
             SELECT
                 f.id_mensagem,
@@ -7182,8 +7941,11 @@ def avaliar_filas_abertas_turno(
                 f.status,
                 f.received_data_hora
             FROM chatbot.fila_mensagens AS f
-            WHERE f.{coluna} = %s
-              AND f.id_phone_unidade = %s
+            WHERE f.id_phone_unidade = %s
+              AND (
+                  f.wa_id = ANY(%s::text[])
+                  OR f.user_id = ANY(%s::text[])
+              )
               AND f.status IN ('pending', 'processing')
         ),
         filas_sem_resposta_bot AS (
@@ -7205,7 +7967,7 @@ def avaliar_filas_abertas_turno(
             (SELECT COUNT(*) FROM filas_abertas),
             (SELECT id_mensagem FROM filas_sem_resposta_bot LIMIT 1);
         """,
-        (identidade, id_phone_unidade),
+        (id_phone_unidade, wa_ids, user_ids),
     )
     resultado = cursor.fetchone()
     return {
@@ -7216,2382 +7978,44 @@ def avaliar_filas_abertas_turno(
     }
 
 
-def fila_tem_mensagem_aberta_turno(
+def _resolver_sujeito_turno(
     cursor,
     tipo_identidade,
     identidade,
     id_phone_unidade,
 ):
-    turno = avaliar_filas_abertas_turno(
-        cursor,
+    aliases = resolver_aliases_comprovados(
         tipo_identidade,
         identidade,
         id_phone_unidade,
+        cursor,
     )
-    return turno["existe_fila_aberta"]
-````
-
-## Passo 25 — `operations/cache_consulta.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `a94683104e504d3263a36d520f3a9665a749996e16182f96eccb411e59a5a79a`
-
-````python
-"""Consulta manual e somente leitura dos bloqueios temporários no Redis."""
-
-from datetime import datetime, timedelta, timezone
-
-from core.cache.redis_client import get_redis_safe
-
-
-def listar_bloqueios_cache():
-    """Consulta o Redis apenas quando o operador executar a ferramenta."""
-    redis = get_redis_safe(retries=1, delay=0, validate=True)
-    chaves = list(
-        redis.scan_iter(
-            match="conversa_bloqueada:*",
-            count=100,
-        )
-    )
-
-    print("Total de conversas bloqueadas:", len(chaves))
-
-    for chave in chaves:
-        dados = redis.hgetall(chave)
-        ttl = redis.ttl(chave)
-        expira_em = (
-            datetime.now(timezone.utc) + timedelta(seconds=ttl)
-            if ttl > 0
-            else None
-        )
-
-        print("\n" + "=" * 70)
-        print("Chave:", chave)
-        print("Tipo de identidade:", dados.get("tipo_identidade"))
-        print("Identidade:", dados.get("identidade"))
-        print("Phone Number ID:", dados.get("id_phone_unidade"))
-        print("Finalizou em:", dados.get("finalizou_em"))
-        print("Dias de bloqueio:", dados.get("bloqueio_dias"))
-        print("TTL em segundos:", ttl)
-        print("Expira aproximadamente em:", expira_em)
-
-
-def main():
-    listar_bloqueios_cache()
-
-
-if __name__ == "__main__":
-    main()
-````
-
-## Passo 26 — `operations/monitoring/blocked_users.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `d0313920372ddad05e334da56e2232fe38fe7c4995b8fe6d7f370c06ae06775b`
-
-````python
-"""Reconciliação de bloqueios e registros WhatsApp.
-
-O escopo é deliberadamente limitado às unidades e WABAs cadastradas no
-banco. Os relatórios não alteram a Meta nem o PostgreSQL. O helper manual de
-desbloqueio exige seleção tipada explícita.
-"""
-
-from __future__ import annotations
-
-import argparse
-import sys
-from pathlib import Path
-
-import requests
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from operations.bootstrap import configure_local_operations
-
-
-TIPO_IDENTIDADE_WA_ID = "wa_id"
-TIPO_IDENTIDADE_USER_ID = "user_id"
-TIPOS_IDENTIDADE = (TIPO_IDENTIDADE_WA_ID, TIPO_IDENTIDADE_USER_ID)
-
-
-def carregar_estado_banco(*, connection_factory=None):
-    """Carrega unidades e bloqueios locais em uma única fotografia read-only."""
-    if connection_factory is None:
-        configure_local_operations()
-        from core.database.connection_aws import get_conn
-
-        connection_factory = get_conn
-
-    conn = connection_factory(
-        application_name="operations_blocked_users_readonly",
-    )
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;"
-        )
-        cursor.execute(
-            """
-            SELECT id_unidade, nome, waba_id, phone_number_id
-            FROM chatbot.unidade
-            WHERE waba_id IS NOT NULL
-              AND BTRIM(waba_id) <> ''
-              AND phone_number_id IS NOT NULL
-              AND BTRIM(phone_number_id) <> ''
-            ORDER BY id_unidade;
-            """
-        )
-        unidades = [
-            {
-                "id_unidade": linha[0],
-                "nome_unidade": linha[1],
-                "waba_id": _normalizar_id(linha[2]),
-                "phone_id_unidade": _normalizar_id(linha[3]),
-            }
-            for linha in cursor.fetchall()
-        ]
-
-        cursor.execute(
-            """
-            SELECT
-                cbm.id_bloqueio,
-                cbm.id_cliente,
-                cbm.nome,
-                cbm.wa_id,
-                cbm.user_id,
-                cbm.username,
-                cbm.id_unidade,
-                cbm.phone_id_unidade,
-                u.nome,
-                u.waba_id,
-                u.phone_number_id,
-                c.nome
-            FROM chatbot.cliente_bloqueado_meta AS cbm
-            JOIN chatbot.unidade AS u
-              ON u.id_unidade = cbm.id_unidade
-            LEFT JOIN chatbot.cliente AS c
-              ON c.id_cliente = cbm.id_cliente
-            ORDER BY
-                cbm.id_unidade,
-                COALESCE(cbm.wa_id, cbm.user_id);
-            """
-        )
-        bloqueios = []
-        for linha in cursor.fetchall():
-            tipo_identidade, identidade = selecionar_identidade_bloqueio(
-                linha[3],
-                linha[4],
-            )
-            bloqueios.append({
-                "id_bloqueio": linha[0],
-                "id_cliente": linha[1],
-                "nome_cliente": linha[2] or linha[11],
-                "wa_id": _normalizar_id(linha[3]),
-                "user_id": _normalizar_id(linha[4]),
-                "username": _normalizar_username(linha[5]),
-                "tipo_identidade": tipo_identidade,
-                "identidade": identidade,
-                "id_unidade": linha[6],
-                "phone_id_registrado": _normalizar_id(linha[7]),
-                "nome_unidade": linha[8],
-                "waba_id": _normalizar_id(linha[9]),
-                "phone_id_unidade": _normalizar_id(linha[10]),
-            })
-        return unidades, bloqueios
-    finally:
-        try:
-            conn.rollback()
-        finally:
-            conn.close()
-
-
-def listar_usuarios_bloqueados_meta(phone_id_unidade):
-    """Lista todos os bloqueados de um phone ID usando paginação do PyWa."""
-    configure_local_operations()
-    from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
-
-    cliente_wa = conta_wa(str(phone_id_unidade))
-    return cliente_wa.get_blocked_users().all(sleep=0.2)
-
-
-def desbloquear_bloqueio_meta_tipado(
-    wa_id,
-    user_id,
-    phone_id_unidade,
-    *,
-    unblock_factory=None,
-):
-    """Desbloqueia usando WA ID prioritário ou user ID como fallback.
-
-    A seleção é idêntica à regra do runtime. O chamador continua responsável
-    por excluir o registro local somente depois do sucesso na Meta.
-    """
-    tipo_identidade, identidade = selecionar_identidade_bloqueio(
-        wa_id,
-        user_id,
-    )
-    phone_id_unidade = _normalizar_id(phone_id_unidade)
-    if not phone_id_unidade:
-        raise ValueError("phone_id_unidade ausente para desbloqueio")
-
-    if unblock_factory is None:
-        configure_local_operations()
-        from core.integrations.whatsapp.tools.usuarios import (
-            desbloquear_usuario_meta,
-        )
-
-        unblock_factory = desbloquear_usuario_meta
-
-    resultado = unblock_factory(identidade, phone_id_unidade)
-    return {
-        "tipo_identidade": tipo_identidade,
-        "identidade": identidade,
-        "phone_id_unidade": phone_id_unidade,
-        "resultado_meta": resultado,
-    }
-
-
-def coletar_bloqueios_meta(unidades, *, list_factory=None):
-    """Coleta cada unidade isoladamente; uma falha não apaga as demais."""
-    list_factory = list_factory or listar_usuarios_bloqueados_meta
-    resultado = []
-
-    for unidade in unidades:
-        item = {
-            **unidade,
-            "status_meta": "ok",
-            "erro_meta": None,
-            "identidades_bloqueadas": [],
-        }
-        try:
-            bloqueados = list_factory(unidade["phone_id_unidade"])
-            por_chave = {}
-            for usuario in bloqueados:
-                identidade_meta = _extrair_identidade_bloqueada(usuario)
-                if identidade_meta is None:
-                    continue
-                chave = (
-                    identidade_meta["tipo_identidade"],
-                    identidade_meta["identidade"],
-                )
-                por_chave[chave] = identidade_meta
-            item["identidades_bloqueadas"] = [
-                por_chave[chave]
-                for chave in sorted(por_chave)
-            ]
-        except Exception as exc:
-            item["status_meta"] = "erro"
-            item["erro_meta"] = f"{type(exc).__name__}: {exc}"
-
-        resultado.append(item)
-
-    return resultado
-
-
-def comparar_bloqueios(bloqueios_meta, bloqueios_banco):
-    """Compara por WABA, phone ID, tipo e identidade do bloqueio."""
-    meta_por_chave = {}
-    banco_por_chave = {}
-    escopos_ok = set()
-    escopos_com_erro = set()
-    falhas_meta = []
-    vinculos_unidade_divergentes = []
-
-    for unidade in bloqueios_meta:
-        escopo = _escopo(unidade)
-        if unidade["status_meta"] != "ok":
-            escopos_com_erro.add(escopo)
-            falhas_meta.append({
-                "id_unidade": unidade["id_unidade"],
-                "nome_unidade": unidade["nome_unidade"],
-                "waba_id": unidade["waba_id"],
-                "phone_id_unidade": unidade["phone_id_unidade"],
-                "erro_meta": unidade["erro_meta"],
-            })
-            continue
-
-        escopos_ok.add(escopo)
-        for identidade_meta in unidade["identidades_bloqueadas"]:
-            chave = (
-                *escopo,
-                identidade_meta["tipo_identidade"],
-                identidade_meta["identidade"],
-            )
-            meta_por_chave[chave] = {
-                **identidade_meta,
-                "id_unidade": unidade["id_unidade"],
-                "nome_unidade": unidade["nome_unidade"],
-                "waba_id": escopo[0],
-                "phone_id_unidade": escopo[1],
-                "origem": "meta",
-            }
-
-    for bloqueio in bloqueios_banco:
-        phone_atual = _normalizar_id(bloqueio["phone_id_unidade"])
-        phone_registrado = _normalizar_id(
-            bloqueio.get("phone_id_registrado", phone_atual)
-        )
-        if phone_registrado != phone_atual:
-            vinculos_unidade_divergentes.append(dict(bloqueio))
-            continue
-
-        chave = (
-            _normalizar_id(bloqueio["waba_id"]),
-            phone_atual,
-            bloqueio["tipo_identidade"],
-            _normalizar_id(bloqueio["identidade"]),
-        )
-        banco_por_chave[chave] = dict(bloqueio)
-
-    chaves_meta = set(meta_por_chave)
-    chaves_banco = set(banco_por_chave)
-    chaves_sincronizadas = chaves_meta & chaves_banco
-    chaves_somente_meta = chaves_meta - chaves_banco
-    chaves_somente_banco = {
-        chave
-        for chave in chaves_banco - chaves_meta
-        if chave[:2] in escopos_ok
-    }
-    chaves_nao_comparadas = {
-        chave
-        for chave in chaves_banco - chaves_meta
-        if chave[:2] not in escopos_ok
-    }
-
-    sincronizados = [
-        {
-            **banco_por_chave[chave],
-            "origens": ("banco", "meta"),
-        }
-        for chave in _ordenar_chaves(chaves_sincronizadas)
-    ]
-    somente_meta = [
-        meta_por_chave[chave]
-        for chave in _ordenar_chaves(chaves_somente_meta)
-    ]
-    somente_banco = [
-        banco_por_chave[chave]
-        for chave in _ordenar_chaves(chaves_somente_banco)
-    ]
-    nao_comparados_banco = [
-        banco_por_chave[chave]
-        for chave in _ordenar_chaves(chaves_nao_comparadas)
-    ]
-
-    return {
-        "sincronizados": sincronizados,
-        "somente_meta": somente_meta,
-        "somente_banco": somente_banco,
-        "nao_comparados_banco": nao_comparados_banco,
-        "vinculos_unidade_divergentes": sorted(
-            vinculos_unidade_divergentes,
-            key=_ordem_registro,
-        ),
-        "falhas_meta": sorted(falhas_meta, key=_ordem_unidade),
-        "escopos_meta_ok": sorted(escopos_ok),
-        "escopos_meta_com_erro": sorted(escopos_com_erro),
-    }
-
-
-def reconciliar_bloqueios_meta_banco(
-    *,
-    imprimir=True,
-    mostrar_wa_id=False,
-    connection_factory=None,
-    meta_list_factory=None,
-):
-    """Executa e opcionalmente imprime a reconciliação Meta × banco."""
-    unidades, bloqueios_banco = carregar_estado_banco(
-        connection_factory=connection_factory,
-    )
-    bloqueios_meta = coletar_bloqueios_meta(
-        unidades,
-        list_factory=meta_list_factory,
-    )
-    resultado = comparar_bloqueios(bloqueios_meta, bloqueios_banco)
-    resultado["unidades_consultadas"] = bloqueios_meta
-
-    if imprimir:
-        imprimir_reconciliacao_bloqueios(
-            resultado,
-            mostrar_wa_id=mostrar_wa_id,
-        )
-
-    return resultado
-
-
-def listar_bloqueados_de_cada_unidade(
-    *,
-    imprimir=True,
-    mostrar_wa_id=False,
-    connection_factory=None,
-    meta_list_factory=None,
-):
-    """Lista o estado Meta por unidade sem compará-lo ao banco."""
-    unidades, _ = carregar_estado_banco(
-        connection_factory=connection_factory,
-    )
-    resultado = coletar_bloqueios_meta(
-        unidades,
-        list_factory=meta_list_factory,
-    )
-
-    if imprimir:
-        print("===== BLOQUEADOS NA META POR UNIDADE =====")
-        for unidade in resultado:
-            print(_descricao_unidade(unidade))
-            if unidade["status_meta"] != "ok":
-                print(f"   ERRO META: {unidade['erro_meta']}")
-                continue
-            if not unidade["identidades_bloqueadas"]:
-                print("   - nenhuma identidade bloqueada")
-            for identidade in unidade["identidades_bloqueadas"]:
-                print(
-                    "   - "
-                    + _formatar_identidade(
-                        identidade,
-                        mostrar=mostrar_wa_id,
-                    )
-                )
-
-    return resultado
-
-
-def imprimir_reconciliacao_bloqueios(resultado, *, mostrar_wa_id=False):
-    print("===== RECONCILIAÇÃO DE BLOQUEIOS META × BANCO =====")
-    print(
-        "Escopo: somente WABAs e unidades atualmente cadastradas no banco."
-    )
-    print(f"sincronizados: {len(resultado['sincronizados'])}")
-    print(f"somente_na_meta: {len(resultado['somente_meta'])}")
-    print(f"somente_no_banco: {len(resultado['somente_banco'])}")
-    print(
-        "não_comparados_por_falha_meta: "
-        f"{len(resultado['nao_comparados_banco'])}"
-    )
-    print(
-        "vínculos_de_unidade_divergentes: "
-        f"{len(resultado['vinculos_unidade_divergentes'])}"
-    )
-    print(f"falhas_meta: {len(resultado['falhas_meta'])}")
-
-    _imprimir_grupo(
-        "SINCRONIZADOS NO BANCO E NA META",
-        resultado["sincronizados"],
-        mostrar_wa_id,
-    )
-    _imprimir_grupo(
-        "SOMENTE NA META",
-        resultado["somente_meta"],
-        mostrar_wa_id,
-    )
-    _imprimir_grupo(
-        "SOMENTE NO BANCO / PENDENTES NA META",
-        resultado["somente_banco"],
-        mostrar_wa_id,
-    )
-    _imprimir_grupo(
-        "NÃO COMPARADOS POR FALHA DA META",
-        resultado["nao_comparados_banco"],
-        mostrar_wa_id,
-    )
-    _imprimir_grupo(
-        "VÍNCULO LOCAL DE UNIDADE DIVERGENTE",
-        resultado["vinculos_unidade_divergentes"],
-        mostrar_wa_id,
-    )
-
-    if resultado["falhas_meta"]:
-        print("\nFALHAS DE COLETA META:")
-        for falha in resultado["falhas_meta"]:
-            print(
-                f"   - {_descricao_unidade(falha)} | "
-                f"erro={falha['erro_meta']}"
-            )
-
-    if _bloqueios_sincronizados(resultado):
-        print("\nOK: banco e Meta estão sincronizados no escopo consultado.")
-
-
-def listar_numeros_waba_meta(waba_id, *, request_get=None):
-    """Lista todos os números de uma WABA conhecida pelo banco."""
-    configure_local_operations()
-    from core.integrations.whatsapp.tools.config import (
-        construir_url_graph_api,
-        get_meta_http_timeout,
-        get_token_usuario_meta,
-    )
-
-    waba_id = _normalizar_id(waba_id)
-    if not waba_id:
-        raise ValueError("waba_id não informado")
-
-    request_get = request_get or requests.get
-    url = construir_url_graph_api(f"{waba_id}/phone_numbers")
-    headers = {"Authorization": f"Bearer {get_token_usuario_meta()}"}
-    params = {
-        "fields": (
-            "id,display_phone_number,verified_name,quality_rating,"
-            "code_verification_status,platform_type,name_status,status"
-        ),
-        "limit": 100,
-    }
-    numeros = []
-
-    while url:
-        response = request_get(
-            url,
-            headers=headers,
-            params=params,
-            timeout=get_meta_http_timeout(),
-        )
-        response.raise_for_status()
-        payload = response.json()
-        for numero in payload.get("data", []):
-            platform_type = numero.get("platform_type")
-            numeros.append({
-                "waba_id": waba_id,
-                "phone_id_unidade": _normalizar_id(numero.get("id")),
-                "display_phone_number": numero.get("display_phone_number"),
-                "verified_name": numero.get("verified_name"),
-                "quality_rating": numero.get("quality_rating"),
-                "code_verification_status": numero.get(
-                    "code_verification_status"
-                ),
-                "platform_type": platform_type,
-                "name_status": numero.get("name_status"),
-                "status": numero.get("status"),
-                "registrado_cloud_api": platform_type == "CLOUD_API",
-            })
-        url = payload.get("paging", {}).get("next")
-        params = None
-
-    return numeros
-
-
-def coletar_registros_meta(unidades, *, list_factory=None):
-    """Consulta isoladamente cada WABA cadastrada no banco."""
-    list_factory = list_factory or listar_numeros_waba_meta
-    numeros = []
-    falhas = []
-
-    for waba_id in sorted({item["waba_id"] for item in unidades}):
-        try:
-            numeros.extend(list_factory(waba_id))
-        except Exception as exc:
-            falhas.append({
-                "waba_id": waba_id,
-                "erro_meta": f"{type(exc).__name__}: {exc}",
-            })
-
-    return numeros, falhas
-
-
-def comparar_registros_waba(unidades, numeros_meta, falhas_meta):
-    """Compara registros usando a chave correta ``(waba_id, phone_id)``."""
-    wabas_com_erro = {item["waba_id"] for item in falhas_meta}
-    banco_por_chave = {
-        _escopo(item): item
-        for item in unidades
-        if item["waba_id"] not in wabas_com_erro
-    }
-    banco_nao_comparado = [
-        item for item in unidades if item["waba_id"] in wabas_com_erro
-    ]
-    meta_cloud = [
-        item
-        for item in numeros_meta
-        if item.get("registrado_cloud_api")
-        and item.get("phone_id_unidade")
-    ]
-    meta_por_chave = {_escopo(item): item for item in meta_cloud}
-
-    banco_por_phone = {
-        item["phone_id_unidade"]: item
-        for item in banco_por_chave.values()
-    }
-    meta_por_phone = {
-        item["phone_id_unidade"]: item
-        for item in meta_por_chave.values()
-    }
-    divergencias_waba = []
-    phones_divergentes = set()
-    for phone_id in set(banco_por_phone) & set(meta_por_phone):
-        banco = banco_por_phone[phone_id]
-        meta = meta_por_phone[phone_id]
-        if banco["waba_id"] != meta["waba_id"]:
-            phones_divergentes.add(phone_id)
-            divergencias_waba.append({
-                "phone_id_unidade": phone_id,
-                "waba_id_banco": banco["waba_id"],
-                "waba_id_meta": meta["waba_id"],
-                "unidade_banco": banco,
-                "numero_meta": meta,
-            })
-
-    chaves_banco = {
-        chave
-        for chave in banco_por_chave
-        if chave[1] not in phones_divergentes
-    }
-    chaves_meta = {
-        chave
-        for chave in meta_por_chave
-        if chave[1] not in phones_divergentes
-    }
-
-    return {
-        "sincronizados": [
-            {
-                "unidade_banco": banco_por_chave[chave],
-                "numero_meta": meta_por_chave[chave],
-            }
-            for chave in sorted(chaves_banco & chaves_meta)
-        ],
-        "somente_meta": [
-            meta_por_chave[chave]
-            for chave in sorted(chaves_meta - chaves_banco)
-        ],
-        "somente_banco": [
-            banco_por_chave[chave]
-            for chave in sorted(chaves_banco - chaves_meta)
-        ],
-        "nao_comparados_banco": sorted(
-            banco_nao_comparado,
-            key=_ordem_unidade,
-        ),
-        "waba_divergente": sorted(
-            divergencias_waba,
-            key=lambda item: item["phone_id_unidade"],
-        ),
-        "falhas_meta": sorted(
-            falhas_meta,
-            key=lambda item: item["waba_id"],
-        ),
-    }
-
-
-def reconciliar_registros_waba_meta(
-    *,
-    imprimir=True,
-    connection_factory=None,
-    meta_list_factory=None,
-):
-    unidades, _ = carregar_estado_banco(
-        connection_factory=connection_factory,
-    )
-    numeros_meta, falhas_meta = coletar_registros_meta(
-        unidades,
-        list_factory=meta_list_factory,
-    )
-    resultado = comparar_registros_waba(
-        unidades,
-        numeros_meta,
-        falhas_meta,
-    )
-    resultado["unidades_banco"] = unidades
-    resultado["numeros_waba_meta"] = numeros_meta
-
-    if imprimir:
-        imprimir_reconciliacao_registros(resultado)
-
-    return resultado
-
-
-def imprimir_reconciliacao_registros(resultado):
-    print("===== RECONCILIAÇÃO DE REGISTROS WABA META × BANCO =====")
-    print(
-        "Escopo: números das WABAs cadastradas no banco; WABAs inteiras "
-        "ausentes do banco não são descobertas por este relatório."
-    )
-    print(f"sincronizados: {len(resultado['sincronizados'])}")
-    print(f"somente_na_meta: {len(resultado['somente_meta'])}")
-    print(f"somente_no_banco: {len(resultado['somente_banco'])}")
-    print(f"waba_divergente: {len(resultado['waba_divergente'])}")
-    print(
-        "não_comparados_por_falha_meta: "
-        f"{len(resultado['nao_comparados_banco'])}"
-    )
-
-    if resultado["sincronizados"]:
-        print("\nSINCRONIZADOS:")
-        for item in resultado["sincronizados"]:
-            unidade = item["unidade_banco"]
-            numero = item["numero_meta"]
-            print(
-                f"   - {_descricao_unidade(unidade)} | "
-                f"status_meta={numero.get('status')}"
-            )
-    if resultado["somente_meta"]:
-        print("\nSOMENTE NA META:")
-        for numero in resultado["somente_meta"]:
-            print(
-                f"   - WABA ({numero['waba_id']}) | phone_id "
-                f"({numero['phone_id_unidade']}) | "
-                f"número={numero.get('display_phone_number')} | "
-                f"nome={numero.get('verified_name')}"
-            )
-    if resultado["somente_banco"]:
-        print("\nSOMENTE NO BANCO:")
-        for unidade in resultado["somente_banco"]:
-            print(f"   - {_descricao_unidade(unidade)}")
-    if resultado["waba_divergente"]:
-        print("\nPHONE ID ASSOCIADO A WABAS DIFERENTES:")
-        for item in resultado["waba_divergente"]:
-            print(
-                f"   - phone_id ({item['phone_id_unidade']}) | "
-                f"WABA banco ({item['waba_id_banco']}) | "
-                f"WABA Meta ({item['waba_id_meta']})"
-            )
-    if resultado["falhas_meta"]:
-        print("\nFALHAS DE COLETA META:")
-        for falha in resultado["falhas_meta"]:
-            print(
-                f"   - WABA ({falha['waba_id']}) | "
-                f"erro={falha['erro_meta']}"
-            )
-
-    if _registros_sincronizados(resultado):
-        print("\nOK: registros WABA e banco estão sincronizados.")
-
-
-def criar_parser():
-    parser = argparse.ArgumentParser(
-        description=(
-            "Monitora bloqueios e registros WhatsApp sem alterar Meta ou banco."
-        ),
-    )
-    subparsers = parser.add_subparsers(dest="comando", required=True)
-    bloqueios = subparsers.add_parser(
-        "blocked-users",
-        help="compara bloqueados na Meta e em cliente_bloqueado_meta",
-    )
-    bloqueios.add_argument(
-        "--show-wa-id",
-        "--show-identifiers",
-        dest="show_wa_id",
-        action="store_true",
-        help=(
-            "exibe WA ID ou user ID completo; por padrão mostra somente "
-            "os 4 finais"
-        ),
-    )
-    subparsers.add_parser(
-        "phone-registrations",
-        help="compara phone IDs Cloud API por WABA",
-    )
-    todos = subparsers.add_parser(
-        "all",
-        help="executa as duas reconciliações",
-    )
-    todos.add_argument(
-        "--show-wa-id",
-        "--show-identifiers",
-        dest="show_wa_id",
-        action="store_true",
-    )
-    return parser
-
-
-def executar_monitoramento_bloqueios():
-    """Atalho local: executar o arquivo no PyCharm já gera o relatório."""
-    configure_local_operations()
-    return reconciliar_bloqueios_meta_banco(
-        imprimir=True,
-        mostrar_wa_id=True,
-    )
-
-
-def main(argv=None):
-    argumentos = sys.argv[1:] if argv is None else list(argv)
-    if not argumentos:
-        argumentos = ["blocked-users", "--show-wa-id"]
-
-    args = criar_parser().parse_args(argumentos)
-    try:
-        resultados = []
-        if args.comando in {"blocked-users", "all"}:
-            resultados.append(
-                reconciliar_bloqueios_meta_banco(
-                    mostrar_wa_id=getattr(args, "show_wa_id", False),
-                )
-            )
-        if args.comando in {"phone-registrations", "all"}:
-            if resultados:
-                print()
-            resultados.append(reconciliar_registros_waba_meta())
-    except Exception as exc:
-        print(
-            f"RECONCILIACAO_FALHOU: {type(exc).__name__}: {exc}",
-            file=sys.stderr,
-        )
-        return 2
-
-    if any(item.get("falhas_meta") for item in resultados):
-        return 2
-    if any(not _resultado_sem_divergencias(item) for item in resultados):
-        return 1
-    return 0
-
-
-def _resultado_sem_divergencias(resultado):
-    campos = (
-        "somente_meta",
-        "somente_banco",
-        "nao_comparados_banco",
-        "vinculos_unidade_divergentes",
-        "waba_divergente",
-        "falhas_meta",
-    )
-    return not any(resultado.get(campo) for campo in campos)
-
-
-def _bloqueios_sincronizados(resultado):
-    return _resultado_sem_divergencias(resultado)
-
-
-def _registros_sincronizados(resultado):
-    return _resultado_sem_divergencias(resultado)
-
-
-def _imprimir_grupo(titulo, itens, mostrar_wa_id):
-    if not itens:
-        return
-    print(f"\n{titulo}:")
-    for item in itens:
-        identidade = _formatar_identidade(
-            item,
-            mostrar=mostrar_wa_id,
-        )
-        nome = item.get("nome_cliente") or "nome não disponível"
-        print(
-            f"   - {identidade} | nome={nome} | "
-            f"{_descricao_unidade(item)}"
-        )
-
-
-def _descricao_unidade(item):
-    return (
-        f"unidade {item.get('id_unidade')} "
-        f"{item.get('nome_unidade')} | "
-        f"WABA ({item.get('waba_id')}) | "
-        f"phone_id ({item.get('phone_id_unidade')})"
-    )
-
-
-def selecionar_identidade_bloqueio(wa_id, user_id):
-    """Aplica a regra canônica: WA ID prioritário, user ID como fallback."""
-    wa_id = _normalizar_id(wa_id)
-    user_id = _normalizar_id(user_id)
-    if wa_id:
-        return TIPO_IDENTIDADE_WA_ID, wa_id
-    if user_id:
-        return TIPO_IDENTIDADE_USER_ID, user_id
-    raise ValueError("bloqueio sem WA ID nem user ID")
-
-
-def _extrair_identidade_bloqueada(usuario):
-    if isinstance(usuario, dict):
-        wa_id = usuario.get("wa_id")
-        user_id = usuario.get("user_id") or usuario.get("bsuid")
-    else:
-        wa_id = getattr(usuario, "wa_id", None)
-        user_id = (
-            getattr(usuario, "bsuid", None)
-            or getattr(usuario, "user_id", None)
-        )
-
-    wa_id = _normalizar_id(wa_id)
-    user_id = _normalizar_id(user_id)
-    if wa_id and user_id:
-        raise ValueError(
-            "Meta retornou bloqueio ambíguo com WA ID e user ID"
-        )
-    if not wa_id and not user_id:
-        return None
-
-    tipo_identidade, identidade = selecionar_identidade_bloqueio(
-        wa_id,
-        user_id,
-    )
-    return {
-        "tipo_identidade": tipo_identidade,
-        "identidade": identidade,
-        "wa_id": wa_id,
-        "user_id": user_id,
-    }
-
-
-def _normalizar_id(valor):
-    if valor is None:
-        return None
-    texto = str(valor).strip()
-    return texto or None
-
-
-def _normalizar_username(valor):
-    texto = _normalizar_id(valor)
-    if not texto:
-        return None
-    return texto.lstrip("@") or None
-
-
-def _escopo(item):
-    return (
-        _normalizar_id(item["waba_id"]),
-        _normalizar_id(item["phone_id_unidade"]),
-    )
-
-
-def _ordenar_chaves(chaves):
-    return sorted(chaves, key=lambda item: tuple(valor or "" for valor in item))
-
-
-def _ordem_registro(item):
-    return (
-        item.get("id_unidade") or 0,
-        item.get("tipo_identidade") or "",
-        item.get("identidade") or "",
-    )
-
-
-def _ordem_unidade(item):
-    return (
-        item.get("id_unidade") or 0,
-        item.get("waba_id") or "",
-    )
-
-
-def _formatar_identidade(item, *, mostrar):
-    tipo = item.get("tipo_identidade") or "identidade"
-    texto = _normalizar_id(item.get("identidade")) or "-"
-    if mostrar or len(texto) <= 4:
-        valor = texto
-    else:
-        valor = "*" * (len(texto) - 4) + texto[-4:]
-    return f"{tipo}={valor}"
-
-
-if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        executar_monitoramento_bloqueios()
-    else:
-        raise SystemExit(main())
-````
-
-## Passo 27 — `operations/monitoring/suspicious_conversations.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `f16ebacaa60585e48ffe6a51904bb117244572bcfae71dda9d366d5f2c1e3e09`
-
-````python
-"""Relatório operacional e somente leitura de conversas suspeitas de automação."""
-
-from __future__ import annotations
-
-import argparse
-import csv
-import io
-import json
-import re
-import statistics
-import sys
-from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from operations.bootstrap import configure_local_operations
-
-MAX_CONVERSAS = 2000
-MAX_MENSAGENS_POR_CONVERSA = 1000
-MAX_MENSAGENS_TOTAL = 50000
-DEFAULT_LIMITE_CONVERSAS = 200
-DEFAULT_LIMITE_MENSAGENS = 250
-DEFAULT_LIMIAR = 45
-DEFAULT_STATEMENT_TIMEOUT_MS = 15000
-DEFAULT_LOCK_TIMEOUT_MS = 1000
-DEFAULT_IDLE_TIMEOUT_MS = 20000
-
-_EMAIL = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
-_URL = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
-_CPF_CNPJ = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
-_TELEFONE = re.compile(r"(?<!\d)(?:\+?55\s*)?(?:\(?\d{2}\)?[\s.-]*)?\d{4,5}[\s.-]?\d{4}(?!\d)")
-_NUMERO_LONGO = re.compile(r"\b\d{7,}\b")
-_SEGREDO = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
-
-
-def parse_instante(valor):
-    texto = str(valor).strip()
-    if texto.endswith("Z"):
-        texto = texto[:-1] + "+00:00"
-    instante = datetime.fromisoformat(texto)
-    if instante.tzinfo is None:
-        instante = instante.replace(tzinfo=timezone.utc)
-    return instante.astimezone(timezone.utc)
-
-
-def mascarar_pii(texto):
-    if texto is None:
-        return None
-    valor = str(texto)
-    valor = _EMAIL.sub("[EMAIL]", valor)
-    valor = _URL.sub("[URL]", valor)
-    valor = _CPF_CNPJ.sub("[DOCUMENTO]", valor)
-    valor = _TELEFONE.sub("[TELEFONE]", valor)
-    valor = _NUMERO_LONGO.sub("[NUMERO]", valor)
-    return _SEGREDO.sub("[CHAVE]", valor)
-
-
-def _iso(valor):
-    if valor is None:
-        return None
-    if isinstance(valor, datetime):
-        return valor.isoformat()
-    return str(valor)
-
-
-def _clamp(valor, minimo, maximo):
-    return max(minimo, min(maximo, valor))
-
-
-def _razao(parte, total):
-    return parte / total if total else 0.0
-
-
-def mascarar_identificador(valor, *, mostrar=False):
-    if valor is None:
-        return None
-    texto = str(valor).strip()
-    if mostrar:
-        return texto
-    if len(texto) <= 4:
-        return "*" * len(texto)
-    return "*" * (len(texto) - 4) + texto[-4:]
-
-
-def mascarar_wa_id(valor, *, mostrar=False):
-    """Compatibilidade nominal para consumidores antigos do relatório."""
-    return mascarar_identificador(valor, mostrar=mostrar)
-
-
-def mascarar_username(valor, *, mostrar=False):
-    if valor is None:
-        return None
-    texto = str(valor).strip().lstrip("@")
-    if not texto:
-        return None
-    if mostrar:
-        return f"@{texto}"
-    if len(texto) <= 2:
-        return "@" + "*" * len(texto)
-    return f"@{texto[0]}{'*' * (len(texto) - 2)}{texto[-1]}"
-
-
-def mascarar_nome(valor):
-    if not valor:
-        return None
-    partes = str(valor).strip().split()
-    return " ".join(
-        parte[0] + "***" if parte else ""
-        for parte in partes[:3]
-    )
-
-
-def reconstruir_movimentos(mensagens):
-    """Pareia cliente/bot pela fila e classifica a evolução observada."""
-    por_fila = defaultdict(list)
-    for item in mensagens:
-        if item.get("id_mensagem_fila") is not None:
-            por_fila[item["id_mensagem_fila"]].append(item)
-    movimentos = []
-    for cliente in (
-        item for item in mensagens if item["quem_enviou"] == "cliente"
-    ):
-        candidatos = [
-            item
-            for item in por_fila.get(cliente.get("id_mensagem_fila"), [])
-            if item["quem_enviou"] == "bot"
-            and item["instante"] >= cliente["instante"]
-        ]
-        bot = min(
-            candidatos,
-            key=lambda item: (item["instante"], item["id_mensagem"]),
-            default=None,
-        )
-        if bot is None:
-            tipo = "indeterminado"
-        elif cliente["id_etapa"] is None and bot["id_etapa"] is not None:
-            tipo = "inicializacao"
-        elif cliente["id_etapa"] is None or bot["id_etapa"] is None:
-            tipo = "indeterminado"
-        elif cliente["id_etapa"] != bot["id_etapa"]:
-            tipo = "avanco"
-        else:
-            tipo = "sem_avanco"
-        movimentos.append(
-            {
-                "id_mensagem_cliente": cliente["id_mensagem"],
-                "id_mensagem_bot": bot["id_mensagem"] if bot else None,
-                "tipo": tipo,
-                "etapa_cliente": cliente["id_etapa"],
-                "etapa_bot": bot["id_etapa"] if bot else None,
-            }
-        )
-    return movimentos
-
-
-def _maior_sequencia_sem_avanco(movimentos):
-    maior = atual = 0
-    for movimento in movimentos:
-        if movimento["tipo"] == "sem_avanco":
-            atual += 1
-            maior = max(maior, atual)
-        else:
-            atual = 0
-    return maior
-
-
-def _latencias_bot_cliente(mensagens):
-    """Mede somente a resposta externa após a última mensagem do nosso bot."""
-    ultima_bot = None
-    latencias = []
-    for item in mensagens:
-        if item["quem_enviou"] == "bot":
-            ultima_bot = item
-        elif ultima_bot is not None:
-            segundos = (item["instante"] - ultima_bot["instante"]).total_seconds()
-            if segundos >= 0:
-                latencias.append(
-                    {
-                        "segundos": segundos,
-                        "estruturada_curta": (
-                            item["tipo_mensagem"]
-                            in {
-                                "button",
-                                "interactive",
-                                "list",
-                                "quick_reply",
-                            }
-                            and (item.get("tamanho_texto") or 0) <= 40
-                        ),
-                    }
-                )
-            ultima_bot = None
-    return latencias
-
-
-def _contar_ciclos(estados):
-    ciclos = 0
-    for tamanho in (2, 3):
-        for indice in range(tamanho * 2, len(estados) + 1):
-            if estados[indice - tamanho:indice] == estados[indice - tamanho * 2:indice - tamanho]:
-                ciclos += 1
-    return ciclos
-
-
-def pontuar_conversa(conversa, mensagens):
-    mensagens = sorted(
-        mensagens,
-        key=lambda item: (item["instante"], item["id_mensagem"]),
-    )
-    total = len(mensagens)
-    clientes = [item for item in mensagens if item["quem_enviou"] == "cliente"]
-    bots_contexto = [
-        item for item in mensagens if item["quem_enviou"] == "bot"
-    ]
-    movimentos = reconstruir_movimentos(mensagens)
-    chaves_cliente = [
-        (item["id_etapa"], item["fingerprint"])
-        for item in clientes
-        if item.get("fingerprint")
-    ]
-    contagens_cliente = Counter(chaves_cliente)
-    repeticoes_cliente = sum(
-        max(0, quantidade - 1)
-        for quantidade in contagens_cliente.values()
-    )
-    razao_repeticao = _razao(
-        repeticoes_cliente,
-        len(chaves_cliente),
-    )
-    estados = [
-        (item["id_etapa"], item.get("fingerprint"))
-        for item in clientes
-        if item.get("fingerprint")
-    ]
-    ciclos = _contar_ciclos(estados)
-    sequencia_sem_avanco = _maior_sequencia_sem_avanco(movimentos)
-    contagem_movimentos = Counter(
-        movimento["tipo"] for movimento in movimentos
-    )
-
-    razoes_fluxo = []
-    turnos = conversa.get("turnos_sem_avanco")
-    sinal_fluxo = max(turnos or 0, sequencia_sem_avanco)
-    if sinal_fluxo >= 12:
-        pontos_fluxo = 70
-    elif sinal_fluxo >= 9:
-        pontos_fluxo = 50
-    elif sinal_fluxo >= 6:
-        pontos_fluxo = 30
-    elif sinal_fluxo >= 4:
-        pontos_fluxo = 15
-    else:
-        pontos_fluxo = 0
-    if turnos:
-        razoes_fluxo.append(
-            f"contador persistido em {turnos} turno(s) sem avanço"
-        )
-    if sequencia_sem_avanco:
-        razoes_fluxo.append(
-            f"{sequencia_sem_avanco} movimento(s) pareado(s) consecutivo(s) sem avanço"
-        )
-    if pontos_fluxo:
-        razoes_fluxo.append(
-            f"faixa principal de fluxo sem avanço (+{pontos_fluxo})"
-        )
-
-    pontos_repeticao = min(
-        15,
-        round(10 * razao_repeticao) + min(5, ciclos),
-    )
-    razoes_repeticao = []
-    if repeticoes_cliente:
-        razoes_repeticao.append(
-            f"{repeticoes_cliente} resposta(s) do cliente repetida(s) na mesma etapa (+{round(10 * razao_repeticao)})"
-        )
-    if ciclos:
-        razoes_repeticao.append(
-            f"{ciclos} ciclo(s) de 2 ou 3 estados (+{min(5, ciclos)})"
-        )
-
-    latencias = _latencias_bot_cliente(mensagens)
-    latencias_nao_estruturadas = [
-        item["segundos"]
-        for item in latencias
-        if not item["estruturada_curta"]
-    ]
-    rapidas_nao_estruturadas = sum(
-        valor <= 2 for valor in latencias_nao_estruturadas
-    )
-    rapidas_estruturadas = sum(
-        item["segundos"] <= 2 and item["estruturada_curta"]
-        for item in latencias
-    )
-    razao_rapida = _razao(
-        rapidas_nao_estruturadas,
-        len(latencias_nao_estruturadas),
-    )
-    cv = None
-    if len(latencias_nao_estruturadas) >= 3:
-        media = statistics.fmean(latencias_nao_estruturadas)
-        if media > 0:
-            cv = statistics.pstdev(latencias_nao_estruturadas) / media
-    pontos_cadencia = min(
-        20,
-        round(14 * razao_rapida)
-        + min(3, rapidas_estruturadas)
-        + (6 if cv is not None and cv <= 0.12 else 0),
-    )
-    razoes_cadencia = []
-    if rapidas_nao_estruturadas:
-        razoes_cadencia.append(
-            f"{rapidas_nao_estruturadas}/{len(latencias_nao_estruturadas)} latência(s) bot→cliente não estruturadas de até 2 s (+{round(14 * razao_rapida)})"
-        )
-    if rapidas_estruturadas:
-        razoes_cadencia.append(
-            f"{rapidas_estruturadas} resposta(s) estruturada(s) rápida(s), com peso reduzido (+{min(3, rapidas_estruturadas)})"
-        )
-    if cv is not None and cv <= 0.12:
-        razoes_cadencia.append("latência bot→cliente muito regular (+6)")
-
-    tipos_cliente = Counter(
-        item["tipo_mensagem"] for item in clientes
-    )
-    tamanhos_cliente = [
-        item["tamanho_texto"]
-        for item in clientes
-        if item.get("tamanho_texto") is not None
-    ]
-    tamanhos_estaveis = False
-    if (
-        len(tamanhos_cliente) >= 4
-        and statistics.fmean(tamanhos_cliente) > 0
-    ):
-        tamanhos_estaveis = (
-            statistics.pstdev(tamanhos_cliente)
-            / statistics.fmean(tamanhos_cliente)
-            <= 0.10
-        )
-    marcadores_automacao = sum(
-        bool(item.get("tem_marcador_automacao"))
-        or bool(
-            item.get("texto")
-            and re.search(
-                r"\b(?:assistente virtual|mensagem autom[aá]tica|"
-                r"n[aã]o consigo entender|digite uma op[cç][aã]o|"
-                r"escolha uma op[cç][aã]o)\b",
-                item["texto"],
-                re.IGNORECASE,
-            )
-        )
-        for item in clientes
-    )
-    mensagens_com_url = sum(bool(item.get("tem_url")) for item in clientes)
-    somente_estruturadas_curtas = bool(clientes) and all(
-        item["tipo_mensagem"]
-        in {"button", "interactive", "list", "quick_reply"}
-        and (item.get("tamanho_texto") or 0) <= 40
-        for item in clientes
-    )
-    pontos_conteudo = min(
-        15,
-        (0 if somente_estruturadas_curtas else round(6 * razao_repeticao))
-        + min(6, marcadores_automacao * 3)
-        + min(2, mensagens_com_url)
-        + (2 if tamanhos_estaveis and not somente_estruturadas_curtas else 0)
-        + (
-            1
-            if len(tipos_cliente) == 1
-            and len(clientes) >= 5
-            and not somente_estruturadas_curtas
-            else 0
-        ),
-    )
-    razoes_conteudo = []
-    if razao_repeticao and not somente_estruturadas_curtas:
-        razoes_conteudo.append(
-            f"templates idênticos do cliente na mesma etapa em {razao_repeticao:.0%} das respostas (+{round(6 * razao_repeticao)})"
-        )
-    if marcadores_automacao:
-        razoes_conteudo.append(
-            f"{marcadores_automacao} texto(s) do cliente com expressão de automação (+{min(6, marcadores_automacao * 3)})"
-        )
-    if mensagens_com_url:
-        razoes_conteudo.append(
-            f"{mensagens_com_url} mensagem(ns) do cliente com URL (+{min(2, mensagens_com_url)})"
-        )
-    if tamanhos_estaveis and not somente_estruturadas_curtas:
-        razoes_conteudo.append("tamanho das mensagens do cliente muito estável (+2)")
-    if (
-        len(tipos_cliente) == 1
-        and len(clientes) >= 5
-        and not somente_estruturadas_curtas
-    ):
-        razoes_conteudo.append("um único tipo de mensagem do cliente (+1)")
-
-    pontos_conclusao = 0
-    razoes_conclusao = []
-    duracao_segundos = None
-    if conversa.get("finalizou_em") and conversa.get("iniciou_em"):
-        duracao_segundos = max(
-            0,
-            (conversa["finalizou_em"] - conversa["iniciou_em"]).total_seconds(),
-        )
-        if len(clientes) >= 4 and duracao_segundos <= 30:
-            pontos_conclusao = 10
-        elif len(clientes) >= 3 and duracao_segundos <= 60:
-            pontos_conclusao = 7
-        elif len(clientes) >= 2 and duracao_segundos <= 120:
-            pontos_conclusao = 4
-        if pontos_conclusao:
-            razoes_conclusao.append(
-                f"conversa encerrada em {duracao_segundos:.0f} s com {len(clientes)} mensagens do cliente (+{pontos_conclusao})"
-            )
-
-    dimensoes = {
-        "fluxo_sem_avanco": {
-            "pontos": pontos_fluxo,
-            "maximo": 70,
-            "razoes": razoes_fluxo,
-        },
-        "repeticao_ciclos": {
-            "pontos": pontos_repeticao,
-            "maximo": 15,
-            "razoes": razoes_repeticao,
-        },
-        "cadencia": {
-            "pontos": pontos_cadencia,
-            "maximo": 20,
-            "razoes": razoes_cadencia,
-        },
-        "conteudo_automatizado": {
-            "pontos": pontos_conteudo,
-            "maximo": 15,
-            "razoes": razoes_conteudo,
-        },
-        "conclusao_rapida": {
-            "pontos": pontos_conclusao,
-            "maximo": 10,
-            "razoes": razoes_conclusao,
-        },
-    }
-    score = min(100, sum(item["pontos"] for item in dimensoes.values()))
-    return {
-        "score": score,
-        "dimensoes": dimensoes,
-        "metricas": {
-            "total_mensagens_analisadas": total,
-            "mensagens_cliente": len(clientes),
-            "mensagens_bot_contexto": len(bots_contexto),
-            "movimentos": dict(contagem_movimentos),
-            "maior_sequencia_sem_avanco": sequencia_sem_avanco,
-            "respostas_cliente_repetidas_na_mesma_etapa": repeticoes_cliente,
-            "ciclos_cliente_detectados": ciclos,
-            "latencias_bot_cliente": [
-                round(item["segundos"], 3) for item in latencias
-            ],
-            "duracao_segundos": duracao_segundos,
-        },
-    }
-
-
-def _configurar_transacao(cursor, args):
-    cursor.execute(
-        "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
-    )
-    cursor.execute(
-        "SELECT set_config('statement_timeout', %s, true)",
-        (f"{args.statement_timeout_ms}ms",),
-    )
-    cursor.execute(
-        "SELECT set_config('lock_timeout', %s, true)",
-        (f"{args.lock_timeout_ms}ms",),
-    )
-    cursor.execute(
-        "SELECT set_config('idle_in_transaction_session_timeout', %s, true)",
-        (f"{args.idle_timeout_ms}ms",),
-    )
-
-
-def _possui_turnos_sem_avanco(cursor):
-    cursor.execute(
-        """
-        SELECT EXISTS (
-            SELECT 1
-            FROM information_schema.columns
-            WHERE table_schema = 'chatbot'
-              AND table_name = 'conversa'
-              AND column_name = 'turnos_sem_avanco'
-        )
-        """
-    )
-    return bool(cursor.fetchone()[0])
-
-
-def _buscar_conversas(cursor, args, inicio, fim, possui_turnos):
-    filtros = [
-        "c.iniciou_em <= %s",
-        "COALESCE(c.finalizou_em, c.last_interaction_at, c.iniciou_em) >= %s",
-    ]
-    parametros = [fim, inicio]
-    if args.id_conversa:
-        filtros.append("c.id_conversa = ANY(%s)")
-        parametros.append(args.id_conversa)
-    if args.id_unidade:
-        filtros.append("c.id_unidade = ANY(%s)")
-        parametros.append(args.id_unidade)
-    coluna_turnos = (
-        "c.turnos_sem_avanco"
-        if possui_turnos
-        else "NULL::integer AS turnos_sem_avanco"
-    )
-    parametros.append(args.limite_conversas + 1)
-    cursor.execute(
-        f"""
-        SELECT
-            c.id_conversa,
-            c.id_cliente,
-            cl.nome AS nome_cliente,
-            COALESCE(c.wa_id, cl.wa_id) AS wa_id,
-            c.user_id,
-            COALESCE(c.username, cl.username) AS username,
-            c.id_unidade,
-            u.nome AS nome_unidade,
-            u.waba_id,
-            u.phone_number_id,
-            c.id_etapa_atual,
-            c.status_ativa,
-            c.iniciou_em,
-            c.finalizou_em,
-            c.motivo_encerramento,
-            {coluna_turnos}
-        FROM chatbot.conversa AS c
-        JOIN chatbot.cliente AS cl
-          ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade AS u
-          ON u.id_unidade = c.id_unidade
-        WHERE {" AND ".join(filtros)}
-        ORDER BY c.iniciou_em DESC, c.id_conversa DESC
-        LIMIT %s
-        """,
-        tuple(parametros),
-    )
-    linhas = cursor.fetchall()
-    if len(linhas) > args.limite_conversas:
-        raise RuntimeError(
-            "limite de conversas atingido; reduza a janela ou refine os filtros"
-        )
-    chaves = (
-        "id_conversa",
-        "id_cliente",
-        "nome_cliente",
-        "wa_id",
-        "user_id",
-        "username",
-        "id_unidade",
-        "nome_unidade",
-        "waba_id",
-        "phone_number_id",
-        "id_etapa_atual",
-        "status_ativa",
-        "iniciou_em",
-        "finalizou_em",
-        "motivo_encerramento",
-        "turnos_sem_avanco",
-    )
-    return [dict(zip(chaves, linha)) for linha in linhas]
-
-
-def _buscar_mensagens(cursor, ids_conversa, args, inicio, fim):
-    if not ids_conversa:
-        return defaultdict(list), {}
-    texto_sql = (
-        "h.conteudo_texto"
-        if args.incluir_textos
-        else "NULL::text AS conteudo_texto"
-    )
-    cursor.execute(
-        f"""
-        WITH ordenadas AS (
-            SELECT
-                h.id_mensagem,
-                h.id_mensagem_fila,
-                h.id_conversa,
-                h.id_etapa,
-                h.received_data_hora,
-                h.tipo_mensagem,
-                h.quem_enviou,
-                CASE
-                    WHEN NULLIF(BTRIM(h.conteudo_texto), '') IS NULL
-                    THEN NULL
-                    ELSE md5(
-                        lower(
-                            regexp_replace(
-                                h.conteudo_texto,
-                                '\\s+',
-                                ' ',
-                                'g'
-                            )
-                        )
-                    )
-                END AS fingerprint,
-                char_length(h.conteudo_texto) AS tamanho_texto,
-                COALESCE(
-                    h.conteudo_texto ~* '(https?://|www\\.)',
-                    FALSE
-                ) AS tem_url,
-                COALESCE(
-                    h.conteudo_texto ~* (
-                        'assistente virtual|mensagem autom[aá]tica|'
-                        'n[aã]o consigo entender|digite uma op[cç][aã]o|'
-                        'escolha uma op[cç][aã]o'
-                    ),
-                    FALSE
-                ) AS tem_marcador_automacao,
-                {texto_sql},
-                row_number() OVER (
-                    PARTITION BY h.id_conversa
-                    ORDER BY h.received_data_hora DESC, h.id_mensagem DESC
-                ) AS ordem,
-                count(*) OVER (
-                    PARTITION BY h.id_conversa
-                ) AS total_conversa
-            FROM chatbot.historico_mensagens AS h
-            WHERE h.id_conversa = ANY(%s)
-              AND h.received_data_hora >= %s
-              AND h.received_data_hora <= %s
-        )
-        SELECT
-            id_mensagem,
-            id_mensagem_fila,
-            id_conversa,
-            id_etapa,
-            received_data_hora,
-            tipo_mensagem,
-            quem_enviou,
-            fingerprint,
-            tamanho_texto,
-            tem_url,
-            tem_marcador_automacao,
-            conteudo_texto,
-            total_conversa
-        FROM ordenadas
-        WHERE ordem <= %s
-        ORDER BY id_conversa, received_data_hora, id_mensagem
-        LIMIT %s
-        """,
-        (
-            ids_conversa,
-            inicio,
-            fim,
-            args.limite_mensagens,
-            args.max_mensagens_total + 1,
-        ),
-    )
-    por_conversa = defaultdict(list)
-    totais = {}
-    for linha in cursor.fetchall():
-        mensagem = {
-            "id_mensagem": linha[0],
-            "id_mensagem_fila": linha[1],
-            "id_conversa": linha[2],
-            "id_etapa": linha[3],
-            "instante": linha[4],
-            "tipo_mensagem": linha[5],
-            "quem_enviou": linha[6],
-            "fingerprint": linha[7],
-            "tamanho_texto": linha[8],
-            "tem_url": bool(linha[9]),
-            "tem_marcador_automacao": bool(linha[10]),
-            "texto": mascarar_pii(linha[11]) if linha[11] is not None else None,
-        }
-        por_conversa[linha[2]].append(mensagem)
-        totais[linha[2]] = linha[12]
-    carregadas = sum(len(itens) for itens in por_conversa.values())
-    if carregadas > args.max_mensagens_total:
-        raise RuntimeError(
-            "limite total de mensagens atingido; reduza a janela ou os limites"
-        )
-    return por_conversa, totais
-
-
-def gerar_relatorio(args, *, connection_factory=None):
-    if connection_factory is None:
-        configure_local_operations()
-        from core.database.connection_aws import get_conn
-
-        connection_factory = get_conn
-
-    inicio, fim = resolver_janela(args)
-    conn = connection_factory(
-        application_name="relatorio_conversas_suspeitas_readonly"
-    )
-    try:
-        cursor = conn.cursor()
-        _configurar_transacao(cursor, args)
-        possui_turnos = _possui_turnos_sem_avanco(cursor)
-        conversas = _buscar_conversas(
-            cursor,
-            args,
-            inicio,
-            fim,
-            possui_turnos,
-        )
-        ids = [item["id_conversa"] for item in conversas]
-        mensagens, totais = _buscar_mensagens(
-            cursor,
-            ids,
-            args,
-            inicio,
-            fim,
-        )
-        resultados = []
-        for conversa in conversas:
-            analise = pontuar_conversa(
-                conversa,
-                mensagens.get(conversa["id_conversa"], []),
-            )
-            if analise["score"] < args.limiar:
-                continue
-            item = {
-                "id_conversa": conversa["id_conversa"],
-                "id_cliente": conversa["id_cliente"],
-                "nome_cliente_mascarado": mascarar_nome(
-                    conversa["nome_cliente"]
-                ),
-                "wa_id": mascarar_identificador(
-                    conversa["wa_id"],
-                    mostrar=args.mostrar_wa_id,
-                ),
-                "user_id": mascarar_identificador(
-                    conversa["user_id"],
-                    mostrar=args.mostrar_wa_id,
-                ),
-                "username": mascarar_username(
-                    conversa["username"],
-                    mostrar=args.mostrar_wa_id,
-                ),
-                "id_unidade": conversa["id_unidade"],
-                "nome_unidade": conversa["nome_unidade"],
-                "waba_id": conversa["waba_id"],
-                "phone_number_id": conversa["phone_number_id"],
-                "score": analise["score"],
-                "status_ativa": conversa["status_ativa"],
-                "id_etapa_atual": conversa["id_etapa_atual"],
-                "iniciou_em": _iso(conversa["iniciou_em"]),
-                "finalizou_em": _iso(conversa["finalizou_em"]),
-                "motivo_encerramento": conversa["motivo_encerramento"],
-                "turnos_sem_avanco": conversa["turnos_sem_avanco"],
-                "historico_truncado": (
-                    totais.get(conversa["id_conversa"], 0)
-                    > args.limite_mensagens
-                ),
-                "metricas_sobre_recorte": (
-                    "mensagens mais recentes da conversa dentro da janela"
-                ),
-                **analise,
-            }
-            if args.incluir_textos:
-                item["amostras_texto_mascarado"] = [
-                    {
-                        "quem_enviou": mensagem["quem_enviou"],
-                        "instante": _iso(mensagem["instante"]),
-                        "texto": mensagem["texto"][: args.max_caracteres_texto],
-                    }
-                    for mensagem in mensagens.get(conversa["id_conversa"], [])
-                    if mensagem.get("texto")
-                ][: args.max_amostras_texto]
-            resultados.append(item)
-        resultados.sort(
-            key=lambda item: (-item["score"], item["id_conversa"])
-        )
+    if aliases:
         return {
-            "metadados": {
-                "gerado_em": datetime.now(timezone.utc).isoformat(),
-                "inicio": inicio.isoformat(),
-                "fim": fim.isoformat(),
-                "somente_leitura": True,
-                "isolamento": "REPEATABLE READ",
-                "coluna_turnos_sem_avanco_disponivel": possui_turnos,
-                "conversas_lidas": len(conversas),
-                "conversas_reportadas": len(resultados),
-                "limiar": args.limiar,
-                "textos_incluidos": bool(args.incluir_textos),
-                "identificadores_completos": bool(args.mostrar_wa_id),
-                "recorte_historico": (
-                    "até o limite de mensagens mais recentes por conversa "
-                    "dentro da janela; métricas não representam mensagens "
-                    "anteriores ao recorte"
-                ),
-            },
-            "conversas": resultados,
+            **aliases,
+            "chave_lock": (
+                f"cliente:{aliases['id_unidade']}:{aliases['id_cliente']}"
+            ),
         }
-    finally:
-        try:
-            conn.rollback()
-        finally:
-            conn.close()
 
-
-def resolver_janela(args):
-    fim = parse_instante(args.fim) if args.fim else datetime.now(timezone.utc)
-    inicio = (
-        parse_instante(args.inicio)
-        if args.inicio
-        else fim - timedelta(hours=args.ultimas_horas)
-    )
-    if inicio >= fim:
-        raise ValueError("--inicio deve ser anterior a --fim")
-    if fim - inicio > timedelta(days=31):
-        raise ValueError("a janela máxima é de 31 dias")
-    return inicio, fim
-
-
-def _razoes_texto(item):
-    razoes = []
-    for nome, dimensao in item["dimensoes"].items():
-        for razao in dimensao["razoes"]:
-            razoes.append(f"{nome}: {razao}")
-    return razoes
-
-
-def formatar_texto(relatorio):
-    meta = relatorio["metadados"]
-    linhas = [
-        "RELATÓRIO MANUAL DE CONVERSAS SUSPEITAS",
-        (
-            f"janela={meta['inicio']}..{meta['fim']} "
-            f"lidas={meta['conversas_lidas']} "
-            f"reportadas={meta['conversas_reportadas']} "
-            f"limiar={meta['limiar']}"
+    return {
+        "id_cliente": None,
+        "id_unidade": None,
+        "wa_id": (
+            identidade if tipo_identidade == TIPO_IDENTIDADE_WA_ID else None
         ),
-    ]
-    for item in relatorio["conversas"]:
-        linhas.append(
-            (
-                f"\nconversa={item['id_conversa']} "
-                f"cliente={item['id_cliente']} "
-                f"wa_id={item['wa_id']} "
-                f"user_id={item['user_id']} "
-                f"username={item['username']} "
-                f"unidade={item['id_unidade']} "
-                f"waba_id={item['waba_id']} "
-                f"phone_number_id={item['phone_number_id']} "
-                f"score={item['score']}/100 "
-                f"ativa={item['status_ativa']}"
-            )
-        )
-        for razao in _razoes_texto(item):
-            linhas.append(f"  - {razao}")
-        if item.get("historico_truncado"):
-            linhas.append("  - aviso: histórico truncado pelo limite de carga")
-        for amostra in item.get("amostras_texto_mascarado", []):
-            linhas.append(
-                f"  - amostra {amostra['quem_enviou']} "
-                f"{amostra['instante']}: {amostra['texto']}"
-            )
-    return "\n".join(linhas) + "\n"
-
-
-def formatar_csv(relatorio):
-    saida = io.StringIO()
-    campos = [
-        "id_conversa",
-        "id_cliente",
-        "nome_cliente_mascarado",
-        "wa_id",
-        "user_id",
-        "username",
-        "id_unidade",
-        "nome_unidade",
-        "waba_id",
-        "phone_number_id",
-        "score",
-        "status_ativa",
-        "id_etapa_atual",
-        "iniciou_em",
-        "finalizou_em",
-        "turnos_sem_avanco",
-        "historico_truncado",
-        "razoes",
-    ]
-    writer = csv.DictWriter(saida, fieldnames=campos)
-    writer.writeheader()
-    for item in relatorio["conversas"]:
-        linha = {campo: item.get(campo) for campo in campos}
-        linha["razoes"] = " | ".join(_razoes_texto(item))
-        writer.writerow(linha)
-    return saida.getvalue()
-
-
-def formatar_saida(relatorio, formato):
-    if formato == "json":
-        return json.dumps(
-            relatorio,
-            ensure_ascii=False,
-            indent=2,
-            default=_iso,
-        ) + "\n"
-    if formato == "csv":
-        return formatar_csv(relatorio)
-    return formatar_texto(relatorio)
-
-
-def criar_parser():
-    parser = argparse.ArgumentParser(
-        description="Gera relatório manual, explicável e somente leitura.",
-    )
-    parser.add_argument("--id-conversa", type=int, action="append")
-    parser.add_argument("--id-unidade", type=int, action="append")
-    parser.add_argument("--todas-unidades", action="store_true")
-    parser.add_argument("--inicio")
-    parser.add_argument("--fim")
-    parser.add_argument("--ultimas-horas", type=int, default=24)
-    parser.add_argument(
-        "--limite-conversas",
-        type=int,
-        default=DEFAULT_LIMITE_CONVERSAS,
-    )
-    parser.add_argument(
-        "--limite-mensagens",
-        type=int,
-        default=DEFAULT_LIMITE_MENSAGENS,
-    )
-    parser.add_argument(
-        "--max-mensagens-total",
-        type=int,
-        default=MAX_MENSAGENS_TOTAL,
-    )
-    parser.add_argument("--limiar", type=int, default=DEFAULT_LIMIAR)
-    parser.add_argument(
-        "--formato",
-        choices=("texto", "json", "csv"),
-        default="texto",
-    )
-    parser.add_argument("--saida")
-    parser.add_argument("--incluir-textos", action="store_true")
-    parser.add_argument(
-        "--mostrar-wa-id",
-        "--mostrar-identificadores",
-        dest="mostrar_wa_id",
-        action="store_true",
-        help="exibe WA ID, user ID e username completos",
-    )
-    parser.add_argument("--max-amostras-texto", type=int, default=5)
-    parser.add_argument("--max-caracteres-texto", type=int, default=160)
-    parser.add_argument(
-        "--statement-timeout-ms",
-        type=int,
-        default=DEFAULT_STATEMENT_TIMEOUT_MS,
-    )
-    parser.add_argument(
-        "--lock-timeout-ms",
-        type=int,
-        default=DEFAULT_LOCK_TIMEOUT_MS,
-    )
-    parser.add_argument(
-        "--idle-timeout-ms",
-        type=int,
-        default=DEFAULT_IDLE_TIMEOUT_MS,
-    )
-    return parser
-
-
-def validar_args(parser, args):
-    if not (args.id_conversa or args.id_unidade or args.todas_unidades):
-        parser.error(
-            "informe --id-conversa, --id-unidade ou --todas-unidades"
-        )
-    limites = (
-        ("--limite-conversas", args.limite_conversas, 1, MAX_CONVERSAS),
-        (
-            "--limite-mensagens",
-            args.limite_mensagens,
-            1,
-            MAX_MENSAGENS_POR_CONVERSA,
+        "user_id": (
+            identidade if tipo_identidade == TIPO_IDENTIDADE_USER_ID else None
         ),
-        (
-            "--max-mensagens-total",
-            args.max_mensagens_total,
-            1,
-            MAX_MENSAGENS_TOTAL,
-        ),
-        ("--limiar", args.limiar, 0, 100),
-        ("--ultimas-horas", args.ultimas_horas, 1, 31 * 24),
-        ("--max-amostras-texto", args.max_amostras_texto, 0, 20),
-        ("--max-caracteres-texto", args.max_caracteres_texto, 20, 500),
-        ("--statement-timeout-ms", args.statement_timeout_ms, 100, 120000),
-        ("--lock-timeout-ms", args.lock_timeout_ms, 50, 10000),
-        ("--idle-timeout-ms", args.idle_timeout_ms, 1000, 120000),
-    )
-    for nome, valor, minimo, maximo in limites:
-        if not minimo <= valor <= maximo:
-            parser.error(f"{nome} deve estar entre {minimo} e {maximo}")
-    if args.inicio and not args.fim:
-        parser.error("--inicio exige --fim")
-    ids = (args.id_conversa or []) + (args.id_unidade or [])
-    if any(valor <= 0 for valor in ids):
-        parser.error("IDs devem ser inteiros positivos")
-    if (
-        args.limite_conversas * args.limite_mensagens
-        > args.max_mensagens_total
-    ):
-        parser.error(
-            "--limite-conversas x --limite-mensagens não pode exceder "
-            "--max-mensagens-total"
-        )
-
-
-def main(argv=None):
-    parser = criar_parser()
-    args = parser.parse_args(argv)
-    validar_args(parser, args)
-    try:
-        relatorio = gerar_relatorio(args)
-        conteudo = formatar_saida(relatorio, args.formato)
-        if args.saida:
-            with open(args.saida, "w", encoding="utf-8", newline="") as arquivo:
-                arquivo.write(conteudo)
-        else:
-            sys.stdout.write(conteudo)
-        return 0
-    except (ValueError, RuntimeError) as exc:
-        parser.exit(2, f"erro: {exc}\n")
-    except Exception as exc:
-        sys.stderr.write(f"erro ao gerar relatório: {type(exc).__name__}: {exc}\n")
-        return 1
-
-
-if __name__ == "__main__":
-    argumentos = sys.argv[1:] or [
-        "--todas-unidades",
-        "--ultimas-horas",
-        "24",
-        "--formato",
-        "texto",
-    ]
-    raise SystemExit(main(argumentos))
+        "chave_lock": f"{tipo_identidade}:{identidade}",
+    }
 ````
 
-## Passo 28 — `operations/operacoes_rotineiras.sql`
+## Passo 25 — `core/repositories/atendimento/clientes.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `bd5a3381db8b04ad65114ddedcdeb1816fd1cd8100527f297d1c66b365fd19c1`
-
-````sql
-/*
-===============================================================================
-CONSULTAS ROTINEIRAS DO CHATBOT
-===============================================================================
-
-Arquivo destinado a consultas e operações manuais executadas no DBeaver.
-
-Regras:
-  - Cada consulta deve explicar sua finalidade e o formato do resultado.
-  - Consultas de leitura e operações destrutivas devem permanecer em seções
-    separadas e claramente identificadas.
-  - Operações destrutivas nunca devem ser executadas sem conferir o ambiente,
-    interromper os serviços envolvidos e compreender os dados removidos.
-*/
-
-
-/*
-===============================================================================
-1. HISTÓRICO DE TODAS AS CONVERSAS — UMA LINHA POR MENSAGEM
-===============================================================================
-
-Finalidade:
-  - Monitorar todas as conversas da unidade selecionada.
-  - Exibir uma linha independente para cada mensagem do cliente ou do bot.
-  - Repetir id_cliente, nome_cliente, identificadores e id_conversa em todas
-    as linhas.
-  - Manter clientes, conversas e mensagens em ordem cronológica.
-  - Servir como base simples para DBeaver, planilhas, dashboards e interfaces.
-
-Filtro:
-  - Atualmente consulta somente a unidade de id 1.
-  - Para consultar outra unidade, altere apenas o valor do WHERE.
-
-Formato da coluna "mensagem":
-  - Contém somente o conteúdo textual da mensagem.
-  - Quando a mensagem for mídia sem texto, informa seu tipo.
-
-Remetente:
-  - A coluna "quem_enviou" informa separadamente se a mensagem é do cliente
-    ou do bot.
-*/
-
-SELECT
-    cliente.id_cliente,
-    cliente.nome AS nome_cliente,
-    COALESCE(historico.wa_id, conversa.wa_id, cliente.wa_id) AS wa_id,
-    COALESCE(historico.user_id, conversa.user_id) AS user_id,
-    COALESCE(
-        historico.username,
-        conversa.username,
-        cliente.username
-    ) AS username,
-    conversa.id_conversa,
-    historico.quem_enviou,
-
-    COALESCE(
-        NULLIF(BTRIM(historico.conteudo_texto), ''),
-        FORMAT(
-            '[mensagem sem conteúdo textual: %s]',
-            COALESCE(
-                historico.tipo_mensagem,
-                'tipo desconhecido'
-            )
-        )
-    ) AS mensagem
-
-FROM chatbot.conversa AS conversa
-
-INNER JOIN chatbot.cliente AS cliente
-    ON cliente.id_cliente = conversa.id_cliente
-
-INNER JOIN chatbot.historico_mensagens AS historico
-    ON historico.id_conversa = conversa.id_conversa
-
-WHERE conversa.id_unidade = 1
-
-ORDER BY
-    cliente.id_cliente,
-    conversa.iniciou_em,
-    conversa.id_conversa,
-    historico.received_data_hora,
-    historico.id_mensagem;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-===============================================================================
-2. RESET COMPLETO DAS TABELAS OPERACIONAIS E DE SUAS IDENTIDADES
-===============================================================================
-
-ATENÇÃO — OPERAÇÃO DESTRUTIVA:
-  - Exclui definitivamente todos os registros das tabelas listadas.
-  - Reinicia suas sequências de IDs; os próximos registros começarão em 1.
-  - Não execute este bloco por engano nem junto com a consulta anterior.
-  - Em produção, interrompa previamente webhook, flow_worker e funil_worker.
-  - O COMMIT torna a exclusão definitiva.
-
-Dados preservados:
-  - clientes;
-  - unidades;
-  - integrações do funil;
-  - clientes bloqueados na Meta;
-  - catálogo de etapas e mapa de transições.
-
-Finalidade:
-  - Limpar somente os dados operacionais para iniciar um novo ciclo de testes
-    ou atendimento sem remover cadastros estruturais.
-  - Confirmar, antes do COMMIT, que todas as tabelas afetadas ficaram vazias.
-
-Proteção:
-  - RESTRICT impede que o PostgreSQL apague automaticamente outras tabelas não
-    declaradas por meio de CASCADE.
-  - Qualquer erro anterior ao COMMIT desfaz toda a operação.
-*/
-
-BEGIN;
-
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
-
-TRUNCATE TABLE
-    chatbot.historico_mensagens,
-    chatbot.respostas_desafios,
-    chatbot.pesquisa_satisfacao,
-    chatbot.funil_envios,
-    chatbot.dependente,
-    chatbot.fila_mensagens,
-    chatbot.conversa,
-    chatbot.webhook_flood_evento
-RESTART IDENTITY
-RESTRICT;
-
-SELECT 'conversa' AS tabela, COUNT(*) AS registros
-FROM chatbot.conversa
-
-UNION ALL
-SELECT 'dependente', COUNT(*)
-FROM chatbot.dependente
-
-UNION ALL
-SELECT 'fila_mensagens', COUNT(*)
-FROM chatbot.fila_mensagens
-
-UNION ALL
-SELECT 'historico_mensagens', COUNT(*)
-FROM chatbot.historico_mensagens
-
-UNION ALL
-SELECT 'respostas_desafios', COUNT(*)
-FROM chatbot.respostas_desafios
-
-UNION ALL
-SELECT 'pesquisa_satisfacao', COUNT(*)
-FROM chatbot.pesquisa_satisfacao
-
-UNION ALL
-SELECT 'funil_envios', COUNT(*)
-FROM chatbot.funil_envios
-
-UNION ALL
-SELECT 'webhook_flood_evento', COUNT(*)
-FROM chatbot.webhook_flood_evento;
-
-COMMIT;
-````
-
-## Passo 29 — `operations/README.md`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `a579799c712d24431c9a2ee93444327ffc3a02200ccb416c53f3cbe90407fd0c`
-
-````markdown
-# Operations
-
-Comandos manuais de monitoramento, diagnóstico e manutenção. Esta pasta não é
-importada pelo webhook, pelo `flow_worker`, pelo `funil_worker` nem pelo Django
-Admin.
-
-## Fronteira
-
-```text
-serviços de produção -> core/callback/workers
-operador humano      -> operations -> primitivas de core
-```
-
-Os módulos daqui podem consultar ou manter recursos de produção quando
-executados conscientemente. Nenhum deles roda por import e nenhum serviço deve
-depender de `operations`.
-
-## Estrutura
-
-```text
-operations/
-├── cache_consulta.py
-├── monitoring/
-│   ├── blocked_users.py
-│   ├── infrastructure.py
-│   └── suspicious_conversations.py
-├── maintenance/
-│   ├── cache_reset.py
-│   └── message_partitions.py
-└── integrations/
-    └── funil_probe.py
-```
-
-`cache_consulta.py` lista os bloqueios temporários por identidade tipada. A
-conexão e a varredura do Redis só acontecem dentro de `main()`, nunca no import:
-
-```bash
-python -m operations.cache_consulta
-```
-
-As ferramentas foram preparadas para execução local no PyCharm. A configuração
-privada fica em `operations/local_settings.py`, arquivo ignorado pelo Git. Ela
-usa o mesmo RDS, Redis e token Meta de produção, mas configura o SSL do
-PostgreSQL de forma compatível com o Windows. O `.env` da VM não é carregado
-como fonte dessas operações.
-
-Os relatórios principais podem ser executados diretamente pelo botão verde do
-PyCharm. Os comandos `python -m` continuam disponíveis para filtros avançados.
-
-No Windows, os módulos também podem ser executados diretamente pelo botão
-**Run** do PyCharm. O caminho Linux configurado em `DB_SSLROOTCERT` é
-automaticamente resolvido para o bundle público do RDS incluído em
-`deploy/certificates`, mantendo `verify-full`.
-
-## Bloqueios Meta × banco
-
-Lista cada unidade com seu WABA e `phone_id`, consulta os bloqueados da Meta e
-compara com `chatbot.cliente_bloqueado_meta`:
-
-```bash
-python -m operations.monitoring.blocked_users blocked-users --show-identifiers
-```
-
-Também é possível apenas abrir `blocked_users.py` e clicar em **Run**. Sem
-parâmetros, ele executa esse mesmo relatório e mostra os identificadores
-completos.
-
-Ao executar `blocked_users.py` diretamente no PyCharm sem parâmetros, esse é o
-relatório escolhido por padrão.
-
-O resultado separa:
-
-- sincronizados no banco e na Meta;
-- somente na Meta;
-- somente no banco, ainda pendentes de confirmação na Meta;
-- registros não comparados porque a Meta falhou naquela unidade;
-- vínculo local divergente entre unidade e `phone_id`.
-
-Uma falha em uma unidade não transforma sua lista Meta em lista vazia e não
-interrompe as outras. A chave da comparação é
-`(waba_id, phone_id_unidade, tipo_identidade, identidade)`. WA ID é
-prioritário; quando ele não existe, o user ID é usado. Assim, um bloqueio por
-user ID nunca é comparado ou desbloqueado como se fosse WA ID.
-
-O helper `desbloquear_bloqueio_meta_tipado()` aplica essa mesma escolha para
-desbloqueios manuais. Os relatórios não o chamam: o operador deve manter a
-ordem Meta -> banco e remover o registro local somente após o sucesso na Meta.
-
-Para conferir os registros Cloud API dos números:
-
-```bash
-python -m operations.monitoring.blocked_users phone-registrations
-```
-
-Esse segundo relatório percorre todas as WABAs conhecidas pelo banco e detecta
-inclusive um mesmo `phone_id` associado a WABAs diferentes. Ele não descobre
-uma WABA inteira que ainda não esteja cadastrada localmente.
-
-Os comandos são somente leitura. Código de saída `0` significa sincronizado,
-`1` indica divergência e `2` indica falha de coleta.
-
-## Conversas suspeitas
-
-```bash
-python -m operations.monitoring.suspicious_conversations \
-  --id-unidade 1 --ultimas-horas 24 --formato texto
-```
-
-Use `--todas-unidades` para ampliar o escopo. WA IDs, user IDs, usernames e
-textos sensíveis permanecem mascarados por padrão. A flag
-`--mostrar-identificadores` exibe os três identificadores completos;
-`--mostrar-wa-id` permanece como alias de compatibilidade.
-
-## Infraestrutura remota
-
-```bash
-python -m operations.monitoring.infrastructure
-```
-
-Confirma acesso ao PostgreSQL e ao Redis e recusa um destino local.
-
-## Cache
-
-```bash
-python -m operations.maintenance.cache_reset --operacional
-python -m operations.maintenance.cache_reset --bloqueios --confirmar
-python -m operations.maintenance.cache_reset --unidades
-```
-
-Todas as operações validam que o Redis é remoto. A segunda apaga somente os
-bloqueios temporários de conversa e exige confirmação explícita.
-
-## Partições do histórico
-
-```bash
-python -m operations.maintenance.message_partitions \
-  --months-ahead 3 --confirm
-```
-
-O comando executa DDL idempotente e retorna erro após rollback se alguma
-partição não puder ser criada.
-
-## Sondas do Funil
-
-```bash
-python -m operations.integrations.funil_probe catalog
-python -m operations.integrations.funil_probe payload
-python -m operations.integrations.funil_probe send-test --confirm-real-send
-```
-
-Somente o último comando envia uma oportunidade real, e isso exige a flag de
-confirmação. Importar o módulo nunca realiza uma requisição externa.
-````
-
-# Fase 4 — Worker, reconciliação, retry e persistência
-
-## Passo 30 — `core/repositories/atendimento/clientes.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `45446db8ab42975ff82d77f87205b9663712a6feb40087c2b5d330856be1bfe1`
+SHA-256 do conteúdo UTF-8 normalizado: `2cce7773e5dfdcc4e831b685223867a91935610490e073471efe81df6079ace8`
 
 ````python
 import logging
@@ -9602,6 +8026,30 @@ from core.logging_config import short_value
 logger = logging.getLogger("db.atendimento.clientes")
 
 
+def bloquear_clientes_por_ids(ids_cliente, cursor):
+    """Adquire row locks de cliente em ordem determinística."""
+    ids = sorted({int(valor) for valor in ids_cliente if valor is not None})
+    if not ids:
+        return {}
+    cursor.execute(
+        """
+        SELECT id_cliente, wa_id, username, nome
+        FROM chatbot.cliente
+        WHERE id_cliente = ANY(%s::int[])
+        ORDER BY id_cliente
+        FOR UPDATE;
+        """,
+        (ids,),
+    )
+    clientes = {
+        cliente["id_cliente"]: cliente
+        for cliente in (_normalizar_cliente(row) for row in cursor.fetchall())
+    }
+    if len(clientes) != len(ids):
+        raise RuntimeError("Cliente desapareceu durante aquisição de locks")
+    return clientes
+
+
 def buscar_cliente_por_wa_id(wa_id, cursor, *, for_update=False):
     if not wa_id:
         return None
@@ -9609,7 +8057,7 @@ def buscar_cliente_por_wa_id(wa_id, cursor, *, for_update=False):
     sufixo_lock = " FOR UPDATE" if for_update else ""
     cursor.execute(
         f"""
-        SELECT id_cliente, wa_id, username
+        SELECT id_cliente, wa_id, username, nome
         FROM chatbot.cliente
         WHERE wa_id = %s
         {sufixo_lock};
@@ -9623,7 +8071,7 @@ def buscar_cliente_por_id(id_cliente, cursor, *, for_update=False):
     sufixo_lock = " FOR UPDATE" if for_update else ""
     cursor.execute(
         f"""
-        SELECT id_cliente, wa_id, username
+        SELECT id_cliente, wa_id, username, nome
         FROM chatbot.cliente
         WHERE id_cliente = %s
         {sufixo_lock};
@@ -9824,14 +8272,15 @@ def _normalizar_cliente(registro):
         "id_cliente": registro[0],
         "wa_id": registro[1],
         "username": registro[2],
+        "nome": registro[3],
     }
 ````
 
-## Passo 31 — `core/repositories/atendimento/conversas.py`
+## Passo 26 — `core/repositories/atendimento/conversas.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d70b2c14dbf0921260a365dae092aaea13c5fc942dc7f80f59c0cd64ce61d402`
+SHA-256 do conteúdo UTF-8 normalizado: `9284dace37b9fc8ff7a520424b87a886563898383f1dfa0fab314e2b504cb765`
 
 ````python
 import logging
@@ -9844,7 +8293,8 @@ ETAPA_INICIAL = 1
 MOTIVOS_ENCERRAMENTO_VALIDOS = {
     "idade_invalida",
     "foi_agendado",
-    "ativou_user_id",
+    "ativou_privacidade",
+    "bloqueio_reconciliado",
 }
 
 COLUNAS_IDENTIDADE = {
@@ -9895,45 +8345,6 @@ def inserindo_em_conversa_caso_seja_nova(
     raise ValueError(
         f"Conversa do cliente {id_cliente} e unidade {id_unidade} não criada"
     )
-
-
-def buscar_last_message_from_conversa(
-    tipo_identidade,
-    identidade,
-    id_phone_unidade,
-    cursor,
-):
-    coluna = COLUNAS_IDENTIDADE.get(tipo_identidade)
-    if coluna is None:
-        raise ValueError(f"Tipo de identidade inválido: {tipo_identidade!r}")
-
-    join_vinculo = (
-        "JOIN chatbot.user_id_cliente AS vinculo "
-        "ON vinculo.id_cliente = c.id_cliente "
-        "AND vinculo.id_unidade = c.id_unidade"
-        if tipo_identidade == "user_id"
-        else "LEFT JOIN chatbot.user_id_cliente AS vinculo ON FALSE"
-    )
-    cursor.execute(
-        f"""
-        SELECT c.last_message_from
-        FROM chatbot.conversa AS c
-        JOIN chatbot.cliente AS cl
-          ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade AS u
-          ON u.id_unidade = c.id_unidade
-        {join_vinculo}
-        WHERE {coluna} = %s
-          AND u.phone_number_id = %s
-          AND c.status_ativa = TRUE
-        LIMIT 1;
-        """,
-        (identidade, id_phone_unidade),
-    )
-    resultado = cursor.fetchone()
-    return resultado[0] if resultado else None
-
-
 def tentar_lock_conversa(id_conversa, cursor):
     cursor.execute(
         "SELECT lock_ok, lock_version_atual FROM chatbot.lock_conversa(%s);",
@@ -9961,15 +8372,33 @@ def unlock_conversa(id_conversa, lock_version, cursor):
     return bool(resultado[0]) if resultado else False
 
 
-def buscar_conversa_ativa_cliente_unidade(id_cliente, id_unidade, cursor):
+class ConversaEmProcessamento(RuntimeError):
+    """Indica contenção transitória que deve voltar à fila sem consumir retry."""
+
+
+def buscar_conversa_ativa_cliente_unidade(
+    id_cliente,
+    id_unidade,
+    cursor,
+    *,
+    for_update=False,
+):
+    sufixo_lock = " FOR UPDATE" if for_update else ""
     cursor.execute(
-        """
-        SELECT id_conversa, id_etapa_atual, status_dependente
+        f"""
+        SELECT
+            id_conversa,
+            id_etapa_atual,
+            status_dependente,
+            processing,
+            processing_started_at,
+            lock_version
         FROM chatbot.conversa
         WHERE id_cliente = %s
           AND id_unidade = %s
           AND status_ativa = TRUE
-        LIMIT 1;
+        ORDER BY id_conversa
+        LIMIT 1{sufixo_lock};
         """,
         (id_cliente, id_unidade),
     )
@@ -9980,7 +8409,110 @@ def buscar_conversa_ativa_cliente_unidade(id_cliente, id_unidade, cursor):
         "id_conversa": resultado[0],
         "id_etapa_atual": resultado[1],
         "status_dependente": bool(resultado[2]),
+        "processing": bool(resultado[3]),
+        "processing_started_at": resultado[4],
+        "lock_version": int(resultado[5] or 0),
     }
+
+
+def bloquear_conversas_reconciliacao(ids_conversa, cursor):
+    """Bloqueia as conversas em ordem e nunca remove posse ainda fresca."""
+    ids = sorted({int(valor) for valor in ids_conversa if valor is not None})
+    if not ids:
+        return {}
+
+    cursor.execute(
+        """
+        SELECT
+            id_conversa,
+            id_cliente,
+            id_unidade,
+            id_etapa_atual,
+            status_ativa,
+            processing,
+            processing_started_at,
+            lock_version
+        FROM chatbot.conversa
+        WHERE id_conversa = ANY(%s::int[])
+        ORDER BY id_conversa
+        FOR UPDATE;
+        """,
+        (ids,),
+    )
+    registros = cursor.fetchall()
+    if len(registros) != len(ids):
+        raise RuntimeError("Conversa desapareceu durante a reconciliação")
+
+    conversas = {}
+    for registro in registros:
+        conversa = {
+            "id_conversa": registro[0],
+            "id_cliente": registro[1],
+            "id_unidade": registro[2],
+            "id_etapa_atual": registro[3],
+            "status_ativa": bool(registro[4]),
+            "processing": bool(registro[5]),
+            "processing_started_at": registro[6],
+            "lock_version": int(registro[7] or 0),
+        }
+        conversas[conversa["id_conversa"]] = conversa
+
+    cursor.execute(
+        """
+        SELECT id_conversa
+        FROM chatbot.conversa
+        WHERE id_conversa = ANY(%s::int[])
+          AND processing IS TRUE
+          AND (
+              processing_started_at IS NULL
+              OR processing_started_at
+                  >= NOW() - INTERVAL '110.0 seconds'
+          )
+        ORDER BY id_conversa
+        LIMIT 1;
+        """,
+        (ids,),
+    )
+    fresco = cursor.fetchone()
+    if fresco:
+        raise ConversaEmProcessamento(
+            f"Conversa {fresco[0]} ainda possui lock fresco de 110 segundos"
+        )
+
+    # Um dono com lock stale perde apenas a versão e a capacidade de executar
+    # unlock sobre uma posse posterior. Este é exatamente o limiar de 110
+    # segundos da V1.0.6, aplicado antes de qualquer efeito do merge.
+    cursor.execute(
+        """
+        UPDATE chatbot.conversa
+        SET
+            processing = FALSE,
+            processing_started_at = NULL,
+            lock_version = COALESCE(lock_version, 0) + 1
+        WHERE id_conversa = ANY(%s::int[])
+          AND processing IS TRUE
+          AND processing_started_at
+              < NOW() - INTERVAL '110.0 seconds';
+        """,
+        (ids,),
+    )
+    return conversas
+
+
+def conversa_possui_fila_aberta(id_conversa, cursor):
+    cursor.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM chatbot.fila_mensagens
+            WHERE id_conversa = %s
+              AND status IN ('pending', 'processing')
+        );
+        """,
+        (id_conversa,),
+    )
+    resultado = cursor.fetchone()
+    return bool(resultado and resultado[0])
 
 
 def buscar_estado_conversa(id_cliente, id_unidade, cursor):
@@ -10031,6 +8563,10 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
             WHERE c.id_cliente = %s
               AND c.id_unidade = %s
               AND c.status_ativa = FALSE
+              AND c.motivo_encerramento
+                  IS DISTINCT FROM 'ativou_privacidade'
+              AND c.motivo_encerramento
+                  IS DISTINCT FROM 'bloqueio_reconciliado'
             ORDER BY c.finalizou_em DESC
             LIMIT 1
         )
@@ -10076,7 +8612,6 @@ def preencher_snapshots_conversa_nulos(
     id_conversa,
     wa_id,
     user_id,
-    username,
     cursor,
 ):
     cursor.execute(
@@ -10084,15 +8619,25 @@ def preencher_snapshots_conversa_nulos(
         UPDATE chatbot.conversa
         SET
             wa_id = COALESCE(wa_id, %s),
-            user_id = COALESCE(user_id, %s),
-            username = COALESCE(username, %s)
-        WHERE id_conversa = %s;
+            user_id = COALESCE(user_id, %s)
+        WHERE id_conversa = %s
+          AND (
+              (
+                  wa_id IS NULL
+                  AND NULLIF(BTRIM(%s::text), '') IS NOT NULL
+              )
+              OR (
+                  user_id IS NULL
+                  AND NULLIF(BTRIM(%s::text), '') IS NOT NULL
+              )
+          );
         """,
-        (wa_id, user_id, username, id_conversa),
+        (wa_id, user_id, id_conversa, wa_id, user_id),
     )
-    if cursor.rowcount != 1:
+    if cursor.rowcount not in {0, 1}:
         raise RuntimeError(
-            f"Snapshots da conversa não preenchidos (id_conversa={id_conversa})"
+            "Quantidade inesperada de conversas enriquecidas "
+            f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
     return cursor.rowcount
 
@@ -10305,7 +8850,7 @@ def _validar_data_interacao_bot(data_interacao):
         raise ValueError("data_interacao não informada para resposta do bot")
 ````
 
-## Passo 32 — `core/repositories/atendimento/dependentes.py`
+## Passo 27 — `core/repositories/atendimento/dependentes.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -10514,23 +9059,17 @@ def remover_dependente_placeholder_da_conversa(id_conversa, cursor):
     return False
 ````
 
-## Passo 33 — `core/repositories/atendimento/fila.py`
+## Passo 28 — `core/repositories/atendimento/fila.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `1c67c3c3e3633451ee782d7018df818dd0219d6d210a778a09e0316edec593f5`
+SHA-256 do conteúdo UTF-8 normalizado: `fd2a9e11a538b27612cf74dd95b7905cac69ea61d88d980cf86389a8d97408f3`
 
 ````python
 import logging
 
 
 logger = logging.getLogger("db.atendimento.fila")
-
-COLUNAS_IDENTIDADE = {
-    "wa_id": "wa_id",
-    "user_id": "user_id",
-}
-
 
 def pegar_mensagens_da_fila(cursor):
     cursor.execute("SELECT * FROM chatbot.dequeue_message();")
@@ -10548,19 +9087,63 @@ def existe_mensagem_anterior_aberta_atendimento(
     received_data_hora,
     cursor,
 ):
-    coluna = COLUNAS_IDENTIDADE.get(tipo_identidade)
-    if coluna is None:
+    if tipo_identidade not in {"wa_id", "user_id"}:
         raise ValueError(f"Tipo de identidade inválido: {tipo_identidade!r}")
 
+    # A identidade do item continua congelada, mas, depois de uma prova
+    # persistida, WA ID e user ID coordenam o mesmo turno na unidade.
     cursor.execute(
-        f"""
+        """
+        WITH unidade AS (
+            SELECT id_unidade
+            FROM chatbot.unidade
+            WHERE phone_number_id = %s
+        ),
+        cliente_resolvido AS (
+            SELECT cliente.id_cliente
+            FROM unidade
+            JOIN chatbot.cliente AS cliente
+              ON %s = 'wa_id'
+             AND cliente.wa_id = %s
+            UNION
+            SELECT vinculo.id_cliente
+            FROM unidade
+            JOIN chatbot.user_id_cliente AS vinculo
+              ON vinculo.id_unidade = unidade.id_unidade
+             AND %s = 'user_id'
+             AND vinculo.user_id = %s
+        ),
+        aliases AS (
+            SELECT cliente.wa_id, vinculo.user_id
+            FROM cliente_resolvido AS resolvido
+            JOIN unidade ON TRUE
+            JOIN chatbot.cliente AS cliente
+              ON cliente.id_cliente = resolvido.id_cliente
+            LEFT JOIN chatbot.user_id_cliente AS vinculo
+              ON vinculo.id_cliente = resolvido.id_cliente
+             AND vinculo.id_unidade = unidade.id_unidade
+        )
         SELECT EXISTS (
             SELECT 1
-            FROM chatbot.fila_mensagens
-            WHERE {coluna} = %s
-              AND id_phone_unidade = %s
+            FROM chatbot.fila_mensagens AS fila
+            WHERE fila.id_phone_unidade = %s
               AND id_mensagem <> %s
               AND status IN ('pending', 'processing')
+              AND (
+                  (
+                      NOT EXISTS (SELECT 1 FROM aliases)
+                      AND (
+                          (%s = 'wa_id' AND fila.wa_id = %s)
+                          OR (%s = 'user_id' AND fila.user_id = %s)
+                      )
+                  )
+                  OR fila.wa_id IN (
+                      SELECT wa_id FROM aliases WHERE wa_id IS NOT NULL
+                  )
+                  OR fila.user_id IN (
+                      SELECT user_id FROM aliases WHERE user_id IS NOT NULL
+                  )
+              )
               AND (
                   received_data_hora < %s
                   OR (
@@ -10572,15 +9155,74 @@ def existe_mensagem_anterior_aberta_atendimento(
         );
         """,
         (
+            id_phone_unidade,
+            tipo_identidade,
+            identidade,
+            tipo_identidade,
             identidade,
             id_phone_unidade,
             id_mensagem_atual,
+            tipo_identidade,
+            identidade,
+            tipo_identidade,
+            identidade,
             received_data_hora,
             received_data_hora,
             id_mensagem_atual,
         ),
     )
     return bool(cursor.fetchone()[0])
+
+
+def existe_mensagem_anterior_alias_handoff(
+    *,
+    wa_id,
+    user_id,
+    id_phone_unidade,
+    id_mensagem_atual,
+    received_data_hora,
+    cursor,
+):
+    """Fecha a corrida anterior à persistência do primeiro vínculo de aliases.
+
+    O turno comum ainda não pode unir WA/user antes da prova. Depois de o worker
+    validar o par do mesmo envelope, esta segunda barreira consulta os snapshots
+    imutáveis dos dois aliases e impede que o item posterior ultrapasse o
+    predecessor que ainda está sem ``id_conversa``.
+    """
+    if not wa_id or not user_id or not id_phone_unidade:
+        return False
+    cursor.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM chatbot.fila_mensagens AS fila
+            WHERE fila.id_phone_unidade = %s
+              AND fila.id_mensagem <> %s
+              AND fila.status IN ('pending', 'processing')
+              AND (fila.wa_id = %s OR fila.user_id = %s)
+              AND (
+                  fila.received_data_hora < %s
+                  OR (
+                      fila.received_data_hora = %s
+                      AND fila.id_mensagem < %s
+                  )
+              )
+            LIMIT 1
+        );
+        """,
+        (
+            id_phone_unidade,
+            id_mensagem_atual,
+            wa_id,
+            user_id,
+            received_data_hora,
+            received_data_hora,
+            id_mensagem_atual,
+        ),
+    )
+    resultado = cursor.fetchone()
+    return bool(resultado and resultado[0])
 
 
 def marcar_mensagem_como_enviada(id_mensagem, cursor):
@@ -10642,28 +9284,6 @@ def vincular_mensagem_fila_a_conversa(id_mensagem, id_conversa, cursor):
     return linhas
 
 
-def preencher_snapshots_fila_conversa_nulos(
-    *,
-    id_conversa,
-    wa_id,
-    user_id,
-    username,
-    cursor,
-):
-    cursor.execute(
-        """
-        UPDATE chatbot.fila_mensagens
-        SET
-            wa_id = COALESCE(wa_id, %s),
-            user_id = COALESCE(user_id, %s),
-            username = COALESCE(username, %s)
-        WHERE id_conversa = %s;
-        """,
-        (wa_id, user_id, username, id_conversa),
-    )
-    return cursor.rowcount
-
-
 def reagendar_mensagem_sem_erro(id_mensagem, cursor, delay_seconds=30):
     cursor.execute(
         """
@@ -10718,11 +9338,11 @@ def deletar_mensagem_se_max_retry(id_mensagem, max_retry, cursor):
     return cursor.rowcount
 ````
 
-## Passo 34 — `core/repositories/atendimento/historico.py`
+## Passo 29 — `core/repositories/atendimento/historico.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `72f1b76cfc2191875b94199c9a4fb15c2aad748ccaafaab6a5633bbec9570676`
+SHA-256 do conteúdo UTF-8 normalizado: `30cabef262b2978c5e51ff59f98be1239fc6dc8d4469ff85d1137ab6e341e0b6`
 
 ````python
 import logging
@@ -10748,42 +9368,6 @@ CAMPOS_HISTORICO = """
     quem_enviou,
     status_envio
 """
-
-
-def buscar_ultimas_mensagens_historico(id_conversa, cursor, limite=6):
-    cursor.execute(
-        f"""
-        SELECT {CAMPOS_HISTORICO}
-        FROM chatbot.historico_mensagens
-        WHERE id_conversa = %s
-        ORDER BY received_data_hora DESC, id_mensagem DESC
-        LIMIT %s;
-        """,
-        (id_conversa, limite),
-    )
-    return cursor.fetchall()
-
-
-def buscar_historico_cliente_por_mensagem_fila(
-    id_conversa,
-    id_mensagem_fila,
-    id_hash_msg,
-    cursor,
-):
-    cursor.execute(
-        f"""
-        SELECT {CAMPOS_HISTORICO}
-        FROM chatbot.historico_mensagens
-        WHERE id_conversa = %s
-          AND quem_enviou = 'cliente'
-          AND id_mensagem_fila = %s
-          AND id_hash_msg = %s
-        ORDER BY received_data_hora DESC, id_mensagem DESC
-        LIMIT 1;
-        """,
-        (id_conversa, id_mensagem_fila, id_hash_msg),
-    )
-    return cursor.fetchone()
 
 
 def buscar_resposta_bot_por_mensagem_cliente(
@@ -10961,30 +9545,9 @@ def inserir_historico_mensagem_bot(
         )
     return resultado[0], resultado[1], bool(resultado[2])
 
-
-def preencher_snapshots_historico_conversa_nulos(
-    *,
-    id_conversa,
-    wa_id,
-    user_id,
-    username,
-    cursor,
-):
-    cursor.execute(
-        """
-        UPDATE chatbot.historico_mensagens
-        SET
-            wa_id = COALESCE(wa_id, %s),
-            user_id = COALESCE(user_id, %s),
-            username = COALESCE(username, %s)
-        WHERE id_conversa = %s;
-        """,
-        (wa_id, user_id, username, id_conversa),
-    )
-    return cursor.rowcount
 ````
 
-## Passo 35 — `core/repositories/atendimento/identidades.py`
+## Passo 30 — `core/repositories/atendimento/identidades.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -11037,32 +9600,39 @@ def buscar_identidades_para_contexto(
     return identidades
 ````
 
-## Passo 36 — `core/repositories/atendimento/reconciliacao_clientes.py`
+## Passo 31 — `core/repositories/atendimento/reconciliacao_clientes.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `024631f58b60096c03b38318f27f219ddeaf1fcde9a131e80706583c1b612753`
+SHA-256 do conteúdo UTF-8 normalizado: `a121f64571b4ea149b201a8e5e55ce151575f60dc0823b08cb9ab6a2cbb6032a`
 
 ````python
 import logging
 
 from core.repositories.atendimento.clientes import (
+    atualizar_nome_cliente,
+    atualizar_username_cliente,
+    bloquear_clientes_por_ids,
     excluir_cliente_provisorio_com_gates,
 )
 from core.repositories.atendimento.conversas import (
+    ConversaEmProcessamento,
+    bloquear_conversas_reconciliacao,
     buscar_conversa_ativa_cliente_unidade,
+    conversa_possui_fila_aberta,
     encerrar_conversa,
     preencher_snapshots_conversa_nulos,
     reatribuir_conversa_cliente,
 )
-from core.repositories.atendimento.fila import (
-    preencher_snapshots_fila_conversa_nulos,
-)
-from core.repositories.atendimento.historico import (
-    preencher_snapshots_historico_conversa_nulos,
-)
 from core.repositories.atendimento.user_id_cliente import (
+    buscar_vinculo_por_user_id,
     consolidar_vinculo_user_id,
+)
+from core.repositories.fluxo.politicas import (
+    buscar_bloqueio_ativo_por_id_cliente_unidade,
+)
+from core.repositories.seguranca.bloqueio_meta import (
+    consolidar_bloqueio_meta_reconciliacao,
 )
 
 
@@ -11078,10 +9648,43 @@ def reconciliar_cliente_provisorio(
     wa_id_canonico,
     user_id,
     username,
+    nome_cliente_provisorio,
     cursor,
+    etapa_obrigatoria=2,
 ):
+    """Reconcilia aliases na transação do worker, sem reescrever snapshots."""
     if id_cliente_provisorio == id_cliente_canonico:
         raise ValueError("Reconciliação chamada para o mesmo cliente")
+    if (
+        etapa_obrigatoria == 2
+        and not str(nome_cliente_provisorio or "").strip()
+    ):
+        raise RuntimeError("Cliente provisório da etapa 2 não possui nome válido")
+
+    # Ordem global de row locks: clientes -> vínculo -> conversas. Repetir um
+    # lock já adquirido pelo chamador é inofensivo e mantém o repositório seguro
+    # quando for reutilizado por outro caminho no futuro.
+    clientes_bloqueados = bloquear_clientes_por_ids(
+        [id_cliente_provisorio, id_cliente_canonico],
+        cursor,
+    )
+    if set(clientes_bloqueados) != {
+        id_cliente_provisorio,
+        id_cliente_canonico,
+    }:
+        raise RuntimeError("Clientes da reconciliação mudaram antes dos locks")
+
+    vinculo_bloqueado = buscar_vinculo_por_user_id(
+        user_id,
+        id_unidade,
+        cursor,
+        for_update=True,
+    )
+    if (
+        not vinculo_bloqueado
+        or vinculo_bloqueado["id_cliente"] != id_cliente_provisorio
+    ):
+        raise RuntimeError("Vínculo provisório mudou antes da reconciliação")
 
     conversa_provisoria = buscar_conversa_ativa_cliente_unidade(
         id_cliente_provisorio,
@@ -11091,6 +9694,10 @@ def reconciliar_cliente_provisorio(
     if (
         not conversa_provisoria
         or conversa_provisoria["id_conversa"] != id_conversa_atual
+        or (
+            etapa_obrigatoria is not None
+            and conversa_provisoria["id_etapa_atual"] != etapa_obrigatoria
+        )
     ):
         raise RuntimeError(
             "Conversa atual não pertence ao cliente provisório esperado"
@@ -11101,13 +9708,53 @@ def reconciliar_cliente_provisorio(
         id_unidade,
         cursor,
     )
+    ids_lock = [id_conversa_atual]
+    if conversa_canonica_anterior:
+        ids_lock.append(conversa_canonica_anterior["id_conversa"])
+
+    conversas_bloqueadas = bloquear_conversas_reconciliacao(ids_lock, cursor)
+    atual_bloqueada = conversas_bloqueadas[id_conversa_atual]
     if (
-        conversa_canonica_anterior
-        and conversa_canonica_anterior["id_conversa"] != id_conversa_atual
+        not atual_bloqueada["status_ativa"]
+        or atual_bloqueada["id_cliente"] != id_cliente_provisorio
+        or atual_bloqueada["id_unidade"] != id_unidade
+        or (
+            etapa_obrigatoria is not None
+            and atual_bloqueada["id_etapa_atual"] != etapa_obrigatoria
+        )
     ):
+        raise RuntimeError("Conversa provisória mudou durante o gate do handoff")
+
+    if conversa_canonica_anterior:
+        id_conversa_canonica = conversa_canonica_anterior["id_conversa"]
+        if conversa_possui_fila_aberta(id_conversa_canonica, cursor):
+            raise ConversaEmProcessamento(
+                "Conversa canônica possui fila aberta; handoff será reagendado"
+            )
+
+    # O prazo é fotografado antes de encerrar/reparentar qualquer conversa.
+    bloqueio_comercial = buscar_bloqueio_ativo_por_id_cliente_unidade(
+        id_cliente_canonico,
+        id_unidade,
+        cursor,
+    )
+
+    if str(nome_cliente_provisorio or "").strip():
+        atualizar_nome_cliente(
+            id_cliente_canonico,
+            str(nome_cliente_provisorio).strip(),
+            cursor,
+        )
+    atualizar_username_cliente(
+        id_cliente_canonico,
+        username,
+        cursor,
+    )
+
+    if conversa_canonica_anterior:
         encerrar_conversa(
             conversa_canonica_anterior["id_conversa"],
-            "ativou_user_id",
+            "ativou_privacidade",
             cursor,
         )
 
@@ -11117,7 +9764,6 @@ def reconciliar_cliente_provisorio(
         id_cliente_destino=id_cliente_canonico,
         cursor=cursor,
     )
-
     consolidar_vinculo_user_id(
         id_cliente_destino=id_cliente_canonico,
         id_cliente_origem=id_cliente_provisorio,
@@ -11126,27 +9772,32 @@ def reconciliar_cliente_provisorio(
         cursor=cursor,
     )
 
+    # Conversa é o agregado atual: apenas aliases ainda nulos podem ser
+    # enriquecidos. Username da conversa, fila e histórico são snapshots.
     preencher_snapshots_conversa_nulos(
         id_conversa=id_conversa_atual,
         wa_id=wa_id_canonico,
         user_id=user_id,
-        username=username,
         cursor=cursor,
     )
-    preencher_snapshots_fila_conversa_nulos(
-        id_conversa=id_conversa_atual,
+
+    bloqueio_meta = consolidar_bloqueio_meta_reconciliacao(
+        id_cliente_origem=id_cliente_provisorio,
+        id_cliente_destino=id_cliente_canonico,
+        id_unidade=id_unidade,
         wa_id=wa_id_canonico,
         user_id=user_id,
         username=username,
         cursor=cursor,
     )
-    preencher_snapshots_historico_conversa_nulos(
-        id_conversa=id_conversa_atual,
-        wa_id=wa_id_canonico,
-        user_id=user_id,
-        username=username,
-        cursor=cursor,
-    )
+
+    bloqueio_reconciliado = bool(bloqueio_comercial or bloqueio_meta)
+    if bloqueio_reconciliado:
+        encerrar_conversa(
+            id_conversa_atual,
+            "bloqueio_reconciliado",
+            cursor,
+        )
 
     excluir_cliente_provisorio_com_gates(
         id_cliente_provisorio,
@@ -11156,11 +9807,12 @@ def reconciliar_cliente_provisorio(
     logger.info(
         "cliente_reconciliado | acao=preservar_conversa "
         "id_cliente_provisorio=%s id_cliente_canonico=%s "
-        "id_conversa=%s id_unidade=%s",
+        "id_conversa=%s id_unidade=%s bloqueio_reconciliado=%s",
         id_cliente_provisorio,
         id_cliente_canonico,
         id_conversa_atual,
         id_unidade,
+        bloqueio_reconciliado,
     )
 
     return {
@@ -11169,18 +9821,19 @@ def reconciliar_cliente_provisorio(
         "conversa_anterior_encerrada": (
             conversa_canonica_anterior["id_conversa"]
             if conversa_canonica_anterior
-            and conversa_canonica_anterior["id_conversa"]
-            != id_conversa_atual
             else None
         ),
+        "bloqueio_reconciliado": bloqueio_reconciliado,
+        "bloqueio_comercial": bloqueio_comercial,
+        "bloqueio_meta": bloqueio_meta,
     }
 ````
 
-## Passo 37 — `core/repositories/atendimento/user_id_cliente.py`
+## Passo 32 — `core/repositories/atendimento/user_id_cliente.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8e5a4f9940b11f767b004b1356dcfbaaf8a0674bac8443e3eebd031a32e237c3`
+SHA-256 do conteúdo UTF-8 normalizado: `bd0079533c6f1e521d63d7dad772dcdd1d8ac33ab6c92676d7e66f5d3fa1ad09`
 
 ````python
 import logging
@@ -11193,7 +9846,7 @@ def buscar_vinculo_por_user_id(user_id, id_unidade, cursor, *, for_update=False)
     if not user_id:
         return None
 
-    sufixo_lock = " FOR UPDATE" if for_update else ""
+    sufixo_lock = " FOR UPDATE OF vinculo" if for_update else ""
     cursor.execute(
         f"""
         SELECT
@@ -11221,7 +9874,7 @@ def buscar_vinculo_por_cliente_unidade(
     *,
     for_update=False,
 ):
-    sufixo_lock = " FOR UPDATE" if for_update else ""
+    sufixo_lock = " FOR UPDATE OF vinculo" if for_update else ""
     cursor.execute(
         f"""
         SELECT
@@ -11291,14 +9944,57 @@ def consolidar_vinculo_user_id(
         user_id,
         id_unidade,
         cursor,
-        for_update=True,
     )
     vinculo_cliente = buscar_vinculo_por_cliente_unidade(
         id_cliente_destino,
         id_unidade,
         cursor,
-        for_update=True,
     )
+
+    # Os clientes são bloqueados pelo chamador. As linhas de vínculo são sempre
+    # adquiridas por PK crescente para não inverter a ordem quando um user ID
+    # novo substitui o vínculo antigo do mesmo cliente/unidade.
+    ids_vinculos = sorted(
+        {
+            vinculo["id_user_id_cliente"]
+            for vinculo in (vinculo_user, vinculo_cliente)
+            if vinculo
+        }
+    )
+    if ids_vinculos:
+        cursor.execute(
+            """
+            SELECT id_user_id_cliente
+            FROM chatbot.user_id_cliente
+            WHERE id_user_id_cliente = ANY(%s::bigint[])
+            ORDER BY id_user_id_cliente
+            FOR UPDATE;
+            """,
+            (ids_vinculos,),
+        )
+        bloqueados = [registro[0] for registro in cursor.fetchall()]
+        if bloqueados != ids_vinculos:
+            raise RuntimeError("Vínculos mudaram durante a aquisição ordenada")
+
+        vinculo_user_atual = buscar_vinculo_por_user_id(
+            user_id,
+            id_unidade,
+            cursor,
+        )
+        vinculo_cliente_atual = buscar_vinculo_por_cliente_unidade(
+            id_cliente_destino,
+            id_unidade,
+            cursor,
+        )
+        if (
+            (vinculo_user_atual or {}).get("id_user_id_cliente")
+            != (vinculo_user or {}).get("id_user_id_cliente")
+            or (vinculo_cliente_atual or {}).get("id_user_id_cliente")
+            != (vinculo_cliente or {}).get("id_user_id_cliente")
+        ):
+            raise RuntimeError("Vínculos mudaram após a aquisição ordenada")
+        vinculo_user = vinculo_user_atual
+        vinculo_cliente = vinculo_cliente_atual
 
     if vinculo_user and vinculo_user["id_cliente"] == id_cliente_destino:
         if (
@@ -11412,6 +10108,114 @@ def buscar_user_id_para_contexto(id_cliente, id_unidade, cursor):
     return vinculo["user_id"] if vinculo else None
 
 
+def resolver_aliases_comprovados(
+    tipo_identidade,
+    identidade,
+    id_phone_unidade,
+    cursor,
+    *,
+    for_update=False,
+):
+    """Resolve a ancora transacional sem confundir aliases nao comprovados.
+
+    O WA ID continua global. O user ID somente identifica um cliente dentro da
+    unidade indicada por ``phone_number_id``. Depois que o vinculo existe, os
+    dois valores coordenam o mesmo ``(id_cliente, id_unidade)``.
+    """
+    identidade = str(identidade or "").strip()
+    id_phone_unidade = str(id_phone_unidade or "").strip()
+    if tipo_identidade not in {"wa_id", "user_id"}:
+        raise ValueError("tipo de identidade invalido")
+    if not identidade or not id_phone_unidade:
+        return None
+
+    if tipo_identidade == "wa_id":
+        cursor.execute(
+            """
+            SELECT
+                cliente.id_cliente,
+                unidade.id_unidade,
+                cliente.wa_id,
+                vinculo.user_id
+            FROM chatbot.unidade AS unidade
+            JOIN chatbot.cliente AS cliente
+              ON cliente.wa_id = %s
+            LEFT JOIN chatbot.user_id_cliente AS vinculo
+              ON vinculo.id_cliente = cliente.id_cliente
+             AND vinculo.id_unidade = unidade.id_unidade
+            WHERE unidade.phone_number_id = %s
+              AND unidade.status_pagamento = TRUE
+            LIMIT 1;
+            """,
+            (identidade, id_phone_unidade),
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT
+                cliente.id_cliente,
+                unidade.id_unidade,
+                cliente.wa_id,
+                vinculo.user_id
+            FROM chatbot.unidade AS unidade
+            JOIN chatbot.user_id_cliente AS vinculo
+              ON vinculo.id_unidade = unidade.id_unidade
+             AND vinculo.user_id = %s
+            JOIN chatbot.cliente AS cliente
+              ON cliente.id_cliente = vinculo.id_cliente
+            WHERE unidade.phone_number_id = %s
+              AND unidade.status_pagamento = TRUE
+            LIMIT 1;
+            """,
+            (identidade, id_phone_unidade),
+        )
+
+    aliases = _normalizar_aliases(cursor.fetchone())
+    if aliases and for_update:
+        # A ordem de fencing e sempre cliente -> vinculo, independente do
+        # alias que iniciou a resolucao.
+        cursor.execute(
+            "SELECT id_cliente FROM chatbot.cliente WHERE id_cliente = %s FOR UPDATE;",
+            (aliases["id_cliente"],),
+        )
+        cursor.fetchone()
+        if aliases["user_id"]:
+            cursor.execute(
+                """
+                SELECT id_user_id_cliente
+                FROM chatbot.user_id_cliente
+                WHERE id_cliente = %s
+                  AND id_unidade = %s
+                FOR UPDATE;
+                """,
+                (aliases["id_cliente"], aliases["id_unidade"]),
+            )
+            cursor.fetchone()
+    return aliases
+
+
+def resolver_aliases_por_cliente_unidade(id_cliente, id_unidade, cursor):
+    cursor.execute(
+        """
+        SELECT
+            cliente.id_cliente,
+            unidade.id_unidade,
+            cliente.wa_id,
+            vinculo.user_id
+        FROM chatbot.cliente AS cliente
+        JOIN chatbot.unidade AS unidade
+          ON unidade.id_unidade = %s
+        LEFT JOIN chatbot.user_id_cliente AS vinculo
+          ON vinculo.id_cliente = cliente.id_cliente
+         AND vinculo.id_unidade = unidade.id_unidade
+        WHERE cliente.id_cliente = %s
+        LIMIT 1;
+        """,
+        (id_unidade, id_cliente),
+    )
+    return _normalizar_aliases(cursor.fetchone())
+
+
 def _normalizar_vinculo(registro):
     if not registro:
         return None
@@ -11423,17 +10227,33 @@ def _normalizar_vinculo(registro):
         "id_unidade": registro[3],
         "wa_id": registro[4],
     }
+
+
+def _normalizar_aliases(registro):
+    if not registro:
+        return None
+    return {
+        "id_cliente": registro[0],
+        "id_unidade": registro[1],
+        "wa_id": registro[2],
+        "user_id": registro[3],
+    }
 ````
 
-## Passo 38 — `core/repositories/fluxo/politicas.py`
+## Passo 33 — `core/repositories/fluxo/politicas.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `56cded64b19389c10050fda034e2ee29a82fadbecf61a994a88bb9db1a94277a`
+SHA-256 do conteúdo UTF-8 normalizado: `b2b55ee20e7025bea0868e5f74a5cc3767ae34eaf658378ac4d0e2034a6c5ba4`
 
 ````python
 from dataclasses import dataclass
 from datetime import datetime
+
+from core.repositories.atendimento.user_id_cliente import (
+    resolver_aliases_comprovados,
+    resolver_aliases_por_cliente_unidade,
+)
 
 
 @dataclass(frozen=True)
@@ -11448,6 +10268,19 @@ class PoliticaEtapa:
 class BloqueioConversa:
     finalizou_em: datetime
     bloqueio_dias: int
+    bloqueado_ate: datetime | None = None
+    id_conversa: int | None = None
+    id_cliente: int | None = None
+    id_unidade: int | None = None
+    wa_id: str | None = None
+    user_id: str | None = None
+
+    @property
+    def aliases(self):
+        return {
+            "wa_id": self.wa_id,
+            "user_id": self.user_id,
+        }
 
 
 def buscar_politica_etapa(id_etapa, cursor):
@@ -11485,8 +10318,19 @@ def buscar_bloqueio_conversa_por_id(id_conversa, cursor):
         """
         SELECT
             c.finalizou_em,
-            e.bloqueio_dias
+            e.bloqueio_dias,
+            c.finalizou_em + (e.bloqueio_dias * INTERVAL '1 day'),
+            c.id_conversa,
+            c.id_cliente,
+            c.id_unidade,
+            cliente.wa_id,
+            vinculo.user_id
         FROM chatbot.conversa c
+        JOIN chatbot.cliente AS cliente
+          ON cliente.id_cliente = c.id_cliente
+        LEFT JOIN chatbot.user_id_cliente AS vinculo
+          ON vinculo.id_cliente = c.id_cliente
+         AND vinculo.id_unidade = c.id_unidade
         JOIN chatbot.etapa e
           ON e.id_etapa = c.id_etapa_atual
         WHERE c.id_conversa = %s
@@ -11507,61 +10351,96 @@ def buscar_bloqueio_ativo_por_cliente_unidade(
     id_phone_unidade,
     cursor,
 ):
-    if tipo_identidade == "wa_id":
-        join_identidade = """
-        JOIN chatbot.cliente cl
-          ON cl.id_cliente = c.id_cliente
-        """
-        filtro_identidade = "cl.wa_id = %s"
-    elif tipo_identidade == "user_id":
-        join_identidade = """
-        JOIN chatbot.user_id_cliente vinculo
-          ON vinculo.id_cliente = c.id_cliente
-         AND vinculo.id_unidade = c.id_unidade
-        """
-        filtro_identidade = "vinculo.user_id = %s"
-    else:
-        raise ValueError("tipo de identidade invalido para bloqueio")
+    aliases = resolver_aliases_comprovados(
+        tipo_identidade,
+        identidade,
+        id_phone_unidade,
+        cursor,
+    )
+    if not aliases:
+        return None
+
+    return buscar_bloqueio_ativo_por_id_cliente_unidade(
+        aliases["id_cliente"],
+        aliases["id_unidade"],
+        cursor,
+        aliases=aliases,
+    )
+
+
+def buscar_bloqueio_ativo_por_id_cliente_unidade(
+    id_cliente,
+    id_unidade,
+    cursor,
+    *,
+    aliases=None,
+):
+    """Localiza o prazo comercial original sem criar uma nova janela."""
+    aliases = aliases or resolver_aliases_por_cliente_unidade(
+        id_cliente,
+        id_unidade,
+        cursor,
+    )
 
     cursor.execute(
-        f"""
+        """
         SELECT
             c.finalizou_em,
-            e.bloqueio_dias
+            e.bloqueio_dias,
+            c.finalizou_em + (e.bloqueio_dias * INTERVAL '1 day'),
+            c.id_conversa,
+            c.id_cliente,
+            c.id_unidade
         FROM chatbot.conversa c
-        {join_identidade}
-        JOIN chatbot.unidade u
-          ON u.id_unidade = c.id_unidade
         JOIN chatbot.etapa e
           ON e.id_etapa = c.id_etapa_atual
-        WHERE {filtro_identidade}
-          AND u.phone_number_id = %s
-          AND u.status_pagamento = TRUE
+        WHERE c.id_cliente = %s
+          AND c.id_unidade = %s
           AND c.status_ativa = FALSE
           AND c.finalizou_em IS NOT NULL
+          AND c.motivo_encerramento
+              IS DISTINCT FROM 'ativou_privacidade'
+          AND c.motivo_encerramento
+              IS DISTINCT FROM 'bloqueio_reconciliado'
           AND e.bloqueio_dias > 0
           AND c.finalizou_em
               > NOW() - (e.bloqueio_dias * INTERVAL '1 day')
-        ORDER BY c.finalizou_em DESC
+        ORDER BY
+            c.finalizou_em + (e.bloqueio_dias * INTERVAL '1 day') DESC,
+            c.id_conversa DESC
         LIMIT 1;
         """,
-        (identidade, id_phone_unidade),
+        (id_cliente, id_unidade),
     )
 
-    return _montar_bloqueio(cursor.fetchone())
+    return _montar_bloqueio(cursor.fetchone(), aliases=aliases)
 
 
-def _montar_bloqueio(resultado):
+def _montar_bloqueio(resultado, *, aliases=None):
     if not resultado:
         return None
 
     return BloqueioConversa(
         finalizou_em=resultado[0],
         bloqueio_dias=int(resultado[1]),
+        bloqueado_ate=resultado[2] if len(resultado) > 2 else None,
+        id_conversa=resultado[3] if len(resultado) > 3 else None,
+        id_cliente=resultado[4] if len(resultado) > 4 else None,
+        id_unidade=resultado[5] if len(resultado) > 5 else None,
+        wa_id=(
+            aliases.get("wa_id")
+            if aliases
+            else (resultado[6] if len(resultado) > 6 else None)
+        ),
+        user_id=(
+            aliases.get("user_id")
+            if aliases
+            else (resultado[7] if len(resultado) > 7 else None)
+        ),
     )
 ````
 
-## Passo 39 — `workers/worker_flow/response_flow/destinatario_sender.py`
+## Passo 34 — `workers/worker_flow/response_flow/destinatario_sender.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -11595,7 +10474,7 @@ def resolver_destinatario_sender(
     )
 ````
 
-## Passo 40 — `workers/worker_flow/response_flow/flow_sender.py`
+## Passo 35 — `workers/worker_flow/response_flow/flow_sender.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -11759,11 +10638,11 @@ def _anexar_identidades(contexto_envio, contexto_historico):
     return contexto_envio
 ````
 
-## Passo 41 — `workers/worker_flow/response_flow/flow_worker.py`
+## Passo 36 — `workers/worker_flow/response_flow/flow_worker.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d7eb464680e32202bdb268b93be3295ba3aa869d655b05db2c0cfc90f3bfd18a`
+SHA-256 do conteúdo UTF-8 normalizado: `51b3caef47a240a2b1deae1754e9c31442e9bc0823fa36eb8587c3317dee793e`
 
 ````python
 import logging
@@ -11773,7 +10652,10 @@ from core.cache.cache_unidade import UnidadeNaoEncontrada
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
-from core.repositories.atendimento.conversas import tentar_lock_conversa
+from core.repositories.atendimento.conversas import (
+    ConversaEmProcessamento,
+    tentar_lock_conversa,
+)
 from core.repositories.atendimento.fila import (
     pegar_mensagens_da_fila,
     reagendar_mensagem_sem_erro,
@@ -11802,6 +10684,7 @@ from workers.worker_flow.suporte.estado_ciclo import (
 from workers.worker_flow.transacoes.finalizacao_fila import (
     finalizar_mensagem_processada,
     registrar_cache_bloqueio_apos_commit,
+    registrar_cache_bloqueio_reconciliado_apos_commit,
 )
 from workers.worker_flow.transacoes.lock_conversa import (
     liberar_lock_conversa_se_necessario,
@@ -11814,7 +10697,10 @@ from workers.worker_flow.transacoes.persistencia_resposta import (
     atualizar_banco_com_contexto_final,
 )
 from workers.worker_flow.tratar_bloqueio import tratar_conversa_bloqueada
-from workers.worker_flow.valida_banco import validar_banco_mensagem
+from workers.worker_flow.valida_banco import (
+    HandoffAguardandoPredecessor,
+    validar_banco_mensagem,
+)
 from workers.worker_flow.valida_historico import valida_historico
 
 
@@ -11874,6 +10760,19 @@ def worker_flow():
 
             conn_ciclo.commit()
             confirmar_cache_cliente_se_pendente(contexto_banco)
+
+            if contexto_banco.get("resultado_terminal"):
+                registrar_cache_bloqueio_reconciliado_apos_commit(
+                    contexto_banco
+                )
+                logger.info(
+                    "mensagem_terminal | acao=continuar_sem_sender "
+                    "id_mensagem=%s resultado=%s id_conversa=%s",
+                    mensagem["id_mensagem"],
+                    contexto_banco["resultado_terminal"],
+                    id_conversa,
+                )
+                continue
 
             if contexto_conversa["estado"] == "bloqueada":
                 tratar_conversa_bloqueada(
@@ -11967,8 +10866,27 @@ def worker_flow():
             conn_ciclo.commit()
             registrar_cache_bloqueio_apos_commit(
                 mensagem,
+                contexto_banco,
                 resultado_encerramento,
             )
+
+        except (ConversaEmProcessamento, HandoffAguardandoPredecessor) as erro:
+            logger.info(
+                "handoff_contendido | acao=reagendar_sem_consumir_retry "
+                "id_mensagem=%s erro=%s",
+                estado_ciclo["id_mensagem"],
+                erro,
+            )
+            if conn_ciclo:
+                conn_ciclo.rollback()
+            if cursor_ciclo and estado_ciclo["id_mensagem"] is not None:
+                reagendar_mensagem_sem_erro(
+                    estado_ciclo["id_mensagem"],
+                    cursor_ciclo,
+                    delay_seconds=5,
+                )
+            if conn_ciclo:
+                conn_ciclo.commit()
 
         except ErroEnvioMeta as erro:
             logger.warning(
@@ -12099,11 +11017,11 @@ def worker_flow():
                         )
 ````
 
-## Passo 42 — `workers/worker_flow/suporte/cache_repair.py`
+## Passo 37 — `workers/worker_flow/suporte/cache_repair.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `40aa5047df71e4b279459f08b437713b9b3623dd71602f4d19c74ca581af6fb8`
+SHA-256 do conteúdo UTF-8 normalizado: `d07137e0f8ff11b4fcdd62ac7c3ea3f88c1bfeacf3a8b28a42bb21cca9787df8`
 
 ````python
 import logging
@@ -12114,6 +11032,7 @@ from core.cache.runtime.cache_cliente import (
     salvar_cliente_cache,
 )
 from core.logging_config import short_value
+from core.integrations.whatsapp.identidade import montar_referencia_cache_cliente
 
 
 logger = logging.getLogger("worker.support")
@@ -12123,13 +11042,29 @@ def confirmar_cache_cliente_se_pendente(contexto_banco):
     if not contexto_banco.get("cliente_cache_pendente"):
         return False
 
-    referencia = contexto_banco["referencia_cache_cliente"]
-    salvar_cliente_cache(referencia, contexto_banco["id_cliente"])
+    referencias = {contexto_banco["referencia_cache_cliente"]}
+    if contexto_banco.get("wa_id"):
+        referencias.add(
+            montar_referencia_cache_cliente(
+                "wa_id",
+                contexto_banco["wa_id"],
+            )
+        )
+    if contexto_banco.get("user_id"):
+        referencias.add(
+            montar_referencia_cache_cliente(
+                "user_id",
+                contexto_banco["user_id"],
+                id_phone_unidade=contexto_banco["id_phone_unidade"],
+            )
+        )
+    for referencia in referencias:
+        salvar_cliente_cache(referencia, contexto_banco["id_cliente"])
     contexto_banco["cliente_cache_pendente"] = False
 
     logger.debug(
-        "cliente_cache_confirmado | acao=salvar referencia=%s id_cliente=%s",
-        short_value(referencia),
+        "cliente_cache_confirmado | acao=salvar referencias=%s id_cliente=%s",
+        len(referencias),
         contexto_banco["id_cliente"],
     )
     return True
@@ -12170,11 +11105,11 @@ def reparar_cache_unidade_stale_se_fk_invalida(erro, estado_ciclo):
     return total_unidades is not None
 ````
 
-## Passo 43 — `workers/worker_flow/suporte/estado_ciclo.py`
+## Passo 38 — `workers/worker_flow/suporte/estado_ciclo.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `aa90778dc07284523e416e188a873f12dbc1e9ce2febf1e38e282e8242db8cb9`
+SHA-256 do conteúdo UTF-8 normalizado: `3ae222c64bc9b7f2e4e3affe0f569688fc2848eba83cc7a49b3627a5502e8424`
 
 ````python
 import logging
@@ -12203,6 +11138,8 @@ def criar_estado_ciclo():
         "referencia_cache_cliente": None,
         "wa_id_compartilhado": None,
         "wa_id_canonico": None,
+        "user_id_canonico": None,
+        "resultado_terminal": None,
         "id_phone_unidade": None,
         "tipo_mensagem": None,
     }
@@ -12286,6 +11223,8 @@ def atualizar_estado_com_contexto(estado_ciclo, contexto_banco):
             "id_conversa": contexto_conversa["id_conversa"],
             "estado": contexto_conversa["estado"],
             "wa_id_canonico": contexto_banco["wa_id"],
+            "user_id_canonico": contexto_banco["user_id"],
+            "resultado_terminal": contexto_banco.get("resultado_terminal"),
         }
     )
 
@@ -12300,7 +11239,7 @@ def aguardar_fila_vazia():
     time.sleep(1.5)
 ````
 
-## Passo 44 — `workers/worker_flow/transacoes/efeitos_identidade.py`
+## Passo 39 — `workers/worker_flow/transacoes/efeitos_identidade.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -12369,7 +11308,7 @@ def reconhecer_contato_oficial_persistido(
     }
 ````
 
-## Passo 45 — `workers/worker_flow/transacoes/efeitos_transicao.py`
+## Passo 40 — `workers/worker_flow/transacoes/efeitos_transicao.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -13631,7 +12570,7 @@ def _persistir_comentario_satisfacao_da_etapa22(
     }
 ````
 
-## Passo 46 — `workers/worker_flow/transacoes/encerramento_atendimento.py`
+## Passo 41 — `workers/worker_flow/transacoes/encerramento_atendimento.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -13801,11 +12740,11 @@ def aplicar_encerramento_se_necessario(
     }
 ````
 
-## Passo 47 — `workers/worker_flow/transacoes/finalizacao_fila.py`
+## Passo 42 — `workers/worker_flow/transacoes/finalizacao_fila.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b08145a49ef8c8900383cf15a01f13992c89d72daaaa5423aa60d1f1fa9760a2`
+SHA-256 do conteúdo UTF-8 normalizado: `7ca7fae891d4595c2a415afaae9360fccc86a82ddee7549968666a984011c6a2`
 
 ````python
 import logging
@@ -13814,6 +12753,7 @@ from core.cache.runtime.cache_conversas_bloqueadas import (
     registrar_bloqueio_conversa_cache,
 )
 from core.logging_config import short_value
+from core.integrations.whatsapp.tools.usuarios import bloquear_usuarios_meta
 from core.repositories.atendimento.fila import marcar_mensagem_como_enviada
 from workers.worker_flow.transacoes.encerramento_atendimento import (
     aplicar_encerramento_se_necessario,
@@ -13859,7 +12799,11 @@ def finalizar_mensagem_processada(
     return resultado_encerramento
 
 
-def registrar_cache_bloqueio_apos_commit(mensagem, resultado_encerramento):
+def registrar_cache_bloqueio_apos_commit(
+    mensagem,
+    contexto_banco,
+    resultado_encerramento,
+):
     if not resultado_encerramento.get("atendimento_encerrado"):
         return False
 
@@ -13873,14 +12817,78 @@ def registrar_cache_bloqueio_apos_commit(mensagem, resultado_encerramento):
         mensagem["id_phone_unidade"],
         resultado_encerramento["finalizou_em"],
         bloqueio_dias,
+        aliases={
+            "wa_id": contexto_banco.get("wa_id"),
+            "user_id": contexto_banco.get("user_id"),
+        },
     )
+
+
+def registrar_cache_bloqueio_reconciliado_apos_commit(contexto_banco):
+    """Propaga efeitos externos somente depois do commit terminal.
+
+    A linha local da denylist ja protege a unidade. Se a reconciliacao
+    descobriu um alias novo, tenta bloquear todos os aliases na Meta sem
+    ressuscitar o item terminal quando a API falhar.
+    """
+    detalhes = contexto_banco.get("bloqueio_reconciliado") or {}
+    bloqueio_meta = detalhes.get("meta")
+    meta_ok = None
+    if bloqueio_meta:
+        identidades_meta = list(dict.fromkeys(
+            valor
+            for valor in (
+                bloqueio_meta.get("wa_id"),
+                bloqueio_meta.get("user_id"),
+                contexto_banco.get("wa_id"),
+                contexto_banco.get("user_id"),
+            )
+            if valor
+        ))
+        try:
+            bloquear_usuarios_meta(
+                identidades_meta,
+                contexto_banco["id_phone_unidade"],
+            )
+            meta_ok = True
+        except Exception as exc:
+            meta_ok = False
+            logger.exception(
+                "bloqueio_meta_reconciliado_falhou | "
+                "acao=manter_denylist_local_sem_reabrir_item "
+                "id_cliente=%s phone_id_unidade=%s aliases=%s erro=%s",
+                contexto_banco.get("id_cliente"),
+                short_value(contexto_banco.get("id_phone_unidade")),
+                len(identidades_meta),
+                exc,
+            )
+
+    bloqueio = detalhes.get("comercial")
+    if bloqueio is None:
+        return bool(meta_ok)
+
+    tipo = "wa_id" if contexto_banco.get("wa_id") else "user_id"
+    identidade = contexto_banco.get(tipo)
+    cache_ok = registrar_bloqueio_conversa_cache(
+        tipo,
+        identidade,
+        contexto_banco["id_phone_unidade"],
+        bloqueio.finalizou_em,
+        bloqueio.bloqueio_dias,
+        aliases={
+            "wa_id": contexto_banco.get("wa_id"),
+            "user_id": contexto_banco.get("user_id"),
+        },
+        bloqueado_ate=bloqueio.bloqueado_ate,
+    )
+    return bool(cache_ok or meta_ok)
 ````
 
-## Passo 48 — `workers/worker_flow/transacoes/ordem_turno.py`
+## Passo 43 — `workers/worker_flow/transacoes/ordem_turno.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `9e34cd9dd253a6d88bce7e63bb6c312ac9b75bd70d9e34273af9603800ce5dda`
+SHA-256 do conteúdo UTF-8 normalizado: `ee36f1c6299aa6ae68bad3920e3e107d61195aafdfa7a4a4527d3ff05768dfe5`
 
 ````python
 import logging
@@ -13928,6 +12936,18 @@ def reagendar_se_houver_mensagem_anterior(mensagem, cursor):
         cursor,
         delay_seconds=30,
     )
+    if linhas != 1:
+        logger.warning(
+            "mensagem_ordem_nao_reagendada | "
+            "motivo=linha_nao_disponivel acao=interromper_ciclo "
+            "id_mensagem=%s tipo_identidade=%s identidade=%s "
+            "phone_number_id=%s linhas=%s",
+            mensagem["id_mensagem"],
+            mensagem["tipo_identidade_do_item"],
+            short_value(mensagem["identidade_do_item"]),
+            short_value(mensagem["id_phone_unidade"]),
+            linhas,
+        )
     logger.info(
         "mensagem_reagendada | motivo=mensagem_anterior_aberta_mesmo_atendimento "
         "acao=aguardar_ordem id_mensagem=%s tipo_identidade=%s "
@@ -13941,11 +12961,11 @@ def reagendar_se_houver_mensagem_anterior(mensagem, cursor):
     return True
 ````
 
-## Passo 49 — `workers/worker_flow/tratar_bloqueio.py`
+## Passo 44 — `workers/worker_flow/tratar_bloqueio.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5d6e100fb64fbdf68efaebe091ee72421e9e9ed0984275af80edd324fd116f49`
+SHA-256 do conteúdo UTF-8 normalizado: `5f80258113a841c21e617415a646abf0c39d76444864b3cf88823735b30777f7`
 
 ````python
 import logging
@@ -13982,6 +13002,8 @@ def tratar_conversa_bloqueada(
         id_phone_unidade,
         bloqueio.finalizou_em,
         bloqueio.bloqueio_dias,
+        aliases=bloqueio.aliases,
+        bloqueado_ate=bloqueio.bloqueado_ate,
     )
     deletadas = deletar_mensagem_por_id(id_mensagem, cursor)
     logger.info(
@@ -13998,20 +13020,22 @@ def tratar_conversa_bloqueada(
     )
 ````
 
-## Passo 50 — `workers/worker_flow/valida_banco.py`
+## Passo 45 — `workers/worker_flow/valida_banco.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0fe127f0157117141e4287386df208404c807b494da6d3ae8b3d2c32122b225e`
+SHA-256 do conteúdo UTF-8 normalizado: `944c1a74e06f1f3d5394257491c72d51d953c2458dd4f620bac2c659c1e5da09`
 
 ````python
 import logging
+import re
 
 from core.cache.cache_unidade import obter_id_unidade_redis_ou_plsql
 from core.cache.runtime.cache_cliente import buscar_cliente_cache
 from core.logging_config import short_value
 from core.repositories.atendimento.clientes import (
     atualizar_username_cliente,
+    bloquear_clientes_por_ids,
     buscar_cliente_por_id,
     buscar_cliente_por_wa_id,
     criar_cliente_provisorio,
@@ -14019,16 +13043,16 @@ from core.repositories.atendimento.clientes import (
     resolver_ou_criar_cliente_por_wa_id,
 )
 from core.repositories.atendimento.conversas import (
+    bloquear_conversas_reconciliacao,
     buscar_conversa_ativa_cliente_unidade,
     buscar_estado_conversa,
+    encerrar_conversa,
     inserindo_em_conversa_caso_seja_nova,
     preencher_snapshots_conversa_nulos,
 )
 from core.repositories.atendimento.fila import (
-    preencher_snapshots_fila_conversa_nulos,
-)
-from core.repositories.atendimento.historico import (
-    preencher_snapshots_historico_conversa_nulos,
+    deletar_mensagem_por_id,
+    existe_mensagem_anterior_alias_handoff,
 )
 from core.repositories.atendimento.identidades import (
     buscar_identidades_para_contexto,
@@ -14041,9 +13065,24 @@ from core.repositories.atendimento.user_id_cliente import (
     consolidar_vinculo_user_id,
     criar_vinculo_user_id,
 )
+from core.repositories.fluxo.politicas import (
+    buscar_bloqueio_ativo_por_id_cliente_unidade,
+)
+from core.repositories.seguranca.bloqueio_meta import (
+    consolidar_bloqueio_meta_reconciliacao,
+)
 
 
 logger = logging.getLogger("worker.valida_banco")
+
+ETAPA_COMPARTILHAMENTO = 2
+TIPO_CONTATO = "contacts"
+ORIGEM_CONTACT_REQUEST = "contact_request"
+PADRAO_WA_ID_COMPARTILHADO = re.compile(r"^[0-9]{10,15}$")
+
+
+class HandoffAguardandoPredecessor(RuntimeError):
+    """Prova válida aguardando item anterior de um dos aliases."""
 
 
 def validar_banco_mensagem(mensagem, cursor):
@@ -14056,11 +13095,7 @@ def validar_banco_mensagem(mensagem, cursor):
     )
 
     if mensagem.get("wa_id_compartilhado"):
-        resolucao = _resolver_handoff(
-            mensagem,
-            id_unidade,
-            cursor,
-        )
+        resolucao = _resolver_handoff(mensagem, id_unidade, cursor)
     elif mensagem.get("wa_id"):
         resolucao = _resolver_evento_com_wa_id(
             mensagem,
@@ -14079,33 +13114,14 @@ def validar_banco_mensagem(mensagem, cursor):
     contexto_conversa = resolucao["conversa"]
     id_conversa = contexto_conversa["id_conversa"]
 
+    # A conversa é o agregado atual e só recebe aliases/snapshot inicial ainda
+    # nulos. Fila e histórico jamais são retropreenchidos após a prova.
     preencher_snapshots_conversa_nulos(
         id_conversa=id_conversa,
         wa_id=resolucao.get("wa_id"),
         user_id=resolucao.get("user_id"),
-        username=mensagem.get("username"),
         cursor=cursor,
     )
-
-    # Payload conjunto e contato oficial são provas de vínculo. O backfill é
-    # restrito à conversa atual e nunca sobrescreve snapshot não nulo.
-    if mensagem.get("user_id") and (
-        mensagem.get("wa_id_compartilhado") or mensagem.get("wa_id")
-    ):
-        preencher_snapshots_fila_conversa_nulos(
-            id_conversa=id_conversa,
-            wa_id=resolucao.get("wa_id"),
-            user_id=resolucao.get("user_id"),
-            username=mensagem.get("username"),
-            cursor=cursor,
-        )
-        preencher_snapshots_historico_conversa_nulos(
-            id_conversa=id_conversa,
-            wa_id=resolucao.get("wa_id"),
-            user_id=resolucao.get("user_id"),
-            username=mensagem.get("username"),
-            cursor=cursor,
-        )
 
     identidades = buscar_identidades_para_contexto(
         id_cliente=id_cliente,
@@ -14113,7 +13129,6 @@ def validar_banco_mensagem(mensagem, cursor):
         id_conversa=id_conversa,
         cursor=cursor,
     )
-
     contexto_banco = {
         "id_unidade": id_unidade,
         "id_cliente": id_cliente,
@@ -14125,13 +13140,15 @@ def validar_banco_mensagem(mensagem, cursor):
         "user_id": identidades["user_id"],
         "username": identidades["username"],
         "conversa": contexto_conversa,
+        "resultado_terminal": resolucao.get("resultado_terminal"),
+        "bloqueio_reconciliado": resolucao.get("bloqueio_reconciliado"),
     }
 
     logger.info(
         "contexto_identidade_resolvido | acao=continuar "
         "tipo_identidade=%s identidade=%s id_cliente=%s "
         "id_unidade=%s id_conversa=%s wa_id_presente=%s "
-        "user_id_presente=%s",
+        "user_id_presente=%s resultado_terminal=%s",
         mensagem["tipo_identidade_do_item"],
         short_value(mensagem["identidade_do_item"]),
         id_cliente,
@@ -14139,63 +13156,105 @@ def validar_banco_mensagem(mensagem, cursor):
         id_conversa,
         bool(identidades["wa_id"]),
         bool(identidades["user_id"]),
+        contexto_banco["resultado_terminal"],
     )
     return contexto_banco
 
 
 def _resolver_handoff(mensagem, id_unidade, cursor):
-    user_id = mensagem.get("user_id")
-    wa_id_compartilhado = mensagem.get("wa_id_compartilhado")
-    if not user_id or not wa_id_compartilhado:
-        raise RuntimeError("contact_request sem user ID ou WA ID compartilhado")
+    """Valida integralmente a prova da etapa 2 antes da primeira mutação."""
+    user_id = str(mensagem.get("user_id") or "").strip()
+    wa_id_compartilhado = str(
+        mensagem.get("wa_id_compartilhado") or ""
+    ).strip()
+    if (
+        mensagem.get("tipo_identidade_do_item") != "user_id"
+        or mensagem.get("identidade_do_item") != user_id
+        or mensagem.get("tipo_mensagem") != TIPO_CONTATO
+        or mensagem.get("conteudo_texto") != ORIGEM_CONTACT_REQUEST
+        or mensagem.get("wa_id") != wa_id_compartilhado
+        or not PADRAO_WA_ID_COMPARTILHADO.fullmatch(wa_id_compartilhado)
+    ):
+        raise RuntimeError("contact_request inválido antes do handoff")
 
-    vinculo = buscar_vinculo_por_user_id(
-        user_id,
-        id_unidade,
-        cursor,
-        for_update=True,
-    )
+    # Leituras puras do gate. Os row locks de clientes/conversas são adquiridos
+    # apenas depois que origem, etapa, cardinalidade e formato foram provados.
+    vinculo = buscar_vinculo_por_user_id(user_id, id_unidade, cursor)
     if not vinculo:
-        raise RuntimeError(
-            "contact_request sem vínculo user_id_cliente prévio"
-        )
+        raise RuntimeError("contact_request sem vínculo user_id_cliente prévio")
 
     id_cliente_origem = vinculo["id_cliente"]
-    cliente_origem = buscar_cliente_por_id(
-        id_cliente_origem,
-        cursor,
-        for_update=True,
-    )
-    if not cliente_origem:
+    cliente_origem_lido = buscar_cliente_por_id(id_cliente_origem, cursor)
+    if not cliente_origem_lido:
         raise RuntimeError("Vínculo aponta para cliente inexistente")
     if (
-        cliente_origem["wa_id"]
-        and cliente_origem["wa_id"] != wa_id_compartilhado
+        cliente_origem_lido["wa_id"]
+        and cliente_origem_lido["wa_id"] != wa_id_compartilhado
     ):
-        raise RuntimeError(
-            "WA ID oficial contradiz WA ID não nulo do cliente vinculado"
-        )
+        raise RuntimeError("WA ID oficial contradiz o cliente vinculado")
 
     conversa_atual = buscar_conversa_ativa_cliente_unidade(
         id_cliente_origem,
         id_unidade,
         cursor,
     )
-    if not conversa_atual:
-        raise RuntimeError(
-            "contact_request sem conversa ativa do vínculo de user ID"
-        )
+    if (
+        not conversa_atual
+        or conversa_atual["id_etapa_atual"] != ETAPA_COMPARTILHAMENTO
+    ):
+        raise RuntimeError("contact_request fora da conversa ativa da etapa 2")
 
-    cliente_canonico = buscar_cliente_por_wa_id(
+    _garantir_ordem_primeira_prova(
+        mensagem,
         wa_id_compartilhado,
+        user_id,
+        cursor,
+    )
+
+    cliente_canonico_lido = buscar_cliente_por_wa_id(
+        wa_id_compartilhado,
+        cursor,
+    )
+    ids_clientes = [id_cliente_origem]
+    if cliente_canonico_lido:
+        ids_clientes.append(cliente_canonico_lido["id_cliente"])
+    clientes = bloquear_clientes_por_ids(ids_clientes, cursor)
+    cliente_origem = clientes[id_cliente_origem]
+    cliente_canonico = (
+        clientes[cliente_canonico_lido["id_cliente"]]
+        if cliente_canonico_lido
+        else None
+    )
+    vinculo_bloqueado = buscar_vinculo_por_user_id(
+        user_id,
+        id_unidade,
         cursor,
         for_update=True,
     )
+    if (
+        not vinculo_bloqueado
+        or vinculo_bloqueado["id_cliente"] != id_cliente_origem
+    ):
+        raise RuntimeError("Vínculo do handoff mudou durante os row locks")
+    username_mais_recente = (
+        str(mensagem.get("username") or "").strip()
+        or cliente_origem.get("username")
+    )
+    resultado_reconciliacao = None
     if not cliente_canonico:
+        conversa_bloqueada = bloquear_conversas_reconciliacao(
+            [conversa_atual["id_conversa"]],
+            cursor,
+        )[conversa_atual["id_conversa"]]
+        _validar_conversa_handoff_bloqueada(
+            conversa_bloqueada,
+            id_cliente_origem,
+            id_unidade,
+        )
         promover_cliente_provisorio(
             id_cliente_origem,
             wa_id_compartilhado,
-            mensagem.get("username"),
+            username_mais_recente,
             cursor,
         )
         id_cliente_final = id_cliente_origem
@@ -14206,10 +13265,19 @@ def _resolver_handoff(mensagem, id_unidade, cursor):
             cursor=cursor,
         )
     elif cliente_canonico["id_cliente"] == id_cliente_origem:
+        conversa_bloqueada = bloquear_conversas_reconciliacao(
+            [conversa_atual["id_conversa"]],
+            cursor,
+        )[conversa_atual["id_conversa"]]
+        _validar_conversa_handoff_bloqueada(
+            conversa_bloqueada,
+            id_cliente_origem,
+            id_unidade,
+        )
         id_cliente_final = id_cliente_origem
         atualizar_username_cliente(
             id_cliente_final,
-            mensagem.get("username"),
+            username_mais_recente,
             cursor,
         )
         consolidar_vinculo_user_id(
@@ -14220,21 +13288,66 @@ def _resolver_handoff(mensagem, id_unidade, cursor):
         )
     else:
         id_cliente_final = cliente_canonico["id_cliente"]
-        reconciliar_cliente_provisorio(
+        resultado_reconciliacao = reconciliar_cliente_provisorio(
             id_cliente_provisorio=id_cliente_origem,
             id_cliente_canonico=id_cliente_final,
             id_conversa_atual=conversa_atual["id_conversa"],
             id_unidade=id_unidade,
             wa_id_canonico=wa_id_compartilhado,
             user_id=user_id,
-            username=mensagem.get("username"),
+            username=username_mais_recente,
+            nome_cliente_provisorio=cliente_origem["nome"],
             cursor=cursor,
         )
-        atualizar_username_cliente(
+
+    if resultado_reconciliacao is None:
+        bloqueio_comercial = buscar_bloqueio_ativo_por_id_cliente_unidade(
             id_cliente_final,
-            mensagem.get("username"),
+            id_unidade,
             cursor,
         )
+        bloqueio_meta = consolidar_bloqueio_meta_reconciliacao(
+            id_cliente_origem=id_cliente_final,
+            id_cliente_destino=id_cliente_final,
+            id_unidade=id_unidade,
+            wa_id=wa_id_compartilhado,
+            user_id=user_id,
+            username=username_mais_recente,
+            cursor=cursor,
+        )
+        bloqueio_reconciliado = bloqueio_comercial or bloqueio_meta
+        if bloqueio_reconciliado:
+            encerrar_conversa(
+                conversa_atual["id_conversa"],
+                "bloqueio_reconciliado",
+                cursor,
+            )
+    else:
+        bloqueio_comercial = resultado_reconciliacao["bloqueio_comercial"]
+        bloqueio_meta = resultado_reconciliacao["bloqueio_meta"]
+        bloqueio_reconciliado = (
+            resultado_reconciliacao["bloqueio_reconciliado"]
+        )
+
+    if bloqueio_reconciliado:
+        if deletar_mensagem_por_id(mensagem["id_mensagem"], cursor) != 1:
+            raise RuntimeError("Item terminal do handoff não foi removido")
+        return {
+            "id_cliente": id_cliente_final,
+            "cliente_inserido": False,
+            "wa_id": wa_id_compartilhado,
+            "user_id": user_id,
+            "conversa": _montar_contexto_terminal(
+                conversa_atual["id_conversa"],
+                id_cliente_final,
+                id_unidade,
+            ),
+            "resultado_terminal": "bloqueio_reconciliado",
+            "bloqueio_reconciliado": {
+                "comercial": bloqueio_comercial,
+                "meta": bloqueio_meta,
+            },
+        }
 
     contexto_conversa = valida_conversa(
         id_cliente_final,
@@ -14247,7 +13360,6 @@ def _resolver_handoff(mensagem, id_unidade, cursor):
     )
     if contexto_conversa["id_conversa"] != conversa_atual["id_conversa"]:
         raise RuntimeError("Handoff não preservou a conversa atual")
-
     return {
         "id_cliente": id_cliente_final,
         "cliente_inserido": False,
@@ -14263,15 +13375,18 @@ def _resolver_evento_com_wa_id(
     id_cliente_cache,
     cursor,
 ):
+    """WA do envelope é canônico; user conjunto prova o alias da unidade."""
     wa_id = mensagem["wa_id"]
     user_id = mensagem.get("user_id")
-    vinculo = (
-        buscar_vinculo_por_user_id(
+    if user_id:
+        _garantir_ordem_primeira_prova(
+            mensagem,
+            wa_id,
             user_id,
-            id_unidade,
             cursor,
-            for_update=True,
         )
+    vinculo = (
+        buscar_vinculo_por_user_id(user_id, id_unidade, cursor)
         if user_id
         else None
     )
@@ -14281,22 +13396,52 @@ def _resolver_evento_com_wa_id(
         if id_cliente_cache
         else None
     )
-    cliente_canonico = (
+    cliente_canonico_lido = (
         cliente_cache
         if cliente_cache and cliente_cache["wa_id"] == wa_id
-        else buscar_cliente_por_wa_id(wa_id, cursor, for_update=True)
+        else buscar_cliente_por_wa_id(wa_id, cursor)
     )
+    cliente_vinculado_lido = (
+        buscar_cliente_por_id(vinculo["id_cliente"], cursor)
+        if vinculo
+        else None
+    )
+    if vinculo and not cliente_vinculado_lido:
+        raise RuntimeError("Vínculo de user ID aponta para cliente ausente")
 
-    cliente_vinculado = None
-    if vinculo:
-        cliente_vinculado = buscar_cliente_por_id(
-            vinculo["id_cliente"],
+    ids_clientes = [
+        cliente["id_cliente"]
+        for cliente in (cliente_canonico_lido, cliente_vinculado_lido)
+        if cliente
+    ]
+    clientes = bloquear_clientes_por_ids(ids_clientes, cursor)
+    cliente_canonico = (
+        clientes[cliente_canonico_lido["id_cliente"]]
+        if cliente_canonico_lido
+        else None
+    )
+    cliente_vinculado = (
+        clientes[cliente_vinculado_lido["id_cliente"]]
+        if cliente_vinculado_lido
+        else None
+    )
+    if user_id:
+        vinculo_bloqueado = buscar_vinculo_por_user_id(
+            user_id,
+            id_unidade,
             cursor,
             for_update=True,
         )
-        if not cliente_vinculado:
-            raise RuntimeError("Vínculo de user ID aponta para cliente ausente")
+        if bool(vinculo_bloqueado) != bool(vinculo):
+            raise RuntimeError("Vínculo de user ID mudou durante os row locks")
+        if (
+            vinculo_bloqueado
+            and vinculo_bloqueado["id_cliente"] != vinculo["id_cliente"]
+        ):
+            raise RuntimeError("Vínculo de user ID mudou de cliente")
+        vinculo = vinculo_bloqueado
 
+    conversa_preservada = None
     if cliente_canonico:
         id_cliente_canonico = cliente_canonico["id_cliente"]
         cliente_inserido = False
@@ -14306,8 +13451,23 @@ def _resolver_evento_com_wa_id(
             cursor,
         )
     elif cliente_vinculado and not cliente_vinculado["wa_id"]:
-        # WA ID novo completa o próprio provisório; não cria um segundo cliente.
         id_cliente_canonico = cliente_vinculado["id_cliente"]
+        conversa_preservada = buscar_conversa_ativa_cliente_unidade(
+            id_cliente_canonico,
+            id_unidade,
+            cursor,
+        )
+        if not conversa_preservada:
+            raise RuntimeError("Cliente provisório vinculado sem conversa ativa")
+        conversa_bloqueada = bloquear_conversas_reconciliacao(
+            [conversa_preservada["id_conversa"]],
+            cursor,
+        )[conversa_preservada["id_conversa"]]
+        _validar_conversa_primeira_prova_bloqueada(
+            conversa_bloqueada,
+            id_cliente_canonico,
+            id_unidade,
+        )
         promover_cliente_provisorio(
             id_cliente_canonico,
             wa_id,
@@ -14316,9 +13476,7 @@ def _resolver_evento_com_wa_id(
         )
         cliente_inserido = False
     elif cliente_vinculado and cliente_vinculado["wa_id"] != wa_id:
-        raise RuntimeError(
-            "User ID já ligado a cliente com WA ID não nulo diferente"
-        )
+        raise RuntimeError("User ID e WA ID apontam para pessoas diferentes")
     else:
         id_cliente_canonico, cliente_inserido = (
             resolver_ou_criar_cliente_por_wa_id(
@@ -14328,31 +13486,31 @@ def _resolver_evento_com_wa_id(
             )
         )
 
-    conversa_preservada = None
+    resultado_reconciliacao = None
     if vinculo and vinculo["id_cliente"] != id_cliente_canonico:
         if cliente_vinculado["wa_id"]:
-            raise RuntimeError(
-                "User ID já ligado a cliente com WA ID não nulo diferente"
-            )
-
+            raise RuntimeError("Aliases comprovados contradizem WA ID canônico")
         conversa_preservada = buscar_conversa_ativa_cliente_unidade(
             vinculo["id_cliente"],
             id_unidade,
             cursor,
         )
         if not conversa_preservada:
-            raise RuntimeError(
-                "Cliente provisório vinculado sem conversa ativa preservável"
-            )
-        reconciliar_cliente_provisorio(
+            raise RuntimeError("Cliente provisório vinculado sem conversa ativa")
+        resultado_reconciliacao = reconciliar_cliente_provisorio(
             id_cliente_provisorio=vinculo["id_cliente"],
             id_cliente_canonico=id_cliente_canonico,
             id_conversa_atual=conversa_preservada["id_conversa"],
             id_unidade=id_unidade,
             wa_id_canonico=wa_id,
             user_id=user_id,
-            username=mensagem.get("username"),
+            username=(
+                str(mensagem.get("username") or "").strip()
+                or cliente_vinculado.get("username")
+            ),
+            nome_cliente_provisorio=cliente_vinculado.get("nome"),
             cursor=cursor,
+            etapa_obrigatoria=None,
         )
         cliente_inserido = False
     elif user_id:
@@ -14362,6 +13520,26 @@ def _resolver_evento_com_wa_id(
             id_unidade=id_unidade,
             cursor=cursor,
         )
+
+    if resultado_reconciliacao and resultado_reconciliacao["bloqueio_reconciliado"]:
+        if deletar_mensagem_por_id(mensagem["id_mensagem"], cursor) != 1:
+            raise RuntimeError("Item terminal conjunto não foi removido")
+        return {
+            "id_cliente": id_cliente_canonico,
+            "cliente_inserido": False,
+            "wa_id": wa_id,
+            "user_id": user_id,
+            "conversa": _montar_contexto_terminal(
+                conversa_preservada["id_conversa"],
+                id_cliente_canonico,
+                id_unidade,
+            ),
+            "resultado_terminal": "bloqueio_reconciliado",
+            "bloqueio_reconciliado": {
+                "comercial": resultado_reconciliacao["bloqueio_comercial"],
+                "meta": resultado_reconciliacao["bloqueio_meta"],
+            },
+        }
 
     contexto_conversa = valida_conversa(
         id_cliente_canonico,
@@ -14378,7 +13556,6 @@ def _resolver_evento_com_wa_id(
         != conversa_preservada["id_conversa"]
     ):
         raise RuntimeError("Payload conjunto não preservou a conversa provisória")
-
     return {
         "id_cliente": id_cliente_canonico,
         "cliente_inserido": cliente_inserido,
@@ -14397,7 +13574,6 @@ def _resolver_evento_somente_user_id(mensagem, id_unidade, cursor):
         user_id,
         id_unidade,
         cursor,
-        for_update=True,
     )
     if vinculo:
         id_cliente = vinculo["id_cliente"]
@@ -14405,6 +13581,20 @@ def _resolver_evento_somente_user_id(mensagem, id_unidade, cursor):
         cliente = buscar_cliente_por_id(id_cliente, cursor, for_update=True)
         if not cliente:
             raise RuntimeError("Vínculo de user ID aponta para cliente ausente")
+        # A ordem global de posse é cliente -> vínculo. A releitura sob lock
+        # impede deadlock com os caminhos de merge e confirma que o vínculo
+        # não mudou entre a leitura pura e a aquisição das linhas.
+        vinculo_bloqueado = buscar_vinculo_por_user_id(
+            user_id,
+            id_unidade,
+            cursor,
+            for_update=True,
+        )
+        if (
+            not vinculo_bloqueado
+            or vinculo_bloqueado["id_cliente"] != id_cliente
+        ):
+            raise RuntimeError("Vínculo de user ID mudou durante o row lock")
         atualizar_username_cliente(
             id_cliente,
             mensagem.get("username"),
@@ -14493,7 +13683,6 @@ def valida_conversa(
         followup_last_sent_at,
         lead_no_funil,
     ) = estado_conversa
-
     if estado in {"ativa", "bloqueada"}:
         return _montar_contexto_conversa_existente(
             id_conversa,
@@ -14510,7 +13699,6 @@ def valida_conversa(
             finalizou_em,
             "conversa_ativa" if estado == "ativa" else "finalizada_30_dias",
         )
-
     if estado == "liberada":
         id_conversa_nova = inserindo_em_conversa_caso_seja_nova(
             id_cliente,
@@ -14528,7 +13716,6 @@ def valida_conversa(
             "bloqueio_expirado",
             conversa_anterior=id_conversa,
         )
-
     raise ValueError(
         f"Estado de conversa inválido: {estado} "
         f"(id_cliente={id_cliente}, id_unidade={id_unidade})"
@@ -14592,13 +13779,74 @@ def _montar_contexto_conversa_existente(
         "conversa_anterior": None,
         "motivo": motivo,
     }
+
+
+def _montar_contexto_terminal(id_conversa, id_cliente, id_unidade):
+    contexto = _montar_contexto_conversa_existente(
+        id_conversa,
+        id_cliente,
+        id_unidade,
+        "bloqueada",
+        ETAPA_COMPARTILHAMENTO,
+        False,
+        False,
+        "cliente",
+        0,
+        None,
+        False,
+        None,
+        "bloqueio_reconciliado",
+    )
+    contexto["resultado_terminal"] = "bloqueio_reconciliado"
+    return contexto
+
+
+def _validar_conversa_handoff_bloqueada(
+    conversa,
+    id_cliente,
+    id_unidade,
+):
+    if (
+        not conversa["status_ativa"]
+        or conversa["id_cliente"] != id_cliente
+        or conversa["id_unidade"] != id_unidade
+        or conversa["id_etapa_atual"] != ETAPA_COMPARTILHAMENTO
+    ):
+        raise RuntimeError("Conversa mudou durante o gate bloqueado do handoff")
+
+
+def _validar_conversa_primeira_prova_bloqueada(
+    conversa,
+    id_cliente,
+    id_unidade,
+):
+    if (
+        not conversa["status_ativa"]
+        or conversa["id_cliente"] != id_cliente
+        or conversa["id_unidade"] != id_unidade
+    ):
+        raise RuntimeError("Conversa mudou durante a primeira prova de aliases")
+
+
+def _garantir_ordem_primeira_prova(mensagem, wa_id, user_id, cursor):
+    if existe_mensagem_anterior_alias_handoff(
+        wa_id=wa_id,
+        user_id=user_id,
+        id_phone_unidade=mensagem["id_phone_unidade"],
+        id_mensagem_atual=mensagem["id_mensagem"],
+        received_data_hora=mensagem["data_recebimento"],
+        cursor=cursor,
+    ):
+        raise HandoffAguardandoPredecessor(
+            "Primeira prova possui predecessor aberto em um dos aliases"
+        )
 ````
 
-## Passo 51 — `workers/worker_flow/valida_historico.py`
+## Passo 46 — `workers/worker_flow/valida_historico.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `73b9cb6f5d4556b11f2836ce57d5994edcdfa6973ffebd3b93cd9966a0732314`
+SHA-256 do conteúdo UTF-8 normalizado: `0e74f0e9ac4643daf266a4dd031217f2cd92ca0f4ace8d45bae30d6e8fd03b05`
 
 ````python
 import logging
@@ -14712,6 +13960,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
     )
     contexto_especifico_etapa = {}
 
+    # Os dados de apresentação da unidade vêm do banco somente no primeiro
+    # contato. Respostas posteriores da etapa 1 não repetem essa apresentação.
     if contexto_conversa.get("id_etapa_atual") is None:
         contexto_especifico_etapa.update(
             buscar_contexto_etapa1(contexto_banco["id_unidade"], cursor)
@@ -14968,7 +14218,210 @@ def _normalizar_resposta_bot(registro):
 
 # Fase 5 — Etapas, mensagens, senders, validadores e triagem
 
-## Passo 52 — `core/integrations/whatsapp/messages/componentes_compartilhados.py`
+## Passo 47 — `core/integrations/whatsapp/messages/etapa1_messages.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `363e813d5d14a7fbab057319090027200c406efa3a30a751e91f9257e4ed9e63`
+
+````python
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    RODAPE_ETAPA1_BOAS_VINDAS,
+    montar_texto_com_rodape,
+)
+from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
+
+
+### INICIO NORMAL
+
+MENSAGEM_ETAPA1 = (
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
+    "atendente virtual do {nome_unidade}! ☺️\n"
+    "Como você se chama?"
+)
+
+def montar_mensagem_etapa1(saudacao, nome_unidade, nome_agente, genero):
+    return montar_texto_com_rodape(
+        MENSAGEM_ETAPA1.format(
+            **_montar_contexto_apresentacao(
+                saudacao,
+                nome_unidade,
+                nome_agente,
+                genero,
+            )
+        ),
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
+
+
+
+
+
+### INICIO PORÉM CLIENTE INICIA COM MIDA
+
+MENSAGEM_MIDIA_INICIO = (
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
+    "atendente virtual do {nome_unidade}! ☺️\n"
+    "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
+    "Me diz, qual o seu primeiro nome?"
+)
+
+def montar_mensagem_midia_inicio(
+    saudacao,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    return montar_texto_com_rodape(
+        MENSAGEM_MIDIA_INICIO.format(
+            **_montar_contexto_apresentacao(
+                saudacao,
+                nome_unidade,
+                nome_agente,
+                genero,
+            )
+        ),
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
+
+
+
+
+
+### INICIO PORÈM CLIENTE INICIA COM PERGUNTA FINANCEIRA
+
+MENSAGEM_FINANCEIRO_INICIO = (
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
+    "atendente virtual do {nome_unidade}! ☺️\n"
+    "Olha demais informações como valores de investimento são apresentadas no atendimento "
+    "presencial após sua aula *gratuita*.\n"
+    "Me diz, qual o seu primeiro nome?"
+)
+
+def montar_mensagem_financeiro_inicio(
+    saudacao,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    return montar_texto_com_rodape(
+        MENSAGEM_FINANCEIRO_INICIO.format(
+            **_montar_contexto_apresentacao(
+                saudacao,
+                nome_unidade,
+                nome_agente,
+                genero,
+            )
+        ),
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
+
+### CLIENTE RESPONDE AO NOME COM MIDIA
+
+MENSAGEM_MIDIA_ETAPA1 = (
+    "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
+    "Me diz, qual o seu primeiro nome?"
+)
+
+def montar_mensagem_midia_etapa1():
+    return MENSAGEM_MIDIA_ETAPA1
+
+
+
+### CLIENTE RESPONDE AO NOME COM FINANCEIRO
+
+MENSAGEM_FINANCEIRO_ETAPA1 = (
+    "Olha demais informações como valores de investimento são apresentadas no atendimento "
+    "presencial após sua aula *gratuita*.\n"
+    "Me diz, qual o seu primeiro nome?"
+)
+
+def montar_mensagem_financeiro_etapa1():
+    return MENSAGEM_FINANCEIRO_ETAPA1
+
+
+### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+MENSAGEM_RETOMADA_ETAPA1 = "Me diz, qual o seu primeiro nome?"
+
+
+def montar_mensagem_reforco_escolar_inicio(
+    saudacao,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    apresentacao = (
+        "{saudacao}! Sou {artigo_agente} {nome_agente}, "
+        "atendente virtual do {nome_unidade}! ☺️\n"
+    ).format(
+        **_montar_contexto_apresentacao(
+            saudacao,
+            nome_unidade,
+            nome_agente,
+            genero,
+        )
+    )
+    mensagem = (
+        f"{apresentacao}"
+        f"{montar_mensagem_tratamento_reforco_escolar(MENSAGEM_RETOMADA_ETAPA1)}"
+    )
+    return montar_texto_com_rodape(
+        mensagem,
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
+
+
+def montar_mensagem_reforco_escolar_etapa1():
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_RETOMADA_ETAPA1,
+    )
+
+
+### CLIENTE RESPONDE AO NOME COM CONTEXTO INVALIDO
+
+MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA1 = (
+    "Não consegui entender o seu nome. Me fala só seu primeiro nome, "
+    "exemplo: Pedro"
+)
+
+def montar_mensagem_contexto_nome_invalido_etapa1():
+    return MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA1
+
+
+def _montar_contexto_apresentacao(
+    saudacao,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    """Valida e formata os dados editoriais da apresentação inicial."""
+    saudacao = str(saudacao or "").strip()
+    nome_unidade = str(nome_unidade or "").strip()
+    nome_agente = str(nome_agente or "").strip()
+    genero = str(genero or "").strip()
+
+    if not saudacao or not nome_unidade or not nome_agente:
+        raise ValueError("Dados obrigatorios da apresentacao inicial ausentes")
+
+    artigo_agente = {
+        "masculino": "o",
+        "feminino": "a",
+    }.get(genero)
+    if artigo_agente is None:
+        raise ValueError(f"Genero de agente invalido: {genero!r}")
+
+    return {
+        "saudacao": saudacao,
+        "nome_unidade": nome_unidade,
+        "nome_agente": nome_agente,
+        "artigo_agente": artigo_agente,
+    }
+````
+
+## Passo 48 — `core/integrations/whatsapp/messages/componentes_compartilhados.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -14999,7 +14452,7 @@ def montar_texto_com_rodape(mensagem, rodape):
     return f"{mensagem}\n\n_{rodape}_"
 ````
 
-## Passo 53 — `core/integrations/whatsapp/messages/etapa10_messages.py`
+## Passo 49 — `core/integrations/whatsapp/messages/etapa10_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15156,7 +14609,7 @@ def montar_botoes_etapa10():
     return BOTOES_ETAPA10
 ````
 
-## Passo 54 — `core/integrations/whatsapp/messages/etapa11_messages.py`
+## Passo 50 — `core/integrations/whatsapp/messages/etapa11_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15226,7 +14679,7 @@ def montar_mensagem_contexto_email_invalido_etapa11():
     return MENSAGEM_CONTEXTO_EMAIL_INVALIDO_ETAPA11
 ````
 
-## Passo 55 — `core/integrations/whatsapp/messages/etapa12_messages.py`
+## Passo 51 — `core/integrations/whatsapp/messages/etapa12_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15303,7 +14756,7 @@ def montar_botoes_etapa12():
     return (BOTAO_ETAPA12_INICIAR_TRIAGEM,)
 ````
 
-## Passo 56 — `core/integrations/whatsapp/messages/etapa13_messages.py`
+## Passo 52 — `core/integrations/whatsapp/messages/etapa13_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15362,7 +14815,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa13(
     )
 ````
 
-## Passo 57 — `core/integrations/whatsapp/messages/etapa14_messages.py`
+## Passo 53 — `core/integrations/whatsapp/messages/etapa14_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15416,7 +14869,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa14(
     )
 ````
 
-## Passo 58 — `core/integrations/whatsapp/messages/etapa15_messages.py`
+## Passo 54 — `core/integrations/whatsapp/messages/etapa15_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15470,7 +14923,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa15(
     )
 ````
 
-## Passo 59 — `core/integrations/whatsapp/messages/etapa16_messages.py`
+## Passo 55 — `core/integrations/whatsapp/messages/etapa16_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15524,7 +14977,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa16(
     )
 ````
 
-## Passo 60 — `core/integrations/whatsapp/messages/etapa17_messages.py`
+## Passo 56 — `core/integrations/whatsapp/messages/etapa17_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15578,7 +15031,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa17(
     )
 ````
 
-## Passo 61 — `core/integrations/whatsapp/messages/etapa18_messages.py`
+## Passo 57 — `core/integrations/whatsapp/messages/etapa18_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15632,7 +15085,7 @@ def montar_mensagem_dependente_contexto_invalido_etapa18(
     )
 ````
 
-## Passo 62 — `core/integrations/whatsapp/messages/etapa19_messages.py`
+## Passo 58 — `core/integrations/whatsapp/messages/etapa19_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15750,7 +15203,7 @@ def _normalizar_link_agendamento(link_agendamento):
     return link
 ````
 
-## Passo 63 — `core/integrations/whatsapp/messages/etapa20_messages.py`
+## Passo 59 — `core/integrations/whatsapp/messages/etapa20_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15794,7 +15247,7 @@ def montar_opcoes_satisfacao_etapa20():
     ]
 ````
 
-## Passo 64 — `core/integrations/whatsapp/messages/etapa21_messages.py`
+## Passo 60 — `core/integrations/whatsapp/messages/etapa21_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15865,7 +15318,7 @@ def montar_botoes_etapa21():
     ]
 ````
 
-## Passo 65 — `core/integrations/whatsapp/messages/etapa22_messages.py`
+## Passo 61 — `core/integrations/whatsapp/messages/etapa22_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15908,7 +15361,7 @@ def montar_mensagem_contexto_invalido_etapa22():
     return MENSAGEM_CONTEXTO_INVALIDO_ETAPA22
 ````
 
-## Passo 66 — `core/integrations/whatsapp/messages/etapa23_messages.py`
+## Passo 62 — `core/integrations/whatsapp/messages/etapa23_messages.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -15929,7 +15382,7 @@ def montar_mensagem_etapa23():
     return MENSAGEM_ETAPA23
 ````
 
-## Passo 67 — `core/integrations/whatsapp/messages/etapa2_messages.py`
+## Passo 63 — `core/integrations/whatsapp/messages/etapa2_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -15993,7 +15446,7 @@ def _montar_mensagem_tratamento(tratamento):
     return f"{tratamento}\n\nMas bora lá:\n\n{MENSAGEM_RETOMADA_ETAPA2}"
 ````
 
-## Passo 68 — `core/integrations/whatsapp/messages/etapa3_messages.py`
+## Passo 64 — `core/integrations/whatsapp/messages/etapa3_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16077,7 +15530,7 @@ def montar_botoes_etapa3():
     return BOTOES_ETAPA3
 ````
 
-## Passo 69 — `core/integrations/whatsapp/messages/etapa4_messages.py`
+## Passo 65 — `core/integrations/whatsapp/messages/etapa4_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16159,7 +15612,7 @@ def _montar_mensagem_tratamento(tratamento, status_dependente):
     return f"{tratamento}\n\nMas bora lá:\n\n{pergunta}"
 ````
 
-## Passo 70 — `core/integrations/whatsapp/messages/etapa5_messages.py`
+## Passo 66 — `core/integrations/whatsapp/messages/etapa5_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16217,7 +15670,7 @@ def montar_mensagem_contexto_profissao_invalida_etapa5():
     return MENSAGEM_CONTEXTO_PROFISSAO_INVALIDA_ETAPA5
 ````
 
-## Passo 71 — `core/integrations/whatsapp/messages/etapa6_messages.py`
+## Passo 67 — `core/integrations/whatsapp/messages/etapa6_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16292,7 +15745,7 @@ def montar_mensagem_contexto_nome_invalido_etapa6():
     return MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA6
 ````
 
-## Passo 72 — `core/integrations/whatsapp/messages/etapa7_messages.py`
+## Passo 68 — `core/integrations/whatsapp/messages/etapa7_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16479,7 +15932,7 @@ def montar_botao_idade_acima_99_etapa7():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA7
 ````
 
-## Passo 73 — `core/integrations/whatsapp/messages/etapa8_messages.py`
+## Passo 69 — `core/integrations/whatsapp/messages/etapa8_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16687,7 +16140,7 @@ def montar_botoes_etapa8():
     return BOTOES_ETAPA8
 ````
 
-## Passo 74 — `core/integrations/whatsapp/messages/etapa9_messages.py`
+## Passo 70 — `core/integrations/whatsapp/messages/etapa9_messages.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16725,7 +16178,7 @@ def montar_mensagem_oferta_adiada_etapa9(link_instagram):
     )
 ````
 
-## Passo 75 — `core/integrations/whatsapp/messages/triagem_componentes.py`
+## Passo 71 — `core/integrations/whatsapp/messages/triagem_componentes.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -16765,7 +16218,267 @@ def montar_rodape_triagem():
     return RODAPE_TRIAGEM
 ````
 
-## Passo 76 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa10.py`
+## Passo 72 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa1.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `d08050dcd8b11dfbbb73decbb3b3a16409ed4c66bf7b33c0bfc08cda263d4e6b`
+
+````python
+import logging
+
+from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.messages.etapa1_messages import (
+    montar_mensagem_contexto_nome_invalido_etapa1,
+    montar_mensagem_etapa1,
+    montar_mensagem_financeiro_etapa1,
+    montar_mensagem_financeiro_inicio,
+    montar_mensagem_midia_etapa1,
+    montar_mensagem_midia_inicio,
+    montar_mensagem_reforco_escolar_etapa1,
+    montar_mensagem_reforco_escolar_inicio,
+)
+from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
+from core.integrations.whatsapp.pywa_functions.resposta_envio import (
+    extrair_id_hash_msg_bot,
+)
+from core.integrations.whatsapp.pywa_functions.saudacao import (
+    obter_saudacao_por_horario,
+)
+from core.logging_config import short_value
+
+
+logger = logging.getLogger("whatsapp.etapa1")
+
+ID_ETAPA1 = 1
+
+TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
+TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
+TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
+TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
+
+
+###  CENARIO NORMAL
+
+def enviar_etapa1(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_etapa1(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1",
+    )
+
+### PARA O WORKER QUANDO O CLIENTE INICIA COM MIDIA
+
+def enviar_etapa1_midia_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_midia_inicio(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_midia_inicio",
+        tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
+    )
+
+### PARA O WORKER QUANDO O CLIENTE INICIA COM FINANCEIRO
+
+def enviar_etapa1_financeiro_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_financeiro_inicio(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_financeiro_inicio",
+        tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+### PARA O WORKER QUANDO O CLIENTE INICIA PERGUNTANDO SOBRE REFORÇO ESCOLAR
+
+def enviar_etapa1_reforco_escolar_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    saudacao = obter_saudacao_por_horario()
+    mensagem_bot = montar_mensagem_reforco_escolar_inicio(
+        saudacao,
+        nome_unidade,
+        nome_agente,
+        genero,
+    )
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_reforco_escolar_inicio",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    )
+
+## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO. com midia
+
+def enviar_etapa1_midia(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_midia_etapa1()
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_midia",
+        tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
+    )
+
+## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO, com financeiro
+
+def enviar_etapa1_financeiro(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_financeiro_etapa1()
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_financeiro",
+        tipo_tratamento=TIPO_TRATAMENTO_FINANCEIRO,
+    )
+
+
+## CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+
+def enviar_etapa1_reforco_escolar(cliente_telefone, phone_id_unidade):
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa1()
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_reforco_escolar",
+        tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
+    )
+
+## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO, fora do contexto
+
+def enviar_etapa1_contexto_nome_invalido(
+    cliente_telefone,
+    phone_id_unidade,
+):
+    mensagem_bot = montar_mensagem_contexto_nome_invalido_etapa1()
+
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_contexto_nome_invalido",
+        tipo_tratamento=TIPO_TRATAMENTO_NOME_INVALIDO,
+    )
+
+
+"""AQUI É UM CONSTRUTOR SIMPLES DE ENVIO, A MENSAGEM QUE ELE ENVIA
+ DEPENDE DO PARAMETRO QUE ELE RECEBE, ELE NÃO SUPORTA BOTÕES POIS FOI
+ FEITO SÓ PARA ETAPA 1, CADA ETAPA TERÁ SEU CONSTRUTOR"""
+
+def _enviar_texto_etapa1(
+    cliente_telefone,
+    phone_id_unidade,
+    mensagem_bot,
+    *,
+    evento,
+    tipo_tratamento=None,
+):
+    try:
+        cliente_wa = conta_wa(phone_id_unidade)
+        sent_message = cliente_wa.send_message(
+            to=cliente_telefone,
+            text=mensagem_bot,
+        )
+        id_hash_msg_bot = extrair_id_hash_msg_bot(sent_message)
+
+        logger.info(
+            "%s_ok | acao=enviar_meta cliente=%s phone_number_id=%s id_hash_msg_bot=%s tratamento=%s",
+            evento,
+            short_value(cliente_telefone),
+            short_value(phone_id_unidade),
+            id_hash_msg_bot,
+            tipo_tratamento,
+        )
+
+        contexto_envio = {
+            "enviou": True,
+            "resposta_ja_existia": False,
+            "mensagem_bot": mensagem_bot,
+            "id_hash_msg_bot": id_hash_msg_bot,
+            "id_etapa_resultante": ID_ETAPA1,
+            "tipo_mensagem": "text",
+            "canal": "meta_whatsapp",
+            "atualizar_conversa": True,
+            "atualizar_last_from_bot": True,
+        }
+
+        if tipo_tratamento:
+            contexto_envio["tratamento"] = True
+            contexto_envio["tipo_tratamento"] = tipo_tratamento
+
+        return contexto_envio
+
+    except Exception as erro:
+        logger.exception(
+            "%s_erro | motivo=meta_falhou acao=levantar_erro cliente=%s phone_number_id=%s erro=%s",
+            evento,
+            short_value(cliente_telefone),
+            short_value(phone_id_unidade),
+            erro,
+        )
+        raise ErroEnvioMeta(
+            "Meta falhou ao enviar mensagem da etapa 1",
+            id_etapa=ID_ETAPA1,
+            phone_id_unidade=phone_id_unidade,
+            cliente_telefone=cliente_telefone,
+        ) from erro
+````
+
+## Passo 73 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa10.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17071,7 +16784,7 @@ def _montar_botoes_pywa_etapa10():
     ]
 ````
 
-## Passo 77 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa11.py`
+## Passo 74 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa11.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17245,7 +16958,7 @@ def _enviar_texto_etapa11(
         ) from erro
 ````
 
-## Passo 78 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa12.py`
+## Passo 75 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa12.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17442,7 +17155,7 @@ def _montar_botoes_pywa_etapa12():
     ]
 ````
 
-## Passo 79 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa13.py`
+## Passo 76 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa13.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17543,7 +17256,7 @@ def _enviar_etapa13(
     )
 ````
 
-## Passo 80 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa14.py`
+## Passo 77 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa14.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17644,7 +17357,7 @@ def _enviar_etapa14(
     )
 ````
 
-## Passo 81 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa15.py`
+## Passo 78 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa15.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17745,7 +17458,7 @@ def _enviar_etapa15(
     )
 ````
 
-## Passo 82 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa16.py`
+## Passo 79 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa16.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17846,7 +17559,7 @@ def _enviar_etapa16(
     )
 ````
 
-## Passo 83 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa17.py`
+## Passo 80 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa17.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -17947,7 +17660,7 @@ def _enviar_etapa17(
     )
 ````
 
-## Passo 84 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa18.py`
+## Passo 81 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa18.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18048,7 +17761,7 @@ def _enviar_etapa18(
     )
 ````
 
-## Passo 85 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa19.py`
+## Passo 82 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa19.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18249,7 +17962,7 @@ def _montar_botoes_pywa_etapa19():
     ]
 ````
 
-## Passo 86 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa2.py`
+## Passo 83 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa2.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18415,7 +18128,7 @@ def _enviar_pedido_contato_etapa2(
         ) from erro
 ````
 
-## Passo 87 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa20.py`
+## Passo 84 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa20.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18574,7 +18287,7 @@ def _montar_lista_pywa_etapa20():
     )
 ````
 
-## Passo 88 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa21.py`
+## Passo 85 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa21.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18747,7 +18460,7 @@ def _montar_botoes_pywa_etapa21():
     ]
 ````
 
-## Passo 89 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa22.py`
+## Passo 86 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa22.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -18879,7 +18592,7 @@ def _enviar_texto_etapa22(
         ) from erro
 ````
 
-## Passo 90 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa23.py`
+## Passo 87 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa23.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -18950,7 +18663,7 @@ def enviar_etapa23(cliente_telefone, phone_id_unidade):
         ) from erro
 ````
 
-## Passo 91 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa3.py`
+## Passo 88 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa3.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -19140,7 +18853,7 @@ def _montar_botoes_pywa_etapa3():
     ]
 ````
 
-## Passo 92 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa4.py`
+## Passo 89 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa4.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -19338,7 +19051,7 @@ def _montar_botoes_pywa_etapa4():
     ]
 ````
 
-## Passo 93 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa5.py`
+## Passo 90 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa5.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -19484,7 +19197,7 @@ def _enviar_texto_etapa5(
         ) from erro
 ````
 
-## Passo 94 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa6.py`
+## Passo 91 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa6.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -19642,7 +19355,7 @@ def _enviar_texto_etapa6(
         ) from erro
 ````
 
-## Passo 95 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa7.py`
+## Passo 92 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa7.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -19996,7 +19709,7 @@ def _montar_link_whatsapp_numero_comercial(numero_comercial):
     return f"https://wa.me/{numero}"
 ````
 
-## Passo 96 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa8.py`
+## Passo 93 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa8.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -20298,7 +20011,7 @@ def _montar_botoes_pywa_etapa8():
     ]
 ````
 
-## Passo 97 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa9.py`
+## Passo 94 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa9.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -20393,7 +20106,7 @@ def _enviar_texto_etapa9(
         ) from erro
 ````
 
-## Passo 98 — `core/integrations/whatsapp/pywa_functions/pywa_senders/triagem_base.py`
+## Passo 95 — `core/integrations/whatsapp/pywa_functions/pywa_senders/triagem_base.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -20521,7 +20234,61 @@ def _montar_botoes_pywa_triagem():
     ]
 ````
 
-## Passo 99 — `core/repositories/fluxo/contextos/etapa10.py`
+## Passo 96 — `core/repositories/fluxo/contextos/etapa1.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `83e2336fdcb3ee585855de25a85970416767d0de611c9e12721da417e39ccf00`
+
+````python
+def buscar_contexto_etapa1(id_unidade, cursor):
+    cursor.execute(
+        """
+        SELECT nome_unidade, nome_agente, genero
+        FROM chatbot.unidade
+        WHERE id_unidade = %s;
+        """,
+        (id_unidade,),
+    )
+
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        raise ValueError(
+            "Unidade nao encontrada para montar a etapa 1 "
+            f"(id_unidade={id_unidade})"
+        )
+
+    nome_unidade = str(resultado[0] or "").strip()
+    nome_agente = str(resultado[1] or "").strip()
+    genero = str(resultado[2] or "").strip()
+
+    if not nome_unidade:
+        raise ValueError(
+            "Unidade sem nome_unidade para montar a etapa 1 "
+            f"(id_unidade={id_unidade})"
+        )
+
+    if not nome_agente:
+        raise ValueError(
+            "Unidade sem nome_agente para montar a etapa 1 "
+            f"(id_unidade={id_unidade})"
+        )
+
+    if genero not in {"masculino", "feminino"}:
+        raise ValueError(
+            "Unidade com genero de agente invalido para montar a etapa 1 "
+            f"(id_unidade={id_unidade}, genero={genero!r})"
+        )
+
+    return {
+        "nome_unidade": nome_unidade,
+        "nome_agente": nome_agente,
+        "genero": genero,
+    }
+````
+
+## Passo 97 — `core/repositories/fluxo/contextos/etapa10.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -20588,11 +20355,13 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
     }
 ````
 
-## Passo 100 — `core/repositories/fluxo/contextos/etapa18.py`
+## Passo 98 — `core/repositories/fluxo/contextos/etapa18.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `core/repositories/fluxo/contextos/etapa19.py` do passo 99. Não se apaga
+regra de negócio; manter os dois caminhos deixaria um módulo órfão para a etapa 18.
 
-## Passo 101 — `core/repositories/fluxo/contextos/etapa19.py`
+## Passo 99 — `core/repositories/fluxo/contextos/etapa19.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -20661,7 +20430,7 @@ def buscar_contexto_etapa19(id_conversa, id_unidade, cursor):
     }
 ````
 
-## Passo 102 — `core/repositories/fluxo/contextos/etapa2.py`
+## Passo 100 — `core/repositories/fluxo/contextos/etapa2.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -20708,11 +20477,13 @@ def buscar_contexto_etapa2(id_conversa, id_unidade, cursor):
     return {"nome_cliente": nome_cliente}
 ````
 
-## Passo 103 — `core/repositories/fluxo/contextos/etapa6.py`
+## Passo 101 — `core/repositories/fluxo/contextos/etapa6.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `core/repositories/fluxo/contextos/etapa7.py` do passo 102. Não se apaga
+regra de negócio; manter os dois caminhos deixaria um módulo órfão para a etapa 6.
 
-## Passo 104 — `core/repositories/fluxo/contextos/etapa7.py`
+## Passo 102 — `core/repositories/fluxo/contextos/etapa7.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -20782,7 +20553,7 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
     }
 ````
 
-## Passo 105 — `core/repositories/fluxo/contextos/etapa8.py`
+## Passo 103 — `core/repositories/fluxo/contextos/etapa8.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -20844,15 +20615,17 @@ def buscar_contexto_etapa8(id_conversa, id_unidade, cursor):
     }
 ````
 
-## Passo 106 — `core/repositories/fluxo/contextos/etapa9.py`
+## Passo 104 — `core/repositories/fluxo/contextos/etapa9.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `core/repositories/fluxo/contextos/etapa10.py` do passo 97. Não se apaga
+regra de negócio; manter os dois caminhos deixaria um módulo órfão para a etapa 9.
 
-## Passo 107 — `core/triagem/perguntas.py`
+## Passo 105 — `core/triagem/perguntas.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `161640d85850bd7c6882f71fda685825e99fbbbd038ac7abdaade8c4045fb55e`
+SHA-256 do conteúdo UTF-8 normalizado: `06d6a7e3adb4754db35da8f292e8d6105647e0a880bec4615b7e6b9b242272dc`
 
 ````python
 """Perguntas canônicas das etapas 13 a 18 da triagem."""
@@ -20884,7 +20657,7 @@ ETAPAS_PERGUNTAS_TRIAGEM = {
     },
     15: {
         FAIXA_ETARIA_INFANTIL: (
-            "Com que frequência {pessoa} esquece com frequência orientações "
+            "Com que frequência {pessoa} esquece orientações "
             "ou conteúdos que acabou de aprender?"
         ),
         FAIXA_ETARIA_ADULTA: (
@@ -20966,11 +20739,11 @@ def montar_pergunta_triagem(
     return modelo.format(pessoa=pessoa)
 ````
 
-## Passo 108 — `workers/worker_flow/response_flow/etapas/resolver_etapa1.py`
+## Passo 106 — `workers/worker_flow/response_flow/etapas/resolver_etapa1.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `dd2201a6971eaeef8f570b17c0d9eadb0637327ca2316e41035dbaeff5bdd226`
+SHA-256 do conteúdo UTF-8 normalizado: `b86cc0ea1ce085838f75e7c03b5005e07aa4b0009ca9aa5846247a7e62812e94`
 
 ````python
 import logging
@@ -21055,12 +20828,31 @@ def resolve_etapa1(contexto_historico):
 
     conversa_sem_etapa = id_etapa_atual is None
     nome_unidade = contexto_historico.get("nome_unidade")
+    nome_agente = contexto_historico.get("nome_agente")
+    genero = contexto_historico.get("genero")
 
-    if conversa_sem_etapa and not nome_unidade:
-        raise ValueError(
-            "Etapa 1 inicial sem nome da unidade "
-            f"(id_conversa={id_conversa})"
-        )
+    if conversa_sem_etapa:
+        campos_ausentes = [
+            campo
+            for campo, valor in (
+                ("nome_unidade", nome_unidade),
+                ("nome_agente", nome_agente),
+                ("genero", genero),
+            )
+            if not valor
+        ]
+        if campos_ausentes:
+            raise ValueError(
+                "Etapa 1 inicial sem dados de apresentacao da unidade "
+                f"(id_conversa={id_conversa}, "
+                f"campos_ausentes={campos_ausentes})"
+            )
+
+        if genero not in {"masculino", "feminino"}:
+            raise ValueError(
+                "Etapa 1 inicial com genero de agente invalido "
+                f"(id_conversa={id_conversa}, genero={genero!r})"
+            )
 
     # Mídia tem prioridade sobre todas as validações de texto.
     if validar_midia(tipo_mensagem):
@@ -21071,6 +20863,8 @@ def resolve_etapa1(contexto_historico):
                 destinatario,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_midia(
@@ -21090,6 +20884,8 @@ def resolve_etapa1(contexto_historico):
                 destinatario,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_reforco_escolar(
@@ -21108,6 +20904,8 @@ def resolve_etapa1(contexto_historico):
                 destinatario,
                 phone_id_unidade,
                 nome_unidade,
+                nome_agente,
+                genero,
             )
 
         return enviar_etapa1_financeiro(
@@ -21121,6 +20919,8 @@ def resolve_etapa1(contexto_historico):
             destinatario,
             phone_id_unidade,
             nome_unidade,
+            nome_agente,
+            genero,
         )
 
     ### VALIDANDO NOME
@@ -21205,7 +21005,12 @@ def _logar_tipo_nao_suportado(contexto_historico):
         "resposta_cliente_invalida | motivo=tipo_mensagem_nao_suportado acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(resolver_destinatario_sender(contexto_historico)),
+        short_value(
+            resolver_destinatario_sender(
+                contexto_historico,
+                permitir_user_id=True,
+            )
+        ),
         short_value(mensagem_cliente_atual["id_phone_unidade"]),
         contexto_historico.get("tipo_mensagem_atual"),
         contexto_historico["id_etapa_cliente"],
@@ -21226,13 +21031,18 @@ def _logar_tratamento_texto(
         motivo_detalhado,
         contexto_historico["id_conversa"],
         mensagem_cliente_atual["id_mensagem_fila"],
-        short_value(resolver_destinatario_sender(contexto_historico)),
+        short_value(
+            resolver_destinatario_sender(
+                contexto_historico,
+                permitir_user_id=True,
+            )
+        ),
         short_value(mensagem_cliente_atual["id_phone_unidade"]),
         contexto_historico["id_etapa_cliente"],
     )
 ````
 
-## Passo 109 — `workers/worker_flow/response_flow/etapas/resolver_etapa10.py`
+## Passo 107 — `workers/worker_flow/response_flow/etapas/resolver_etapa10.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -21488,7 +21298,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
     )
 ````
 
-## Passo 110 — `workers/worker_flow/response_flow/etapas/resolver_etapa11.py`
+## Passo 108 — `workers/worker_flow/response_flow/etapas/resolver_etapa11.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -21676,7 +21486,7 @@ def _logar_tratamento_texto(
     )
 ````
 
-## Passo 111 — `workers/worker_flow/response_flow/etapas/resolver_etapa12.py`
+## Passo 109 — `workers/worker_flow/response_flow/etapas/resolver_etapa12.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -21857,7 +21667,7 @@ def _logar_tratamento(contexto_historico, motivo):
     )
 ````
 
-## Passo 112 — `workers/worker_flow/response_flow/etapas/resolver_etapa13.py`
+## Passo 110 — `workers/worker_flow/response_flow/etapas/resolver_etapa13.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -21998,7 +21808,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 113 — `workers/worker_flow/response_flow/etapas/resolver_etapa14.py`
+## Passo 111 — `workers/worker_flow/response_flow/etapas/resolver_etapa14.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22139,7 +21949,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 114 — `workers/worker_flow/response_flow/etapas/resolver_etapa15.py`
+## Passo 112 — `workers/worker_flow/response_flow/etapas/resolver_etapa15.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22280,7 +22090,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 115 — `workers/worker_flow/response_flow/etapas/resolver_etapa16.py`
+## Passo 113 — `workers/worker_flow/response_flow/etapas/resolver_etapa16.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22421,7 +22231,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 116 — `workers/worker_flow/response_flow/etapas/resolver_etapa17.py`
+## Passo 114 — `workers/worker_flow/response_flow/etapas/resolver_etapa17.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22562,7 +22372,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 117 — `workers/worker_flow/response_flow/etapas/resolver_etapa18.py`
+## Passo 115 — `workers/worker_flow/response_flow/etapas/resolver_etapa18.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22697,7 +22507,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 118 — `workers/worker_flow/response_flow/etapas/resolver_etapa19.py`
+## Passo 116 — `workers/worker_flow/response_flow/etapas/resolver_etapa19.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -22878,7 +22688,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
     )
 ````
 
-## Passo 119 — `workers/worker_flow/response_flow/etapas/resolver_etapa2.py`
+## Passo 117 — `workers/worker_flow/response_flow/etapas/resolver_etapa2.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23047,7 +22857,7 @@ def _enviar_tratamento(contexto_historico, sender, motivo):
     )
 ````
 
-## Passo 120 — `workers/worker_flow/response_flow/etapas/resolver_etapa20.py`
+## Passo 118 — `workers/worker_flow/response_flow/etapas/resolver_etapa20.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23157,7 +22967,7 @@ def _logar_tratamento_contexto(contexto_historico):
     )
 ````
 
-## Passo 121 — `workers/worker_flow/response_flow/etapas/resolver_etapa21.py`
+## Passo 119 — `workers/worker_flow/response_flow/etapas/resolver_etapa21.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23329,7 +23139,7 @@ def _logar_tratamento(contexto_historico, motivo):
     )
 ````
 
-## Passo 122 — `workers/worker_flow/response_flow/etapas/resolver_etapa22.py`
+## Passo 120 — `workers/worker_flow/response_flow/etapas/resolver_etapa22.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -23459,7 +23269,7 @@ def _logar_tratamento(contexto_historico, motivo):
     )
 ````
 
-## Passo 123 — `workers/worker_flow/response_flow/etapas/resolver_etapa3.py`
+## Passo 121 — `workers/worker_flow/response_flow/etapas/resolver_etapa3.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23616,7 +23426,7 @@ def _logar_tratamento(contexto_historico, motivo):
     )
 ````
 
-## Passo 124 — `workers/worker_flow/response_flow/etapas/resolver_etapa4.py`
+## Passo 122 — `workers/worker_flow/response_flow/etapas/resolver_etapa4.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23810,7 +23620,7 @@ def _logar_tratamento(
     )
 ````
 
-## Passo 125 — `workers/worker_flow/response_flow/etapas/resolver_etapa5.py`
+## Passo 123 — `workers/worker_flow/response_flow/etapas/resolver_etapa5.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -23998,7 +23808,7 @@ def _logar_tratamento(
     )
 ````
 
-## Passo 126 — `workers/worker_flow/response_flow/etapas/resolver_etapa6.py`
+## Passo 124 — `workers/worker_flow/response_flow/etapas/resolver_etapa6.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -24197,7 +24007,7 @@ def _logar_tratamento_texto(
     )
 ````
 
-## Passo 127 — `workers/worker_flow/response_flow/etapas/resolver_etapa7.py`
+## Passo 125 — `workers/worker_flow/response_flow/etapas/resolver_etapa7.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -24530,7 +24340,7 @@ def _logar_tratamento(
     )
 ````
 
-## Passo 128 — `workers/worker_flow/response_flow/etapas/resolver_etapa8.py`
+## Passo 126 — `workers/worker_flow/response_flow/etapas/resolver_etapa8.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -24786,7 +24596,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
     )
 ````
 
-## Passo 129 — `workers/worker_flow/response_flow/etapas/resolver_etapa9.py`
+## Passo 127 — `workers/worker_flow/response_flow/etapas/resolver_etapa9.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -24880,7 +24690,7 @@ def resolve_etapa9(contexto_historico):
     )
 ````
 
-## Passo 130 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa10.py`
+## Passo 128 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa10.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -24999,7 +24809,7 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 131 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa11.py`
+## Passo 129 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa11.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25123,7 +24933,7 @@ def _resultado_invalido(motivo):
     )
 ````
 
-## Passo 132 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa12.py`
+## Passo 130 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa12.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -25229,11 +25039,13 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 133 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa18.py`
+## Passo 131 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa18.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa19.py`
+do passo 132. Não se apaga regra de negócio nem validação.
 
-## Passo 134 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa19.py`
+## Passo 132 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa19.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25293,11 +25105,11 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 135 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa2.py`
+## Passo 133 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa2.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a1c062c0dfb1ded9ba9daf8177ae71cd9df65c04384f090a47fb1bf138f8c10f`
+SHA-256 do conteúdo UTF-8 normalizado: `21f15d98a8e10e72417b43d0f8de04efcd2060a80f9a2bf714d7134170cce933`
 
 ````python
 """Validação pura da prova oficial esperada na etapa 2."""
@@ -25309,7 +25121,7 @@ TIPO_MENSAGEM_CONTATO = "contacts"
 MARCADOR_CONTACT_REQUEST = "contact_request"
 TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "contato_oficial_ausente"
 
-PADRAO_WA_ID_COMPARTILHADO = re.compile(r"^\d{10,15}$")
+PADRAO_WA_ID_COMPARTILHADO = re.compile(r"^[0-9]{10,15}$")
 
 
 def validar_etapa2(
@@ -25332,7 +25144,7 @@ def validar_etapa2(
     ) is not None
 ````
 
-## Passo 136 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa20.py`
+## Passo 134 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa20.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25393,7 +25205,7 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 137 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa21.py`
+## Passo 135 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa21.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25472,7 +25284,7 @@ def normalizar_resposta_comentario(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 138 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa22.py`
+## Passo 136 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa22.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -25535,7 +25347,7 @@ def recusou_comentario_etapa22(conteudo_texto, tipo_mensagem):
     )
 ````
 
-## Passo 139 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa3.py`
+## Passo 137 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa3.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25848,7 +25660,7 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 140 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa4.py`
+## Passo 138 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa4.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -25924,7 +25736,7 @@ def _resultado_invalido(motivo):
     )
 ````
 
-## Passo 141 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa5.py`
+## Passo 139 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa5.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -26054,11 +25866,13 @@ def _resultado_invalido(motivo):
     )
 ````
 
-## Passo 142 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa6.py`
+## Passo 140 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa6.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa7.py`
+do passo 141. Não se apaga regra de negócio nem validação.
 
-## Passo 143 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa7.py`
+## Passo 141 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa7.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -26323,7 +26137,7 @@ def _resultado_invalido(motivo):
     )
 ````
 
-## Passo 144 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa8.py`
+## Passo 142 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa8.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -26442,15 +26256,19 @@ def _normalizar_resposta(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 145 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa9.py`
+## Passo 143 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa9.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: sua regra foi renumerada e está integralmente
+no novo `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa10.py`
+do passo 128. Não se apaga regra de negócio nem validação.
 
-## Passo 146 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_financeiro_etapa4.py`
+## Passo 144 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_financeiro_etapa4.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: o tratamento financeiro foi renumerado e está
+integralmente em `validador_financeiro_etapa5.py` no passo 145. Não se apaga a
+regra financeira.
 
-## Passo 147 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_financeiro_etapa5.py`
+## Passo 145 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_financeiro_etapa5.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -26539,11 +26357,13 @@ def _normalizar_texto(texto):
     return " ".join(texto_sem_pontuacao.split())
 ````
 
-## Passo 148 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_reforco_escolar_etapa4.py`
+## Passo 146 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_reforco_escolar_etapa4.py`
 
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
+Remover somente este caminho antigo: o tratamento de reforço escolar foi renumerado
+e está integralmente em `validador_reforco_escolar_etapa5.py` no passo 147. Não se
+apaga a regra de reforço escolar.
 
-## Passo 149 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_reforco_escolar_etapa5.py`
+## Passo 147 — `workers/worker_flow/response_flow/etapas/validadores_contexto/validador_reforco_escolar_etapa5.py`
 
 Criar o arquivo com o conteúdo completo abaixo.
 
@@ -26627,7 +26447,7 @@ def _normalizar_texto(texto):
     return " ".join(texto_sem_simbolos.replace("_", " ").split())
 ````
 
-## Passo 150 — `workers/worker_flow/response_flow/transicoes/eventos.py`
+## Passo 148 — `workers/worker_flow/response_flow/transicoes/eventos.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -26691,16 +26511,15 @@ EVENTO_COMENTARIO_SATISFACAO_RECEBIDO = "comentario_satisfacao_recebido"
 
 # Fase 6 — Funil e documentação operacional
 
-## Passo 151 — `core/integrations/funil/oportunidades.py`
+## Passo 149 — `core/integrations/funil/oportunidades.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `93ffb11a0ca5c020dae777d740a8ada1936981e3b2a445bfc15bfd3596a2f80c`
+SHA-256 do conteúdo UTF-8 normalizado: `eb60b508ddbfa488a04f1808da30c0bb5f3729719169ab8e9302864c7063a465`
 
 ````python
 """Monta o payload de oportunidade sem conhecer banco ou transações."""
 
-from datetime import datetime
 import re
 
 from core.triagem.perguntas import (
@@ -26913,32 +26732,6 @@ def _normalizar_username(username):
     return f"@{username_limpo}" if username_limpo else ""
 
 
-def montar_dados_lead_teste():
-    """Snapshot fixo e inofensivo para a validação manual do endpoint."""
-    return {
-        "id_conversa": int(datetime.now().strftime("%m%d%H%M%S")),
-        "id_unidade": 1,
-        "nome_unidade": "Supera Santo Antônio de Jesus",
-        "status_dependente": True,
-        "nome_cliente": "Edcarlos Teste - Não contatar",
-        "telefone_cliente": "5571994111866",
-        "username": "@edcarlos_teste",
-        "email_cliente": "edcaspfilho+teste@gmail.com",
-        "idade_cliente": None,
-        "profissao": "Engenheiro",
-        "nome_dependente": "Enzo Teste",
-        "idade_dependente": 12,
-        "triagem_respostas": [
-            {"id_etapa": 13, "resposta": "nunca"},
-            {"id_etapa": 14, "resposta": "às vezes"},
-            {"id_etapa": 15, "resposta": "frequentemente"},
-            {"id_etapa": 16, "resposta": "às vezes"},
-            {"id_etapa": 17, "resposta": "nunca"},
-            {"id_etapa": 18, "resposta": "às vezes"},
-        ],
-    }
-
-
 def _validar_dados_lead(dados_lead):
     obrigatorios = (
         "id_conversa",
@@ -27011,11 +26804,11 @@ def _obter_respostas_triagem_validadas(dados_lead):
     return respostas_validadas
 ````
 
-## Passo 152 — `core/repositories/funil/leads.py`
+## Passo 150 — `core/repositories/funil/leads.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `89fbb3ff4b8528a7c34f62e72689f0cf6670167a912d8a0c567a0b8296afed18`
+SHA-256 do conteúdo UTF-8 normalizado: `d9cf6ce1405840fe73554575f011217ca72dfb04b47f6f24c4b5e113affe1599`
 
 ````python
 """Leitura do snapshot completo de uma conversa elegível ao Funil."""
@@ -27028,7 +26821,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         SELECT
             c.id_conversa,
             c.id_unidade,
-            u.nome AS nome_unidade,
+            u.nome_unidade,
             COALESCE(c.status_dependente, FALSE) AS status_dependente,
             cl.nome AS nome_cliente,
             cl.wa_id AS telefone_cliente,
@@ -27093,11 +26886,11 @@ def buscar_dados_lead_funil(id_conversa, cursor):
     }
 ````
 
-## Passo 153 — `PADROES_DE_ARQUITETURA.md`
+## Passo 151 — `PADROES_DE_ARQUITETURA.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8f7c3645050b3f6a096843834c11c9fb193def8059c75b656bbd1884f663bbbe`
+SHA-256 do conteúdo UTF-8 normalizado: `6ab13be6cb2664f0c372b14e971d83faa509cf21123c92f4c6beb25f4786da00`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -27188,6 +26981,7 @@ core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
 core/cache        -> Redis, fallback e autocura detectável
 core/integrations -> comunicação com serviços externos
+utilitarios       -> diagnóstico, monitoramento e manutenção manuais
 tests             -> testes, mocks, fakes e contratos
 ```
 
@@ -27198,7 +26992,7 @@ webhook ─┐
          ├──> core/repositories
 worker  ─┤──> core/cache
 admin   ─┤──> core/integrations
-tools   ─┘
+utilitários ─┘
 
 core nunca importa webhook ou worker
 ```
@@ -27324,19 +27118,19 @@ As transações independentes do anti-flood pertencem a:
 callback/webhook/services/flood_guard.py
 ```
 
-O `flood_guard` coordena a avaliação, mas não inventa equivalências. A prova
-permanente de que `user_id` e `wa_id` representam o mesmo sujeito vem do
+O `flood_guard` coordena a avaliação, mas não inventa equivalências. A única
+prova reutilizável de que `user_id` e `wa_id` representam o mesmo sujeito vem do
 repositório de segurança, que consulta `user_id_cliente` na unidade resolvida
-pelo `phone_number_id`. Antes do commit do worker, somente um
-`contact_request` autenticado, inequívoco e originado pelo componente oficial
-da Meta pode criar no Redis uma ponte pendente entre as duas identidades.
+pelo `phone_number_id`. Um envelope conjunto ou `contact_request` fornece apenas
+um candidato ao worker e não publica vínculo no Redis antes do gate bancário.
 
-A ponte pendente usa namespace próprio, escrita atômica nas duas direções e TTL
-de 15 segundos. O cache confirmado dura uma hora. Ausências usam marcador
-negativo de 5 segundos para impedir uma consulta ao RDS por evento; a ponte
-oficial tem prioridade sobre esse marcador, portanto não herda uma conclusão
-obsoleta. Vínculo pendente conflitante ou falha ao publicar a ponte exige HTTP
-503 e reentrega, nunca aproximação nem bloqueio do cliente.
+O cache confirmado dura uma hora. Ausências usam marcador negativo de 5 segundos
+para impedir uma consulta ao RDS por evento. Antes do primeiro commit do vínculo,
+o item conta somente no alias congelado; depois do gate e antes da mutação, uma
+segunda barreira de predecessor no worker impede que ele ultrapasse item anterior
+do outro alias. Conflito determinístico é descartado com HTTP 200 e nenhuma
+mutação. Indisponibilidade transitória do RDS exige HTTP 503 e reentrega, nunca
+aproximação nem bloqueio por hipótese.
 
 Depois da prova, Redis e memória recebem as duas identidades explicitamente,
 incrementam o contador canônico do WA ID e somam os eventos ainda válidos da
@@ -27344,14 +27138,46 @@ chave anterior de user ID. A deduplicação usa WAMID e unidade; o fallback SQL
 conta `DISTINCT id_hash_msg`. Nenhuma dessas camadas altera snapshots históricos,
 cria vínculo, reconcilia clientes ou participa da transação do worker.
 
-Se o cache não possuir prova e o banco estiver indisponível, ou se a ausência
-consultada no banco não puder ser compartilhada de volta pelo cache, a decisão
-segura é HTTP 503 para reentrega. Continuar com uma identidade isolada nesse
-ponto é proibido, pois reabriria a janela que a associação oficial deve
-preservar.
+Se o cache não possuir prova e o banco estiver indisponível, a decisão segura é
+HTTP 503 para reentrega. Se o RDS responder que ainda não existe vínculo, o alias
+unitário é uma decisão autoritativa e continua mesmo que o Redis não aceite o
+cache negativo; o anti-flood usa o fallback banco -> memória já existente. Uma
+falha de cache isolada não descarta mensagem válida nem inventa associação.
 
 O módulo `populating_fila_mensagens.py` prepara, valida e insere usando o cursor
 recebido, mas não abre ou finaliza conexão.
+
+#### Âncora de identidade e reconciliação
+
+`wa_id` e `user_id` não formam uma string composta. Depois de prova persistida,
+ambos resolvem a âncora `(id_cliente, id_unidade)` por
+`core/repositories/atendimento/user_id_cliente.py`. Turno, predecessor, flood,
+cooldown e denylist reutilizam esse resolvedor; antes da prova, cada identidade
+permanece tipada e isolada.
+
+O webhook congela somente os campos do evento. `phone_number_id` é obrigatório;
+`display_phone_number` é snapshot opcional. Um `contact_request` guarda o WA ID
+explícito do cartão na própria linha da fila, mas conserva o user ID do envelope
+como `identidade_do_item`. Fila e histórico nunca recebem backfill posterior.
+
+O worker é o único dono da promoção/reconciliação. O gate autoritativo ocorre em
+`validar_banco_mensagem()` antes da primeira mutação e diferencia o remetente do
+cartão compartilhado. Clientes e conversas envolvidos são bloqueados em ordem
+determinística. Um lock que ainda não ultrapassou o limiar de 110 segundos da
+V1.0.6 gera rollback e requeue sem erro; um lock stale segue a recuperação
+versionada já existente.
+
+O resultado terminal `bloqueio_reconciliado` pertence à mesma transação do
+handoff: reparenta a conversa, consolida aliases e denylist, encerra a conversa
+nova e remove o item atual antes do commit. Depois do commit, o worker apenas
+repara o cache com a expiração original e não chama histórico, lock normal,
+resolver, sender, transição ou Funil.
+
+`cliente_bloqueado_meta` mantém uma linha por pessoa/unidade. O repositório de
+segurança pode completar um alias nulo quando WA+user forem comprovados, mas não
+infere equivalência por username/nome e não transforma o bloqueio em global.
+Bloqueio e desbloqueio Meta recebem todos os aliases da linha; exclusão local só
+ocorre após sucesso integral na Meta.
 
 ### Scripts e Admin
 
@@ -27731,12 +27557,18 @@ Separação interna recomendada:
 
 ### `tools`
 
-Contém scripts administrativos ou operacionais executados de forma consciente,
-como ativação de número, inscrição do WABA e reconciliação de bloqueios.
+Dentro de uma integração, contém operações administrativas que pertencem ao
+domínio daquela integração e são reutilizadas pelo Django Admin, como ativação
+de número e inscrição do WABA.
 
-Um `tool` não deve se tornar dependência do fluxo normal. Quando uma operação é
-reutilizada em runtime, mova a implementação para a camada apropriada e faça o
-tool chamá-la.
+Um `tool` não deve se tornar dependência do webhook ou dos workers. Quando uma
+operação é reutilizada por esses runtimes, mova a implementação para a camada
+apropriada e faça o `tool` e os orquestradores chamarem essa primitiva.
+
+Comandos iniciados conscientemente por uma pessoa apenas para diagnóstico,
+monitoramento, manutenção ou probe pertencem à pasta `utilitarios`, não a
+`core/integrations/<serviço>/tools`. Nenhum dos quatro pontos de entrada —
+webhook, `worker_flow`, `worker_funil` e Django Admin — importa `utilitarios`.
 
 Configuração operacional:
 
@@ -27899,7 +27731,8 @@ Use esta sequência:
 6. Define texto ou callback do WhatsApp? `messages`.
 7. Trata entrada HTTP? `callback/webhook`.
 8. Decide processamento assíncrono ou etapa? `workers`.
-9. É script manual operacional? `tools`.
+9. É comando humano de diagnóstico, monitoramento, manutenção ou probe?
+   `utilitarios`.
 10. Existe apenas para validar comportamento? `tests`.
 
 Se a função responder positivamente a mais de uma pergunta, provavelmente deve
@@ -27953,11 +27786,11 @@ Mudanças neste documento não substituem testes nem alteram automaticamente as
 regras de negócio.
 ````
 
-## Passo 154 — `REGRAS_DE_NEGOCIO.md`
+## Passo 152 — `REGRAS_DE_NEGOCIO.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `53bd2e3953bc052cb7998e8002af225e88527eea8ea1c8fde47e2210f90d4d07`
+SHA-256 do conteúdo UTF-8 normalizado: `377e7e516025d889d600bf658e850dcf00f0005da0e60b8f28e978b399814e6c`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -28132,7 +27965,7 @@ C e quaisquer mensagens posteriores continuarão bloqueadas por B.
 Depois de aproximadamente 2 minutos:
 
 1. A fica elegível novamente;
-2. o lock antigo já expirou após 110 segundos;
+2. o lock antigo já ultrapassou a tolerância de 110 segundos da conversa;
 3. outro worker adquire o lock;
 4. encontra o histórico do bot vinculado a A;
 5. não envia uma resposta duplicada;
@@ -28223,8 +28056,8 @@ Implementação principal:
 ## 5. Ordenação e exclusão mútua
 
 - Uma conversa deve ser processada por apenas um worker por vez.
-- O lock da conversa poderá ser retomado se estiver abandonado por mais de 110
-  segundos.
+- O lock da conversa preserva exatamente o predicado da V1.0.6: só poderá ser
+  retomado quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`.
 - `lock_version` impede que um worker antigo libere o lock adquirido por um
   worker mais novo.
 - Uma mensagem não poderá ultrapassar outra mensagem anterior ainda aberta na
@@ -28282,6 +28115,41 @@ Implementação principal:
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma
   unidade.
 
+### 6.1 Identidade privada, reconciliação e prazo remanescente
+
+- `wa_id` continua global; `user_id` é um alias escopado à unidade por
+  `user_id_cliente`. Cliente legado somente-WA continua válido.
+- `phone_number_id` é obrigatório para resolver a unidade e para o `sender`.
+  `display_phone_number` é snapshot opcional e nunca substitui o ID técnico.
+- Payload somente-user cria cliente provisório, vínculo e conversa. Payload
+  conjunto WA+user prova imediatamente o mesmo sujeito na unidade e prioriza WA
+  no envio. Valores que resolvem clientes incompatíveis falham de forma fechada.
+- O cartão oficial da etapa 2 só promove `messages[].contacts[].phones[].wa_id`
+  explícito, único e formado por 10 a 15 dígitos ASCII. `phones[].phone` não é
+  prova e não é fallback.
+- O gate do handoff valida unidade, conversa ativa na etapa 2, tipo `contacts`,
+  origem `contact_request`, user ID e WA ID antes de qualquer mutação.
+- Fila e histórico são snapshots imutáveis: item que chegou somente-user mantém
+  `wa_id = NULL` mesmo após a prova. A conversa pode completar aliases ainda
+  nulos, mas seu username é somente o do payload que criou a conversa; se ela
+  nasceu sem username, esse snapshot permanece `NULL`.
+- `cliente.username` recebe o último username não vazio. Registros anteriores de
+  fila, histórico e conversa nunca são reescritos quando o username muda.
+- No merge, o nome válido do provisório sempre sobrescreve o nome canônico antes
+  da exclusão; a conversa nova é reparentada e a conversa canônica ativa anterior
+  fecha com `ativou_privacidade`.
+- Lock fresco em qualquer conversa envolvida cancela o merge inteiro e reagenda
+  o item por 5 segundos sem consumir retry. Lock stale segue exatamente o limiar
+  de 110 segundos da V1.0.6 e incrementa `lock_version`; o dono antigo não pode
+  liberar a versão nova.
+- Se o cliente canônico ainda possui bloqueio comercial vigente, a conversa nova
+  fecha com `bloqueio_reconciliado`, o item atual é removido atomicamente e nada
+  é enviado. A expiração continua sendo a da conversa antiga; o prazo não é
+  reiniciado.
+- Turno, predecessor, flood, cooldown e denylist usam todos os aliases
+  comprovados do mesmo `(id_cliente, id_unidade)`. Antes da prova, aliases e
+  unidades diferentes permanecem isolados.
+
 Implementação principal:
 
 - `core/database/deploy_database/bank_script.py`
@@ -28290,7 +28158,7 @@ Implementação principal:
 - `workers/worker_flow/valida_banco.py`
 - `core/cache/runtime/cache_conversas_bloqueadas.py`
 
-### 6.1 Oportunidade no Funil de Vendas
+### 6.2 Oportunidade no Funil de Vendas
 
 - Uma conversa torna-se elegível ao entrar na etapa 19.
 - As etapas 19 a 23 permanecem elegíveis. Assim, avançar na pesquisa
@@ -28431,11 +28299,24 @@ Quando a conversa ainda não possui etapa atual persistida, qualquer mensagem de
 texto comum poderá iniciar o atendimento e receber a saudação normal da etapa 1.
 
 Essa regra vale mesmo que o texto inicial seja estranho, curto, tenha símbolos ou
-pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar a Su e
-pedir o nome do cliente.
+pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar o
+agente virtual configurado para a unidade e pedir o nome do cliente.
 
 A exceção é texto com intenção financeira. Nesse caso, o sistema já responde a
 dúvida sobre valores e, na mesma mensagem, apresenta a etapa 1.
+
+Nas mensagens iniciais padrão, de mídia, de intenção financeira e de tratamento
+de reforço escolar, a apresentação é formada exclusivamente pelos dados
+persistidos em `chatbot.unidade`:
+
+- `nome_unidade`: nome público da unidade;
+- `nome_agente`: nome público do agente virtual;
+- `genero`: seleciona `Sou o {nome_agente}` para `masculino` e
+  `Sou a {nome_agente}` para `feminino`.
+
+Esses campos não alteram evento, transição, turno, retry ou transação. Eles são
+apenas dados de apresentação lidos pelo contexto da etapa 1. As demais mensagens
+mantêm seus textos próprios.
 
 ### 11.2. Exceção para conversa iniciada com mídia
 
@@ -28448,10 +28329,12 @@ uma etapa atual persistida. Nesse caso:
 4. a próxima interação válida será interpretada como resposta da etapa 1 e
    poderá direcionar o fluxo para a etapa 2.
 
-Mensagem esperada:
+Mensagem esperada, usando uma das duas primeiras linhas conforme o gênero do
+agente:
 
 ```text
-Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
 Me diz, qual o seu nome?
 ```
@@ -28504,10 +28387,12 @@ mensalidade, investimento ou termo equivalente:
 4. a conversa não avançará por causa da pergunta de valor;
 5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
 
-Se a conversa iniciar com pergunta de valor, a resposta esperada será:
+Se a conversa iniciar com pergunta de valor, a resposta esperada usará uma das
+duas primeiras linhas conforme o gênero do agente:
 
 ```text
-Bom dia/Boa tarde/Boa noite! Seja bem vindo (a), sou a Su, atendente virtual do Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
 Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
 Me diz, qual o seu nome?
 ```
@@ -28611,10 +28496,10 @@ tratamento futuro que reapresente conteúdo da etapa.
 - Antes da avaliação, o sistema procura uma equivalência comprovada entre
   `user_id` e `wa_id` na mesma unidade. A prova permanente é o vínculo
   persistido em `chatbot.user_id_cliente`, ligado a um cliente com WA ID
-  canônico. Durante a janela anterior ao commit do worker, também vale o
-  `contact_request` oficial, autenticado, com um único WA ID compartilhado e
-  user ID inequívoco. Contato comum, username, nome, coincidência temporal e
-  aproximação são proibidos como prova.
+  canônico. Envelope conjunto e `contact_request` oficial são candidatos que o
+  worker ainda precisa validar; antes do commit não unem contadores no webhook.
+  Contato comum, username, nome, coincidência temporal e aproximação são
+  proibidos como prova.
 - Quando o vínculo oficial existe, as janelas das duas identidades pertencem ao
   mesmo sujeito lógico. O WA ID é a referência canônica, Redis e memória somam
   os eventos das duas chaves e o banco usa `COUNT(DISTINCT id_hash_msg)`.
@@ -28622,15 +28507,16 @@ tratamento futuro que reapresente conteúdo da etapa.
   mensagem nunca é contada duas vezes.
 - A equivalência é sempre limitada por `phone_id_unidade`. Identidades sem
   vínculo e unidades diferentes permanecem isoladas.
-- O vínculo permanente fica em cache positivo. O `contact_request` cria uma
-  ponte pendente de 15 segundos, atômica nas duas direções e limitada à mesma
-  unidade, suficiente para cobrir o intervalo até o commit. A ausência de
-  vínculo recebe cache negativo de apenas 5 segundos; uma ponte oficial usa
-  namespace separado e tem prioridade imediata sobre esse marcador.
-- Em cache miss, o banco revalida o vínculo. Conflito na ponte, Redis
-  indisponível sem prova persistida ou qualquer outra impossibilidade de manter
-  uma decisão compartilhada produz HTTP 503 para reentrega, sem bloqueio Meta e
-  sem iniciar contador paralelo por hipótese.
+- O vínculo permanente fica em cache positivo. A ausência de vínculo recebe
+  cache negativo de apenas 5 segundos. Antes do primeiro commit, uma barreira de
+  predecessor no worker impede que a prova posterior ultrapasse item aberto do
+  outro alias sem publicar identidade provisória.
+- Em cache miss, o banco revalida o vínculo. Se o RDS confirmar sua ausência, a
+  indisponibilidade isolada do Redis não descarta a mensagem: o alias unitário
+  segue pelo fallback banco -> memória já existente. Conflito determinístico
+  recebe HTTP 200 sem mutação; HTTP 503 é usado somente quando uma falha
+  transitória impede a decisão autoritativa, sempre sem bloqueio Meta por
+  hipótese.
 - Eventos já persistidos continuam snapshots do payload recebido: a união das
   janelas não retropreenche nem reescreve WA ID ou user ID históricos.
 - Um cliente identificado como flood poderá ser bloqueado na Meta e não deverá
@@ -28873,9 +28759,17 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 
 ### 19.2. Clientes bloqueados na Meta
 
-- `cliente_bloqueado_meta` representa a intenção persistente de bloquear a
-  identidade Meta (`wa_id` prioritário ou `user_id` quando o WA ID não existir)
-  junto de `phone_id_unidade`, além dos bloqueios já confirmados pela Meta.
+- `cliente_bloqueado_meta` representa uma intenção persistente por cliente e
+  unidade. A linha contém pelo menos um entre `wa_id` e `user_id` e guarda os
+  dois quando ambos forem conhecidos; não existe prioridade destrutiva entre
+  aliases para bloqueio.
+- Se a linha nascer somente com WA ID ou somente com user ID, uma prova posterior
+  completa apenas o campo nulo do mesmo registro. Linhas separadas comprovadamente
+  equivalentes são consolidadas, sem desbloquear o cliente e sem criar duplicata
+  na mesma unidade.
+- O mesmo cliente pode possuir outra linha em outra unidade: o WA ID global pode
+  repetir, enquanto o user ID será o alias daquela unidade. Nenhum bloqueio é
+  promovido a global por aproximação.
 - Um contato identificado manualmente pode ser registrado nessa tabela mesmo
   quando a janela da Meta ainda não permite confirmar o bloqueio.
 - Toda nova mensagem desse par é interceptada antes do flood, da validação da
@@ -28884,8 +28778,8 @@ eventos de flood e controle de cache utilizam administração somente leitura:
   no sucesso quanto na falha. Uma mensagem futura provoca uma nova tentativa.
 - Falha ao consultar a lista retorna HTTP 503 para a Meta reenviar o evento;
   nenhuma mensagem é enfileirada sem que essa validação seja concluída.
-- A consulta sempre inclui a identidade tipada e `phone_id_unidade`,
-  preservando o isolamento multi-WABA. `username` permanece apenas informativo.
+- A consulta recebe a identidade tipada e `phone_id_unidade`; depois de uma prova,
+  qualquer alias encontra a mesma linha. `username` permanece informativo.
 - Bloqueios automáticos detectados pelo sistema registram e confirmam primeiro
   a intenção local no banco; somente depois do commit tentam o bloqueio na
   Meta, sem manter transação aberta durante a chamada externa.
@@ -28899,7 +28793,8 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 - O administrador poderá somente desbloquear, removendo individualmente um
   registro existente.
 - Desbloqueio em massa é proibido.
-- No desbloqueio, a ordem obrigatória é Meta primeiro, banco depois.
+- No desbloqueio, todos os aliases conhecidos são enviados à Meta primeiro e o
+  banco só é removido depois do sucesso integral.
 - Se o desbloqueio na Meta falhar, o registro deverá permanecer no banco.
 - Não existe chave Redis equivalente: a própria tabela é consultada de forma
   autoritativa pelo webhook.
@@ -29048,11 +28943,11 @@ Antes de modificar o fluxo:
    conservador ou incompleto.
 ````
 
-## Passo 155 — `ROTINA_IMPLEMENTACAO_ETAPAS.md`
+## Passo 153 — `ROTINA_IMPLEMENTACAO_ETAPAS.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f2b86d3278102fc7434d75a40b20ceaacc21555dd0b0564c93eaf838f6acbcd4`
+SHA-256 do conteúdo UTF-8 normalizado: `9cfe134f58de6c57bffafbe31577067d51e6f0b10f79cf55ecf87ccc7f2bee1d`
 
 ````markdown
 # Rotina de implementação de novas etapas
@@ -29734,10 +29629,8 @@ Sempre executar:
 ```text
 test_fluxo_turno_abc
 test_retry_essencial
-test_lastfrom_semantico
-test_roteamento_essencial
 test_persistencia_essencial
-test_persistencia_essencial
+test_worker_flow_runtime
 ```
 
 ## Definition of done
@@ -29796,7 +29689,7 @@ Se uma nova regra não se encaixar neste padrão, ela deve ser discutida antes d
 introduzir exceção arquitetural.
 ````
 
-## Passo 156 — `TAREFA_FUTURA_TRIAGEM_POR_IDADE.txt`
+## Passo 154 — `TAREFA_FUTURA_TRIAGEM_POR_IDADE.txt`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
@@ -29853,4006 +29746,11 @@ CUIDADO NO DEPLOY
 
 # Fase 7 — Testes automatizados
 
-## Passo 157 — `tests/unit/test_block_report_multi_waba.py`
+## Passo 155 — `tests/unit/test_fluxo_turno_abc.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `52177468e3569a91c6750678217e208bf99d272606bc9380ecbbe338d2138d47`
-
-````python
-import unittest
-from unittest.mock import call, patch
-
-from operations.monitoring import blocked_users
-
-
-def unidade(
-    *,
-    id_unidade=1,
-    nome="Unidade A",
-    waba="waba-a",
-    phone="phone-a",
-):
-    return {
-        "id_unidade": id_unidade,
-        "nome_unidade": nome,
-        "waba_id": waba,
-        "phone_id_unidade": phone,
-    }
-
-
-def bloqueio(
-    identidade,
-    *,
-    tipo_identidade="wa_id",
-    id_bloqueio=10,
-    id_unidade=1,
-    nome_unidade="Unidade A",
-    waba="waba-a",
-    phone="phone-a",
-    phone_registrado=None,
-    nome_cliente=None,
-):
-    return {
-        "id_bloqueio": id_bloqueio,
-        "id_cliente": None,
-        "nome_cliente": nome_cliente,
-        "wa_id": identidade if tipo_identidade == "wa_id" else None,
-        "user_id": identidade if tipo_identidade == "user_id" else None,
-        "username": None,
-        "tipo_identidade": tipo_identidade,
-        "identidade": identidade,
-        "id_unidade": id_unidade,
-        "nome_unidade": nome_unidade,
-        "waba_id": waba,
-        "phone_id_unidade": phone,
-        "phone_id_registrado": phone_registrado or phone,
-    }
-
-
-class BlockReportMultiWabaTests(unittest.TestCase):
-    def test_execucao_sem_argumentos_escolhe_relatorio_principal(self):
-        resultado = {
-            "sincronizados": [],
-            "somente_meta": [],
-            "somente_banco": [],
-            "nao_comparados_banco": [],
-            "vinculos_unidade_divergentes": [],
-            "falhas_meta": [],
-        }
-        with (
-            patch.object(
-                blocked_users,
-                "reconciliar_bloqueios_meta_banco",
-                return_value=resultado,
-            ) as reconciliar,
-            patch.object(
-                blocked_users,
-                "reconciliar_registros_waba_meta",
-            ) as reconciliar_registros,
-        ):
-            codigo = blocked_users.main([])
-
-        self.assertEqual(codigo, 0)
-        reconciliar.assert_called_once_with(mostrar_wa_id=True)
-        reconciliar_registros.assert_not_called()
-
-    def test_compara_bloqueios_por_waba_phone_e_cliente(self):
-        bloqueios_meta = [{
-            **unidade(),
-            "status_meta": "ok",
-            "erro_meta": None,
-            "identidades_bloqueadas": [
-                {
-                    "tipo_identidade": "wa_id",
-                    "identidade": "cliente-1",
-                    "wa_id": "cliente-1",
-                    "user_id": None,
-                },
-                {
-                    "tipo_identidade": "user_id",
-                    "identidade": "BR.cliente-2",
-                    "wa_id": None,
-                    "user_id": "BR.cliente-2",
-                },
-            ],
-        }]
-        bloqueios_banco = [
-            bloqueio("cliente-1", nome_cliente="Maria"),
-            bloqueio(
-                "BR.cliente-2",
-                tipo_identidade="user_id",
-                id_bloqueio=11,
-            ),
-            bloqueio("cliente-3", id_bloqueio=12),
-        ]
-
-        resultado = blocked_users.comparar_bloqueios(
-            bloqueios_meta,
-            bloqueios_banco,
-        )
-
-        self.assertEqual(
-            [
-                (item["tipo_identidade"], item["identidade"])
-                for item in resultado["sincronizados"]
-            ],
-            [("user_id", "BR.cliente-2"), ("wa_id", "cliente-1")],
-        )
-        self.assertEqual(
-            resultado["somente_meta"],
-            [],
-        )
-        self.assertEqual(
-            [item["identidade"] for item in resultado["somente_banco"]],
-            ["cliente-3"],
-        )
-        self.assertEqual(
-            next(
-                item["nome_cliente"]
-                for item in resultado["sincronizados"]
-                if item["tipo_identidade"] == "wa_id"
-            ),
-            "Maria",
-        )
-
-    def test_falha_meta_nao_vira_falso_somente_banco(self):
-        bloqueios_meta = [{
-            **unidade(),
-            "status_meta": "erro",
-            "erro_meta": "TimeoutError: indisponível",
-            "identidades_bloqueadas": [],
-        }]
-
-        resultado = blocked_users.comparar_bloqueios(
-            bloqueios_meta,
-            [bloqueio("cliente-1")],
-        )
-
-        self.assertEqual(resultado["somente_banco"], [])
-        self.assertEqual(
-            [item["identidade"]
-             for item in resultado["nao_comparados_banco"]],
-            ["cliente-1"],
-        )
-        self.assertEqual(len(resultado["falhas_meta"]), 1)
-
-    def test_vinculo_phone_gravado_divergente_e_sinalizado(self):
-        resultado = blocked_users.comparar_bloqueios(
-            [{
-                **unidade(),
-                "status_meta": "ok",
-                "erro_meta": None,
-                "identidades_bloqueadas": [],
-            }],
-            [
-                bloqueio(
-                    "cliente-1",
-                    phone="phone-atual",
-                    phone_registrado="phone-antigo",
-                )
-            ],
-        )
-
-        self.assertEqual(resultado["somente_banco"], [])
-        self.assertEqual(
-            resultado["vinculos_unidade_divergentes"][0][
-                "identidade"
-            ],
-            "cliente-1",
-        )
-
-    def test_coleta_e_desbloqueio_preservam_tipo_user_id(self):
-        class Bloqueado:
-            wa_id = None
-            bsuid = "BR.123"
-
-        coletado = blocked_users.coletar_bloqueios_meta(
-            [unidade()],
-            list_factory=lambda _phone: [Bloqueado()],
-        )
-        self.assertEqual(
-            coletado[0]["identidades_bloqueadas"],
-            [{
-                "tipo_identidade": "user_id",
-                "identidade": "BR.123",
-                "wa_id": None,
-                "user_id": "BR.123",
-            }],
-        )
-
-        chamadas = []
-        resultado = blocked_users.desbloquear_bloqueio_meta_tipado(
-            None,
-            "BR.123",
-            "phone-a",
-            unblock_factory=lambda identidade, phone: chamadas.append(
-                (identidade, phone)
-            ) or "ok",
-        )
-        self.assertEqual(resultado["tipo_identidade"], "user_id")
-        self.assertEqual(chamadas, [("BR.123", "phone-a")])
-
-    def test_coleta_registros_consulta_cada_waba_do_banco(self):
-        unidades = [
-            unidade(),
-            unidade(
-                id_unidade=2,
-                nome="Unidade B",
-                waba="waba-b",
-                phone="phone-b",
-            ),
-        ]
-        chamadas = []
-
-        def listar(waba_id):
-            chamadas.append(call(waba_id))
-            return [{
-                "waba_id": waba_id,
-                "phone_id_unidade": f"phone-{waba_id[-1]}",
-                "registrado_cloud_api": True,
-                "status": "CONNECTED",
-            }]
-
-        numeros, falhas = blocked_users.coletar_registros_meta(
-            unidades,
-            list_factory=listar,
-        )
-        resultado = blocked_users.comparar_registros_waba(
-            unidades,
-            numeros,
-            falhas,
-        )
-
-        self.assertEqual(chamadas, [call("waba-a"), call("waba-b")])
-        self.assertEqual(len(resultado["sincronizados"]), 2)
-        self.assertEqual(resultado["somente_meta"], [])
-        self.assertEqual(resultado["somente_banco"], [])
-
-    def test_mesmo_phone_em_wabas_diferentes_nao_e_sincronizado(self):
-        unidades = [unidade()]
-        numeros = [{
-            "waba_id": "waba-b",
-            "phone_id_unidade": "phone-a",
-            "registrado_cloud_api": True,
-            "status": "CONNECTED",
-        }]
-
-        resultado = blocked_users.comparar_registros_waba(
-            unidades,
-            numeros,
-            [],
-        )
-
-        self.assertEqual(resultado["sincronizados"], [])
-        self.assertEqual(len(resultado["waba_divergente"]), 1)
-        self.assertEqual(
-            resultado["waba_divergente"][0]["waba_id_banco"],
-            "waba-a",
-        )
-        self.assertEqual(
-            resultado["waba_divergente"][0]["waba_id_meta"],
-            "waba-b",
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 158 — `tests/unit/test_bloqueio_meta_guard.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `8b38d702e1c31e2f022f68fe6bb63323762e4971a977ca890bb8c202ac034aee`
-
-````python
-import unittest
-from unittest.mock import patch
-
-from callback.webhook.services import bloqueio_meta_guard
-from tests.helpers import FakeConn, FakeCursor, json_response_payload
-
-
-WA_ID = "5571999999999"
-PHONE_ID = "123456"
-
-
-class BloqueioMetaGuardTests(unittest.TestCase):
-    def test_cliente_marcado_tenta_meta_e_retorna_ignored(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            return_value={"banco_ok": True, "marcado": True},
-        ), patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            json_response_payload(response),
-            {
-                "status": "ignored",
-                "reason": "cliente_marcado_bloqueio_meta",
-            },
-        )
-        bloquear_meta.assert_called_once_with(WA_ID, PHONE_ID)
-
-    def test_meta_falha_mas_mensagem_continua_ignorada(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            return_value={"banco_ok": True, "marcado": True},
-        ), patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-            side_effect=RuntimeError("Meta recusou"),
-        ):
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            json_response_payload(response)["reason"],
-            "cliente_marcado_bloqueio_meta",
-        )
-
-    def test_cada_nova_mensagem_repete_tentativa_na_meta(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            return_value={"banco_ok": True, "marcado": True},
-        ) as consultar, patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-            side_effect=RuntimeError("Meta recusou"),
-        ) as bloquear_meta:
-            primeira = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-            segunda = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(primeira.status_code, 200)
-        self.assertEqual(segunda.status_code, 200)
-        self.assertEqual(consultar.call_count, 2)
-        self.assertEqual(bloquear_meta.call_count, 2)
-
-    def test_cliente_nao_marcado_segue_fluxo_normal(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            return_value={"banco_ok": True, "marcado": False},
-        ), patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertIsNone(response)
-        bloquear_meta.assert_not_called()
-
-    def test_mesmo_wa_id_em_outro_phone_id_nao_bloqueia(self):
-        def consultar(
-            _tipo_identidade,
-            _identidade,
-            phone_id,
-            **_snapshots,
-        ):
-            return {
-                "banco_ok": True,
-                "marcado": phone_id == PHONE_ID,
-            }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            side_effect=consultar,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    "outro-phone-id",
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertIsNone(response)
-        bloquear_meta.assert_not_called()
-
-    def test_consulta_da_lista_indisponivel_retorna_503(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-            return_value={"banco_ok": False, "marcado": False},
-        ), patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            json_response_payload(response),
-            {
-                "status": "unavailable",
-                "reason": "blocklist_validation_unavailable",
-            },
-        )
-        bloquear_meta.assert_not_called()
-
-    def test_dados_incompletos_nao_consultam_banco_nem_meta(self):
-        with patch.object(
-            bloqueio_meta_guard,
-            "_consultar_cliente_marcado_para_bloqueio",
-        ) as consultar, patch.object(
-            bloqueio_meta_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            response = (
-                bloqueio_meta_guard
-                .responder_se_cliente_marcado_para_bloqueio(
-                    None,
-                    None,
-                    PHONE_ID,
-                )
-            )
-
-        self.assertIsNone(response)
-        consultar.assert_not_called()
-        bloquear_meta.assert_not_called()
-
-    def test_consulta_persistida_usa_wa_id_phone_id_e_fecha_conexao(self):
-        cursor = FakeCursor(fetchone_result=(True,))
-        conn = FakeConn(cursor=cursor)
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ):
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": True,
-                "marcado": True,
-            },
-        )
-        self.assertEqual(cursor.calls[0][1], (WA_ID, PHONE_ID))
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 0)
-        self.assertTrue(conn.closed)
-
-    def test_falha_na_consulta_faz_rollback_e_fecha_conexao(self):
-        conn = FakeConn()
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            side_effect=RuntimeError("banco caiu"),
-        ), patch.object(
-            bloqueio_meta_guard.logger,
-            "exception",
-        ):
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": False,
-                "marcado": False,
-            },
-        )
-        self.assertEqual(conn.commits, 0)
-        self.assertEqual(conn.rollbacks, 1)
-        self.assertTrue(conn.closed)
-
-    def test_limite_promove_para_denylist_antes_da_meta(self):
-        conn = FakeConn()
-        suspeita = {
-            "id_conversa": 10,
-            "id_cliente": 20,
-            "nome_cliente": "Cliente Persistido",
-            "id_unidade": 30,
-            "phone_id_unidade": PHONE_ID,
-            "turnos_sem_avanco": 12,
-        }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=suspeita,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-            return_value=99,
-        ) as registrar:
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    nome_cliente="Nome Meta",
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": True,
-                "marcado": True,
-            },
-        )
-        registrar.assert_called_once_with(
-            20,
-            WA_ID,
-            None,
-            None,
-            30,
-            PHONE_ID,
-            conn.cursor(),
-            nome_cliente="Cliente Persistido",
-        )
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 0)
-        self.assertTrue(conn.closed)
-
-    def test_nome_do_profile_e_fallback_da_promocao(self):
-        conn = FakeConn()
-        suspeita = {
-            "id_conversa": 10,
-            "id_cliente": 20,
-            "nome_cliente": None,
-            "id_unidade": 30,
-            "phone_id_unidade": PHONE_ID,
-            "turnos_sem_avanco": 12,
-        }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=suspeita,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-            return_value=99,
-        ) as registrar:
-            bloqueio_meta_guard._consultar_cliente_marcado_para_bloqueio(
-                "wa_id",
-                WA_ID,
-                PHONE_ID,
-                nome_cliente="Nome Meta",
-                wa_id=WA_ID,
-            )
-
-        self.assertEqual(
-            registrar.call_args.kwargs["nome_cliente"],
-            "Nome Meta",
-        )
-
-    def test_falha_ao_persistir_promocao_faz_rollback(self):
-        conn = FakeConn()
-        suspeita = {
-            "id_conversa": 10,
-            "id_cliente": 20,
-            "nome_cliente": "Cliente",
-            "id_unidade": 30,
-            "phone_id_unidade": PHONE_ID,
-            "turnos_sem_avanco": 12,
-        }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=suspeita,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-            side_effect=RuntimeError("banco caiu"),
-        ), patch.object(
-            bloqueio_meta_guard.logger,
-            "exception",
-        ):
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": False,
-                "marcado": False,
-            },
-        )
-        self.assertEqual(conn.commits, 0)
-        self.assertEqual(conn.rollbacks, 1)
-        self.assertTrue(conn.closed)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 159 — `tests/unit/test_cabecalhos_whatsapp.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `4dcd429912feb7b3697cc158e894b24cc435268b6bc2e037cb50af72c31569da`
-
-````python
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    CABECALHO_ETAPA12_TRIAGEM,
-    CABECALHO_PESQUISA_SATISFACAO,
-    RODAPE_OPCAO_UNICA,
-    montar_texto_com_cabecalho,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa12,
-    etapa20,
-    etapa21,
-    etapa22,
-    triagem_base,
-)
-
-
-class _ClienteWhatsAppFake:
-    def __init__(self):
-        self.ultimo_envio = None
-
-    def send_message(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.teste")
-
-
-class CabecalhosWhatsAppTests(unittest.TestCase):
-    def test_helper_mantem_cabecalho_em_negrito_com_tamanho_do_corpo(self):
-        self.assertEqual(
-            montar_texto_com_cabecalho("Conteúdo", "Cabeçalho"),
-            "*Cabeçalho*\n\nConteúdo",
-        )
-
-    def test_introducao_da_triagem_nao_usa_header_nativo(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(etapa12, "conta_wa", return_value=cliente),
-            patch.object(etapa12.logger, "info") as log_info,
-        ):
-            contexto = etapa12.enviar_etapa12(
-                "5511999999999",
-                "phone-id",
-            )
-
-        self._assert_cabecalho_padronizado(
-            cliente,
-            CABECALHO_ETAPA12_TRIAGEM,
-        )
-        self.assertEqual(
-            contexto["cabecalho_mensagem"],
-            CABECALHO_ETAPA12_TRIAGEM,
-        )
-        self.assertEqual(contexto["tipo_mensagem"], "interactive_button")
-        self._assert_log_cabecalho_no_corpo(log_info)
-
-    def test_perguntas_da_triagem_nao_usam_header_nativo(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(triagem_base, "conta_wa", return_value=cliente),
-            patch.object(triagem_base.logger, "info") as log_info,
-        ):
-            contexto = triagem_base.enviar_pergunta_triagem(
-                "5511999999999",
-                "phone-id",
-                id_etapa=12,
-                cabecalho="Pergunta 1",
-                mensagem_bot="Texto da pergunta",
-                evento_log="teste_triagem",
-            )
-
-        self._assert_cabecalho_padronizado(cliente, "Pergunta 1")
-        self.assertTrue(
-            cliente.ultimo_envio["text"].endswith(
-                f"\n\n_{RODAPE_OPCAO_UNICA}_"
-            )
-        )
-        self.assertEqual(contexto["cabecalho_mensagem"], "Pergunta 1")
-        self.assertEqual(contexto["tipo_mensagem"], "interactive_button")
-        self._assert_log_cabecalho_no_corpo(log_info)
-
-    def test_lista_da_pesquisa_nao_usa_header_nativo(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(etapa20, "conta_wa", return_value=cliente),
-            patch.object(etapa20.logger, "info") as log_info,
-        ):
-            contexto = etapa20.enviar_etapa20(
-                "5511999999999",
-                "phone-id",
-                "Edcarlos",
-            )
-
-        self._assert_cabecalho_padronizado(
-            cliente,
-            CABECALHO_PESQUISA_SATISFACAO,
-        )
-        self.assertEqual(
-            contexto["cabecalho_mensagem"],
-            CABECALHO_PESQUISA_SATISFACAO,
-        )
-        self.assertEqual(contexto["tipo_mensagem"], "interactive_list")
-        self._assert_log_cabecalho_no_corpo(log_info)
-
-    def test_decisao_de_comentario_usa_cabecalho_e_botoes_validos(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(etapa21, "conta_wa", return_value=cliente),
-            patch.object(etapa21.logger, "info") as log_info,
-        ):
-            contexto = etapa21.enviar_etapa21(
-                "5511999999999",
-                "phone-id",
-            )
-
-        self._assert_cabecalho_padronizado(
-            cliente,
-            CABECALHO_PESQUISA_SATISFACAO,
-        )
-        self.assertEqual(
-            contexto["cabecalho_mensagem"],
-            CABECALHO_PESQUISA_SATISFACAO,
-        )
-        self.assertEqual(contexto["tipo_mensagem"], "interactive_button")
-        titulos = [
-            botao.title
-            for botao in cliente.ultimo_envio["buttons"]
-        ]
-        self.assertEqual(
-            titulos,
-            ["Sim, quero comentar", "Prefiro não comentar"],
-        )
-        self.assertTrue(all(len(titulo) <= 20 for titulo in titulos))
-        self._assert_log_cabecalho_no_corpo(log_info)
-
-    def test_captura_do_comentario_usa_cabecalho_no_corpo(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(etapa22, "conta_wa", return_value=cliente),
-            patch.object(etapa22.logger, "info") as log_info,
-        ):
-            contexto = etapa22.enviar_etapa22(
-                "5511999999999",
-                "phone-id",
-            )
-
-        self.assertNotIn("header", cliente.ultimo_envio)
-        self.assertNotIn("buttons", cliente.ultimo_envio)
-        self.assertTrue(
-            cliente.ultimo_envio["text"].startswith(
-                f"*{CABECALHO_PESQUISA_SATISFACAO}*\n\n"
-            )
-        )
-        self.assertEqual(
-            contexto["cabecalho_mensagem"],
-            CABECALHO_PESQUISA_SATISFACAO,
-        )
-        self.assertEqual(contexto["tipo_mensagem"], "text")
-        self._assert_log_cabecalho_no_corpo(log_info)
-
-    def _assert_cabecalho_padronizado(self, cliente, cabecalho):
-        self.assertNotIn("header", cliente.ultimo_envio)
-        self.assertIn("buttons", cliente.ultimo_envio)
-        self.assertTrue(
-            cliente.ultimo_envio["text"].startswith(
-                f"*{cabecalho}*\n\n"
-            )
-        )
-
-    def _assert_log_cabecalho_no_corpo(self, log_info):
-        formatos = [
-            chamada.args[0]
-            for chamada in log_info.call_args_list
-            if chamada.args
-        ]
-        self.assertTrue(
-            any(
-                "cabecalho=corpo_negrito" in formato
-                for formato in formatos
-            )
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 160 — `tests/unit/test_cache_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `89b39ebc4ba0a9e53ce7b94a6b13f81c14681d08dd62d26f58acf7837e54370a`
-
-````python
-import unittest
-from unittest.mock import patch
-
-from core.cache import cache_unidade
-from core.cache.runtime import cache_conversas_bloqueadas
-
-
-class FakeRedisUnidade:
-    def __init__(self, presente):
-        self.presente = presente
-
-    def hexists(self, _key, _field):
-        return self.presente
-
-
-class CacheEssencialTests(unittest.TestCase):
-    def test_hit_de_unidade_e_rapido_e_nao_consulta_banco(self):
-        with patch.object(
-            cache_unidade,
-            "get_redis_safe",
-            return_value=FakeRedisUnidade(presente=True),
-        ), patch.object(
-            cache_unidade,
-            "_sincronizar_cache_unidades_por_versao",
-        ), patch.object(
-            cache_unidade,
-            "_cache_valido",
-            return_value=True,
-        ), patch.object(
-            cache_unidade,
-            "_unidade_esta_ativa_banco_e_repara_cache",
-        ) as fallback_banco:
-            resultado = cache_unidade.unidade_esta_ativa("123456")
-
-        self.assertTrue(resultado)
-        fallback_banco.assert_not_called()
-
-    def test_miss_de_unidade_e_confirmado_no_banco(self):
-        with patch.object(
-            cache_unidade,
-            "get_redis_safe",
-            return_value=FakeRedisUnidade(presente=False),
-        ), patch.object(
-            cache_unidade,
-            "_sincronizar_cache_unidades_por_versao",
-        ), patch.object(
-            cache_unidade,
-            "_cache_valido",
-            return_value=True,
-        ), patch.object(
-            cache_unidade,
-            "_unidade_esta_ativa_banco_e_repara_cache",
-            return_value=True,
-        ) as fallback_banco:
-            resultado = cache_unidade.unidade_esta_ativa("123456")
-
-        self.assertTrue(resultado)
-        fallback_banco.assert_called_once_with(
-            "123456",
-            reparar_cache_se_ausente=False,
-        )
-
-    def test_redis_indisponivel_usa_banco_para_unidade_e_bloqueio(self):
-        with patch.object(
-            cache_unidade,
-            "get_redis_safe",
-            side_effect=ConnectionError("redis caiu"),
-        ), patch.object(
-            cache_unidade,
-            "_unidade_esta_ativa_banco_e_repara_cache",
-            return_value=True,
-        ) as unidade_banco:
-            self.assertTrue(cache_unidade.unidade_esta_ativa("123456"))
-
-        unidade_banco.assert_called_once_with(
-            "123456",
-            reparar_cache_se_ausente=True,
-        )
-
-        with patch.object(
-            cache_conversas_bloqueadas,
-            "get_redis_safe",
-            side_effect=ConnectionError("redis caiu"),
-        ), patch.object(
-            cache_conversas_bloqueadas,
-            "_conversa_esta_bloqueada_banco_e_repara_cache",
-            return_value=True,
-        ) as bloqueio_banco:
-            resultado = (
-                cache_conversas_bloqueadas
-                .conversa_esta_bloqueada_cache(
-                    "wa_id",
-                    "5571999999999",
-                    "123456",
-                )
-            )
-
-        self.assertTrue(resultado)
-        bloqueio_banco.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
-            "123456",
-        )
-
-    def test_redis_e_banco_indisponiveis_nao_liberam_conversa(self):
-        with patch.object(
-            cache_conversas_bloqueadas,
-            "get_redis_safe",
-            side_effect=ConnectionError("redis caiu"),
-        ), patch.object(
-            cache_conversas_bloqueadas,
-            "get_conn",
-            side_effect=ConnectionError("banco caiu"),
-        ):
-            with self.assertRaises(
-                cache_conversas_bloqueadas.ValidacaoBloqueioConversaIndisponivel
-            ):
-                cache_conversas_bloqueadas.conversa_esta_bloqueada_cache(
-                    "wa_id",
-                    "5571999999999",
-                    "123456",
-                )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 161 — `tests/unit/test_cache_flood_wamid.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `756e378969eb17e3e5a751a7aa9b7e5d99febb5619058036d69f7d784ae21890`
-
-````python
-import unittest
-from unittest.mock import patch
-
-from callback.webhook.services import flood_guard
-from core.cache import cache_flood_memoria
-from core.cache.runtime import cache_flood_redis
-
-
-REGRAS = (
-    {
-        "nome": "rajada_curta",
-        "limite": 15,
-        "janela_segundos": 5,
-    },
-)
-
-
-class FakeRedis:
-    def __init__(self, agora):
-        self.agora = agora
-        self.valores = {}
-        self.expiracoes = {}
-        self.expira_em = {}
-
-    def eval(self, _script, numero_chaves, *chaves_e_argumentos):
-        self._expirar_chaves()
-        chaves = list(chaves_e_argumentos[:numero_chaves])
-        argumentos = list(chaves_e_argumentos[numero_chaves:])
-        dedupe_key = chaves[0]
-        evento_novo = dedupe_key not in self.valores
-
-        if evento_novo:
-            self.valores[dedupe_key] = "1"
-            self.expiracoes[dedupe_key] = int(argumentos[0])
-            self.expira_em[dedupe_key] = (
-                self.agora() + int(argumentos[0])
-            )
-
-        resultados = [1 if evento_novo else 0]
-
-        for indice, contador_key in enumerate(chaves[1:]):
-            ttl = int(argumentos[1 + (indice * 2)])
-            incrementar = int(argumentos[2 + (indice * 2)]) == 1
-            if evento_novo and incrementar:
-                total = int(
-                    self.valores.get(contador_key, 0)
-                ) + 1
-                self.valores[contador_key] = total
-
-                if total == 1:
-                    self.expiracoes[contador_key] = int(
-                        ttl
-                    )
-                    self.expira_em[contador_key] = (
-                        self.agora()
-                        + ttl
-                    )
-
-            else:
-                total = int(
-                    self.valores.get(contador_key, 0)
-                )
-
-            resultados.append(total)
-
-        return resultados
-
-    def _expirar_chaves(self):
-        agora = self.agora()
-        expiradas = [
-            key
-            for key, instante in self.expira_em.items()
-            if instante <= agora
-        ]
-
-        for key in expiradas:
-            self.valores.pop(key, None)
-            self.expiracoes.pop(key, None)
-            self.expira_em.pop(key, None)
-
-
-class CacheFloodRedisWamidTests(unittest.TestCase):
-    def setUp(self):
-        self.agora = 1000.0
-        self.redis = FakeRedis(
-            agora=lambda: self.agora,
-        )
-        self.redis_patch = patch.object(
-            cache_flood_redis,
-            "get_redis_safe",
-            return_value=self.redis,
-        )
-        self.redis_patch.start()
-        self.time_patch = patch.object(
-            cache_flood_redis.time,
-            "time",
-            side_effect=lambda: self.agora,
-        )
-        self.time_patch.start()
-
-    def tearDown(self):
-        self.time_patch.stop()
-        self.redis_patch.stop()
-
-    def avaliar(self, wamid, phone="phone-a", wa="cliente-a"):
-        return cache_flood_redis.avaliar_flood_redis(
-            "wa_id",
-            wa,
-            phone,
-            wamid,
-            REGRAS,
-        )
-
-    def test_mesmo_wamid_repetido_quinze_vezes_conta_um(self):
-        resultado = None
-
-        for _ in range(15):
-            resultado = self.avaliar("wamid.unico")
-
-        self.assertEqual(resultado["total"], 1)
-        self.assertFalse(resultado["flood"])
-
-    def test_decimo_quinto_wamid_distinto_detecta_flood(self):
-        resultado = None
-
-        for indice in range(15):
-            resultado = self.avaliar(
-                f"wamid.{indice}"
-            )
-
-        self.assertEqual(resultado["total"], 15)
-        self.assertTrue(resultado["flood"])
-
-    def test_mesmo_wamid_fica_isolado_por_unidade(self):
-        unidade_a = self.avaliar(
-            "wamid.igual",
-            phone="phone-a",
-        )
-        unidade_b = self.avaliar(
-            "wamid.igual",
-            phone="phone-b",
-        )
-
-        self.assertEqual(unidade_a["total"], 1)
-        self.assertEqual(unidade_b["total"], 1)
-        contador_keys = [
-            key
-            for key in self.redis.valores
-            if ":contador:" in key
-        ]
-        self.assertEqual(len(contador_keys), 2)
-
-    def test_reentrega_em_outra_janela_nao_incrementa(self):
-        primeiro = self.avaliar("wamid.1")
-        self.agora += 10
-        reentrega = self.avaliar("wamid.1")
-
-        self.assertEqual(primeiro["total"], 1)
-        self.assertEqual(reentrega["total"], 0)
-        self.assertFalse(reentrega["evento_novo"])
-
-    def test_wamid_volta_a_contar_depois_do_ttl_dedupe(self):
-        primeiro = self.avaliar("wamid.1")
-        self.agora += (
-            cache_flood_redis
-            .DEDUPLICACAO_TTL_SEGUNDOS
-            + 1
-        )
-        depois_do_ttl = self.avaliar("wamid.1")
-
-        self.assertTrue(primeiro["evento_novo"])
-        self.assertTrue(depois_do_ttl["evento_novo"])
-        self.assertEqual(depois_do_ttl["total"], 1)
-
-    def test_chaves_tem_ttl_e_prefixo_operacional(self):
-        self.avaliar("wamid.1")
-
-        self.assertEqual(len(self.redis.expiracoes), 2)
-        dedupe_key = next(
-            key
-            for key in self.redis.expiracoes
-            if ":wamid:" in key
-        )
-        contador_key = next(
-            key
-            for key in self.redis.expiracoes
-            if ":contador:" in key
-        )
-        self.assertTrue(
-            dedupe_key.startswith("webhook_flood_rate:{")
-        )
-        self.assertEqual(
-            self.redis.expiracoes[dedupe_key],
-            7200,
-        )
-        self.assertEqual(
-            self.redis.expiracoes[contador_key],
-            15,
-        )
-
-    def test_dado_invalido_nao_acessa_redis(self):
-        with patch.object(
-            cache_flood_redis,
-            "get_redis_safe",
-        ) as get_redis:
-            resultado = cache_flood_redis.avaliar_flood_redis(
-                "wa_id",
-                "cliente-a",
-                "phone-a",
-                None,
-                REGRAS,
-            )
-
-        self.assertFalse(resultado["flood"])
-        get_redis.assert_not_called()
-
-    def test_vinculo_oficial_soma_rajadas_user_id_e_wa_id(self):
-        for indice in range(8):
-            cache_flood_redis.avaliar_flood_redis(
-                "user_id", "user-a", "phone-a", f"wamid.user.{indice}", REGRAS
-            )
-
-        resultado = None
-        equivalentes = (("wa_id", "wa-a"), ("user_id", "user-a"))
-        for indice in range(7):
-            resultado = cache_flood_redis.avaliar_flood_redis(
-                "wa_id",
-                "wa-a",
-                "phone-a",
-                f"wamid.wa.{indice}",
-                REGRAS,
-                identidades_equivalentes=equivalentes,
-            )
-
-        self.assertEqual(resultado["total"], 15)
-        self.assertTrue(resultado["flood"])
-
-    def test_identidades_sem_vinculo_permanecem_isoladas(self):
-        resultado_user = None
-        resultado_wa = None
-
-        for indice in range(8):
-            resultado_user = cache_flood_redis.avaliar_flood_redis(
-                "user_id",
-                "user-sem-vinculo",
-                "phone-a",
-                f"wamid.user.solto.{indice}",
-                REGRAS,
-            )
-
-        for indice in range(7):
-            resultado_wa = cache_flood_redis.avaliar_flood_redis(
-                "wa_id",
-                "wa-outra-pessoa",
-                "phone-a",
-                f"wamid.wa.solto.{indice}",
-                REGRAS,
-            )
-
-        self.assertEqual(resultado_user["total"], 8)
-        self.assertEqual(resultado_wa["total"], 7)
-        self.assertFalse(resultado_user["flood"])
-        self.assertFalse(resultado_wa["flood"])
-
-    def test_vinculo_oficial_nao_duplica_wamid_entre_identidades(self):
-        cache_flood_redis.avaliar_flood_redis(
-            "user_id", "user-a", "phone-a", "wamid.igual", REGRAS
-        )
-        resultado = cache_flood_redis.avaliar_flood_redis(
-            "wa_id",
-            "wa-a",
-            "phone-a",
-            "wamid.igual",
-            REGRAS,
-            identidades_equivalentes=(("wa_id", "wa-a"), ("user_id", "user-a")),
-        )
-
-        self.assertEqual(resultado["total"], 1)
-        self.assertFalse(resultado["evento_novo"])
-
-
-class CacheFloodMemoriaWamidTests(unittest.TestCase):
-    def setUp(self):
-        with cache_flood_memoria._lock:
-            cache_flood_memoria._eventos_por_chave.clear()
-            cache_flood_memoria._ultima_limpeza = 0.0
-
-        self.agora = 1000.0
-        self.time_patch = patch.object(
-            cache_flood_memoria.time,
-            "monotonic",
-            side_effect=lambda: self.agora,
-        )
-        self.time_patch.start()
-
-    def tearDown(self):
-        self.time_patch.stop()
-
-    def avaliar(self, wamid):
-        return cache_flood_memoria.avaliar_flood_memoria(
-            "wa_id",
-            "cliente-a",
-            "phone-a",
-            wamid,
-            REGRAS,
-        )
-
-    def test_memoria_nao_duplica_o_mesmo_wamid(self):
-        resultado = None
-
-        for _ in range(15):
-            resultado = self.avaliar("wamid.unico")
-
-        self.assertEqual(resultado["total"], 1)
-        self.assertFalse(resultado["flood"])
-
-    def test_memoria_deduplica_em_outra_janela(self):
-        primeiro = self.avaliar("wamid.unico")
-        self.agora += 10
-        reentrega = self.avaliar("wamid.unico")
-
-        self.assertEqual(primeiro["total"], 1)
-        self.assertEqual(reentrega["total"], 0)
-        self.assertFalse(reentrega["evento_novo"])
-
-    def test_memoria_bloqueia_quinze_wamids_distintos(self):
-        resultado = None
-
-        for indice in range(15):
-            resultado = self.avaliar(
-                f"wamid.{indice}"
-            )
-
-        self.assertEqual(resultado["total"], 15)
-        self.assertTrue(resultado["flood"])
-
-    def test_memoria_wamid_expirado_volta_a_contar(self):
-        primeiro = self.avaliar("wamid.unico")
-        self.agora += (
-            cache_flood_memoria
-            .DEDUPLICACAO_TTL_SEGUNDOS
-            + 1
-        )
-        depois_do_ttl = self.avaliar("wamid.unico")
-
-        self.assertTrue(primeiro["evento_novo"])
-        self.assertTrue(depois_do_ttl["evento_novo"])
-        self.assertEqual(depois_do_ttl["total"], 1)
-
-    def test_memoria_limita_wamids_por_par(self):
-        with patch.object(
-            cache_flood_memoria,
-            "MAX_WAMIDS_POR_PAR_MEMORIA",
-            3,
-        ):
-            for indice in range(5):
-                self.avaliar(f"wamid.{indice}")
-
-        chave = cache_flood_memoria._cache_key(
-            "wa_id",
-            "cliente-a",
-            "phone-a",
-        )
-        eventos = (
-            cache_flood_memoria
-            ._eventos_por_chave[chave]
-        )
-        self.assertEqual(len(eventos), 3)
-        self.assertNotIn(
-            cache_flood_memoria._digest_wamid(
-                "wamid.0"
-            ),
-            eventos,
-        )
-
-    def test_memoria_limita_pares_antes_de_retorno_flood(
-        self,
-    ):
-        regra_flood_imediato = (
-            {
-                "nome": "teste",
-                "limite": 1,
-                "janela_segundos": 5,
-            },
-        )
-
-        with patch.object(
-            cache_flood_memoria,
-            "MAX_CHAVES_MEMORIA",
-            1,
-        ):
-            cache_flood_memoria.avaliar_flood_memoria(
-                "wa_id",
-                "cliente-a",
-                "phone-a",
-                "wamid.a",
-                regra_flood_imediato,
-            )
-            resultado = (
-                cache_flood_memoria
-                .avaliar_flood_memoria(
-                    "wa_id",
-                    "cliente-b",
-                    "phone-b",
-                    "wamid.b",
-                    regra_flood_imediato,
-                )
-            )
-
-        self.assertTrue(resultado["flood"])
-        self.assertEqual(
-            len(
-                cache_flood_memoria
-                ._eventos_por_chave
-            ),
-            1,
-        )
-        self.assertIn(
-            cache_flood_memoria._cache_key(
-                "wa_id",
-                "cliente-b",
-                "phone-b",
-            ),
-            cache_flood_memoria._eventos_por_chave,
-        )
-
-    def test_memoria_vinculo_oficial_soma_sem_duplicar_wamid(self):
-        for indice in range(8):
-            cache_flood_memoria.avaliar_flood_memoria(
-                "user_id", "user-a", "phone-a", f"wamid.user.{indice}", REGRAS
-            )
-        resultado = None
-        for indice in range(7):
-            resultado = cache_flood_memoria.avaliar_flood_memoria(
-                "wa_id",
-                "wa-a",
-                "phone-a",
-                f"wamid.wa.{indice}",
-                REGRAS,
-                identidades_equivalentes=(("wa_id", "wa-a"), ("user_id", "user-a")),
-            )
-
-        self.assertEqual(resultado["total"], 15)
-        self.assertTrue(resultado["flood"])
-
-
-class FloodGuardPropagacaoWamidTests(unittest.TestCase):
-    def setUp(self):
-        self.resolver_patch = patch.object(
-            flood_guard,
-            "_resolver_identidades_flood",
-            side_effect=lambda tipo, identidade, _phone: {
-                "resolucao_ok": True,
-                "identidades": [(tipo, identidade)],
-            },
-        )
-        self.resolver_patch.start()
-
-    def tearDown(self):
-        self.resolver_patch.stop()
-
-    def test_repassa_wamid_ao_redis(self):
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "flood": False,
-                "total": 1,
-                "regra": None,
-            },
-        ) as avaliar_redis:
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "cliente-a",
-                "phone-a",
-                "wamid.1",
-            )
-
-        self.assertFalse(resultado["bloqueado"])
-        avaliar_redis.assert_called_once_with(
-            "wa_id",
-            "cliente-a",
-            "phone-a",
-            "wamid.1",
-            regras=flood_guard.REGRAS_FLOOD,
-        )
-
-    def test_repassa_wamid_ao_fallback_de_memoria(self):
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={
-                "redis_ok": False,
-                "flood": False,
-                "total": 0,
-                "regra": None,
-            },
-        ), patch.object(
-            flood_guard,
-            "_avaliar_flood_banco",
-            return_value={
-                "banco_ok": False,
-                "flood": False,
-                "total": 0,
-                "regra": None,
-                "motivo": "banco_indisponivel",
-            },
-        ), patch.object(
-            flood_guard,
-            "avaliar_flood_memoria",
-            return_value={
-                "memoria_ok": True,
-                "flood": False,
-                "total": 1,
-                "regra": None,
-                "motivo": "memoria",
-            },
-        ) as avaliar_memoria:
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "cliente-a",
-                "phone-a",
-                "wamid.1",
-            )
-
-        self.assertFalse(resultado["bloqueado"])
-        avaliar_memoria.assert_called_once_with(
-            "wa_id",
-            "cliente-a",
-            "phone-a",
-            "wamid.1",
-            regras=flood_guard.REGRAS_FLOOD,
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 162 — `tests/unit/test_deploy_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `c004006c8c1314d8dcd2fea7ec29fd3c22b2bc6c1774f00bb6c07f6a407d127a`
-
-````python
-import inspect
-import logging
-import unittest
-from pathlib import Path
-from unittest.mock import patch
-
-from core.database.deploy_database import (
-    bank_script,
-    etapa_transicao_script,
-    floodscript,
-    povoar_etapas,
-    transacao_deploy as transacao_deploy_module,
-)
-from tests.helpers import FakeConn
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_EMAIL_VALIDO,
-    EVENTO_CONTATO_OFICIAL_COMPARTILHADO,
-    EVENTO_NOME_CLIENTE_VALIDO_COM_WA_ID,
-    EVENTO_NOME_CLIENTE_VALIDO_SEM_WA_ID,
-    EVENTO_NOME_DEPENDENTE_VALIDO,
-    EVENTO_OFERTA_ACEITA,
-    EVENTO_OFERTA_ADIADA,
-    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-    EVENTO_PROFISSAO_TITULAR_VALIDA,
-    EVENTO_SATISFACAO_AVALIADA,
-    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-)
-
-
-class DeployEssencialTests(unittest.TestCase):
-    def test_ddl_contem_os_contratos_que_nao_podem_desaparecer(self):
-        source = inspect.getsource(bank_script.criar_tabelas)
-        contratos = (
-            "CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens",
-            "CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens",
-            "CREATE TABLE IF NOT EXISTS chatbot.respostas_desafios",
-            "CREATE TABLE IF NOT EXISTS chatbot.pesquisa_satisfacao",
-            "CREATE TABLE IF NOT EXISTS chatbot.integracao_funil_unidade",
-            "CREATE TABLE IF NOT EXISTS chatbot.funil_envios",
-            "UNIQUE (id_conversa, id_etapa)",
-            "UNIQUE,\n            nota SMALLINT",
-            "CHECK (nota IS NULL OR nota BETWEEN 1 AND 5)",
-            "waba_id VARCHAR(100)",
-            "link_instagram VARCHAR(400)",
-            "numero_comercial",
-            "bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE",
-            "motivo_encerramento VARCHAR(30)",
-            "profissao VARCHAR(100) NULL",
-            "encerra_automaticamente BOOLEAN",
-            "bloqueio_dias INTEGER",
-            "elegivel_funil BOOLEAN",
-            "CHECK (status IN ('pending', 'processing', 'sent'))",
-        )
-
-        for contrato in contratos:
-            with self.subTest(contrato=contrato):
-                self.assertIn(contrato, source)
-
-        self.assertNotIn("ALTER TABLE", source)
-        self.assertNotIn("Supera - Santo Antônio de Jesus", source)
-        self.assertNotIn("https://www.instagram.com/supera.saj/", source)
-        self.assertLess(
-            source.index("CREATE TABLE IF NOT EXISTS chatbot.conversa"),
-            source.index("CREATE TABLE IF NOT EXISTS chatbot.dependente"),
-        )
-        self.assertLess(
-            source.index("CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens"),
-            source.index("CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens"),
-        )
-
-        flood_source = inspect.getsource(
-            floodscript.criar_tabelas_bloqueio_flood
-        )
-        self.assertIn(
-            "CREATE TABLE IF NOT EXISTS chatbot.cliente_bloqueado_meta",
-            flood_source,
-        )
-        self.assertIn("nome VARCHAR(200) NULL", flood_source)
-        self.assertNotIn("ALTER TABLE", flood_source)
-
-        etapa_19 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 19)
-        etapa_20 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 20)
-        etapa_21 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 21)
-        etapa_22 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 22)
-        etapa_23 = next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 23)
-        self.assertFalse(
-            next(etapa for etapa in povoar_etapas.ETAPAS if etapa[0] == 18)[4]
-        )
-        self.assertTrue(etapa_19[4])
-        self.assertTrue(etapa_20[4])
-        self.assertTrue(etapa_21[4])
-        self.assertTrue(etapa_22[4])
-        self.assertEqual(etapa_23[2:], (True, 30, True))
-
-    def test_etapas_e_transicoes_formam_um_mapa_valido_e_contiguo(self):
-        ids_etapa = [etapa[0] for etapa in povoar_etapas.ETAPAS]
-        transicoes = etapa_transicao_script.TRANSICOES_INICIAIS
-
-        self.assertEqual(len(ids_etapa), 23)
-        self.assertEqual(len(transicoes), 27)
-        self.assertEqual(ids_etapa, list(range(1, len(ids_etapa) + 1)))
-        self.assertEqual(
-            len({(origem, evento) for origem, evento, _ in transicoes}),
-            len(transicoes),
-        )
-
-        for origem, _evento, destino in transicoes:
-            with self.subTest(origem=origem, destino=destino):
-                self.assertIn(origem, ids_etapa)
-                self.assertIn(destino, ids_etapa)
-                self.assertNotEqual(origem, destino)
-
-        arestas_criticas = {
-            (1, EVENTO_NOME_CLIENTE_VALIDO_COM_WA_ID, 3),
-            (1, EVENTO_NOME_CLIENTE_VALIDO_SEM_WA_ID, 2),
-            (2, EVENTO_CONTATO_OFICIAL_COMPARTILHADO, 3),
-            (3, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO, 4),
-            (4, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO, 5),
-            (5, EVENTO_PROFISSAO_DEPENDENTE_VALIDA, 6),
-            (5, EVENTO_PROFISSAO_TITULAR_VALIDA, 7),
-            (6, EVENTO_NOME_DEPENDENTE_VALIDO, 7),
-            (8, EVENTO_OFERTA_ACEITA, 11),
-            (8, EVENTO_OFERTA_ADIADA, 9),
-            (11, EVENTO_EMAIL_VALIDO, 12),
-            (18, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA, 19),
-            (19, "agendamento_confirmado", 20),
-            (20, EVENTO_SATISFACAO_AVALIADA, 21),
-            (21, EVENTO_COMENTARIO_SATISFACAO_ACEITO, 22),
-            (21, EVENTO_COMENTARIO_SATISFACAO_RECUSADO, 23),
-            (22, EVENTO_COMENTARIO_SATISFACAO_RECEBIDO, 23),
-        }
-        self.assertTrue(arestas_criticas.issubset(set(transicoes)))
-
-    def test_migracao_user_id_remapeia_referencias_e_valida_politicas(self):
-        caminho = (
-            Path(__file__).resolve().parents[2]
-            / "deploy"
-            / "migrations"
-            / "20260811_adicionar_user_id_whatsapp.sql"
-        )
-        sql = caminho.read_text(encoding="utf-8")
-
-        contratos = (
-            "BEGIN;",
-            "LOCK TABLE",
-            "FOR etapa_antiga IN REVERSE 22..2 LOOP",
-            "UPDATE chatbot.conversa",
-            "UPDATE chatbot.historico_mensagens",
-            "UPDATE chatbot.respostas_desafios",
-            "(2,  'Compartilhamento oficial do contato'",
-            "(23, 'Finalização do atendimento'",
-            "nome_cliente_valido_sem_wa_id",
-            "contato_oficial_compartilhado",
-            "destino_atendimento_confirmado",
-            "transicoes_atuais <> 25",
-            "chatbot.etapa_transicao) <> 27",
-            "COMMIT;",
-        )
-
-        for contrato in contratos:
-            with self.subTest(contrato=contrato):
-                self.assertIn(contrato, sql)
-
-        self.assertNotIn("DROP TABLE", sql.upper())
-
-    def test_executor_transacional_confirma_ou_reverte_e_propaga(self):
-        conn_sucesso = FakeConn()
-
-        with patch.object(
-            transacao_deploy_module,
-            "get_conn",
-            return_value=conn_sucesso,
-        ):
-            with transacao_deploy_module.transacao_deploy(
-                "teste_sucesso",
-                logging.getLogger("tests.deploy_database"),
-            ):
-                pass
-
-        self.assertEqual(conn_sucesso.commits, 1)
-        self.assertEqual(conn_sucesso.rollbacks, 0)
-        self.assertTrue(conn_sucesso.closed)
-
-        conn_falha = FakeConn()
-
-        with patch.object(
-            transacao_deploy_module,
-            "get_conn",
-            return_value=conn_falha,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "falha controlada"):
-                with transacao_deploy_module.transacao_deploy(
-                    "teste_falha",
-                    logging.getLogger("tests.deploy_database"),
-                ):
-                    raise RuntimeError("falha controlada")
-
-        self.assertEqual(conn_falha.commits, 0)
-        self.assertEqual(conn_falha.rollbacks, 1)
-        self.assertTrue(conn_falha.closed)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 163 — `tests/unit/test_efeitos_triagem.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `124c4aa45671735731e249dfddd78c92527d401868ab554ae5f5127cd31215fa`
-
-````python
-import unittest
-from unittest.mock import ANY, patch
-
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA,
-    EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA,
-    EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA,
-    EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA,
-    EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA,
-    EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-)
-from workers.worker_flow.transacoes import efeitos_transicao as efeitos
-
-
-CASOS_TRIAGEM = (
-    (13, 14, EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA),
-    (14, 15, EVENTO_TRIAGEM_PERGUNTA_2_RESPONDIDA),
-    (15, 16, EVENTO_TRIAGEM_PERGUNTA_3_RESPONDIDA),
-    (16, 17, EVENTO_TRIAGEM_PERGUNTA_4_RESPONDIDA),
-    (17, 18, EVENTO_TRIAGEM_PERGUNTA_5_RESPONDIDA),
-    (18, 19, EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA),
-)
-
-
-def contexto_historico(etapa, texto="Às vezes"):
-    return {
-        "id_conversa": 10,
-        "id_etapa_origem_transicao": etapa,
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": "interactive",
-        "mensagem_cliente_atual": {
-            "id_mensagem": 900 + etapa,
-        },
-    }
-
-
-class EfeitosTriagemTests(unittest.TestCase):
-    def test_seis_respostas_sao_persistidas_na_etapa_de_origem(self):
-        for etapa, destino, evento in CASOS_TRIAGEM:
-            with self.subTest(etapa=etapa):
-                with patch.object(
-                    efeitos,
-                    "registrar_resposta_triagem",
-                    return_value={
-                        "id_resposta_desafio": 30,
-                        "resposta": "às vezes",
-                        "id_historico_mensagem_cliente": 900 + etapa,
-                        "inserido": True,
-                    },
-                ) as repositorio:
-                    resultado = (
-                        efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                            contexto_historico(etapa),
-                            {
-                                "id_etapa_resultante": destino,
-                                "evento_transicao": evento,
-                                "resposta_triagem": "às vezes",
-                            },
-                            object(),
-                        )
-                    )
-
-                repositorio.assert_called_once_with(
-                    10,
-                    etapa,
-                    "às vezes",
-                    900 + etapa,
-                    ANY,
-                )
-                self.assertTrue(
-                    resultado["resposta_triagem_persistida"]
-                )
-                self.assertEqual(resultado["resposta"], "às vezes")
-
-    def test_retry_reconstroi_resposta_pela_mensagem_original(self):
-        with patch.object(
-            efeitos,
-            "registrar_resposta_triagem",
-            return_value={
-                "id_resposta_desafio": 30,
-                "resposta": "frequentemente",
-                "id_historico_mensagem_cliente": 910,
-                "inserido": False,
-            },
-        ) as repositorio:
-            resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico(13, texto="Frequentemente"),
-                {
-                    "id_etapa_resultante": 14,
-                    "evento_transicao": (
-                        EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA
-                    ),
-                },
-                object(),
-            )
-
-        repositorio.assert_called_once_with(
-            10,
-            13,
-            "frequentemente",
-            913,
-            ANY,
-        )
-        self.assertFalse(resultado["inserido"])
-
-    def test_destino_incompativel_falha_antes_de_persistir(self):
-        with patch.object(
-            efeitos,
-            "registrar_resposta_triagem",
-        ) as repositorio:
-            with self.assertRaises(ValueError):
-                efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                    contexto_historico(13),
-                    {
-                        "id_etapa_resultante": 15,
-                        "evento_transicao": (
-                            EVENTO_TRIAGEM_PERGUNTA_1_RESPONDIDA
-                        ),
-                        "resposta_triagem": "nunca",
-                    },
-                    object(),
-                )
-
-        repositorio.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 164 — `tests/unit/test_etapa11_tratamentos.py`
-
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
-
-## Passo 165 — `tests/unit/test_etapa12_tratamentos.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `2a9b17ccb044468574beeb65e7f654746a549ce54cc2c687e1a933a159700d7e`
-
-````python
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.etapa12_messages import (
-    BOTAO_ETAPA12_INICIAR_TRIAGEM,
-    montar_mensagem_contexto_invalido_etapa12,
-    montar_mensagem_financeiro_etapa12,
-    montar_mensagem_midia_etapa12,
-    montar_mensagem_triagem_cognitiva_etapa12,
-)
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    CABECALHO_ETAPA12_TRIAGEM,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa12 as sender_etapa12,
-)
-from workers.worker_flow.response_flow.etapas import resolver_etapa12
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa12 import (
-    validar_etapa12,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_12_INTRODUCAO_TRIAGEM,
-    ETAPA_13_TRIAGEM_PERGUNTA_1,
-    EVENTO_TRIAGEM_INICIADA,
-)
-
-
-class _ClienteWhatsAppFake:
-    def __init__(self):
-        self.ultimo_envio = None
-
-    def send_message(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.etapa12")
-
-
-def _contexto_historico(texto, tipo="text", *, dependente=False):
-    return {
-        "id_conversa": 10,
-        "id_etapa_cliente": ETAPA_12_INTRODUCAO_TRIAGEM,
-        "id_etapa_origem_transicao": ETAPA_12_INTRODUCAO_TRIAGEM,
-        "transicoes_permitidas": {
-            EVENTO_TRIAGEM_INICIADA: ETAPA_13_TRIAGEM_PERGUNTA_1,
-        },
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo,
-        "status_dependente": dependente,
-        "wa_id": "5571999999999",
-        "user_id": None,
-        "username": None,
-        "nome_dependente": "Ana" if dependente else None,
-        "idade_pessoa_triagem": 12 if dependente else 30,
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 20,
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def _contexto_envio(id_etapa, *, tratamento=None):
-    contexto = {
-        "enviou": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "mensagem",
-        "id_hash_msg_bot": "wamid.bot",
-        "id_etapa_resultante": id_etapa,
-        "tipo_mensagem": "interactive_button",
-    }
-
-    if tratamento:
-        contexto.update(
-            {
-                "tratamento": True,
-                "tipo_tratamento": tratamento,
-            }
-        )
-
-    return contexto
-
-
-class Etapa12TratamentosTests(unittest.TestCase):
-    def test_validador_aceita_botao_e_confirmacoes_digitadas(self):
-        confirmacoes = (
-            "Iniciar triagem",
-            "  VAMOS LÁ!!!  ",
-            "Começar",
-            "ok",
-            "certo.",
-            "Pode continuar",
-            "Com certeza!",
-            "Estou pronta",
-            "Ok, vamos lá!",
-            "Sim, pode começar.",
-            "Vamos prosseguir",
-            "Pode seguir",
-        )
-
-        for texto in confirmacoes:
-            with self.subTest(texto=texto):
-                self.assertEqual(
-                    validar_etapa12(texto),
-                    EVENTO_TRIAGEM_INICIADA,
-                )
-
-    def test_validador_rejeita_negacoes_e_respostas_fora_do_contexto(self):
-        respostas_invalidas = (
-            "",
-            "não quero começar",
-            "agora não",
-            "ok, mas não quero",
-            "não, vamos lá",
-            "sim, mas não quero começar",
-            "talvez depois",
-            "qualquer coisa",
-            None,
-        )
-
-        for texto in respostas_invalidas:
-            with self.subTest(texto=texto):
-                self.assertIsNone(validar_etapa12(texto))
-
-    def test_mensagens_compoem_tratamento_e_reapresentam_etapa(self):
-        mensagem_base = montar_mensagem_triagem_cognitiva_etapa12()
-        casos = (
-            (
-                montar_mensagem_midia_etapa12,
-                "Olha, ainda não reconhecemos mensagens com mídia",
-            ),
-            (
-                montar_mensagem_financeiro_etapa12,
-                "Olha, demais informações, como valores de investimento",
-            ),
-            (
-                montar_mensagem_contexto_invalido_etapa12,
-                "Desculpe, não entendi.",
-            ),
-        )
-
-        for montar_mensagem, inicio_tratamento in casos:
-            with self.subTest(montador=montar_mensagem.__name__):
-                mensagem = montar_mensagem()
-                self.assertTrue(mensagem.startswith(inicio_tratamento))
-                self.assertIn("\n\nMas bora lá:\n\n", mensagem)
-                self.assertTrue(mensagem.endswith(mensagem_base))
-
-    def test_senders_de_tratamento_preservam_cabecalho_e_botao(self):
-        casos = (
-            (
-                sender_etapa12.enviar_etapa12_midia,
-                sender_etapa12.TIPO_TRATAMENTO_MIDIA,
-            ),
-            (
-                sender_etapa12.enviar_etapa12_financeiro,
-                sender_etapa12.TIPO_TRATAMENTO_FINANCEIRO,
-            ),
-            (
-                sender_etapa12.enviar_etapa12_contexto_invalido,
-                sender_etapa12.TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
-            ),
-        )
-
-        for enviar, tipo_tratamento in casos:
-            cliente = _ClienteWhatsAppFake()
-
-            with self.subTest(sender=enviar.__name__), patch.object(
-                sender_etapa12,
-                "conta_wa",
-                return_value=cliente,
-            ):
-                contexto = enviar("5571999999999", "phone-id")
-
-            self.assertTrue(
-                cliente.ultimo_envio["text"].startswith(
-                    f"*{CABECALHO_ETAPA12_TRIAGEM}*\n\n"
-                )
-            )
-            self.assertEqual(
-                [botao.title for botao in cliente.ultimo_envio["buttons"]],
-                [BOTAO_ETAPA12_INICIAR_TRIAGEM],
-            )
-            self.assertTrue(contexto["tratamento"])
-            self.assertEqual(contexto["tipo_tratamento"], tipo_tratamento)
-            self.assertEqual(
-                contexto["id_etapa_resultante"],
-                ETAPA_12_INTRODUCAO_TRIAGEM,
-            )
-            self.assertNotIn("evento_transicao", contexto)
-
-    def test_resolver_prioriza_midia_financeiro_e_contexto(self):
-        casos = (
-            (
-                "Quanto custa?",
-                "image",
-                "enviar_etapa12_midia",
-                "tipo_mensagem_nao_suportado",
-            ),
-            (
-                "Quanto custa?",
-                "text",
-                "enviar_etapa12_financeiro",
-                "pergunta_financeira",
-            ),
-            (
-                "Talvez depois",
-                "text",
-                "enviar_etapa12_contexto_invalido",
-                "confirmacao_triagem_invalida",
-            ),
-        )
-
-        nomes_senders = (
-            "enviar_etapa12_midia",
-            "enviar_etapa12_financeiro",
-            "enviar_etapa12_contexto_invalido",
-        )
-
-        for texto, tipo, sender_esperado, tratamento in casos:
-            retornos = {
-                nome: _contexto_envio(
-                    ETAPA_12_INTRODUCAO_TRIAGEM,
-                    tratamento=tratamento,
-                )
-                for nome in nomes_senders
-            }
-
-            with self.subTest(texto=texto, tipo=tipo):
-                with (
-                    patch.object(
-                        resolver_etapa12,
-                        nomes_senders[0],
-                        return_value=retornos[nomes_senders[0]],
-                    ) as sender_midia,
-                    patch.object(
-                        resolver_etapa12,
-                        nomes_senders[1],
-                        return_value=retornos[nomes_senders[1]],
-                    ) as sender_financeiro,
-                    patch.object(
-                        resolver_etapa12,
-                        nomes_senders[2],
-                        return_value=retornos[nomes_senders[2]],
-                    ) as sender_contexto,
-                ):
-                    resultado = resolver_etapa12.resolve_etapa12(
-                        _contexto_historico(texto, tipo)
-                    )
-
-            senders = {
-                nomes_senders[0]: sender_midia,
-                nomes_senders[1]: sender_financeiro,
-                nomes_senders[2]: sender_contexto,
-            }
-            senders[sender_esperado].assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-            )
-            for nome, sender in senders.items():
-                if nome != sender_esperado:
-                    sender.assert_not_called()
-
-            self.assertTrue(resultado["tratamento"])
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_12_INTRODUCAO_TRIAGEM,
-            )
-            self.assertNotIn("evento_transicao", resultado)
-
-    def test_confirmacao_avanca_para_primeira_pergunta_da_triagem(self):
-        for tipo_mensagem in ("interactive", "button", "text"):
-            with self.subTest(tipo_mensagem=tipo_mensagem):
-                with (
-                    patch.object(
-                        resolver_etapa12,
-                        "enviar_etapa13_cliente",
-                        return_value=_contexto_envio(
-                            ETAPA_13_TRIAGEM_PERGUNTA_1
-                        ),
-                    ) as enviar_cliente,
-                    patch.object(
-                        resolver_etapa12,
-                        "enviar_etapa13_dependente",
-                    ) as enviar_dependente,
-                ):
-                    resultado = resolver_etapa12.resolve_etapa12(
-                        _contexto_historico(
-                            "Iniciar triagem",
-                            tipo_mensagem,
-                        )
-                    )
-
-            enviar_cliente.assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-            )
-            enviar_dependente.assert_not_called()
-            self.assertEqual(
-                resultado["evento_transicao"],
-                EVENTO_TRIAGEM_INICIADA,
-            )
-            self.assertEqual(
-                resultado["id_etapa_origem_transicao"],
-                ETAPA_12_INTRODUCAO_TRIAGEM,
-            )
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_13_TRIAGEM_PERGUNTA_1,
-            )
-
-    def test_confirmacao_de_dependente_envia_primeira_pergunta_com_nome(self):
-        with (
-            patch.object(
-                resolver_etapa12,
-                "enviar_etapa13_cliente",
-            ) as enviar_cliente,
-            patch.object(
-                resolver_etapa12,
-                "enviar_etapa13_dependente",
-                return_value=_contexto_envio(
-                    ETAPA_13_TRIAGEM_PERGUNTA_1
-                ),
-            ) as enviar_dependente,
-        ):
-            resultado = resolver_etapa12.resolve_etapa12(
-                _contexto_historico(
-                    "Vamos lá",
-                    dependente=True,
-                )
-            )
-
-        enviar_cliente.assert_not_called()
-        enviar_dependente.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-            "Ana",
-            12,
-        )
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_TRIAGEM_INICIADA,
-        )
-        self.assertEqual(
-            resultado["id_etapa_resultante"],
-            ETAPA_13_TRIAGEM_PERGUNTA_1,
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 166 — `tests/unit/test_etapa2_compartilhamento_contato.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `87b1870b6d214e3d1386d080e36ba4a9ef8f06e7ba9503f74552e2bfc7d1f7d6`
-
-````python
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.etapa2_messages import (
-    MENSAGEM_RETOMADA_ETAPA2,
-    montar_mensagem_contexto_etapa2,
-    montar_mensagem_etapa2,
-    montar_mensagem_financeiro_etapa2,
-    montar_mensagem_midia_etapa2,
-    montar_mensagem_reforco_escolar_etapa2,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa2 as sender_etapa2,
-)
-from workers.worker_flow.response_flow.etapas import resolver_etapa2
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
-    validar_etapa2,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_3_DESTINO_ATENDIMENTO,
-    EVENTO_CONTATO_OFICIAL_COMPARTILHADO,
-)
-
-
-class _ClienteWhatsAppFake:
-    def __init__(self):
-        self.ultimo_envio = None
-
-    def request_contact_info(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.contact-request")
-
-
-def _contexto(
-    *,
-    tipo="text",
-    texto="qualquer resposta",
-    wa_id_compartilhado=None,
-    wa_id="5571999999999",
-    user_id="user-id-teste",
-):
-    return {
-        "id_conversa": 10,
-        "id_etapa_atual": 2,
-        "id_etapa_cliente": 2,
-        "id_etapa_origem_transicao": 2,
-        "transicoes_permitidas": {
-            EVENTO_CONTATO_OFICIAL_COMPARTILHADO:
-                ETAPA_3_DESTINO_ATENDIMENTO,
-        },
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo,
-        "wa_id_compartilhado": wa_id_compartilhado,
-        "wa_id": wa_id,
-        "user_id": user_id,
-        "username": "maria.teste",
-        "nome_cliente": "Maria",
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 20,
-            "id_hash_msg": "wamid.inbound",
-            "cliente_telefone": wa_id,
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def _tratamento(tipo):
-    return {
-        "enviou": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "tratamento",
-        "id_hash_msg_bot": "wamid.bot",
-        "id_etapa_resultante": 2,
-        "tipo_mensagem": "contact_request",
-        "tratamento": True,
-        "tipo_tratamento": tipo,
-    }
-
-
-class ValidadorEtapa2Tests(unittest.TestCase):
-    def test_aceita_somente_prova_oficial_com_wa_id_valido(self):
-        self.assertTrue(
-            validar_etapa2(
-                "contacts",
-                "contact_request",
-                "5571999999999",
-            )
-        )
-
-        invalidos = (
-            ("text", "contact_request", "5571999999999"),
-            ("contacts", "other", "5571999999999"),
-            ("contacts", "contact_request", None),
-            ("contacts", "contact_request", "abc"),
-            ("contacts", "contact_request", "123"),
-        )
-        for caso in invalidos:
-            with self.subTest(caso=caso):
-                self.assertFalse(validar_etapa2(*caso))
-
-
-class MensagensEtapa2Tests(unittest.TestCase):
-    def test_mensagem_inicial_e_retomadas_nao_repetem_jargao(self):
-        self.assertIn("compartilhe", montar_mensagem_etapa2().casefold())
-
-        for montar in (
-            montar_mensagem_contexto_etapa2,
-            montar_mensagem_financeiro_etapa2,
-            montar_mensagem_midia_etapa2,
-            montar_mensagem_reforco_escolar_etapa2,
-        ):
-            with self.subTest(montador=montar.__name__):
-                mensagem = montar()
-                self.assertIn("Mas bora lá:\n\n", mensagem)
-                self.assertTrue(mensagem.endswith(MENSAGEM_RETOMADA_ETAPA2))
-
-
-class SenderEtapa2Tests(unittest.TestCase):
-    def test_sender_usa_componente_oficial_e_tracker_da_conversa(self):
-        cliente = _ClienteWhatsAppFake()
-        with patch.object(sender_etapa2, "conta_wa", return_value=cliente):
-            resultado = sender_etapa2.enviar_etapa2_compartilhamento_contato(
-                "user-id-teste",
-                "phone-id",
-                10,
-            )
-
-        self.assertEqual(resultado["id_etapa_resultante"], 2)
-        self.assertEqual(resultado["tipo_mensagem"], "contact_request")
-        self.assertEqual(cliente.ultimo_envio["to"], "user-id-teste")
-        self.assertEqual(cliente.ultimo_envio["sender"], "phone-id")
-        self.assertEqual(cliente.ultimo_envio["tracker"], "contato:10:etapa:2")
-
-
-class ResolverEtapa2Tests(unittest.TestCase):
-    def test_contato_oficial_avanca_para_etapa3_com_nome_persistido(self):
-        retorno = {
-            "enviou": True,
-            "resposta_ja_existia": False,
-            "id_etapa_resultante": 3,
-            "id_hash_msg_bot": "wamid.bot",
-            "tipo_mensagem": "interactive_button",
-        }
-        with patch.object(
-            resolver_etapa2,
-            "enviar_etapa3",
-            return_value=retorno,
-        ) as enviar:
-            resultado = resolver_etapa2.resolve_etapa2(
-                _contexto(
-                    tipo="contacts",
-                    texto="contact_request",
-                    wa_id_compartilhado="5571999999999",
-                )
-            )
-
-        enviar.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-            nome="Maria",
-        )
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_CONTATO_OFICIAL_COMPARTILHADO,
-        )
-        self.assertEqual(resultado["id_etapa_resultante"], 3)
-
-    def test_contato_manual_repete_como_contexto_sem_avancar(self):
-        retorno = _tratamento("contato_oficial_ausente")
-        with patch.object(
-            resolver_etapa2,
-            "enviar_etapa2_contexto_invalido",
-            return_value=retorno,
-        ) as enviar:
-            resultado = resolver_etapa2.resolve_etapa2(
-                _contexto(
-                    tipo="contacts",
-                    texto="other",
-                    wa_id_compartilhado="5571999999999",
-                )
-            )
-
-        enviar.assert_called_once_with("5571999999999", "phone-id", 10)
-        self.assertEqual(resultado, retorno)
-        self.assertNotIn("evento_transicao", resultado)
-
-    def test_midia_supera_reforco_e_reforco_supera_financeiro(self):
-        casos = (
-            (
-                "image",
-                "Quanto custa o reforço escolar?",
-                "enviar_etapa2_midia",
-                "tipo_mensagem_nao_suportado",
-            ),
-            (
-                "text",
-                "Quanto custa o reforço escolar?",
-                "enviar_etapa2_reforco_escolar",
-                "duvida_reforco_escolar",
-            ),
-        )
-        for tipo, texto, nome_sender, tratamento in casos:
-            retorno = _tratamento(tratamento)
-            with self.subTest(tipo=tipo), patch.object(
-                resolver_etapa2,
-                nome_sender,
-                return_value=retorno,
-            ) as enviar:
-                resultado = resolver_etapa2.resolve_etapa2(
-                    _contexto(tipo=tipo, texto=texto)
-                )
-
-            enviar.assert_called_once_with("5571999999999", "phone-id", 10)
-            self.assertEqual(resultado, retorno)
-
-    def test_contato_oficial_sem_wa_id_canonico_falha_antes_do_sender(self):
-        with patch.object(resolver_etapa2, "enviar_etapa3") as enviar:
-            with self.assertRaises(ValueError):
-                resolver_etapa2.resolve_etapa2(
-                    _contexto(
-                        tipo="contacts",
-                        texto="contact_request",
-                        wa_id_compartilhado="5571999999999",
-                        wa_id=None,
-                    )
-                )
-
-        enviar.assert_not_called()
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 167 — `tests/unit/test_etapa3_confirmacao_destino.py`
-
-Remover este arquivo legado. Nenhum substituto com o mesmo caminho deverá permanecer.
-
-## Passo 168 — `tests/unit/test_etapa4_confirmacao_destino.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `2122e41cbccc7b1bd7242eff15403a4ba70a52706b7204b266348265319ed7b8`
-
-````python
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    RODAPE_OPCAO_UNICA,
-)
-from core.integrations.whatsapp.messages.etapa4_messages import (
-    BOTAO_ETAPA4_NAO,
-    BOTAO_ETAPA4_SIM,
-    montar_mensagem_contexto_etapa4,
-    montar_mensagem_etapa4,
-    montar_mensagem_financeiro_etapa4,
-    montar_mensagem_midia_etapa4,
-)
-from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa4 as sender_etapa4,
-)
-from workers.worker_flow.response_flow import flow_sender as modulo_flow_sender
-from workers.worker_flow.response_flow.etapas import (
-    resolver_etapa3,
-    resolver_etapa4,
-    resolver_etapa5,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
-    validar_etapa4,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_4_CONFIRMACAO_DESTINO,
-    ETAPA_5_PROFISSAO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
-    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-)
-
-
-class _ClienteWhatsAppFake:
-    def __init__(self):
-        self.ultimo_envio = None
-
-    def send_message(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.etapa4")
-
-
-def _contexto_historico(
-    texto,
-    *,
-    status_dependente=False,
-    tipo="text",
-):
-    return {
-        "id_conversa": 30,
-        "id_etapa_atual": ETAPA_4_CONFIRMACAO_DESTINO,
-        "id_etapa_cliente": ETAPA_4_CONFIRMACAO_DESTINO,
-        "id_etapa_origem_transicao": ETAPA_4_CONFIRMACAO_DESTINO,
-        "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_5_PROFISSAO,
-        },
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo,
-        "status_dependente": status_dependente,
-        "wa_id": "5571999999999",
-        "user_id": None,
-        "username": None,
-        "retry_count": 1,
-        "resposta_bot_para_mensagem_atual": None,
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 31,
-            "id_hash_msg": "wamid.cliente",
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def _contexto_envio(id_etapa, *, tratamento=None):
-    contexto = {
-        "enviou": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "mensagem",
-        "id_hash_msg_bot": "wamid.bot",
-        "id_etapa_resultante": id_etapa,
-        "tipo_mensagem": "text",
-    }
-
-    if tratamento:
-        contexto.update(
-            {
-                "tratamento": True,
-                "tipo_tratamento": tratamento,
-            }
-        )
-
-    return contexto
-
-
-class Etapa4ConfirmacaoDestinoTests(unittest.TestCase):
-    def test_etapa3_entrega_escolha_inicial_para_confirmacao(self):
-        casos = (
-            ("Para mim", False),
-            ("Para um dependente", True),
-        )
-
-        for texto, status_dependente in casos:
-            contexto = _contexto_historico(texto)
-            contexto.update(
-                {
-                    "id_etapa_atual": 2,
-                    "id_etapa_cliente": 2,
-                    "id_etapa_origem_transicao": 2,
-                    "transicoes_permitidas": {
-                        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: (
-                            ETAPA_4_CONFIRMACAO_DESTINO
-                        ),
-                    },
-                }
-            )
-
-            with self.subTest(texto=texto), patch.object(
-                resolver_etapa3,
-                "enviar_etapa4",
-                return_value=_contexto_envio(
-                    ETAPA_4_CONFIRMACAO_DESTINO
-                ),
-            ) as enviar_confirmacao:
-                resultado = resolver_etapa3.resolve_etapa3(contexto)
-
-            enviar_confirmacao.assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-                status_dependente,
-            )
-            self.assertEqual(
-                resultado["evento_transicao"],
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-            )
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_4_CONFIRMACAO_DESTINO,
-            )
-            self.assertIs(
-                resultado["status_dependente"],
-                status_dependente,
-            )
-
-    def test_mensagens_variam_com_destino_sem_entendi_ou_entao(self):
-        titular = montar_mensagem_etapa4(False)
-        dependente = montar_mensagem_etapa4(True)
-
-        self.assertEqual(
-            titular,
-            "Você confirma que esse atendimento é para você?",
-        )
-        self.assertEqual(
-            dependente,
-            "Você confirma que esse atendimento é para um "
-            "dependente?",
-        )
-        self.assertNotIn("entendi", titular.casefold())
-        self.assertNotIn("entendi", dependente.casefold())
-        self.assertNotIn("então", titular.casefold())
-        self.assertNotIn("então", dependente.casefold())
-
-    def test_tratamentos_reapresentam_a_pergunta_do_destino_atual(self):
-        casos = (
-            (montar_mensagem_midia_etapa4, "mensagens com mídia"),
-            (
-                montar_mensagem_financeiro_etapa4,
-                "valores de investimento",
-            ),
-            (montar_mensagem_contexto_etapa4, "Desculpe, não entendi."),
-        )
-
-        for status_dependente in (False, True):
-            pergunta = montar_mensagem_etapa4(status_dependente)
-            for montar, aviso in casos:
-                with self.subTest(
-                    status_dependente=status_dependente,
-                    montar=montar.__name__,
-                ):
-                    mensagem = montar(status_dependente)
-                    self.assertIn(aviso, mensagem)
-                    self.assertIn("\n\nMas bora lá:\n\n", mensagem)
-                    self.assertNotIn(
-                        "Mas bora lá:\n\nEntendi",
-                        mensagem,
-                    )
-                    self.assertTrue(mensagem.endswith(pergunta))
-
-    def test_sender_preserva_botoes_e_rodape_de_opcao_unica(self):
-        cliente = _ClienteWhatsAppFake()
-
-        with patch.object(
-            sender_etapa4,
-            "conta_wa",
-            return_value=cliente,
-        ):
-            contexto = sender_etapa4.enviar_etapa4(
-                "5571999999999",
-                "phone-id",
-                True,
-            )
-
-        self.assertEqual(
-            [botao.title for botao in cliente.ultimo_envio["buttons"]],
-            [BOTAO_ETAPA4_SIM, BOTAO_ETAPA4_NAO],
-        )
-        self.assertTrue(
-            cliente.ultimo_envio["text"].endswith(
-                f"_{RODAPE_OPCAO_UNICA}_"
-            )
-        )
-        self.assertEqual(
-            contexto["id_etapa_resultante"],
-            ETAPA_4_CONFIRMACAO_DESTINO,
-        )
-
-    def test_validador_aceita_somente_sim_ou_nao(self):
-        entradas_sim = ("Sim", "SIM", " sim ", "\nSim\t")
-        entradas_nao = ("Não", "NÃO", "nao", " não ")
-
-        for status_atual in (False, True):
-            for texto in entradas_sim:
-                with self.subTest(
-                    texto=texto,
-                    status_atual=status_atual,
-                ):
-                    resultado = validar_etapa4(texto, status_atual)
-                    self.assertTrue(resultado.valida)
-                    self.assertIs(
-                        resultado.status_dependente_final,
-                        status_atual,
-                    )
-
-            for texto in entradas_nao:
-                with self.subTest(
-                    texto=texto,
-                    status_atual=status_atual,
-                ):
-                    resultado = validar_etapa4(texto, status_atual)
-                    self.assertTrue(resultado.valida)
-                    self.assertIs(
-                        resultado.status_dependente_final,
-                        not status_atual,
-                    )
-
-    def test_validador_rejeita_qualquer_outro_conteudo(self):
-        respostas_invalidas = (
-            "",
-            "s",
-            "n",
-            "ok",
-            "confirmo",
-            "foi um engano",
-            "para mim",
-            "para um dependente",
-            "sim!",
-            "não?",
-            "sim, é para mim",
-            "não é para outra pessoa",
-            "sim 👍",
-            "qualquer coisa",
-            None,
-        )
-
-        for status_atual in (False, True):
-            for texto in respostas_invalidas:
-                with self.subTest(
-                    texto=texto,
-                    status_atual=status_atual,
-                ):
-                    resultado = validar_etapa4(texto, status_atual)
-                    self.assertFalse(resultado.valida)
-                    self.assertIsNone(
-                        resultado.status_dependente_final
-                    )
-
-    def test_resolver_aceita_clique_nos_botoes_sim_e_nao(self):
-        casos = (
-            ("interactive", "Sim"),
-            ("button", "Não"),
-        )
-
-        for tipo, texto in casos:
-            with self.subTest(tipo=tipo, texto=texto):
-                with patch.object(
-                    resolver_etapa4,
-                    "enviar_etapa5",
-                    return_value=_contexto_envio(ETAPA_5_PROFISSAO),
-                ) as enviar_profissao:
-                    resultado = resolver_etapa4.resolve_etapa4(
-                        _contexto_historico(
-                            texto,
-                            tipo=tipo,
-                            status_dependente=False,
-                        )
-                    )
-
-            enviar_profissao.assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-            )
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_5_PROFISSAO,
-            )
-
-    def test_resolver_prioriza_midia_financeiro_e_contexto(self):
-        casos = (
-            (
-                "quanto custa?",
-                "image",
-                "enviar_etapa4_midia",
-                "tipo_mensagem_nao_suportado",
-            ),
-            (
-                "quanto custa?",
-                "text",
-                "enviar_etapa4_financeiro",
-                "pergunta_financeira",
-            ),
-            (
-                "talvez",
-                "text",
-                "enviar_etapa4_contexto_invalido",
-                "confirmacao_destino_invalida",
-            ),
-            (
-                "sim, é para mim",
-                "text",
-                "enviar_etapa4_contexto_invalido",
-                "confirmacao_destino_invalida",
-            ),
-        )
-        nomes_senders = (
-            "enviar_etapa4_midia",
-            "enviar_etapa4_financeiro",
-            "enviar_etapa4_contexto_invalido",
-        )
-
-        for texto, tipo, esperado, tratamento in casos:
-            retornos = {
-                nome: _contexto_envio(
-                    ETAPA_4_CONFIRMACAO_DESTINO,
-                    tratamento=tratamento,
-                )
-                for nome in nomes_senders
-            }
-            with self.subTest(texto=texto, tipo=tipo):
-                with (
-                    patch.object(
-                        resolver_etapa4,
-                        nomes_senders[0],
-                        return_value=retornos[nomes_senders[0]],
-                    ) as sender_midia,
-                    patch.object(
-                        resolver_etapa4,
-                        nomes_senders[1],
-                        return_value=retornos[nomes_senders[1]],
-                    ) as sender_financeiro,
-                    patch.object(
-                        resolver_etapa4,
-                        nomes_senders[2],
-                        return_value=retornos[nomes_senders[2]],
-                    ) as sender_contexto,
-                ):
-                    resultado = resolver_etapa4.resolve_etapa4(
-                        _contexto_historico(
-                            texto,
-                            tipo=tipo,
-                            status_dependente=True,
-                        )
-                    )
-
-            senders = {
-                nomes_senders[0]: sender_midia,
-                nomes_senders[1]: sender_financeiro,
-                nomes_senders[2]: sender_contexto,
-            }
-            senders[esperado].assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-                True,
-            )
-            for nome, sender in senders.items():
-                if nome != esperado:
-                    sender.assert_not_called()
-
-            self.assertTrue(resultado["tratamento"])
-            self.assertNotIn("evento_transicao", resultado)
-
-    def test_resolver_encaminha_por_estado_final_absoluto(self):
-        casos = (
-            (False, "sim", False),
-            (False, "não", True),
-            (True, "sim", True),
-            (True, "não", False),
-        )
-
-        for (
-            status_atual,
-            texto,
-            status_final,
-        ) in casos:
-            with self.subTest(
-                status_atual=status_atual,
-                texto=texto,
-            ):
-                with patch.object(
-                    resolver_etapa4,
-                    "enviar_etapa5",
-                    return_value=_contexto_envio(ETAPA_5_PROFISSAO),
-                ) as enviar_profissao:
-                    resultado = resolver_etapa4.resolve_etapa4(
-                        _contexto_historico(
-                            texto,
-                            status_dependente=status_atual,
-                        )
-                    )
-
-            enviar_profissao.assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-            )
-            self.assertEqual(
-                resultado["evento_transicao"],
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
-            )
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_5_PROFISSAO,
-            )
-            self.assertIs(
-                resultado["status_dependente_final"],
-                status_final,
-            )
-            self.assertIs(
-                resultado["status_dependente_anterior"],
-                status_atual,
-            )
-            self.assertEqual(
-                resultado["status_dependente_alterado"],
-                status_final != status_atual,
-            )
-
-    def test_replay_recupera_status_final_persistido_sem_inverter(self):
-        for status_final in (False, True):
-            contexto = _contexto_historico(
-                "não",
-                status_dependente=status_final,
-            )
-            contexto["retry_count"] = 2
-            contexto["resposta_bot_para_mensagem_atual"] = {
-                "id_mensagem": 99,
-                "id_hash_msg": "wamid.resposta-existente",
-                "id_etapa": ETAPA_5_PROFISSAO,
-            }
-
-            with self.subTest(status_final=status_final):
-                resultado = modulo_flow_sender.flow_sender(contexto)
-
-            self.assertTrue(resultado["resposta_ja_existia"])
-            self.assertEqual(
-                resultado["evento_transicao"],
-                EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
-            )
-            self.assertIs(
-                resultado["status_dependente_final"],
-                status_final,
-            )
-
-    def test_replay_recusa_status_dependente_ausente(self):
-        contexto = _contexto_historico("sim")
-        contexto["status_dependente"] = None
-        contexto["retry_count"] = 2
-        contexto["resposta_bot_para_mensagem_atual"] = {
-            "id_mensagem": 99,
-            "id_hash_msg": "wamid.resposta-existente",
-            "id_etapa": ETAPA_5_PROFISSAO,
-        }
-
-        with self.assertRaisesRegex(ValueError, "status_dependente"):
-            modulo_flow_sender.flow_sender(contexto)
-
-    def test_primeiro_processamento_recusa_status_dependente_ausente(self):
-        contexto = _contexto_historico("sim")
-        contexto["status_dependente"] = None
-
-        with self.assertRaisesRegex(ValueError, "status_dependente"):
-            resolver_etapa4.resolve_etapa4(contexto)
-
-    def test_profissao_recusa_status_dependente_ausente(self):
-        contexto = _contexto_historico("Professora")
-        contexto["status_dependente"] = None
-
-        with self.assertRaisesRegex(ValueError, "status_dependente"):
-            resolver_etapa5.resolve_etapa5(contexto)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 169 — `tests/unit/test_flood_guard.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `086b81c81bc26c80ebde0e7bf43985ea429a116905cf48afac2061d93f8a5655`
-
-````python
-import json
-import unittest
-from unittest.mock import MagicMock, patch
-
-from callback.webhook.services import flood_guard
-from callback.webhook.services.identidade_meta import extrair_identidade_meta
-from core.cache.runtime import cache_flood_redis
-from core.repositories.seguranca import bloqueio_meta
-from tests.payloads import payload_texto_meta
-
-
-class FloodGuardTests(unittest.TestCase):
-    def setUp(self):
-        self.resolver_patch = patch.object(
-            flood_guard,
-            "_resolver_identidades_flood",
-            side_effect=lambda tipo, identidade, _phone: {
-                "resolucao_ok": True,
-                "identidades": [(tipo, identidade)],
-            },
-        )
-        self.resolver_patch.start()
-
-    def tearDown(self):
-        self.resolver_patch.stop()
-
-    def test_dados_invalidos_nao_bloqueiam(self):
-        resultado = flood_guard.bloquear_cliente_se_flood(
-            None,
-            "5571999999999",
-            "123456",
-            "wamid",
-        )
-
-        self.assertFalse(resultado["bloqueado"])
-        self.assertEqual(resultado["motivo"], "dados_invalidos")
-
-    def test_redis_abaixo_limite_nao_usa_banco(self):
-        def banco_nao_deveria_ser_usado(*_args, **_kwargs):
-            raise AssertionError("banco nao deveria ser usado")
-
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "flood": False,
-                "total": 3,
-                "regra": None,
-            },
-        ), patch.object(
-            flood_guard,
-            "_avaliar_flood_banco",
-            banco_nao_deveria_ser_usado,
-        ):
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                "wamid",
-                wa_id="5571999999999",
-            )
-
-        self.assertFalse(resultado["bloqueado"])
-        self.assertEqual(resultado["motivo"], "abaixo_limite_redis")
-
-    def test_redis_detecta_flood_e_bloqueia(self):
-        chamadas = []
-
-        def fake_bloquear(
-            tipo_identidade,
-            identidade,
-            phone,
-            *,
-            origem,
-            total,
-            regra,
-            nome_cliente=None,
-            wa_id=None,
-            user_id=None,
-            username=None,
-        ):
-            chamadas.append(
-                (
-                    tipo_identidade,
-                    identidade,
-                    phone,
-                    origem,
-                    total,
-                    regra,
-                )
-            )
-            return {
-                "bloqueado": True,
-                "motivo": "flood_redis",
-                "total": total,
-                "regra": regra,
-                "meta_ok": True,
-            }
-
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "flood": True,
-                "total": 15,
-                "regra": "rajada_curta",
-            },
-        ), patch.object(flood_guard, "_bloquear_e_registrar", fake_bloquear):
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                "wamid",
-                wa_id="5571999999999",
-            )
-
-        self.assertTrue(resultado["bloqueado"])
-        self.assertEqual(
-            chamadas,
-            [
-                (
-                    "wa_id",
-                    "5571999999999",
-                    "123456",
-                    "redis",
-                    15,
-                    "rajada_curta",
-                )
-            ],
-        )
-
-    def test_redis_e_banco_falham_memoria_detecta(self):
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={"redis_ok": False, "flood": False, "total": 0, "regra": None},
-        ), patch.object(
-            flood_guard,
-            "_avaliar_flood_banco",
-            return_value={
-                "banco_ok": False,
-                "flood": False,
-                "total": 0,
-                "regra": None,
-                "motivo": "banco_indisponivel",
-            },
-        ), patch.object(
-            flood_guard,
-            "avaliar_flood_memoria",
-            return_value={"flood": True, "total": 15, "regra": "rajada_curta"},
-        ), patch.object(
-            flood_guard,
-            "_bloquear_e_registrar",
-            return_value={
-                "bloqueado": True,
-                "motivo": "flood_memoria",
-                "total": 15,
-                "regra": "rajada_curta",
-                "meta_ok": True,
-            },
-        ) as bloquear, patch.object(
-            flood_guard,
-            "registrar_alerta_flood_memoria",
-        ) as alertar:
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                "wamid",
-                wa_id="5571999999999",
-            )
-
-        self.assertTrue(resultado["bloqueado"])
-        self.assertEqual(resultado["motivo"], "flood_memoria")
-        bloquear.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
-            "123456",
-            origem="memoria",
-            total=15,
-            regra="rajada_curta",
-            nome_cliente=None,
-            wa_id="5571999999999",
-            user_id=None,
-            username=None,
-        )
-        alertar.assert_called_once()
-
-    def test_flood_sem_persistencia_local_retorna_503(self):
-        payload = payload_texto_meta()
-
-        with patch.object(
-            flood_guard,
-            "bloquear_cliente_se_flood",
-            return_value={
-                "bloqueado": True,
-                "motivo": "flood_redis_persistencia_local_falhou",
-                "total": 15,
-                "regra": "rajada_curta",
-                "persistencia_ok": False,
-                "meta_ok": None,
-                "reentregar": True,
-            },
-        ):
-            resposta = flood_guard.responder_se_flood(payload)
-
-        self.assertEqual(resposta.status_code, 503)
-
-    def test_vinculo_indisponivel_retorna_503_sem_marcar_bloqueio(self):
-        payload = payload_texto_meta()
-
-        with patch.object(
-            flood_guard,
-            "bloquear_cliente_se_flood",
-            return_value={
-                "bloqueado": False,
-                "motivo": "flood_vinculo_indisponivel",
-                "total": 0,
-                "regra": None,
-                "persistencia_ok": False,
-                "meta_ok": None,
-                "reentregar": True,
-            },
-        ):
-            resposta = flood_guard.responder_se_flood(payload)
-
-        self.assertEqual(resposta.status_code, 503)
-        self.assertEqual(
-            json.loads(resposta.content)["reason"],
-            "flood_vinculo_indisponivel",
-        )
-
-    def test_payload_repassa_nome_do_perfil_para_avaliacao_de_flood(self):
-        with patch.object(
-            flood_guard,
-            "bloquear_cliente_se_flood",
-            return_value={
-                "bloqueado": False,
-                "motivo": "abaixo_limite_redis",
-                "total": 1,
-                "regra": None,
-                "meta_ok": None,
-            },
-        ) as avaliar_flood:
-            resposta = flood_guard.responder_se_flood(
-                payload_texto_meta()
-            )
-
-        self.assertIsNone(resposta)
-        avaliar_flood.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
-            "123456",
-            "wamid.test.1",
-            nome_cliente="Cliente Teste",
-            wa_id="5571999999999",
-            user_id=None,
-            username=None,
-            wa_id_compartilhado=None,
-        )
-
-    def test_profile_nulo_nao_interrompe_avaliacao_de_flood(self):
-        payload = payload_texto_meta()
-        payload["entry"][0]["changes"][0]["value"]["contacts"][0]["profile"] = None
-
-        with patch.object(
-            flood_guard,
-            "bloquear_cliente_se_flood",
-            return_value={
-                "bloqueado": False,
-                "motivo": "abaixo_limite_redis",
-                "total": 1,
-                "regra": None,
-                "meta_ok": None,
-            },
-        ) as avaliar_flood:
-            resposta = flood_guard.responder_se_flood(payload)
-
-        self.assertIsNone(resposta)
-        avaliar_flood.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
-            "123456",
-            "wamid.test.1",
-            nome_cliente=None,
-            wa_id="5571999999999",
-            user_id=None,
-            username=None,
-            wa_id_compartilhado=None,
-        )
-
-    def test_nome_cliente_e_normalizado_e_limitado_a_200_caracteres(self):
-        payload = payload_texto_meta()
-        payload["entry"][0]["changes"][0]["value"]["contacts"][0]["profile"] = {
-            "name": f"  {'A' * 250}  ",
-        }
-
-        self.assertEqual(
-            extrair_identidade_meta(payload)["nome_cliente"],
-            "A" * 200,
-        )
-
-    def test_nome_consolidado_no_banco_tem_preferencia_sobre_perfil(self):
-        conexao = MagicMock()
-
-        with patch.object(
-            flood_guard,
-            "get_conn",
-            return_value=conexao,
-        ), patch.object(
-            flood_guard,
-            "buscar_cliente_por_identidade",
-            return_value=(1, "Nome do Banco"),
-        ), patch.object(
-            flood_guard,
-            "buscar_unidade_bloqueio_por_phone_id",
-            return_value=(2, "123456"),
-        ):
-            resultado = flood_guard._buscar_dados_bloqueio(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                nome_cliente="Nome do Perfil",
-            )
-
-        self.assertEqual(resultado["nome_cliente"], "Nome do Banco")
-        conexao.close.assert_called_once_with()
-
-    def test_upsert_bloqueio_inclui_nome_na_ordem_correta(self):
-        cursor = MagicMock()
-        cursor.fetchone.side_effect = [None, (10,)]
-
-        resultado = bloqueio_meta.registrar_cliente_bloqueado_meta_banco(
-            1,
-            "5571999999999",
-            None,
-            None,
-            2,
-            "123456",
-            cursor,
-            nome_cliente="Cliente Teste",
-        )
-
-        self.assertEqual(resultado, 10)
-        parametros = cursor.execute.call_args.args[1]
-        self.assertEqual(
-            parametros,
-            (
-                1,
-                "Cliente Teste",
-                "5571999999999",
-                None,
-                None,
-                2,
-                "123456",
-            ),
-        )
-
-    def test_meta_sucesso_registra_nome_cliente_no_banco(self):
-        with patch.object(
-            flood_guard,
-            "_buscar_dados_bloqueio",
-            return_value={
-                "id_cliente": 1,
-                "nome_cliente": "Cliente Teste",
-                "id_unidade": 2,
-                "phone_id_unidade": "123456",
-                "motivo": "ok",
-            },
-        ), patch.object(
-            flood_guard,
-            "bloquear_usuario_meta",
-        ), patch.object(
-            flood_guard,
-            "_registrar_intencao_bloqueio_banco",
-            return_value=10,
-        ) as registrar:
-            resultado = flood_guard._bloquear_e_registrar(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                origem="redis",
-                total=15,
-                regra="rajada_curta",
-                nome_cliente="Cliente Teste",
-                wa_id="5571999999999",
-                user_id=None,
-                username=None,
-            )
-
-        self.assertTrue(resultado["bloqueado"])
-        self.assertTrue(resultado["meta_ok"])
-        self.assertEqual(resultado["id_bloqueio"], 10)
-        registrar.assert_called_once_with(
-            1,
-            "Cliente Teste",
-            "5571999999999",
-            None,
-            None,
-            2,
-            "123456",
-        )
-
-    def test_meta_falha_mantem_registro_local_para_retentativa(self):
-        with patch.object(
-            flood_guard,
-            "_buscar_dados_bloqueio",
-            return_value={
-                "id_cliente": 1,
-                "nome_cliente": "Cliente Teste",
-                "id_unidade": 2,
-                "phone_id_unidade": "123456",
-                "motivo": "ok",
-            },
-        ), patch.object(
-            flood_guard,
-            "bloquear_usuario_meta",
-            side_effect=RuntimeError("meta caiu"),
-        ), patch.object(
-            flood_guard,
-            "_registrar_intencao_bloqueio_banco",
-            return_value=10,
-        ) as registrar:
-            resultado = flood_guard._bloquear_e_registrar(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                origem="redis",
-                total=15,
-                regra="rajada_curta",
-                nome_cliente=None,
-                wa_id="5571999999999",
-                user_id=None,
-                username=None,
-            )
-
-        self.assertTrue(resultado["bloqueado"])
-        self.assertFalse(resultado["meta_ok"])
-        self.assertEqual(resultado["id_bloqueio"], 10)
-        self.assertEqual(resultado["motivo"], "flood_redis_meta_falhou")
-        registrar.assert_called_once_with(
-            1,
-            "Cliente Teste",
-            "5571999999999",
-            None,
-            None,
-            2,
-            "123456",
-        )
-
-    def test_falha_persistencia_local_nao_chama_meta_e_pede_reentrega(self):
-        with patch.object(
-            flood_guard,
-            "_buscar_dados_bloqueio",
-            return_value={
-                "id_cliente": 1,
-                "nome_cliente": "Cliente Teste",
-                "id_unidade": 2,
-                "phone_id_unidade": "123456",
-                "motivo": "ok",
-            },
-        ), patch.object(
-            flood_guard,
-            "_registrar_intencao_bloqueio_banco",
-            return_value=None,
-        ), patch.object(
-            flood_guard,
-            "bloquear_usuario_meta",
-        ) as bloquear_meta:
-            resultado = flood_guard._bloquear_e_registrar(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                origem="redis",
-                total=15,
-                regra="rajada_curta",
-                nome_cliente="Cliente Teste",
-                wa_id="5571999999999",
-                user_id=None,
-                username=None,
-            )
-
-        self.assertTrue(resultado["bloqueado"])
-        self.assertFalse(resultado["persistencia_ok"])
-        self.assertTrue(resultado["reentregar"])
-        self.assertIsNone(resultado["meta_ok"])
-        bloquear_meta.assert_not_called()
-
-    def test_fallback_memoria_reutiliza_bloqueio_persistente_e_nome(self):
-        resultado_bloqueio = {
-            "bloqueado": True,
-            "motivo": "flood_memoria_meta_falhou",
-            "total": 15,
-            "regra": "rajada_curta",
-            "id_bloqueio": 10,
-            "id_cliente": 1,
-            "id_unidade": 2,
-            "persistencia_ok": True,
-            "meta_ok": False,
-            "erro_meta": "conta business",
-            "reentregar": False,
-        }
-
-        with patch.object(
-            flood_guard,
-            "avaliar_flood_redis",
-            return_value={
-                "redis_ok": False,
-                "flood": False,
-                "total": 0,
-                "regra": None,
-            },
-        ), patch.object(
-            flood_guard,
-            "_avaliar_flood_banco",
-            return_value={
-                "banco_ok": False,
-                "flood": False,
-                "total": 0,
-                "regra": None,
-                "motivo": "banco_indisponivel",
-            },
-        ), patch.object(
-            flood_guard,
-            "avaliar_flood_memoria",
-            return_value={
-                "flood": True,
-                "total": 15,
-                "regra": "rajada_curta",
-            },
-        ), patch.object(
-            flood_guard,
-            "_bloquear_e_registrar",
-            return_value=resultado_bloqueio,
-        ) as bloquear, patch.object(
-            flood_guard,
-            "registrar_alerta_flood_memoria",
-        ) as alertar:
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                "wamid.test.1",
-                nome_cliente="Cliente Teste",
-                wa_id="5571999999999",
-            )
-
-        self.assertEqual(resultado, resultado_bloqueio)
-        bloquear.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
-            "123456",
-            origem="memoria",
-            total=15,
-            regra="rajada_curta",
-            nome_cliente="Cliente Teste",
-            wa_id="5571999999999",
-            user_id=None,
-            username=None,
-        )
-        alertar.assert_called_once()
-
-    def test_registro_local_acontece_antes_da_tentativa_meta(self):
-        ordem = []
-
-        with patch.object(
-            flood_guard,
-            "_buscar_dados_bloqueio",
-            return_value={
-                "id_cliente": 1,
-                "nome_cliente": "Cliente Teste",
-                "id_unidade": 2,
-                "phone_id_unidade": "123456",
-                "motivo": "ok",
-            },
-        ), patch.object(
-            flood_guard,
-            "_registrar_intencao_bloqueio_banco",
-            side_effect=lambda *_args: ordem.append("banco") or 10,
-        ), patch.object(
-            flood_guard,
-            "bloquear_usuario_meta",
-            side_effect=lambda *_args: ordem.append("meta"),
-        ):
-            flood_guard._bloquear_e_registrar(
-                "wa_id",
-                "5571999999999",
-                "123456",
-                origem="redis",
-                total=15,
-                regra="rajada_curta",
-                nome_cliente="Cliente Teste",
-                wa_id="5571999999999",
-                user_id=None,
-                username=None,
-            )
-
-        self.assertEqual(ordem, ["banco", "meta"])
-
-    def test_lookup_unidade_para_bloqueio_nao_depende_de_pagamento(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = (2, "123456")
-
-        resultado = bloqueio_meta.buscar_unidade_bloqueio_por_phone_id(
-            "123456",
-            cursor,
-        )
-
-        self.assertEqual(resultado, (2, "123456"))
-        sql = cursor.execute.call_args.args[0]
-        self.assertNotIn("status_pagamento", sql)
-
-
-class FloodGuardVinculoOficialTests(unittest.TestCase):
-    def test_cache_miss_repara_vinculo_exclusivamente_pelo_banco(self):
-        conexao = MagicMock()
-        cursor = conexao.cursor.return_value
-        vinculo = {
-            "wa_id": "wa-a",
-            "user_id": "user-a",
-            "id_unidade": 7,
-        }
-        with patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "cache_hit": False,
-                "encontrado": False,
-                "wa_id": None,
-                "user_id": None,
-            },
-        ), patch.object(
-            flood_guard,
-            "get_conn",
-            return_value=conexao,
-        ), patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_oficial",
-            return_value=vinculo,
-        ) as buscar, patch.object(
-            flood_guard,
-            "salvar_vinculo_flood_redis",
-        ) as salvar:
-            resultado = flood_guard._resolver_identidades_flood(
-                "user_id", "user-a", "phone-a"
-            )
-
-        self.assertTrue(resultado["resolucao_ok"])
-        self.assertEqual(
-            resultado["identidades"],
-            [("wa_id", "wa-a"), ("user_id", "user-a")],
-        )
-        buscar.assert_called_once_with(
-            "user_id", "user-a", "phone-a", cursor
-        )
-        salvar.assert_called_once_with("wa-a", "user-a", "phone-a")
-
-    def test_falha_ao_provar_vinculo_pede_reentrega_sem_bloquear_meta(self):
-        with patch.object(
-            flood_guard,
-            "_resolver_identidades_flood",
-            return_value={"resolucao_ok": False, "identidades": []},
-        ), patch.object(flood_guard, "avaliar_flood_redis") as redis:
-            resultado = flood_guard.bloquear_cliente_se_flood(
-                "wa_id", "wa-a", "phone-a", "wamid.1"
-            )
-
-        self.assertFalse(resultado["bloqueado"])
-        self.assertTrue(resultado["reentregar"])
-        self.assertEqual(resultado["motivo"], "flood_vinculo_indisponivel")
-        redis.assert_not_called()
-
-    def test_banco_conta_wamids_distintos_das_duas_identidades(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = (15,)
-
-        total = bloqueio_meta.contar_eventos_flood_banco(
-            "wa_id",
-            "wa-a",
-            "phone-a",
-            cursor,
-            janela_segundos=5,
-            identidades_equivalentes=(
-                ("wa_id", "wa-a"),
-                ("user_id", "user-a"),
-            ),
-        )
-
-        self.assertEqual(total, 15)
-        sql, parametros = cursor.execute.call_args.args
-        self.assertIn("COUNT(DISTINCT id_hash_msg)", sql)
-        self.assertEqual(parametros, ("phone-a", 5, ["wa-a"], ["user-a"]))
-
-    def test_lookup_oficial_usa_phone_da_unidade_e_user_id_cliente(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = ("wa-a", "user-a", 7)
-
-        resultado = bloqueio_meta.buscar_vinculo_flood_oficial(
-            "user_id", "user-a", "phone-a", cursor
-        )
-
-        self.assertEqual(resultado["id_unidade"], 7)
-        sql, parametros = cursor.execute.call_args.args
-        self.assertIn("chatbot.user_id_cliente", sql)
-        self.assertIn("unidade.phone_number_id", sql)
-        self.assertEqual(parametros, ("phone-a", "user-a"))
-
-    def test_contact_request_abre_ponte_para_wa_antes_do_commit(self):
-        with patch.object(
-            flood_guard,
-            "salvar_vinculo_pendente_flood_redis",
-            return_value=True,
-        ) as salvar:
-            contato = flood_guard._resolver_contato_oficial_flood(
-                "user_id",
-                "user-a",
-                "phone-a",
-                user_id="user-a",
-                wa_id_compartilhado="wa-a",
-            )
-
-        self.assertEqual(
-            contato["identidades"],
-            [("wa_id", "wa-a"), ("user_id", "user-a")],
-        )
-        salvar.assert_called_once_with("wa-a", "user-a", "phone-a")
-
-        with patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "cache_hit": True,
-                "encontrado": True,
-                "wa_id": "wa-a",
-                "user_id": "user-a",
-                "fonte": "pendente",
-            },
-        ), patch.object(flood_guard, "get_conn") as banco:
-            mensagem_wa = flood_guard._resolver_identidades_flood(
-                "wa_id", "wa-a", "phone-a"
-            )
-
-        self.assertEqual(mensagem_wa, contato)
-        banco.assert_not_called()
-
-    def test_conflito_ou_falha_no_pendente_pede_reentrega(self):
-        with patch.object(
-            flood_guard,
-            "salvar_vinculo_pendente_flood_redis",
-            return_value=False,
-        ):
-            resultado = flood_guard._resolver_contato_oficial_flood(
-                "user_id",
-                "user-a",
-                "phone-a",
-                user_id="user-a",
-                wa_id_compartilhado="wa-conflitante",
-            )
-
-        self.assertFalse(resultado["resolucao_ok"])
-        self.assertEqual(resultado["identidades"], [])
-
-    def test_cache_negativo_curto_e_pendente_oficial_tem_prioridade(self):
-        redis = MagicMock()
-        redis.mget.return_value = (
-            "-",
-            '{"user_id":"user-a","wa_id":"wa-a"}',
-        )
-        with patch.object(
-            cache_flood_redis,
-            "get_redis_safe",
-            return_value=redis,
-        ):
-            resultado = cache_flood_redis.buscar_vinculo_flood_redis(
-                "wa_id", "wa-a", "phone-a"
-            )
-
-        self.assertTrue(resultado["encontrado"])
-        self.assertEqual(resultado["fonte"], "pendente")
-
-    def test_pendente_e_atomico_repetivel_e_isolado_por_unidade(self):
-        redis = MagicMock()
-        redis.eval.return_value = 2
-        with patch.object(
-            cache_flood_redis,
-            "get_redis_safe",
-            return_value=redis,
-        ):
-            self.assertTrue(
-                cache_flood_redis.salvar_vinculo_pendente_flood_redis(
-                    "wa-a", "user-a", "phone-a"
-                )
-            )
-
-        argumentos = redis.eval.call_args.args
-        self.assertEqual(argumentos[1], 4)
-        chaves = argumentos[2:6]
-        tags = {chave.split("{", 1)[1].split("}", 1)[0] for chave in chaves}
-        self.assertEqual(len(tags), 1)
-        self.assertEqual(
-            argumentos[-2],
-            cache_flood_redis.VINCULO_PENDENTE_TTL_SEGUNDOS,
-        )
-
-        chave_outra_unidade = cache_flood_redis._vinculo_key(
-            cache_flood_redis.VINCULO_PENDENTE_PREFIX,
-            "wa_id",
-            "wa-a",
-            "phone-b",
-        )
-        self.assertNotIn(next(iter(tags)), chave_outra_unidade)
-
-    def test_pendente_conflitante_e_recusado(self):
-        redis = MagicMock()
-        redis.eval.return_value = -1
-        with patch.object(
-            cache_flood_redis,
-            "get_redis_safe",
-            return_value=redis,
-        ):
-            resultado = cache_flood_redis.salvar_vinculo_pendente_flood_redis(
-                "wa-b", "user-a", "phone-a"
-            )
-
-        self.assertFalse(resultado)
-
-    def test_sem_vinculo_grava_cache_negativo_e_evitar_rds_repetido(self):
-        conexao = MagicMock()
-        with patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_redis",
-            side_effect=(
-                {
-                    "redis_ok": True,
-                    "cache_hit": False,
-                    "encontrado": False,
-                },
-                {
-                    "redis_ok": True,
-                    "cache_hit": True,
-                    "encontrado": False,
-                },
-            ),
-        ), patch.object(
-            flood_guard, "get_conn", return_value=conexao
-        ), patch.object(
-            flood_guard, "buscar_vinculo_flood_oficial", return_value=None
-        ), patch.object(
-            flood_guard, "salvar_ausencia_vinculo_flood_redis"
-        ) as salvar_ausencia:
-            resultado = flood_guard._resolver_identidades_flood(
-                "wa_id", "wa-sem-vinculo", "phone-a"
-            )
-
-        self.assertTrue(resultado["resolucao_ok"])
-        salvar_ausencia.assert_called_once_with(
-            "wa_id", "wa-sem-vinculo", "phone-a"
-        )
-
-        with patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_redis",
-            return_value={
-                "redis_ok": True,
-                "cache_hit": True,
-                "encontrado": False,
-            },
-        ), patch.object(flood_guard, "get_conn") as banco:
-            flood_guard._resolver_identidades_flood(
-                "wa_id", "wa-sem-vinculo", "phone-a"
-            )
-        banco.assert_not_called()
-
-    def test_sem_vinculo_e_redis_indisponivel_pede_reentrega(self):
-        conexao = MagicMock()
-        with patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_redis",
-            return_value={
-                "redis_ok": False,
-                "cache_hit": False,
-                "encontrado": False,
-            },
-        ), patch.object(
-            flood_guard,
-            "get_conn",
-            return_value=conexao,
-        ), patch.object(
-            flood_guard,
-            "buscar_vinculo_flood_oficial",
-            return_value=None,
-        ):
-            resultado = flood_guard._resolver_identidades_flood(
-                "wa_id", "wa-sem-vinculo", "phone-a"
-            )
-
-        self.assertFalse(resultado["resolucao_ok"])
-        self.assertEqual(resultado["identidades"], [])
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 170 — `tests/unit/test_fluxo_turno_abc.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `841162fc502fd3fa13a07f204eaca3127b9db8f1111bc45a5c232289b8b19ec6`
+SHA-256 do conteúdo UTF-8 normalizado: `3d1eb0b8eb2146eb7279fee98b5fcb9d5085e84de741b844057a01e5d664e54f`
 
 ````python
 import unittest
@@ -33899,7 +29797,7 @@ class EstadoTurnoABC:
             fila["id_hash_msg"],
         ) in self.respostas_bot
 
-    def avaliar_filas_abertas(self, *_args):
+    def avaliar_filas_abertas(self, *_args, **_kwargs):
         abertas = sorted(
             (
                 fila
@@ -33924,7 +29822,7 @@ class EstadoTurnoABC:
             ),
         }
 
-    def adquirir_lock_turno(self, *_args):
+    def adquirir_lock_turno(self, *_args, **_kwargs):
         self.locks_turno += 1
 
     def existe_anterior(
@@ -33956,6 +29854,49 @@ class EstadoTurnoABC:
 
     def marcar_sent(self, id_mensagem, _cursor):
         self.filas[id_mensagem]["status"] = "sent"
+
+
+class EstadoTurnoAliases:
+    def __init__(self):
+        self.filas = []
+        self.vinculos = {}
+
+    def vincular(self, phone_id, wa_id, user_id):
+        self.vinculos[(phone_id, "wa_id", wa_id)] = (wa_id, user_id)
+        self.vinculos[(phone_id, "user_id", user_id)] = (wa_id, user_id)
+
+    def adicionar(self, phone_id, tipo, identidade, *, respondida=False):
+        self.filas.append({
+            "phone_id": phone_id,
+            "tipo": tipo,
+            "identidade": identidade,
+            "respondida": respondida,
+        })
+
+    def avaliar(self, _cursor, tipo, identidade, phone_id, **_kwargs):
+        sujeito = self.vinculos.get(
+            (phone_id, tipo, identidade),
+            (tipo, identidade),
+        )
+        abertas = [
+            item
+            for item in self.filas
+            if item["phone_id"] == phone_id
+            and self.vinculos.get(
+                (phone_id, item["tipo"], item["identidade"]),
+                (item["tipo"], item["identidade"]),
+            ) == sujeito
+        ]
+        return {
+            "existe_fila_aberta": bool(abertas),
+            "todas_abertas_respondidas": bool(abertas) and all(
+                item["respondida"] for item in abertas
+            ),
+            "total_abertas": len(abertas),
+            "id_mensagem_bloqueadora": 1 if any(
+                not item["respondida"] for item in abertas
+            ) else None,
+        }
 
 
 def mensagem_worker(estado, id_mensagem):
@@ -34016,6 +29957,16 @@ class FluxoTurnoABCTests(unittest.TestCase):
         estado.registrar_resposta_bot(1)
 
         with patch.object(
+            turno_cliente,
+            "_resolver_sujeito_turno",
+            return_value={
+                "id_cliente": 5,
+                "id_unidade": 2,
+                "wa_id": CLIENTE,
+                "user_id": None,
+                "chave_lock": "cliente:2:5",
+            },
+        ), patch.object(
             turno_cliente,
             "adquirir_lock_turno_cliente",
             side_effect=estado.adquirir_lock_turno,
@@ -34195,1165 +30146,108 @@ class FluxoTurnoABCTests(unittest.TestCase):
 
         self.assertEqual(estado.locks_turno, 4)
 
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 171 — `tests/unit/test_funil_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `a0503695070c76d62a7ac4dd9e19f607fc7654838d58ae2afb92ff2e8f6ac45e`
-
-````python
-import unittest
-from unittest.mock import call, patch
-
-from core.integrations.funil.cliente import (
-    enviar_oportunidade,
-    montar_url_envio,
-)
-from core.integrations.funil.exceptions import OportunidadeRejeitadaFunil
-from core.integrations.funil.oportunidades import (
-    montar_dados_lead_teste,
-    montar_payload_oportunidade,
-)
-from core.repositories.funil.envios import (
-    reivindicar_proximo_envio,
-    sincronizar_envios_elegiveis,
-)
-from core.repositories.funil.leads import buscar_dados_lead_funil
-from tests.helpers import FakeConn, FakeCursor
-from workers.worker_funil import funil_worker as executor_funil
-from workers.worker_funil import iniciar_worker_funil as supervisor_funil
-from workers.worker_funil.exceptions import BancoFalhouAposEnvioFunil
-from workers.worker_funil.funil_worker import executar_ciclo_funil
-from workers.worker_funil.processamento import processar_envio_funil
-
-
-class _FakeResponse:
-    status_code = 200
-
-    def __init__(self, corpo):
-        self.corpo = corpo
-
-    def raise_for_status(self):
-        return None
-
-    def json(self):
-        return self.corpo
-
-
-class _FakeSession:
-    def __init__(self, corpo):
-        self.corpo = corpo
-        self.calls = []
-
-    def post(self, url, json, timeout):
-        self.calls.append((url, json, timeout))
-        return _FakeResponse(self.corpo)
-
-
-class FunilEssencialTests(unittest.TestCase):
-    def test_worker_registra_lote_e_aguarda_trinta_minutos(self):
-        resumo = {
-            "materializados": 2,
-            "processados": 2,
-            "enviados": 2,
-            "falhas": 0,
-        }
-
-        with (
-            patch.object(
-                executor_funil,
-                "executar_ciclo_funil",
-                side_effect=[resumo, KeyboardInterrupt],
-            ),
-            patch.object(executor_funil.time, "sleep") as sleep_mock,
-            patch("builtins.print") as print_mock,
-            patch.object(executor_funil.logger, "info") as log_info,
-        ):
-            with self.assertRaises(KeyboardInterrupt):
-                executor_funil.funil_worker()
-
-        self.assertEqual(executor_funil.FUNIL_INTERVALO_SEGUNDOS, 1800)
-        self.assertEqual(executor_funil.FUNIL_LIMITE_POR_CICLO, 100)
-        sleep_mock.assert_called_once_with(1800)
-        print_mock.assert_called_once_with("PROXIMO CICLO EM 30 MINUTOS")
-        self.assertIn(
-            call(
-                "funil_worker_iniciado | intervalo_segundos=%s "
-                "limite_por_ciclo=%s",
-                1800,
-                100,
-            ),
-            log_info.call_args_list,
-        )
-        self.assertIn(
-            call(
-                "funil_ciclo_concluido | acao=aguardar_proximo "
-                "materializados=%s processados=%s enviados=%s falhas=%s "
-                "limite_por_ciclo=%s aguardar=%ss",
-                2,
-                2,
-                2,
-                0,
-                100,
-                1800,
-            ),
-            log_info.call_args_list,
-        )
-
-    def test_materializacao_exclui_conversas_ja_enfileiradas_antes_do_limite(self):
-        cursor = FakeCursor()
-
-        sincronizar_envios_elegiveis(cursor, limite=100)
-
-        sql, parametros = cursor.calls[0]
-        self.assertIn("NOT EXISTS", sql)
-        self.assertIn(
-            "fe_existente.id_conversa = c.id_conversa",
-            sql,
-        )
-        self.assertIn("e.elegivel_funil = TRUE", sql)
-        self.assertIn("c.lead_no_funil IS NOT TRUE", sql)
-        self.assertEqual(parametros, (100,))
-
-    def test_reivindicacao_prioriza_menor_numero_de_tentativas(self):
-        cursor = FakeCursor()
-
-        reivindicar_proximo_envio(cursor, lease_segundos=900)
-
-        sql, parametros = cursor.calls[0]
-        ordenacao = sql.split("ORDER BY", 1)[1].split("FOR UPDATE", 1)[0]
-        posicao_tentativas = ordenacao.index("fe.attempt_count ASC")
-        posicao_tempo = ordenacao.index("CASE")
-        posicao_id = ordenacao.index("fe.id_funil_envio ASC")
-
-        self.assertLess(posicao_tentativas, posicao_tempo)
-        self.assertLess(posicao_tempo, posicao_id)
-        self.assertIn("fe.next_attempt_at", ordenacao)
-        self.assertIn("fe.processing_started_at", ordenacao)
-        self.assertEqual(parametros, (900,))
-
-    def test_payload_dependente_preenche_contato_e_observacoes(self):
-        dados = montar_dados_lead_teste()
-        dados["id_conversa"] = 123
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-        personalizados = {
-            item["titulo"]: item["valor"]
-            for item in oportunidade["personalizados"]
-        }
-
-        self.assertEqual(
-            oportunidade["titulo"],
-            "Chatbot Lead Supera Santo Antônio de Jesus",
-        )
-        self.assertEqual(
-            oportunidade["empresa"]["nome"],
-            "Edcarlos Teste - Não contatar | Enzo Teste | 12",
-        )
-        self.assertEqual(oportunidade["contato"]["nome"], dados["nome_cliente"])
-        self.assertEqual(
-            oportunidade["contato"]["telefone1"],
-            "5571994111866",
-        )
-        self.assertEqual(
-            oportunidade["contato"]["email"],
-            dados["email_cliente"],
-        )
-        self.assertEqual(personalizados["Origem do lead"], "Meta Chatbot")
-        self.assertIn("Nome do dependente: Enzo Teste", personalizados["Observações"])
-        self.assertIn(
-            "- Profissão: Engenheiro",
-            personalizados["Observações"],
-        )
-        self.assertIn(
-            "Perguntas e respostas da triagem:",
-            personalizados["Observações"],
-        )
-        self.assertIn(
-            "-Pergunta 1:\n\n"
-            "Com que frequência Enzo Teste se distrai com facilidade "
-            "durante tarefas ou atividades escolares?\n\n"
-            "Resposta: Nunca",
-            personalizados["Observações"],
-        )
-        self.assertEqual(
-            personalizados["Observações"].count("-Pergunta "),
-            6,
-        )
-        self.assertNotIn("- Nunca:", personalizados["Observações"])
-        self.assertLess(
-            personalizados["Observações"].index(
-                "- Idade do dependente: 12"
-            ),
-            personalizados["Observações"].index(
-                "- Profissão: Engenheiro"
-            ),
-        )
-        self.assertLess(
-            personalizados["Observações"].index(
-                "- Profissão: Engenheiro"
-            ),
-            personalizados["Observações"].index(
-                "Perguntas e respostas da triagem"
-            ),
-        )
-
-    def test_snapshot_funil_inclui_profissao_da_conversa(self):
-        cursor = FakeCursor(
-            fetchone_result=(
-                123,
-                1,
-                "Supera Teste",
-                False,
-                "Maria",
-                "5571999999999",
-                "@maria",
-                "maria@example.com",
-                30,
-                "Analista financeira",
-                None,
-                None,
-                [
-                    {"id_etapa": 13, "resposta": "nunca"},
-                    {"id_etapa": 14, "resposta": "às vezes"},
-                    {"id_etapa": 15, "resposta": "frequentemente"},
-                    {"id_etapa": 16, "resposta": "nunca"},
-                    {"id_etapa": 17, "resposta": "às vezes"},
-                    {"id_etapa": 18, "resposta": "frequentemente"},
-                ],
-            )
-        )
-
-        dados = buscar_dados_lead_funil(123, cursor)
-
-        sql, parametros = cursor.calls[0]
-        self.assertIn("c.profissao", sql)
-        self.assertIn("cl.wa_id AS telefone_cliente", sql)
-        self.assertIn("c.username AS username", sql)
-        self.assertIn("r.id_etapa BETWEEN 13 AND 18", sql)
-        self.assertIn("ORDER BY r.id_etapa", sql)
-        self.assertEqual(parametros, (123,))
-        self.assertEqual(dados["profissao"], "Analista financeira")
-        self.assertEqual(dados["username"], "@maria")
-        self.assertEqual(
-            [item["id_etapa"] for item in dados["triagem_respostas"]],
-            [13, 14, 15, 16, 17, 18],
-        )
-
-    def test_payload_legado_exibe_profissao_nao_informada(self):
-        dados = montar_dados_lead_teste()
-        dados["profissao"] = None
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-        observacoes = oportunidade["personalizados"][0]["valor"]
-
-        self.assertIn("- Profissão: Não informada", observacoes)
-        self.assertLess(
-            observacoes.index("- Profissão: Não informada"),
-            observacoes.index("Perguntas e respostas da triagem"),
-        )
-
-    def test_payload_adiciona_nono_digito_ao_telefone_brasileiro(self):
-        dados = montar_dados_lead_teste()
-        dados["telefone_cliente"] = "557587006911"
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-
-        self.assertEqual(
-            oportunidade["contato"]["telefone1"],
-            "5575987006911",
-        )
-
-    def test_payload_internacional_omite_telefone1_e_avisa_nas_observacoes(self):
-        dados = montar_dados_lead_teste()
-        dados["telefone_cliente"] = "351912345678"
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-        observacoes = oportunidade["personalizados"][0]["valor"]
-
-        self.assertEqual(oportunidade["contato"]["telefone1"], "")
-        self.assertIn("351912345678", observacoes)
-        self.assertIn(
-            "número internacional fora do padrão brasileiro",
-            observacoes,
-        )
-        self.assertLess(
-            observacoes.index("- Idade do dependente: 12"),
-            observacoes.index(
-                "O cliente possui um número internacional fora do padrão brasileiro"
-            ),
-        )
-        self.assertLess(
-            observacoes.index(
-                "O cliente possui um número internacional fora do padrão brasileiro"
-            ),
-            observacoes.index("Perguntas e respostas da triagem"),
-        )
-        self.assertIn(
-            "- Idade do dependente: 12\n\n"
-            "O cliente possui um número internacional fora do padrão brasileiro, "
-            "por isso o campo Telefone 1 não foi preenchido.\n\n"
-            "- Profissão: Engenheiro\n\n"
-            "Perguntas e respostas da triagem",
-            observacoes,
-        )
-
-    def test_payload_titular_usa_somente_idade_do_cliente(self):
-        dados = montar_dados_lead_teste()
-        dados.update(
-            {
-                "status_dependente": False,
-                "idade_cliente": 25,
-                "nome_dependente": None,
-                "idade_dependente": None,
-            }
-        )
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-        observacoes = oportunidade["personalizados"][0]["valor"]
-
-        self.assertEqual(
-            oportunidade["titulo"],
-            "Chatbot Lead Supera Santo Antônio de Jesus",
-        )
-        self.assertEqual(
-            oportunidade["empresa"]["nome"],
-            "Edcarlos Teste - Não contatar | 25",
-        )
-        self.assertIn("Idade do cliente: 25", observacoes)
-        self.assertNotIn("Nome do dependente", observacoes)
-        self.assertIn(
-            "Com que frequência você esquece compromissos, recados ou "
-            "onde guardou objetos pessoais?",
-            observacoes,
-        )
-
-    def test_payload_dependente_adulto_usa_nome_nas_perguntas(self):
-        dados = montar_dados_lead_teste()
-        dados["idade_dependente"] = 35
-
-        oportunidade = montar_payload_oportunidade(dados)["oportunidades"][0]
-        observacoes = oportunidade["personalizados"][0]["valor"]
-
-        self.assertIn(
-            "Com que frequência Enzo Teste esquece compromissos, recados "
-            "ou onde guardou objetos pessoais?",
-            observacoes,
-        )
-        self.assertNotIn("Com que frequência você", observacoes)
-
-    def test_payload_rejeita_triagem_incompleta(self):
-        dados = montar_dados_lead_teste()
-        dados["triagem_respostas"] = dados["triagem_respostas"][:-1]
-
-        with self.assertRaisesRegex(ValueError, "etapas 13"):
-            montar_payload_oportunidade(dados)
-
-    def test_payload_rejeita_triagem_fora_de_ordem(self):
-        dados = montar_dados_lead_teste()
-        dados["triagem_respostas"] = list(
-            reversed(dados["triagem_respostas"])
-        )
-
-        with self.assertRaisesRegex(ValueError, "ordenadas"):
-            montar_payload_oportunidade(dados)
-
-    def test_payload_rejeita_resposta_fora_do_dominio(self):
-        dados = montar_dados_lead_teste()
-        dados["triagem_respostas"][2]["resposta"] = "raramente"
-
-        with self.assertRaisesRegex(ValueError, "fora do domínio"):
-            montar_payload_oportunidade(dados)
-
-    def test_payload_nao_inclui_dados_da_pesquisa_de_satisfacao(self):
-        dados = montar_dados_lead_teste()
-        dados["nota_satisfacao"] = 5
-        dados["comentario_satisfacao"] = "Comentário interno da pesquisa"
-
-        payload_serializado = repr(montar_payload_oportunidade(dados))
-
-        self.assertNotIn("nota_satisfacao", payload_serializado)
-        self.assertNotIn("comentario_satisfacao", payload_serializado)
-        self.assertNotIn("Comentário interno da pesquisa", payload_serializado)
-
-    def test_cliente_preserva_widget_e_forca_canal(self):
-        url = montar_url_envio(
-            "https://leads.example/api/?W=ABC",
-            "113340",
-        )
-        self.assertEqual(
-            url,
-            "https://leads.example/api/?W=ABC&ForceCodeChannel=113340",
-        )
-
-        session = _FakeSession({"response": "success"})
-        resultado = enviar_oportunidade(
-            link_api_carrossel="https://leads.example/api/?W=ABC",
-            codigo_canal_venda="113340",
-            payload={"oportunidades": []},
-            timeout=(10, 30),
-            session=session,
-        )
-        self.assertEqual(resultado["status_http"], 200)
-
-    def test_cliente_nao_confunde_http_200_com_sucesso_logico(self):
-        session = _FakeSession(
-            {"response": "failure", "message": "payload inválido"}
-        )
-
-        with self.assertRaises(OportunidadeRejeitadaFunil):
-            enviar_oportunidade(
-                link_api_carrossel="https://leads.example/api/?W=ABC",
-                codigo_canal_venda="113340",
-                payload={"oportunidades": []},
-                timeout=(10, 30),
-                session=session,
-            )
-
-    @patch("workers.worker_funil.processamento.buscar_dados_lead_funil")
-    @patch("workers.worker_funil.processamento.buscar_integracao_funil_por_unidade")
-    @patch("workers.worker_funil.processamento.enviar_oportunidade")
-    @patch("workers.worker_funil.processamento.marcar_envio_como_concluido")
-    def test_falha_local_apos_sucesso_externo_preserva_janela_para_reconciliar(
-        self,
-        marcar_mock,
-        enviar_mock,
-        integracao_mock,
-        dados_mock,
-    ):
-        dados_mock.return_value = montar_dados_lead_teste()
-        integracao_mock.return_value = {
-            "link_api_carrossel": "https://leads.example/api/?W=ABC",
-            "codigo_canal_venda": "113340",
-            "integracao_ativa": True,
-            "widget_ativo": True,
-        }
-        enviar_mock.return_value = {
-            "status_http": 200,
-            "resposta": {"response": "success"},
-        }
-        marcar_mock.side_effect = RuntimeError("banco indisponível")
-        conn = FakeConn(FakeCursor())
-        envio = {"id_funil_envio": 7, "id_conversa": 123, "attempt_count": 1}
-
-        with self.assertRaises(BancoFalhouAposEnvioFunil):
-            processar_envio_funil(envio, conn, conn.cursor_obj)
-
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 1)
-
-    @patch("workers.worker_funil.funil_worker.get_conn")
-    @patch("workers.worker_funil.funil_worker.sincronizar_envios_elegiveis")
-    @patch("workers.worker_funil.funil_worker.reivindicar_proximo_envio")
-    @patch("workers.worker_funil.funil_worker.processar_envio_funil")
-    def test_ciclo_continua_depois_de_falha_individual(
-        self,
-        processar_mock,
-        reivindicar_mock,
-        sincronizar_mock,
-        get_conn_mock,
-    ):
-        cursor = FakeCursor()
-        cursor.close = lambda: None
-        conn = FakeConn(cursor)
-        get_conn_mock.return_value = conn
-        sincronizar_mock.return_value = 2
-        reivindicar_mock.side_effect = [
-            {"id_funil_envio": 1, "id_conversa": 101, "attempt_count": 1},
-            {"id_funil_envio": 2, "id_conversa": 102, "attempt_count": 1},
-            None,
-        ]
-        processar_mock.side_effect = [False, True]
-
-        resumo = executar_ciclo_funil()
-
-        self.assertEqual(
-            resumo,
-            {
-                "materializados": 2,
-                "processados": 2,
-                "enviados": 1,
-                "falhas": 1,
+    def test_wa_e_user_com_vinculo_oficial_compartilham_o_mesmo_turno(self):
+        estado = EstadoTurnoAliases()
+        estado.vincular(PHONE_ID, CLIENTE, "BR.123")
+        estado.adicionar(PHONE_ID, "user_id", "BR.123", respondida=False)
+
+        with patch.object(
+            turno_cliente,
+            "_resolver_sujeito_turno",
+            return_value={
+                "id_cliente": 5,
+                "id_unidade": 2,
+                "wa_id": CLIENTE,
+                "user_id": "BR.123",
+                "chave_lock": "cliente:2:5",
             },
-        )
-        self.assertEqual(processar_mock.call_count, 2)
-
-    def test_supervisor_reinicia_ciclo_apos_falha_global(self):
-        with (
-            patch.object(supervisor_funil, "FUNIL_WORKER_ENABLED", True),
-            patch.object(supervisor_funil, "validar_configuracao_funil"),
-            patch.object(
-                supervisor_funil,
-                "funil_worker",
-                side_effect=[RuntimeError("banco indisponível"), KeyboardInterrupt],
-            ) as worker_mock,
-            patch.object(supervisor_funil.time, "sleep") as sleep_mock,
-            patch.object(supervisor_funil.logger, "exception"),
+        ), patch.object(
+            turno_cliente,
+            "avaliar_filas_abertas_turno",
+            side_effect=estado.avaliar,
         ):
-            with self.assertRaises(KeyboardInterrupt):
-                supervisor_funil.iniciar_worker_funil()
+            decisao = turno_cliente.avaliar_turno_cliente_para_fila(
+                cursor=object(),
+                tipo_identidade="wa_id",
+                identidade=CLIENTE,
+                id_phone_unidade=PHONE_ID,
+            )
 
-        self.assertEqual(worker_mock.call_count, 2)
-        sleep_mock.assert_called_once_with(5)
+        self.assertFalse(decisao["pode_enfileirar"])
+        self.assertEqual(decisao["motivo"], "fila_aberta_sem_resposta_bot")
 
-    def test_funil_worker_recupera_banco_com_backoff_linear(self):
-        erro_banco = executor_funil.psycopg.OperationalError(
-            "banco indisponivel"
-        )
+    def test_aliases_comprovados_nao_cruzam_o_limite_da_unidade(self):
+        estado = EstadoTurnoAliases()
+        estado.vincular(PHONE_ID, CLIENTE, "BR.123")
+        estado.vincular("outra-unidade", CLIENTE, "BR.999")
+        estado.adicionar(PHONE_ID, "user_id", "BR.123", respondida=False)
 
-        with (
-            patch.object(
-                executor_funil,
-                "executar_ciclo_funil",
-                side_effect=[erro_banco, KeyboardInterrupt],
-            ) as ciclo_mock,
-            patch.object(
-                executor_funil,
-                "handle_erro_conexao",
-                return_value=10,
-            ) as retry_mock,
+        with patch.object(
+            turno_cliente,
+            "_resolver_sujeito_turno",
+            return_value={
+                "id_cliente": 9,
+                "id_unidade": 3,
+                "wa_id": CLIENTE,
+                "user_id": "BR.999",
+                "chave_lock": "cliente:3:9",
+            },
+        ), patch.object(
+            turno_cliente,
+            "avaliar_filas_abertas_turno",
+            side_effect=estado.avaliar,
         ):
-            with self.assertRaises(KeyboardInterrupt):
-                executor_funil.funil_worker()
+            decisao = turno_cliente.avaliar_turno_cliente_para_fila(
+                cursor=object(),
+                tipo_identidade="user_id",
+                identidade="BR.999",
+                id_phone_unidade="outra-unidade",
+            )
 
-        self.assertEqual(ciclo_mock.call_count, 2)
-        retry_mock.assert_called_once_with(
-            erro_banco,
-            5,
-            incremento_retry=5,
-        )
+        self.assertTrue(decisao["pode_enfileirar"])
+        self.assertEqual(decisao["motivo"], "sem_fila_aberta")
 
 
 if __name__ == "__main__":
     unittest.main()
 ````
 
-## Passo 172 — `tests/unit/test_lastfrom_semantico.py`
+## Passo 156 — `tests/unit/test_persistencia_essencial.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e1259f1f328d055c1a5ef972403b52102168f8dabe869d1defd2ac20929546ca`
+SHA-256 do conteúdo UTF-8 normalizado: `a966a281c222f6942295170429043ebc36bc8c8116a1c68ebb88ac09f0c7dd40`
 
 ````python
-import unittest
-from unittest.mock import patch
-
-from workers.worker_flow import valida_historico
-
-
-DATA_CLIENTE = "2026-01-01T00:00:00"
-DATA_BOT = "2026-01-01T00:01:00"
-
-
-def mensagem_base(retry=1):
-    return {
-        "id_mensagem": 20,
-        "wa_id": "5571999999999",
-        "user_id": "BR.123",
-        "username": "maria.teste",
-        "conteudo_texto": "ola",
-        "tipo_mensagem": "text",
-        "id_phone_unidade": "123456",
-        "unidade_telefone": "5571000000000",
-        "data_recebimento": "2026-01-01T00:00:00",
-        "id_hash": "wamid.cliente",
-        "retry_count": retry,
-        "tipo_identidade_do_item": "wa_id",
-        "identidade_do_item": "5571999999999",
-    }
-
-
-def contexto_banco_base(last_from="bot", etapa=1):
-    return {
-        "id_unidade": 1,
-        "id_cliente": 6,
-        "wa_id": "5571999999999",
-        "user_id": "BR.123",
-        "username": "maria.teste",
-        "conversa": {
-            "id_conversa": 10,
-            "id_etapa_atual": etapa,
-            "status_dependente": False,
-            "last_message_from": last_from,
-        }
-    }
-
-
-class LastFromSemanticoTests(unittest.TestCase):
-    def test_conversa_nova_registra_cliente_e_responde_etapa1(self):
-        chamadas = []
-
-        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
-            chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
-            return 100, DATA_CLIENTE, 1, True
-
-        def fake_buscar_resposta(**_kwargs):
-            return None
-
-        def fake_update_cliente(
-            id_conversa,
-            data_interacao,
-            cursor,
-        ):
-            chamadas.append(
-                (
-                    "update_cliente",
-                    id_conversa,
-                    data_interacao,
-                    cursor,
-                )
-            )
-            return 1
-
-        def fake_update_bot(*_args, **_kwargs):
-            raise AssertionError("conversa nova ainda nao tem resposta do bot")
-
-        cursor = object()
-
-        with patch.object(
-            valida_historico,
-            "inserir_historico_mensagem_cliente",
-            fake_inserir,
-        ), patch.object(
-            valida_historico,
-            "buscar_resposta_bot_por_mensagem_cliente",
-            fake_buscar_resposta,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_mensagem_cliente",
-            fake_update_cliente,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_resposta_bot_sem_avancar",
-            fake_update_bot,
-        ), patch.object(
-            valida_historico,
-            "listar_transicoes_permitidas",
-            return_value={"nome_cliente_valido": 2},
-        ), patch.object(
-            valida_historico,
-            "buscar_contexto_etapa1",
-            return_value={"nome_unidade": "Supera Teste"},
-        ):
-            contexto = valida_historico.valida_historico(
-                mensagem_base(),
-                contexto_banco_base(last_from="cliente", etapa=None),
-                cursor,
-            )
-
-        self.assertEqual(contexto["id_etapa_cliente"], 1)
-        self.assertEqual(contexto["id_etapa_resposta"], 1)
-        self.assertEqual(contexto["last_message_from"], "cliente")
-        self.assertEqual(
-            [chamada[0] for chamada in chamadas],
-            ["insert_cliente", "update_cliente"],
-        )
-
-    def test_retry_antes_da_resposta_mantem_etapa_e_last_from_cliente(self):
-        chamadas = []
-
-        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
-            chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
-            return 100, DATA_CLIENTE, 1, False
-
-        def fake_buscar_resposta(**_kwargs):
-            return None
-
-        def fake_update_cliente(
-            id_conversa,
-            data_interacao,
-            cursor,
-        ):
-            chamadas.append(
-                (
-                    "update_cliente",
-                    id_conversa,
-                    data_interacao,
-                    cursor,
-                )
-            )
-            return 1
-
-        cursor = object()
-
-        with patch.object(
-            valida_historico,
-            "inserir_historico_mensagem_cliente",
-            fake_inserir,
-        ), patch.object(
-            valida_historico,
-            "buscar_resposta_bot_por_mensagem_cliente",
-            fake_buscar_resposta,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_mensagem_cliente",
-            fake_update_cliente,
-        ), patch.object(
-            valida_historico,
-            "listar_transicoes_permitidas",
-            return_value={"nome_cliente_valido": 2},
-        ):
-            contexto = valida_historico.valida_historico(
-                mensagem_base(retry=2),
-                contexto_banco_base(last_from="cliente", etapa=1),
-                cursor,
-            )
-
-        self.assertEqual(contexto["id_etapa_cliente"], 1)
-        self.assertEqual(contexto["id_etapa_resposta"], 2)
-        self.assertEqual(contexto["last_message_from"], "cliente")
-        self.assertFalse(contexto["mensagem_cliente_inserida"])
-
-        self.assertIn(
-            ("update_cliente", 10, DATA_CLIENTE, cursor),
-            chamadas,
-        )
-
-    def test_retry_apos_resposta_usa_etapas_persistidas_sem_regredir(self):
-        chamadas = []
-
-        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
-            chamadas.append(("insert_cliente", id_conversa, id_etapa, cursor))
-            return 100, DATA_CLIENTE, 1, False
-
-        def fake_buscar_resposta(**_kwargs):
-            return (
-                200,
-                10,
-                2,
-                DATA_BOT,
-                "5571999999999",
-                "BR.123",
-                "maria.teste",
-                "Ola",
-                "text",
-                "wamid.bot",
-                20,
-                "wamid.cliente",
-                "123456",
-                "5571000000000",
-                "bot",
-                "sent",
-            )
-
-        def fake_update_cliente(*_args, **_kwargs):
-            raise AssertionError("nao deve atualizar cliente quando resposta bot ja existe")
-
-        def fake_update_bot(*_args, **_kwargs):
-            raise AssertionError("last_from ja esta semanticamente como bot")
-
-        cursor = object()
-
-        with patch.object(
-            valida_historico,
-            "inserir_historico_mensagem_cliente",
-            fake_inserir,
-        ), patch.object(
-            valida_historico,
-            "buscar_resposta_bot_por_mensagem_cliente",
-            fake_buscar_resposta,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_mensagem_cliente",
-            fake_update_cliente,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_resposta_bot_sem_avancar",
-            fake_update_bot,
-        ), patch.object(
-            valida_historico,
-            "listar_transicoes_permitidas",
-            return_value={"nome_cliente_valido": 2},
-        ):
-            contexto = valida_historico.valida_historico(
-                mensagem_base(retry=2),
-                contexto_banco_base(last_from="bot", etapa=2),
-                cursor,
-            )
-
-        self.assertEqual(contexto["id_etapa_cliente"], 1)
-        self.assertEqual(contexto["id_etapa_resposta"], 2)
-        self.assertEqual(contexto["last_message_from"], "bot")
-        self.assertTrue(contexto["resposta_bot_para_mensagem_atual"])
-        self.assertEqual([chamada[0] for chamada in chamadas], ["insert_cliente"])
-
-    def test_retry_repara_last_from_cliente_quando_resposta_bot_ja_existe(self):
-        chamadas = []
-
-        def fake_inserir(mensagem, id_conversa, id_etapa, cursor):
-            return 100, DATA_CLIENTE, 1, False
-
-        def fake_buscar_resposta(**_kwargs):
-            return (
-                200,
-                10,
-                2,
-                DATA_BOT,
-                "5571999999999",
-                "BR.123",
-                "maria.teste",
-                "Ola",
-                "text",
-                "wamid.bot",
-                20,
-                "wamid.cliente",
-                "123456",
-                "5571000000000",
-                "bot",
-                "sent",
-            )
-
-        def fake_update_bot(
-            id_conversa,
-            data_interacao,
-            cursor,
-        ):
-            chamadas.append(
-                (
-                    "update_bot_sem_avancar",
-                    id_conversa,
-                    data_interacao,
-                    cursor,
-                )
-            )
-            return 1
-
-        cursor = object()
-
-        with patch.object(
-            valida_historico,
-            "inserir_historico_mensagem_cliente",
-            fake_inserir,
-        ), patch.object(
-            valida_historico,
-            "buscar_resposta_bot_por_mensagem_cliente",
-            fake_buscar_resposta,
-        ), patch.object(
-            valida_historico,
-            "atualizar_conversa_resposta_bot_sem_avancar",
-            fake_update_bot,
-        ), patch.object(
-            valida_historico,
-            "listar_transicoes_permitidas",
-            return_value={"nome_cliente_valido": 2},
-        ):
-            contexto = valida_historico.valida_historico(
-                mensagem_base(retry=2),
-                contexto_banco_base(last_from="cliente", etapa=2),
-                cursor,
-            )
-
-        self.assertEqual(contexto["id_etapa_cliente"], 1)
-        self.assertEqual(contexto["id_etapa_resposta"], 2)
-        self.assertEqual(contexto["last_message_from"], "bot")
-        self.assertEqual(
-            chamadas,
-            [("update_bot_sem_avancar", 10, DATA_BOT, cursor)],
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 173 — `tests/unit/test_multi_waba_isolamento.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `f04265a2570ed2878361a16f9734d54da1fc76bac3ed439d0278bb3ce41b1e55`
-
-````python
+import ast
 import inspect
+import json
+import subprocess
 import unittest
-from unittest.mock import ANY, call, patch
-
-from callback.webhook.services.populating_fila_mensagens import (
-    extrair_dados_whatsapp,
-)
-from core.database.deploy_database import bank_script
-from tests.helpers import FakeConn, FakeCursor
-from tests.payloads import payload_texto_meta
-from workers.worker_flow import valida_banco
-from workers.worker_funil import processamento as processamento_funil
-
-
-class MultiWabaIsolamentoTests(unittest.TestCase):
-    def test_webhook_preserva_phone_id_para_mesmo_cliente_em_duas_unidades(self):
-        cliente = "5571999999999"
-        dados_a = extrair_dados_whatsapp(
-            payload_texto_meta(
-                wa_id=cliente,
-                phone_number_id="phone-a",
-                message_id="wamid.a",
-            )
-        )
-        dados_b = extrair_dados_whatsapp(
-            payload_texto_meta(
-                wa_id=cliente,
-                phone_number_id="phone-b",
-                message_id="wamid.b",
-            )
-        )
-
-        self.assertEqual(dados_a["wa_id"], cliente)
-        self.assertEqual(dados_b["wa_id"], cliente)
-        self.assertEqual(dados_a["tipo_identidade_do_item"], "wa_id")
-        self.assertEqual(dados_b["tipo_identidade_do_item"], "wa_id")
-        self.assertEqual(dados_a["identidade_do_item"], cliente)
-        self.assertEqual(dados_b["identidade_do_item"], cliente)
-        self.assertEqual(dados_a["id_phone_unidade"], "phone-a")
-        self.assertEqual(dados_b["id_phone_unidade"], "phone-b")
-
-    def test_worker_resolve_matriz_cliente_unidade_em_conversas_distintas(self):
-        unidade_por_phone = {
-            "phone-a": 1,
-            "phone-b": 2,
-        }
-        cliente_por_wa_id = {
-            "cliente-a": 10,
-            "cliente-b": 20,
-        }
-        conversa_por_par = {
-            (10, 1): 101,
-            (10, 2): 102,
-            (20, 1): 103,
-        }
-
-        with (
-            patch.object(
-                valida_banco,
-                "obter_id_unidade_redis_ou_plsql",
-                side_effect=lambda phone, _cursor: unidade_por_phone[phone],
-            ),
-            patch.object(
-                valida_banco,
-                "buscar_cliente_cache",
-                return_value=None,
-            ),
-            patch.object(
-                valida_banco,
-                "buscar_cliente_por_wa_id",
-                side_effect=lambda wa_id, _cursor, **_kwargs: {
-                    "id_cliente": cliente_por_wa_id[wa_id],
-                    "wa_id": wa_id,
-                    "username": None,
-                },
-            ),
-            patch.object(
-                valida_banco,
-                "buscar_estado_conversa",
-                return_value=None,
-            ) as buscar_estado,
-            patch.object(
-                valida_banco,
-                "inserindo_em_conversa_caso_seja_nova",
-                side_effect=lambda cliente, unidade, *_args: (
-                    conversa_por_par[(cliente, unidade)]
-                ),
-            ),
-            patch.object(
-                valida_banco,
-                "preencher_snapshots_conversa_nulos",
-            ),
-            patch.object(
-                valida_banco,
-                "buscar_identidades_para_contexto",
-                side_effect=lambda *, id_cliente, **_kwargs: {
-                    "wa_id": next(
-                        wa_id
-                        for wa_id, cliente in cliente_por_wa_id.items()
-                        if cliente == id_cliente
-                    ),
-                    "user_id": None,
-                    "username": None,
-                },
-            ),
-        ):
-            contextos = [
-                valida_banco.validar_banco_mensagem(
-                    {
-                        "wa_id": cliente,
-                        "user_id": None,
-                        "username": None,
-                        "wa_id_compartilhado": None,
-                        "tipo_identidade_do_item": "wa_id",
-                        "identidade_do_item": cliente,
-                        "referencia_cache_cliente": f"cliente_cache:{cliente}",
-                        "id_phone_unidade": phone,
-                    },
-                    object(),
-                )
-                for cliente, phone in (
-                    ("cliente-a", "phone-a"),
-                    ("cliente-a", "phone-b"),
-                    ("cliente-b", "phone-a"),
-                )
-            ]
-
-        self.assertEqual(
-            [
-                (
-                    contexto["id_cliente"],
-                    contexto["id_unidade"],
-                    contexto["conversa"]["id_conversa"],
-                )
-                for contexto in contextos
-            ],
-            [
-                (10, 1, 101),
-                (10, 2, 102),
-                (20, 1, 103),
-            ],
-        )
-        self.assertEqual(
-            buscar_estado.call_args_list,
-            [
-                call(10, 1, ANY),
-                call(10, 2, ANY),
-                call(20, 1, ANY),
-            ],
-        )
-
-    def test_funil_seleciona_integracao_da_unidade_de_cada_conversa(self):
-        unidades_por_conversa = {
-            101: 1,
-            102: 2,
-            103: 1,
-        }
-        integracoes = {
-            1: {
-                "link_api_carrossel": "https://funil-a.example/api?W=A",
-                "codigo_canal_venda": "canal-a",
-                "integracao_ativa": True,
-                "widget_ativo": True,
-            },
-            2: {
-                "link_api_carrossel": "https://funil-b.example/api?W=B",
-                "codigo_canal_venda": "canal-b",
-                "integracao_ativa": True,
-                "widget_ativo": True,
-            },
-        }
-
-        def buscar_lead(id_conversa, _cursor):
-            return {
-                "id_conversa": id_conversa,
-                "id_unidade": unidades_por_conversa[id_conversa],
-            }
-
-        def buscar_integracao(id_unidade, _cursor):
-            return integracoes[id_unidade]
-
-        conn = FakeConn(FakeCursor())
-
-        with (
-            patch.object(
-                processamento_funil,
-                "buscar_dados_lead_funil",
-                side_effect=buscar_lead,
-            ),
-            patch.object(
-                processamento_funil,
-                "buscar_integracao_funil_por_unidade",
-                side_effect=buscar_integracao,
-            ) as buscar_integracao_mock,
-            patch.object(
-                processamento_funil,
-                "montar_payload_oportunidade",
-                side_effect=lambda dados: {
-                    "id_conversa": dados["id_conversa"],
-                },
-            ),
-            patch.object(
-                processamento_funil,
-                "enviar_oportunidade",
-                return_value={
-                    "status_http": 200,
-                    "resposta": {"success": True},
-                },
-            ) as enviar,
-            patch.object(
-                processamento_funil,
-                "marcar_envio_como_concluido",
-                return_value=True,
-            ),
-        ):
-            for id_funil_envio, id_conversa in enumerate(
-                (101, 102, 103),
-                start=1,
-            ):
-                self.assertTrue(
-                    processamento_funil.processar_envio_funil(
-                        {
-                            "id_funil_envio": id_funil_envio,
-                            "id_conversa": id_conversa,
-                            "attempt_count": 1,
-                        },
-                        conn,
-                        conn.cursor_obj,
-                    )
-                )
-
-        self.assertEqual(
-            [chamada.args[0] for chamada in buscar_integracao_mock.call_args_list],
-            [1, 2, 1],
-        )
-        self.assertEqual(
-            [
-                (
-                    chamada.kwargs["link_api_carrossel"],
-                    chamada.kwargs["codigo_canal_venda"],
-                )
-                for chamada in enviar.call_args_list
-            ],
-            [
-                ("https://funil-a.example/api?W=A", "canal-a"),
-                ("https://funil-b.example/api?W=B", "canal-b"),
-                ("https://funil-a.example/api?W=A", "canal-a"),
-            ],
-        )
-
-    def test_schema_separa_conversa_ativa_por_cliente_e_unidade(self):
-        source = inspect.getsource(bank_script.criar_tabelas)
-
-        self.assertIn(
-            "ON chatbot.conversa (id_cliente, id_unidade)",
-            source,
-        )
-        self.assertIn(
-            "id_unidade INT NOT NULL UNIQUE",
-            source,
-        )
-        self.assertIn(
-            "phone_number_id VARCHAR(100) UNIQUE NOT NULL",
-            source,
-        )
-        self.assertIn(
-            "waba_id VARCHAR(100) UNIQUE NOT NULL",
-            source,
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 174 — `tests/unit/test_persistencia_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `22a75a68597cfc1e9f3fc468247b1471ee6d36abd84557ed1fc71fc6ab5b5d63`
-
-````python
-import unittest
+from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import ANY, patch
 
+from callback.webhook.services import identidade_meta, populating_fila_mensagens
+from core.database.deploy_database.etapa_transicao_script import (
+    TRANSICOES_INICIAIS,
+)
+from core.database.deploy_database.povoar_etapas import ETAPAS
+from core.integrations.funil import oportunidades
+from core.repositories.atendimento import (
+    clientes,
+    conversas,
+    reconciliacao_clientes,
+)
 from core.repositories.fluxo.politicas import PoliticaEtapa
+from core.triagem import perguntas as perguntas_futuras
+from tests.helpers import FakeCursor
+from workers.worker_flow import valida_banco
+from workers.worker_flow.response_flow import destinatario_sender
+from workers.worker_flow.response_flow.etapas.validadores_contexto import (
+    valida_etapa2,
+)
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
     EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
@@ -35375,6 +30269,109 @@ from workers.worker_flow.transacoes import persistencia_resposta as persistencia
 
 
 DATA_BOT = "2026-01-01T00:00:00"
+ROOT = Path(__file__).resolve().parents[2]
+PHONE_ID = "1217356894795355"
+DISPLAY_PHONE = "557536310000"
+WA_ID = "5575999999999"
+USER_ID = "BR.13491208655302741918"
+
+
+def _ler_arquivo_da_v106(caminho):
+    processo = subprocess.run(
+        ["git", "show", f"e052625:{caminho}"],
+        cwd=ROOT,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    return processo.stdout.decode("utf-8-sig")
+
+
+def _literal_atribuido(fonte, nome):
+    arvore = ast.parse(fonte)
+    for no in arvore.body:
+        if not isinstance(no, ast.Assign):
+            continue
+        if any(
+            isinstance(alvo, ast.Name) and alvo.id == nome
+            for alvo in no.targets
+        ):
+            return ast.literal_eval(no.value)
+    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.0.6")
+
+
+def _strings_executaveis(fonte):
+    """Compara textos reais ignorando apenas docstrings técnicas."""
+    arvore = ast.parse(fonte)
+    docstrings = set()
+    donos = [arvore]
+    donos.extend(
+        no
+        for no in ast.walk(arvore)
+        if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    )
+    for dono in donos:
+        if (
+            dono.body
+            and isinstance(dono.body[0], ast.Expr)
+            and isinstance(dono.body[0].value, ast.Constant)
+            and isinstance(dono.body[0].value.value, str)
+        ):
+            docstrings.add(id(dono.body[0].value))
+
+    return Counter(
+        no.value
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Constant)
+        and isinstance(no.value, str)
+        and id(no) not in docstrings
+    )
+
+
+def _executar_modulo_v106(caminho):
+    namespace = {
+        "__name__": f"baseline_v106_{Path(caminho).stem}",
+        "__file__": str(ROOT / caminho),
+    }
+    fonte = _ler_arquivo_da_v106(caminho)
+    exec(compile(fonte, caminho, "exec"), namespace)
+    return namespace
+
+
+def mensagem_handoff(**sobrescritas):
+    mensagem = {
+        "id_mensagem": 20,
+        "id_phone_unidade": PHONE_ID,
+        "data_recebimento": datetime(2026, 6, 18, 10, tzinfo=timezone.utc),
+        "tipo_identidade_do_item": "user_id",
+        "identidade_do_item": USER_ID,
+        "wa_id": WA_ID,
+        "user_id": USER_ID,
+        "wa_id_compartilhado": WA_ID,
+        "username": "maria.nova",
+        "tipo_mensagem": "contacts",
+        "conteudo_texto": "contact_request",
+    }
+    mensagem.update(sobrescritas)
+    return mensagem
+
+
+def conversa_ativa(
+    id_conversa=70,
+    id_cliente=91,
+    id_unidade=7,
+    id_etapa_atual=2,
+):
+    return {
+        "id_conversa": id_conversa,
+        "id_cliente": id_cliente,
+        "id_unidade": id_unidade,
+        "id_etapa_atual": id_etapa_atual,
+        "status_ativa": True,
+        "processing": False,
+        "lock_version": 0,
+        "estado": "ativa",
+    }
 
 
 def contexto_historico_base(
@@ -35403,6 +30400,131 @@ def contexto_historico_base(
             "unidade_telefone": "5571000000000",
         },
     }
+
+
+class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
+    def test_catalogo_e_mapa_legados_so_mudam_pela_renumeracao(self):
+        etapas_v106 = _literal_atribuido(
+            _ler_arquivo_da_v106(
+                "core/database/deploy_database/povoar_etapas.py"
+            ),
+            "ETAPAS",
+        )
+        etapas_futuras_normalizadas = tuple(
+            (
+                1 if id_etapa == 1 else id_etapa - 1,
+                nome,
+                encerra,
+                bloqueio_dias,
+                elegivel_funil,
+            )
+            for (
+                id_etapa,
+                nome,
+                encerra,
+                bloqueio_dias,
+                elegivel_funil,
+            ) in ETAPAS
+            if id_etapa != 2
+        )
+        self.assertEqual(etapas_futuras_normalizadas, etapas_v106)
+
+        transicoes_v106 = _literal_atribuido(
+            _ler_arquivo_da_v106(
+                "core/database/deploy_database/etapa_transicao_script.py"
+            ),
+            "TRANSICOES_INICIAIS",
+        )
+        eventos_aditivos = {
+            "nome_cliente_valido_sem_wa_id",
+            "contato_oficial_compartilhado",
+        }
+        transicoes_futuras_normalizadas = []
+
+        for origem, evento, destino in TRANSICOES_INICIAIS:
+            if evento in eventos_aditivos:
+                continue
+            if evento == "nome_cliente_valido_com_wa_id":
+                evento = "nome_cliente_valido"
+            transicoes_futuras_normalizadas.append(
+                (
+                    1 if origem == 1 else origem - 1,
+                    evento,
+                    1 if destino == 1 else destino - 1,
+                )
+            )
+
+        self.assertEqual(
+            tuple(transicoes_futuras_normalizadas),
+            transicoes_v106,
+        )
+
+    def test_textos_e_botoes_das_22_etapas_legadas_sao_identicos(self):
+        for etapa_v106 in range(1, 23):
+            etapa_futura = 1 if etapa_v106 == 1 else etapa_v106 + 1
+            caminho_v106 = (
+                "core/integrations/whatsapp/messages/"
+                f"etapa{etapa_v106}_messages.py"
+            )
+            caminho_futuro = ROOT / (
+                "core/integrations/whatsapp/messages/"
+                f"etapa{etapa_futura}_messages.py"
+            )
+
+            with self.subTest(
+                etapa_v106=etapa_v106,
+                etapa_futura=etapa_futura,
+            ):
+                self.assertEqual(
+                    _strings_executaveis(
+                        caminho_futuro.read_text(encoding="utf-8-sig")
+                    ),
+                    _strings_executaveis(_ler_arquivo_da_v106(caminho_v106)),
+                )
+
+    def test_funil_wa_only_sem_username_preserva_payload_v106(self):
+        dados_v106 = {
+            "id_conversa": 10,
+            "id_unidade": 1,
+            "nome_unidade": "Supera Teste",
+            "status_dependente": False,
+            "nome_cliente": "Maria",
+            "telefone_cliente": WA_ID,
+            "email_cliente": "maria@example.com",
+            "idade_cliente": 30,
+            "profissao": "Professora",
+            "nome_dependente": None,
+            "idade_dependente": None,
+            "triagem_respostas": [
+                {"id_etapa": etapa, "resposta": "nunca"}
+                for etapa in range(12, 18)
+            ],
+        }
+        dados_futuros = {
+            **dados_v106,
+            "username": None,
+            "triagem_respostas": [
+                {**item, "id_etapa": item["id_etapa"] + 1}
+                for item in dados_v106["triagem_respostas"]
+            ],
+        }
+        baseline = _executar_modulo_v106(
+            "core/integrations/funil/oportunidades.py"
+        )
+        baseline["montar_pergunta_triagem"] = (
+            lambda id_etapa, **kwargs: perguntas_futuras.montar_pergunta_triagem(
+                id_etapa + 1,
+                **kwargs,
+            )
+        )
+        baseline["obter_faixa_etaria_triagem"] = (
+            perguntas_futuras.obter_faixa_etaria_triagem
+        )
+
+        self.assertEqual(
+            oportunidades.montar_payload_oportunidade(dados_futuros),
+            baseline["montar_payload_oportunidade"](dados_v106),
+        )
 
 
 class PersistenciaEssencialTests(unittest.TestCase):
@@ -35995,1684 +31117,650 @@ class PersistenciaEssencialTests(unittest.TestCase):
         self.assertEqual(resultado["bloqueio_dias"], 30)
 
 
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 175 — `tests/unit/test_profissao_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `cd92d02544b65a57e7482b25b08422035eaacb6199dbc4a637b482306f8e972d`
-
-````python
-import unittest
-
-from django.contrib.admin.sites import AdminSite
-
-from core.repositories.atendimento.conversas import (
-    atualizar_profissao_conversa,
-)
-from tests.helpers import FakeCursor
-from webhook.admin import ConversaAdmin
-from webhook.models import Conversa
-
-
-class ProfissaoEssencialTests(unittest.TestCase):
-    def test_modelo_e_admin_expoem_profissao_opcional_de_100_caracteres(self):
-        campo = Conversa._meta.get_field("profissao")
-        admin = ConversaAdmin(Conversa, AdminSite())
-
-        self.assertEqual(campo.max_length, 100)
-        self.assertTrue(campo.null)
-        self.assertTrue(campo.blank)
-        self.assertIn("profissao", admin.list_display)
-        self.assertIn("profissao", admin.search_fields)
-
-    def test_repositorio_normaliza_e_atualiza_profissao_por_conversa(self):
-        cursor = FakeCursor(rowcount=1)
-
-        linhas = atualizar_profissao_conversa(
-            123,
-            "  Analista de custos  ",
-            cursor,
-        )
-
-        sql, parametros = cursor.calls[0]
-        self.assertIn("UPDATE chatbot.conversa", sql)
-        self.assertIn("SET profissao = %s", sql)
-        self.assertIn("WHERE id_conversa = %s", sql)
-        self.assertEqual(parametros, ("Analista de custos", 123))
-        self.assertEqual(linhas, 1)
-
-    def test_repositorio_rejeita_profissao_fora_do_contrato(self):
-        invalidas = (
-            None,
-            "",
-            "   ",
-            "Engenheiro\nProfessor",
-            "x" * 101,
-        )
-
-        for profissao in invalidas:
-            with self.subTest(profissao=profissao):
-                cursor = FakeCursor()
-
-                with self.assertRaisesRegex(ValueError, "profissao"):
-                    atualizar_profissao_conversa(123, profissao, cursor)
-
-                self.assertEqual(cursor.calls, [])
-
-    def test_repositorio_falha_se_conversa_nao_for_atualizada(self):
-        cursor = FakeCursor(rowcount=0)
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "Profissão não atualizada",
-        ):
-            atualizar_profissao_conversa(
-                999,
-                "Autonomo",
-                cursor,
-            )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 176 — `tests/unit/test_protecao_bot_turnos_sem_avanco.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `d256e3756cfcf00e5c18b5adb878191f69360e8d63ed75571ea41c94a57b656d`
-
-````python
-import unittest
-from types import SimpleNamespace
-from unittest.mock import MagicMock, call, patch
-
-from django.contrib import admin
-
-from callback.webhook.services import bloqueio_meta_guard
-from callback.webhook.services.identidade_meta import extrair_identidade_meta
-from core.repositories.seguranca import suspeita_bot
-from tests.helpers import FakeConn
-from webhook import admin as webhook_admin
-from webhook.models import ClienteBloqueadoMeta
-from workers.worker_flow.transacoes import persistencia_resposta
-from workers.worker_flow.transacoes.movimento_conversa import (
-    MOVIMENTO_SEM_AVANCO,
-    MOVIMENTO_TRANSICAO,
-)
-
-
-WA_ID = "5571999999999"
-USER_ID = "BR.13491208655302741918"
-PHONE_ID = "123456"
-
-
-class RepositorioTurnosSemAvancoTests(unittest.TestCase):
-    def test_incremento_e_limitado_a_doze(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = (12,)
-
-        contador = suspeita_bot.incrementar_turnos_sem_avanco(
-            10,
-            cursor,
-        )
-
-        self.assertEqual(contador, 12)
-        sql, parametros = cursor.execute.call_args.args
-        self.assertIn("LEAST", sql)
-        self.assertEqual(
-            parametros,
-            (suspeita_bot.LIMITE_TURNOS_SEM_AVANCO, 10),
-        )
-
-    def test_reset_define_zero(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = (0,)
-
-        contador = suspeita_bot.resetar_turnos_sem_avanco(
-            10,
-            cursor,
-        )
-
-        self.assertEqual(contador, 0)
-        self.assertEqual(cursor.execute.call_args.args[1], (10,))
-
-    def test_consulta_isola_wa_id_phone_id_e_conversa_ativa(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = (
-            10,
-            20,
-            "Cliente",
-            30,
-            PHONE_ID,
-            12,
-        )
-
-        resultado = suspeita_bot.buscar_conversa_no_limite_sem_avanco(
-            "wa_id",
-            WA_ID,
-            PHONE_ID,
-            cursor,
-        )
-
-        sql, parametros = cursor.execute.call_args.args
-        self.assertIn("cliente.wa_id = %s", sql)
-        self.assertIn("unidade.phone_number_id = %s", sql)
-        self.assertIn("conversa.status_ativa = TRUE", sql)
-        self.assertNotIn("FOR UPDATE", sql)
-        self.assertEqual(
-            parametros,
-            (WA_ID, PHONE_ID, suspeita_bot.LIMITE_TURNOS_SEM_AVANCO),
-        )
-        self.assertEqual(resultado["id_conversa"], 10)
-        self.assertEqual(resultado["turnos_sem_avanco"], 12)
-
-    def test_consulta_user_id_exige_vinculo_da_mesma_unidade(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = None
-
-        suspeita_bot.buscar_conversa_no_limite_sem_avanco(
-            "user_id",
-            USER_ID,
-            PHONE_ID,
-            cursor,
-        )
-
-        sql, parametros = cursor.execute.call_args.args
-        self.assertIn("JOIN chatbot.user_id_cliente AS vinculo", sql)
-        self.assertIn("vinculo.user_id = %s", sql)
-        self.assertIn("vinculo.id_unidade = conversa.id_unidade", sql)
-        self.assertEqual(
-            parametros,
-            (USER_ID, PHONE_ID, suspeita_bot.LIMITE_TURNOS_SEM_AVANCO),
-        )
-
-
-class WorkerTurnosSemAvancoTests(unittest.TestCase):
-    def test_tratamento_novo_incrementa(self):
-        cursor = object()
-
-        with patch.object(
-            persistencia_resposta,
-            "incrementar_turnos_sem_avanco",
-            return_value=6,
-        ) as incrementar, patch.object(
-            persistencia_resposta,
-            "resetar_turnos_sem_avanco",
-        ) as resetar:
-            resultado = (
-                persistencia_resposta._persistir_turnos_sem_avanco(
-                    id_conversa=10,
-                    movimento=MOVIMENTO_SEM_AVANCO,
-                    tratamento=True,
-                    historico_bot_inserido=True,
-                    cursor=cursor,
-                )
-            )
-
-        self.assertEqual(resultado, 6)
-        incrementar.assert_called_once_with(10, cursor)
-        resetar.assert_not_called()
-
-    def test_retry_de_tratamento_nao_incrementa(self):
-        with patch.object(
-            persistencia_resposta,
-            "incrementar_turnos_sem_avanco",
-        ) as incrementar:
-            resultado = (
-                persistencia_resposta._persistir_turnos_sem_avanco(
-                    id_conversa=10,
-                    movimento=MOVIMENTO_SEM_AVANCO,
-                    tratamento=True,
-                    historico_bot_inserido=False,
-                    cursor=object(),
-                )
-            )
-
-        self.assertIsNone(resultado)
-        incrementar.assert_not_called()
-
-    def test_resposta_sem_tratamento_e_sem_transicao_nao_incrementa(self):
-        with patch.object(
-            persistencia_resposta,
-            "incrementar_turnos_sem_avanco",
-        ) as incrementar:
-            resultado = (
-                persistencia_resposta._persistir_turnos_sem_avanco(
-                    id_conversa=10,
-                    movimento=MOVIMENTO_SEM_AVANCO,
-                    tratamento=False,
-                    historico_bot_inserido=True,
-                    cursor=object(),
-                )
-            )
-
-        self.assertIsNone(resultado)
-        incrementar.assert_not_called()
-
-    def test_transicao_valida_reseta_mesmo_em_reaplicacao(self):
-        cursor = object()
-
-        with patch.object(
-            persistencia_resposta,
-            "resetar_turnos_sem_avanco",
-            return_value=0,
-        ) as resetar, patch.object(
-            persistencia_resposta,
-            "incrementar_turnos_sem_avanco",
-        ) as incrementar:
-            resultado = (
-                persistencia_resposta._persistir_turnos_sem_avanco(
-                    id_conversa=10,
-                    movimento=MOVIMENTO_TRANSICAO,
-                    tratamento=False,
-                    historico_bot_inserido=False,
-                    cursor=cursor,
-                )
-            )
-
-        self.assertEqual(resultado, 0)
-        resetar.assert_called_once_with(10, cursor)
-        incrementar.assert_not_called()
-
-
-class WebhookSuspeitaBotTests(unittest.TestCase):
-    def test_limite_promove_para_denylist_antes_da_meta(self):
-        conn = FakeConn()
-        suspeita = {
-            "id_conversa": 10,
-            "id_cliente": 20,
-            "nome_cliente": "Cliente",
-            "id_unidade": 30,
-            "phone_id_unidade": PHONE_ID,
-            "turnos_sem_avanco": 12,
-        }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=suspeita,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-            return_value=99,
-        ) as registrar:
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": True,
-                "marcado": True,
-            },
-        )
-        registrar.assert_called_once_with(
-            20,
-            WA_ID,
-            None,
-            None,
-            30,
-            PHONE_ID,
-            conn.cursor(),
-            nome_cliente="Cliente",
-        )
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 0)
-        self.assertTrue(conn.closed)
-
-    def test_abaixo_do_limite_nao_cria_denylist(self):
-        conn = FakeConn()
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=None,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-        ) as registrar:
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": True,
-                "marcado": False,
-            },
-        )
-        registrar.assert_not_called()
-
-    def test_falha_ao_persistir_promocao_retorna_estado_indisponivel(self):
-        conn = FakeConn()
-        suspeita = {
-            "id_conversa": 10,
-            "id_cliente": 20,
-            "nome_cliente": "Cliente",
-            "id_unidade": 30,
-            "phone_id_unidade": PHONE_ID,
-            "turnos_sem_avanco": 12,
-        }
-
-        with patch.object(
-            bloqueio_meta_guard,
-            "get_conn",
-            return_value=conn,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "cliente_bloqueado_meta_existe_banco",
-            return_value=False,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "buscar_conversa_no_limite_sem_avanco",
-            return_value=suspeita,
-        ), patch.object(
-            bloqueio_meta_guard,
-            "registrar_cliente_bloqueado_meta_banco",
-            side_effect=RuntimeError("banco caiu"),
-        ), patch.object(
-            bloqueio_meta_guard.logger,
-            "exception",
-        ):
-            resultado = (
-                bloqueio_meta_guard
-                ._consultar_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-            )
-
-        self.assertEqual(
-            resultado,
-            {
-                "banco_ok": False,
-                "marcado": False,
-            },
-        )
-        self.assertEqual(conn.commits, 0)
-        self.assertEqual(conn.rollbacks, 1)
-        self.assertTrue(conn.closed)
-
-
-class CoberturaAdicionalTests(unittest.TestCase):
-    def test_isolamento_e_conversa_encerrada(self):
-        cursor = MagicMock()
-        cursor.fetchone.return_value = None
-        limite = suspeita_bot.LIMITE_TURNOS_SEM_AVANCO
-        for wa, phone in (("a", "1"), ("a", "2"), ("b", "1")):
-            suspeita_bot.buscar_conversa_no_limite_sem_avanco(
+class IdentidadePrivadaEssencialTests(unittest.TestCase):
+    def _carregar_payload(self, nome):
+        return json.loads((ROOT / "payloads" / nome).read_text(encoding="utf-8"))
+
+    def test_parser_aceita_quatro_formatos_com_phone_id_e_display_opcional(self):
+        casos = (
+            ("WAID.json", "wa_id", "5575999999999"),
+            (
+                "BSUID_USERNAME.json",
+                "user_id",
+                "BR.13491208655302741918",
+            ),
+            (
+                "WAID_BSUID_USERNAME.json",
                 "wa_id",
-                wa,
-                phone,
-                cursor,
-            )
-        self.assertEqual(
-            [c.args[1] for c in cursor.execute.call_args_list],
-            [("a", "1", limite), ("a", "2", limite), ("b", "1", limite)],
-        )
-        self.assertIn("conversa.status_ativa = TRUE", cursor.execute.call_args.args[0])
-
-    def test_nome_profile_e_fallback_persistido(self):
-        payload = {
-            "entry": [{
-                "changes": [{
-                    "value": {
-                        "contacts": [{
-                            "wa_id": WA_ID,
-                            "profile": {"name": " Nome Meta "},
-                        }],
-                        "messages": [{"from": WA_ID, "type": "text"}],
-                    }
-                }]
-            }]
-        }
-        self.assertEqual(
-            extrair_identidade_meta(payload)["nome_cliente"],
-            "Nome Meta",
-        )
-        conn = FakeConn()
-        suspeita = {"id_conversa": 10, "id_cliente": 20, "nome_cliente": None, "id_unidade": 30, "phone_id_unidade": PHONE_ID, "turnos_sem_avanco": 12}
-        with patch.object(bloqueio_meta_guard, "get_conn", return_value=conn), patch.object(bloqueio_meta_guard, "cliente_bloqueado_meta_existe_banco", return_value=False), patch.object(bloqueio_meta_guard, "buscar_conversa_no_limite_sem_avanco", return_value=suspeita), patch.object(bloqueio_meta_guard, "registrar_cliente_bloqueado_meta_banco", return_value=99) as registrar:
-            bloqueio_meta_guard._consultar_cliente_marcado_para_bloqueio(
-                "wa_id",
-                WA_ID,
-                PHONE_ID,
-                nome_cliente="Nome Meta",
-                wa_id=WA_ID,
-            )
-        self.assertEqual(registrar.call_args.kwargs["nome_cliente"], "Nome Meta")
-
-    def test_falha_meta_e_retry_sequencial(self):
-        with patch.object(bloqueio_meta_guard, "_consultar_cliente_marcado_para_bloqueio", return_value={"banco_ok": True, "marcado": True}), patch.object(bloqueio_meta_guard, "bloquear_usuario_meta", side_effect=[RuntimeError("falha"), None]) as bloquear:
-            respostas = [
-                bloqueio_meta_guard.responder_se_cliente_marcado_para_bloqueio(
-                    "wa_id",
-                    WA_ID,
-                    PHONE_ID,
-                    wa_id=WA_ID,
-                )
-                for _ in range(2)
-            ]
-        self.assertTrue(all(r.status_code == 200 for r in respostas))
-        self.assertEqual(bloquear.call_args_list, [call(WA_ID, PHONE_ID), call(WA_ID, PHONE_ID)])
-
-    def test_admin_reseta_antes_de_excluir_denylist(self):
-        ma = webhook_admin.ClienteBloqueadoMetaAdmin(ClienteBloqueadoMeta, admin.site)
-        request = SimpleNamespace(user="operador")
-        obj = SimpleNamespace(
-            id_cliente_id=20,
-            id_unidade_id=30,
-            wa_id=WA_ID,
-            user_id=None,
-            phone_id_unidade=PHONE_ID,
-        )
-        qs = MagicMock()
-        with patch.object(webhook_admin.Conversa.objects, "filter", return_value=qs) as filtrar, patch.object(admin.ModelAdmin, "delete_model") as excluir:
-            ma.delete_model(request, obj)
-        filtrar.assert_called_once_with(id_cliente_id=20, id_unidade_id=30, status_ativa=True)
-        qs.update.assert_called_once_with(turnos_sem_avanco=0)
-        excluir.assert_called_once_with(request, obj)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 177 — `tests/unit/test_reconciliacao_user_id.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `da3360a8f951d4230d2382be1b204bb18cbd4fdd26af316aacb3ab9c07720313`
-
-````python
-import unittest
-from contextlib import ExitStack
-from unittest.mock import Mock, call, patch
-
-from core.repositories.atendimento import clientes
-from core.repositories.atendimento import reconciliacao_clientes as reconciliacao
-from core.repositories.atendimento import user_id_cliente
-from workers.worker_flow import valida_banco
-
-
-class CursorFake:
-    def __init__(self, fetchone=None):
-        self._fetchone = fetchone
-        self.rowcount = 1
-        self.execucoes = []
-
-    def execute(self, sql, parametros=None):
-        self.execucoes.append((sql, parametros))
-
-    def fetchone(self):
-        return self._fetchone
-
-
-class ReconciliacaoClienteTests(unittest.TestCase):
-    def test_reconciliacao_preserva_conversa_e_encerra_canonica_anterior(self):
-        cursor = object()
-        with ExitStack() as stack:
-            buscar_conversa = stack.enter_context(
-                patch.object(
-                    reconciliacao,
-                    "buscar_conversa_ativa_cliente_unidade",
-                    side_effect=[
-                        {"id_conversa": 100},
-                        {"id_conversa": 200},
-                    ],
-                )
-            )
-            encerrar = stack.enter_context(
-                patch.object(reconciliacao, "encerrar_conversa")
-            )
-            reatribuir = stack.enter_context(
-                patch.object(reconciliacao, "reatribuir_conversa_cliente")
-            )
-            consolidar = stack.enter_context(
-                patch.object(reconciliacao, "consolidar_vinculo_user_id")
-            )
-            preencher_conversa = stack.enter_context(
-                patch.object(
-                    reconciliacao,
-                    "preencher_snapshots_conversa_nulos",
-                )
-            )
-            preencher_fila = stack.enter_context(
-                patch.object(
-                    reconciliacao,
-                    "preencher_snapshots_fila_conversa_nulos",
-                )
-            )
-            preencher_historico = stack.enter_context(
-                patch.object(
-                    reconciliacao,
-                    "preencher_snapshots_historico_conversa_nulos",
-                )
-            )
-            excluir = stack.enter_context(
-                patch.object(
-                    reconciliacao,
-                    "excluir_cliente_provisorio_com_gates",
-                )
-            )
-
-            resultado = reconciliacao.reconciliar_cliente_provisorio(
-                id_cliente_provisorio=10,
-                id_cliente_canonico=20,
-                id_conversa_atual=100,
-                id_unidade=7,
-                wa_id_canonico="5575999999999",
-                user_id="BR.123",
-                username="ana",
-                cursor=cursor,
-            )
-
-        self.assertEqual(
-            buscar_conversa.call_args_list,
-            [call(10, 7, cursor), call(20, 7, cursor)],
-        )
-        encerrar.assert_called_once_with(200, "ativou_user_id", cursor)
-        reatribuir.assert_called_once_with(
-            id_conversa=100,
-            id_cliente_origem=10,
-            id_cliente_destino=20,
-            cursor=cursor,
-        )
-        consolidar.assert_called_once_with(
-            id_cliente_destino=20,
-            id_cliente_origem=10,
-            user_id="BR.123",
-            id_unidade=7,
-            cursor=cursor,
-        )
-        snapshots = {
-            "id_conversa": 100,
-            "wa_id": "5575999999999",
-            "user_id": "BR.123",
-            "username": "ana",
-            "cursor": cursor,
-        }
-        preencher_conversa.assert_called_once_with(**snapshots)
-        preencher_fila.assert_called_once_with(**snapshots)
-        preencher_historico.assert_called_once_with(**snapshots)
-        excluir.assert_called_once_with(10, cursor)
-        self.assertEqual(
-            resultado,
-            {
-                "id_cliente": 20,
-                "id_conversa": 100,
-                "conversa_anterior_encerrada": 200,
-            },
+                "5571988887777",
+            ),
+            (
+                "CONTACT_INFO.json",
+                "user_id",
+                "BR.13491208655302741918",
+            ),
         )
 
-    def test_reconciliacao_recusa_conversa_que_nao_e_a_atual(self):
-        with patch.object(
-            reconciliacao,
-            "buscar_conversa_ativa_cliente_unidade",
-            return_value={"id_conversa": 999},
-        ), patch.object(
-            reconciliacao,
-            "reatribuir_conversa_cliente",
-        ) as reatribuir:
-            with self.assertRaises(RuntimeError):
-                reconciliacao.reconciliar_cliente_provisorio(
-                    id_cliente_provisorio=10,
-                    id_cliente_canonico=20,
-                    id_conversa_atual=100,
-                    id_unidade=7,
-                    wa_id_canonico="5575999999999",
-                    user_id="BR.123",
-                    username=None,
-                    cursor=object(),
+        for arquivo, tipo_esperado, identidade_esperada in casos:
+            with self.subTest(arquivo=arquivo, display_presente=True):
+                payload = self._carregar_payload(arquivo)
+                identidade = identidade_meta.extrair_identidade_meta(payload)
+                dados = populating_fila_mensagens.extrair_dados_whatsapp(
+                    payload,
+                    identidade_meta=identidade,
                 )
 
-        reatribuir.assert_not_called()
-
-    def test_reconciliacao_recusa_mesmo_cliente(self):
-        with self.assertRaises(ValueError):
-            reconciliacao.reconciliar_cliente_provisorio(
-                id_cliente_provisorio=10,
-                id_cliente_canonico=10,
-                id_conversa_atual=100,
-                id_unidade=7,
-                wa_id_canonico="5575999999999",
-                user_id="BR.123",
-                username=None,
-                cursor=object(),
-            )
-
-
-class ExclusaoSeguraClienteProvisorioTests(unittest.TestCase):
-    def test_delete_contem_os_quatro_gates_e_exige_wa_nulo(self):
-        cursor = CursorFake(fetchone=(10,))
-
-        resultado = clientes.excluir_cliente_provisorio_com_gates(10, cursor)
-
-        self.assertEqual(resultado, 10)
-        sql, parametros = cursor.execucoes[0]
-        sql_normalizado = " ".join(sql.split()).lower()
-        self.assertIn("cliente.wa_id is null", sql_normalizado)
-        for tabela in (
-            "chatbot.conversa",
-            "chatbot.dependente",
-            "chatbot.cliente_bloqueado_meta",
-            "chatbot.user_id_cliente",
-        ):
-            self.assertIn(f"from {tabela}", sql_normalizado)
-        self.assertEqual(parametros, (10,))
-
-    def test_delete_bloqueado_por_qualquer_gate_propaga_erro(self):
-        cursor = CursorFake(fetchone=None)
-
-        with self.assertRaisesRegex(RuntimeError, "referência remanescente"):
-            clientes.excluir_cliente_provisorio_com_gates(10, cursor)
-
-
-class ConsolidacaoVinculoUserIdTests(unittest.TestCase):
-    def test_retry_com_vinculo_ja_canonico_e_idempotente(self):
-        vinculo = {
-            "id_user_id_cliente": 2,
-            "id_cliente": 20,
-            "user_id": "BR.123",
-            "id_unidade": 7,
-            "wa_id": "5575999999999",
-        }
-        cursor = CursorFake()
-        with patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_user_id",
-            return_value=vinculo,
-        ), patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_cliente_unidade",
-            return_value=vinculo,
-        ):
-            resultado = user_id_cliente.consolidar_vinculo_user_id(
-                id_cliente_destino=20,
-                id_cliente_origem=10,
-                user_id="BR.123",
-                id_unidade=7,
-                cursor=cursor,
-            )
-
-        self.assertEqual(resultado, 2)
-        self.assertEqual(cursor.execucoes, [])
-
-    def test_duas_unicidades_removem_provisorio_antes_de_atualizar_canonico(self):
-        cursor = CursorFake()
-        with patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_user_id",
-            return_value={
-                "id_user_id_cliente": 1,
-                "id_cliente": 10,
-                "user_id": "BR.123",
-                "id_unidade": 7,
-                "wa_id": None,
-            },
-        ), patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_cliente_unidade",
-            return_value={
-                "id_user_id_cliente": 2,
-                "id_cliente": 20,
-                "user_id": "BR.ANTIGO",
-                "id_unidade": 7,
-                "wa_id": "5575999999999",
-            },
-        ):
-            resultado = user_id_cliente.consolidar_vinculo_user_id(
-                id_cliente_destino=20,
-                id_cliente_origem=10,
-                user_id="BR.123",
-                id_unidade=7,
-                cursor=cursor,
-            )
-
-        self.assertEqual(resultado, 2)
-        self.assertEqual(len(cursor.execucoes), 2)
-        self.assertIn("DELETE FROM chatbot.user_id_cliente", cursor.execucoes[0][0])
-        self.assertIn("UPDATE chatbot.user_id_cliente", cursor.execucoes[1][0])
-
-    def test_user_id_de_outro_cliente_sem_origem_comprovada_e_recusado(self):
-        cursor = CursorFake()
-        with patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_user_id",
-            return_value={
-                "id_user_id_cliente": 1,
-                "id_cliente": 99,
-                "user_id": "BR.123",
-                "id_unidade": 7,
-                "wa_id": "5511000000000",
-            },
-        ), patch.object(
-            user_id_cliente,
-            "buscar_vinculo_por_cliente_unidade",
-            return_value=None,
-        ):
-            with self.assertRaisesRegex(RuntimeError, "sem prova de origem"):
-                user_id_cliente.consolidar_vinculo_user_id(
-                    id_cliente_destino=20,
-                    id_cliente_origem=10,
-                    user_id="BR.123",
-                    id_unidade=7,
-                    cursor=cursor,
+                self.assertNotIn("erro", dados)
+                self.assertEqual(dados["id_phone_unidade"], PHONE_ID)
+                self.assertEqual(
+                    dados["tipo_identidade_do_item"],
+                    tipo_esperado,
+                )
+                self.assertEqual(
+                    dados["identidade_do_item"],
+                    identidade_esperada,
                 )
 
-        self.assertEqual(cursor.execucoes, [])
+            with self.subTest(arquivo=arquivo, display_presente=False):
+                payload = self._carregar_payload(arquivo)
+                metadata = payload["entry"][0]["changes"][0]["value"][
+                    "metadata"
+                ]
+                metadata.pop("display_phone_number")
+                dados = populating_fila_mensagens.extrair_dados_whatsapp(
+                    payload
+                )
 
+                self.assertNotIn("erro", dados)
+                self.assertEqual(dados["id_phone_unidade"], PHONE_ID)
+                self.assertIsNone(dados["unidade_telefone"])
 
-class ValidaBancoSomenteUserIdTests(unittest.TestCase):
-    def setUp(self):
-        self.mensagem = {
-            "id_phone_unidade": "phone-1",
-            "referencia_cache_cliente": "cliente_cache:user:phone-1:BR.123",
-            "tipo_identidade_do_item": "user_id",
-            "identidade_do_item": "BR.123",
-            "wa_id": None,
-            "wa_id_compartilhado": None,
-            "user_id": "BR.123",
-            "username": "ana",
-        }
+    def test_parser_rejeita_phone_id_ausente_mesmo_com_display(self):
+        payload = self._carregar_payload("WAID.json")
+        metadata = payload["entry"][0]["changes"][0]["value"]["metadata"]
+        metadata.pop("phone_number_id")
 
-    def _patch_base(self, stack):
-        stack.enter_context(
-            patch.object(
-                valida_banco,
-                "obter_id_unidade_redis_ou_plsql",
-                return_value=7,
-            )
+        dados = populating_fila_mensagens.extrair_dados_whatsapp(payload)
+
+        self.assertEqual(dados["erro"], "dados_incompletos")
+        self.assertEqual(metadata["display_phone_number"], DISPLAY_PHONE)
+
+    def test_contact_gate_exige_origem_oficial_e_wa_id_de_10_a_15_digitos(self):
+        validos = ("1" * 10, "2" * 12, "3" * 15)
+        invalidos = ("4" * 9, "5" * 16, "+5575999999999", "55 75")
+
+        for candidato in validos:
+            with self.subTest(candidato=candidato, valido=True):
+                self.assertTrue(
+                    valida_etapa2.validar_etapa2(
+                        "contacts",
+                        "contact_request",
+                        candidato,
+                    )
+                )
+
+        for candidato in invalidos:
+            with self.subTest(candidato=candidato, valido=False):
+                self.assertFalse(
+                    valida_etapa2.validar_etapa2(
+                        "contacts",
+                        "contact_request",
+                        candidato,
+                    )
+                )
+
+        self.assertFalse(
+            valida_etapa2.validar_etapa2("contacts", "other", "1" * 12)
         )
-        stack.enter_context(
-            patch.object(valida_banco, "buscar_cliente_cache", return_value=None)
-        )
-        stack.enter_context(
-            patch.object(valida_banco, "preencher_snapshots_conversa_nulos")
-        )
-        stack.enter_context(
-            patch.object(
-                valida_banco,
-                "buscar_identidades_para_contexto",
-                return_value={
-                    "wa_id": None,
-                    "user_id": "BR.123",
-                    "username": "ana",
-                },
-            )
+        self.assertFalse(
+            valida_etapa2.validar_etapa2("text", "contact_request", "1" * 12)
         )
 
-    def test_primeiro_evento_user_only_cria_provisorio_vinculo_e_conversa(self):
-        cursor = object()
-        with ExitStack() as stack:
-            self._patch_base(stack)
-            stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "buscar_vinculo_por_user_id",
-                    return_value=None,
-                )
-            )
-            criar_cliente = stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "criar_cliente_provisorio",
-                    return_value=11,
-                )
-            )
-            criar_vinculo = stack.enter_context(
-                patch.object(valida_banco, "criar_vinculo_user_id")
-            )
-            stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "valida_conversa",
-                    return_value={"id_conversa": 22, "status_ativa": True},
-                )
-            )
+        # ``phones[].phone`` nunca e prova: sem ``phones[].wa_id`` explicito,
+        # o item continua sendo do user ID e nao inicia reconciliacao.
+        payload_sem_wa_explicito = self._carregar_payload("CONTACT_INFO.json")
+        phone = payload_sem_wa_explicito["entry"][0]["changes"][0]["value"][
+            "messages"
+        ][0]["contacts"][0]["phones"][0]
+        phone.pop("wa_id")
+        identidade = identidade_meta.extrair_identidade_meta(
+            payload_sem_wa_explicito
+        )
+        self.assertIsNone(identidade["wa_id_compartilhado"])
+        self.assertFalse(identidade["contato_ambiguo"])
+        self.assertEqual(identidade["tipo_identidade_do_item"], "user_id")
 
-            resultado = valida_banco.validar_banco_mensagem(
-                self.mensagem,
-                cursor,
-            )
+        # Exatamente uma ocorrencia explicita e aceita. Ate duas ocorrencias
+        # iguais sao ambiguas, pois cardinalidade tambem faz parte da prova.
+        payload_duplicado = self._carregar_payload("CONTACT_INFO.json")
+        phones = payload_duplicado["entry"][0]["changes"][0]["value"][
+            "messages"
+        ][0]["contacts"][0]["phones"]
+        phones.append(dict(phones[0]))
+        identidade = identidade_meta.extrair_identidade_meta(payload_duplicado)
+        self.assertIsNone(identidade["wa_id_compartilhado"])
+        self.assertTrue(identidade["contato_ambiguo"])
 
-        criar_cliente.assert_called_once_with("ana", cursor)
-        criar_vinculo.assert_called_once_with(11, "BR.123", 7, cursor)
-        self.assertEqual(resultado["id_cliente"], 11)
-        self.assertEqual(resultado["conversa"]["id_conversa"], 22)
-        self.assertIsNone(resultado["wa_id"])
-        self.assertEqual(resultado["user_id"], "BR.123")
-
-    def test_retry_user_only_reusa_vinculo_sem_recriar_cliente(self):
-        cursor = object()
-        with ExitStack() as stack:
-            self._patch_base(stack)
-            stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "buscar_vinculo_por_user_id",
-                    return_value={"id_cliente": 11},
-                )
-            )
-            stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "buscar_cliente_por_id",
-                    return_value={
-                        "id_cliente": 11,
-                        "wa_id": None,
-                        "username": "ana",
-                    },
-                )
-            )
-            criar_cliente = stack.enter_context(
-                patch.object(valida_banco, "criar_cliente_provisorio")
-            )
-            criar_vinculo = stack.enter_context(
-                patch.object(valida_banco, "criar_vinculo_user_id")
-            )
-            stack.enter_context(
-                patch.object(valida_banco, "atualizar_username_cliente")
-            )
-            stack.enter_context(
-                patch.object(
-                    valida_banco,
-                    "valida_conversa",
-                    return_value={"id_conversa": 22, "status_ativa": True},
-                )
-            )
-
-            resultado = valida_banco.validar_banco_mensagem(
-                self.mensagem,
-                cursor,
-            )
-
-        criar_cliente.assert_not_called()
-        criar_vinculo.assert_not_called()
-        self.assertEqual(resultado["id_cliente"], 11)
-        self.assertFalse(resultado["cliente_inserido"])
-
-    def test_handoff_para_cliente_canonico_chama_reconciliacao_antes_de_seguir(self):
-        cursor = object()
-        mensagem = {
-            **self.mensagem,
-            "wa_id_compartilhado": "5575999999999",
-        }
+        mensagem_invalida = mensagem_handoff(conteudo_texto="other")
         with patch.object(
             valida_banco,
             "buscar_vinculo_por_user_id",
-            return_value={"id_cliente": 10},
+        ) as buscar_vinculo, patch.object(
+            valida_banco,
+            "bloquear_clientes_por_ids",
+        ) as bloquear_clientes, patch.object(
+            valida_banco,
+            "promover_cliente_provisorio",
+        ) as promover:
+            with self.assertRaisesRegex(RuntimeError, "antes do handoff"):
+                valida_banco._resolver_handoff(
+                    mensagem_invalida,
+                    7,
+                    object(),
+                )
+
+        buscar_vinculo.assert_not_called()
+        bloquear_clientes.assert_not_called()
+        promover.assert_not_called()
+
+    def test_user_id_desconhecido_cria_cliente_provisorio_e_vinculo_da_unidade(self):
+        mensagem = {"user_id": USER_ID, "username": "maria.nova"}
+        conversa = {"id_conversa": 70, "estado": "ativa"}
+
+        with patch.object(
+            valida_banco,
+            "buscar_vinculo_por_user_id",
+            return_value=None,
+        ) as buscar_vinculo, patch.object(
+            valida_banco,
+            "criar_cliente_provisorio",
+            return_value=91,
+        ) as criar_cliente, patch.object(
+            valida_banco,
+            "criar_vinculo_user_id",
+        ) as criar_vinculo, patch.object(
+            valida_banco,
+            "valida_conversa",
+            return_value=conversa,
+        ):
+            resultado = valida_banco._resolver_evento_somente_user_id(
+                mensagem,
+                7,
+                object(),
+            )
+
+        buscar_vinculo.assert_called_once_with(
+            USER_ID,
+            7,
+            ANY,
+        )
+        criar_cliente.assert_called_once_with("maria.nova", ANY)
+        criar_vinculo.assert_called_once_with(91, USER_ID, 7, ANY)
+        self.assertEqual(resultado["id_cliente"], 91)
+        self.assertIsNone(resultado["wa_id"])
+        self.assertEqual(resultado["user_id"], USER_ID)
+
+    def test_handoff_com_wa_novo_promove_o_mesmo_cliente(self):
+        mensagem = mensagem_handoff()
+        conversa = conversa_ativa()
+
+        with patch.object(
+            valida_banco,
+            "existe_mensagem_anterior_alias_handoff",
+            return_value=False,
+        ), patch.object(
+            valida_banco,
+            "buscar_vinculo_por_user_id",
+            return_value={"id_cliente": 91},
         ), patch.object(
             valida_banco,
             "buscar_cliente_por_id",
-            return_value={"id_cliente": 10, "wa_id": None},
+            return_value={
+                "id_cliente": 91,
+                "wa_id": None,
+                "username": "maria.nova",
+                "nome": "Maria",
+            },
         ), patch.object(
             valida_banco,
             "buscar_conversa_ativa_cliente_unidade",
-            return_value={"id_conversa": 100},
+            return_value=conversa,
         ), patch.object(
             valida_banco,
             "buscar_cliente_por_wa_id",
-            return_value={"id_cliente": 20, "wa_id": "5575999999999"},
+            return_value=None,
+        ), patch.object(
+            valida_banco,
+            "bloquear_clientes_por_ids",
+            return_value={
+                91: {
+                    "id_cliente": 91,
+                    "wa_id": None,
+                    "username": "maria.nova",
+                    "nome": "Maria",
+                }
+            },
+        ), patch.object(
+            valida_banco,
+            "bloquear_conversas_reconciliacao",
+            return_value={70: conversa},
+        ), patch.object(
+            valida_banco,
+            "promover_cliente_provisorio",
+        ) as promover, patch.object(
+            valida_banco,
+            "consolidar_vinculo_user_id",
+        ) as consolidar, patch.object(
+            valida_banco,
+            "valida_conversa",
+            return_value=conversa,
         ), patch.object(
             valida_banco,
             "reconciliar_cliente_provisorio",
+        ) as reconciliar, patch.object(
+            valida_banco,
+            "buscar_bloqueio_ativo_por_id_cliente_unidade",
+            return_value=None,
+        ), patch.object(
+            valida_banco,
+            "consolidar_bloqueio_meta_reconciliacao",
+            return_value=None,
+        ):
+            resultado = valida_banco._resolver_handoff(
+                mensagem,
+                7,
+                object(),
+            )
+
+        promover.assert_called_once_with(91, WA_ID, "maria.nova", ANY)
+        consolidar.assert_called_once()
+        reconciliar.assert_not_called()
+        self.assertEqual(resultado["id_cliente"], 91)
+        self.assertEqual(resultado["wa_id"], WA_ID)
+
+    def test_handoff_com_wa_existente_encaminha_nome_novo_ao_merge(self):
+        mensagem = mensagem_handoff(username="maria.privada")
+        conversa = conversa_ativa()
+        resultado_merge = {
+            "id_cliente": 5,
+            "id_conversa": 70,
+            "conversa_anterior_encerrada": 33,
+            "bloqueio_reconciliado": False,
+            "bloqueio_comercial": None,
+            "bloqueio_meta": None,
+        }
+
+        with patch.object(
+            valida_banco,
+            "existe_mensagem_anterior_alias_handoff",
+            return_value=False,
+        ), patch.object(
+            valida_banco,
+            "buscar_vinculo_por_user_id",
+            return_value={"id_cliente": 91},
+        ), patch.object(
+            valida_banco,
+            "buscar_cliente_por_id",
+            return_value={
+                "id_cliente": 91,
+                "wa_id": None,
+                "username": "maria.privada",
+                "nome": "Maria Nova",
+            },
+        ), patch.object(
+            valida_banco,
+            "buscar_conversa_ativa_cliente_unidade",
+            return_value=conversa,
+        ), patch.object(
+            valida_banco,
+            "buscar_cliente_por_wa_id",
+            return_value={
+                "id_cliente": 5,
+                "wa_id": WA_ID,
+                "username": "maria.antiga",
+                "nome": "Nome Antigo",
+            },
+        ), patch.object(
+            valida_banco,
+            "bloquear_clientes_por_ids",
+            return_value={
+                5: {
+                    "id_cliente": 5,
+                    "wa_id": WA_ID,
+                    "username": "maria.antiga",
+                    "nome": "Nome Antigo",
+                },
+                91: {
+                    "id_cliente": 91,
+                    "wa_id": None,
+                    "username": "maria.privada",
+                    "nome": "Maria Nova",
+                },
+            },
+        ), patch.object(
+            valida_banco,
+            "reconciliar_cliente_provisorio",
+            return_value=resultado_merge,
         ) as reconciliar, patch.object(
             valida_banco,
             "atualizar_username_cliente",
         ), patch.object(
             valida_banco,
             "valida_conversa",
-            return_value={"id_conversa": 100, "status_ativa": True},
+            return_value=conversa,
         ):
             resultado = valida_banco._resolver_handoff(
                 mensagem,
                 7,
-                cursor,
+                object(),
             )
 
-        reconciliar.assert_called_once_with(
-            id_cliente_provisorio=10,
-            id_cliente_canonico=20,
-            id_conversa_atual=100,
-            id_unidade=7,
-            wa_id_canonico="5575999999999",
-            user_id="BR.123",
-            username="ana",
-            cursor=cursor,
+        reconciliar.assert_called_once()
+        argumentos = reconciliar.call_args.kwargs
+        nome_encaminhado = argumentos.get(
+            "nome_cliente_provisorio",
+            argumentos.get("nome_cliente"),
         )
-        self.assertEqual(resultado["id_cliente"], 20)
-        self.assertEqual(resultado["conversa"]["id_conversa"], 100)
+        self.assertEqual(nome_encaminhado, "Maria Nova")
+        self.assertEqual(argumentos["id_cliente_provisorio"], 91)
+        self.assertEqual(argumentos["id_cliente_canonico"], 5)
+        self.assertEqual(argumentos["id_conversa_atual"], 70)
+        self.assertEqual(resultado["id_cliente"], 5)
 
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 178 — `tests/unit/test_relatorio_conversas_suspeitas.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `07e7efece8414154ddb0bd4b235ed29387f398dfdd702cc29267f24634f898b8`
-
-````python
-import argparse
-import csv
-import io
-import json
-import unittest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
-
-from operations.monitoring import suspicious_conversations as relatorio
-
-
-UTC = timezone.utc
-BASE = datetime(2025, 1, 15, 12, 0, tzinfo=UTC)
-
-
-def mensagem(
-    indice,
-    *,
-    segundos,
-    quem,
-    etapa=4,
-    fingerprint=None,
-    tamanho=20,
-    texto=None,
-    tipo="text",
-    id_fila=None,
-    tem_url=False,
-    tem_marcador_automacao=False,
-):
-    return {
-        "id_mensagem": indice,
-        "id_mensagem_fila": id_fila,
-        "id_conversa": 10,
-        "id_etapa": etapa,
-        "instante": BASE + timedelta(seconds=segundos),
-        "tipo_mensagem": tipo,
-        "quem_enviou": quem,
-        "fingerprint": fingerprint or f"fp-{indice}",
-        "tamanho_texto": tamanho,
-        "texto": texto,
-        "tem_url": tem_url,
-        "tem_marcador_automacao": tem_marcador_automacao,
-    }
-
-
-def conversa(**alteracoes):
-    dados = {
-        "id_conversa": 10,
-        "id_cliente": 99,
-        "nome_cliente": "Maria da Silva",
-        "wa_id": "5511999998888",
-        "user_id": "BR.123456789",
-        "username": "maria.silva",
-        "id_unidade": 2,
-        "nome_unidade": "Unidade Centro",
-        "waba_id": "waba-2",
-        "phone_number_id": "phone-2",
-        "id_etapa_atual": 4,
-        "status_ativa": True,
-        "iniciou_em": BASE,
-        "finalizou_em": None,
-        "motivo_encerramento": None,
-        "turnos_sem_avanco": None,
-    }
-    dados.update(alteracoes)
-    return dados
-
-
-def args_padrao(**alteracoes):
-    dados = {
-        "id_conversa": [10],
-        "id_unidade": None,
-        "todas_unidades": False,
-        "inicio": "2025-01-15T00:00:00Z",
-        "fim": "2025-01-16T00:00:00Z",
-        "ultimas_horas": 24,
-        "limite_conversas": 100,
-        "limite_mensagens": 100,
-        "max_mensagens_total": 10000,
-        "limiar": 0,
-        "formato": "json",
-        "saida": None,
-        "incluir_textos": False,
-        "mostrar_wa_id": False,
-        "max_amostras_texto": 5,
-        "max_caracteres_texto": 160,
-        "statement_timeout_ms": 15000,
-        "lock_timeout_ms": 1000,
-        "idle_timeout_ms": 20000,
-    }
-    dados.update(alteracoes)
-    return argparse.Namespace(**dados)
-
-
-class FakeCursor:
-    def __init__(self, *, possui_turnos=True, conversas=None, mensagens=None):
-        self.possui_turnos = possui_turnos
-        self.conversas = conversas or []
-        self.mensagens = mensagens or []
-        self.calls = []
-        self._resultado = []
-
-    def execute(self, sql, parametros=None):
-        self.calls.append((sql, parametros))
-        normalizado = " ".join(sql.split())
-        if "information_schema.columns" in normalizado:
-            self._resultado = [(self.possui_turnos,)]
-        elif "FROM chatbot.conversa AS c" in normalizado:
-            self._resultado = self.conversas
-        elif "FROM chatbot.historico_mensagens AS h" in normalizado:
-            self._resultado = self.mensagens
-        else:
-            self._resultado = [(None,)]
-
-    def fetchone(self):
-        return self._resultado[0]
-
-    def fetchall(self):
-        return list(self._resultado)
-
-
-class FakeConn:
-    def __init__(self, cursor):
-        self.cursor_obj = cursor
-        self.closed = False
-        self.rollbacks = 0
-
-    def cursor(self):
-        return self.cursor_obj
-
-    def close(self):
-        self.closed = True
-
-    def rollback(self):
-        self.rollbacks += 1
-
-
-class PontuacaoTests(unittest.TestCase):
-    def test_score_explicavel_usa_as_cinco_dimensoes(self):
-        mensagens = []
-        for indice in range(8):
-            mensagens.append(
-                mensagem(
-                    indice + 1,
-                    segundos=indice,
-                    quem="bot" if indice % 2 == 0 else "cliente",
-                    fingerprint="template" if indice % 2 == 0 else "cliente",
-                    tamanho=30,
-                )
-            )
-        resultado = relatorio.pontuar_conversa(
-            conversa(
-                turnos_sem_avanco=12,
-                finalizou_em=BASE + timedelta(seconds=8),
-            ),
-            mensagens,
+        eventos = []
+        assinatura = inspect.signature(
+            reconciliacao_clientes.reconciliar_cliente_provisorio
         )
-        self.assertGreaterEqual(resultado["score"], 55)
-        self.assertEqual(
-            set(resultado["dimensoes"]),
-            {
-                "fluxo_sem_avanco",
-                "repeticao_ciclos",
-                "cadencia",
-                "conteudo_automatizado",
-                "conclusao_rapida",
+        parametro_nome = (
+            "nome_cliente_provisorio"
+            if "nome_cliente_provisorio" in assinatura.parameters
+            else "nome_cliente"
+        )
+        argumentos_reconciliacao = {
+            "id_cliente_provisorio": 91,
+            "id_cliente_canonico": 5,
+            "id_conversa_atual": 70,
+            "id_unidade": 7,
+            "wa_id_canonico": WA_ID,
+            "user_id": USER_ID,
+            "username": "maria.privada",
+            parametro_nome: "Maria Nova",
+            "cursor": object(),
+        }
+
+        with patch.object(
+            reconciliacao_clientes,
+            "bloquear_clientes_por_ids",
+            return_value={
+                5: {"id_cliente": 5, "wa_id": WA_ID},
+                91: {"id_cliente": 91, "wa_id": None},
             },
-        )
-        self.assertTrue(
-            all(
-                "pontos" in dimensao and "razoes" in dimensao
-                for dimensao in resultado["dimensoes"].values()
-            )
-        )
-
-    def test_funciona_sem_coluna_futura(self):
-        mensagens = [
-            mensagem(
-                indice,
-                segundos=indice * 5,
-                quem="bot" if indice % 2 else "cliente",
-                etapa=4,
-            )
-            for indice in range(1, 10)
-        ]
-        resultado = relatorio.pontuar_conversa(
-            conversa(turnos_sem_avanco=None),
-            mensagens,
-        )
-        self.assertIsInstance(resultado["score"], int)
-        razoes = resultado["dimensoes"]["fluxo_sem_avanco"]["razoes"]
-        self.assertFalse(any("contador persistido" in item for item in razoes))
-
-    def test_fluxo_normal_nao_recebe_score_alto(self):
-        mensagens = [
-            mensagem(
-                indice,
-                segundos=indice * 60,
-                quem="cliente" if indice % 2 else "bot",
-                etapa=indice,
-            )
-            for indice in range(1, 7)
-        ]
-        resultado = relatorio.pontuar_conversa(
-            conversa(turnos_sem_avanco=0),
-            mensagens,
-        )
-        self.assertLess(resultado["score"], relatorio.DEFAULT_LIMIAR)
-
-    def test_mesma_resposta_em_etapas_diferentes_nao_forma_loop(self):
-        mensagens = [
-            mensagem(
-                indice,
-                segundos=indice * 30,
-                quem="cliente",
-                etapa=indice,
-                fingerprint="frequentemente",
-                tipo="interactive",
-            )
-            for indice in range(1, 7)
-        ]
-        resultado = relatorio.pontuar_conversa(
-            conversa(turnos_sem_avanco=None),
-            mensagens,
-        )
-        repeticao = resultado["dimensoes"]["repeticao_ciclos"]
-        self.assertEqual(repeticao["pontos"], 0)
-        self.assertEqual(
-            resultado["metricas"]["ciclos_cliente_detectados"],
-            0,
-        )
-
-    def test_repeticao_do_nosso_bot_nao_pontua_conteudo_do_cliente(self):
-        clientes = [
-            mensagem(
-                indice * 2,
-                segundos=indice * 20,
-                quem="cliente",
-                etapa=indice,
-                fingerprint=f"cliente-{indice}",
-                tamanho=indice * 10,
-            )
-            for indice in range(1, 5)
-        ]
-        bots_repetidos = [
-            mensagem(
-                indice * 2 - 1,
-                segundos=indice * 20 - 10,
-                quem="bot",
-                etapa=4,
-                fingerprint="template-do-nosso-bot",
-            )
-            for indice in range(1, 5)
-        ]
-        resultado = relatorio.pontuar_conversa(
-            conversa(),
-            clientes + bots_repetidos,
-        )
-        self.assertEqual(
-            resultado["dimensoes"]["conteudo_automatizado"]["pontos"],
-            0,
-        )
-        self.assertEqual(
-            resultado["metricas"]["respostas_cliente_repetidas_na_mesma_etapa"],
-            0,
-        )
-
-    def test_cliente_abab_na_mesma_etapa_e_sinal_de_ciclo(self):
-        mensagens = [
-            mensagem(
-                indice,
-                segundos=indice * 10,
-                quem="cliente",
-                etapa=4,
-                fingerprint=fingerprint,
-            )
-            for indice, fingerprint in enumerate(
-                ("A", "B", "A", "B"),
-                start=1,
-            )
-        ]
-        resultado = relatorio.pontuar_conversa(conversa(), mensagens)
-        self.assertGreater(
-            resultado["dimensoes"]["repeticao_ciclos"]["pontos"],
-            0,
-        )
-        self.assertGreater(
-            resultado["metricas"]["ciclos_cliente_detectados"],
-            0,
-        )
-
-    def test_latencia_e_bot_para_primeiro_cliente_seguinte(self):
-        mensagens = [
-            mensagem(1, segundos=0, quem="bot"),
-            mensagem(2, segundos=1, quem="cliente"),
-            mensagem(3, segundos=2, quem="cliente"),
-            mensagem(4, segundos=10, quem="bot"),
-            mensagem(5, segundos=15, quem="cliente"),
-        ]
-        resultado = relatorio.pontuar_conversa(conversa(), mensagens)
-        self.assertEqual(
-            resultado["metricas"]["latencias_bot_cliente"],
-            [1.0, 5.0],
-        )
-
-    def test_movimentos_sao_pareados_por_id_mensagem_fila(self):
-        mensagens = [
-            mensagem(
-                1,
-                segundos=0,
-                quem="cliente",
-                etapa=None,
-                id_fila=101,
-            ),
-            mensagem(
-                2,
-                segundos=1,
-                quem="bot",
-                etapa=1,
-                id_fila=101,
-            ),
-            mensagem(
-                3,
-                segundos=10,
-                quem="cliente",
-                etapa=4,
-                id_fila=102,
-            ),
-            mensagem(
-                4,
-                segundos=11,
-                quem="bot",
-                etapa=5,
-                id_fila=102,
-            ),
-            mensagem(
-                5,
-                segundos=20,
-                quem="cliente",
-                etapa=5,
-                id_fila=103,
-            ),
-            mensagem(
-                6,
-                segundos=21,
-                quem="bot",
-                etapa=5,
-                id_fila=103,
-            ),
-            mensagem(
-                7,
-                segundos=30,
-                quem="cliente",
-                etapa=5,
-                id_fila=None,
-            ),
-        ]
-        self.assertEqual(
-            [
-                item["tipo"]
-                for item in relatorio.reconstruir_movimentos(mensagens)
+        ), patch.object(
+            reconciliacao_clientes,
+            "buscar_vinculo_por_user_id",
+            return_value={"id_cliente": 91},
+        ), patch.object(
+            reconciliacao_clientes,
+            "buscar_conversa_ativa_cliente_unidade",
+            side_effect=[
+                conversa_ativa(),
+                conversa_ativa(
+                    id_conversa=33,
+                    id_cliente=5,
+                    id_etapa_atual=9,
+                ),
             ],
-            ["inicializacao", "avanco", "sem_avanco", "indeterminado"],
-        )
-
-    def test_contador_doze_sozinho_supera_limiar_padrao(self):
-        resultado = relatorio.pontuar_conversa(
-            conversa(turnos_sem_avanco=12),
-            [],
-        )
-        self.assertEqual(
-            resultado["dimensoes"]["fluxo_sem_avanco"]["pontos"],
-            70,
-        )
-        self.assertGreaterEqual(
-            resultado["score"],
-            relatorio.DEFAULT_LIMIAR,
-        )
-
-
-class PrivacidadeEFormatosTests(unittest.TestCase):
-    def test_mascaramento_de_pii(self):
-        original = (
-            "maria@example.com +55 (11) 99999-8888 "
-            "123.456.789-09 https://exemplo.com/abc 123456789"
-        )
-        mascarado = relatorio.mascarar_pii(original)
-        self.assertNotIn("maria@example.com", mascarado)
-        self.assertNotIn("99999-8888", mascarado)
-        self.assertNotIn("123.456.789-09", mascarado)
-        self.assertNotIn("https://exemplo.com/abc", mascarado)
-        self.assertIn("[EMAIL]", mascarado)
-        self.assertIn("[URL]", mascarado)
-        self.assertEqual(
-            relatorio.mascarar_wa_id("5511999998888"),
-            "*********8888",
-        )
-        self.assertEqual(
-            relatorio.mascarar_wa_id(
-                "5511999998888",
-                mostrar=True,
-            ),
-            "5511999998888",
-        )
-        self.assertNotEqual(
-            relatorio.mascarar_nome("Maria da Silva"),
-            "Maria da Silva",
-        )
-
-    def test_json_csv_e_texto_sao_validos(self):
-        item = {
-            "id_conversa": 10,
-            "id_cliente": 99,
-            "nome_cliente_mascarado": "M*** d*** S***",
-            "wa_id": "*********8888",
-            "user_id": "********6789",
-            "username": "@m*********a",
-            "id_unidade": 2,
-            "nome_unidade": "Centro",
-            "waba_id": "waba-2",
-            "phone_number_id": "phone-2",
-            "score": 80,
-            "status_ativa": True,
-            "id_etapa_atual": 4,
-            "iniciou_em": BASE.isoformat(),
-            "finalizou_em": None,
-            "turnos_sem_avanco": 12,
-            "historico_truncado": False,
-            "dimensoes": {
-                "fluxo_sem_avanco": {
-                    "pontos": 20,
-                    "maximo": 25,
-                    "razoes": ["contador alto"],
-                }
+        ), patch.object(
+            reconciliacao_clientes,
+            "bloquear_conversas_reconciliacao",
+            return_value={
+                33: conversa_ativa(
+                    id_conversa=33,
+                    id_cliente=5,
+                    id_etapa_atual=9,
+                ),
+                70: conversa_ativa(),
             },
-            "metricas": {},
-        }
-        documento = {
-            "metadados": {
-                "inicio": BASE.isoformat(),
-                "fim": (BASE + timedelta(hours=1)).isoformat(),
-                "conversas_lidas": 1,
-                "conversas_reportadas": 1,
-                "limiar": 55,
-            },
-            "conversas": [item],
-        }
-        self.assertEqual(
-            json.loads(relatorio.formatar_saida(documento, "json"))["conversas"][0]["score"],
-            80,
+        ), patch.object(
+            reconciliacao_clientes,
+            "conversa_possui_fila_aberta",
+            return_value=False,
+        ), patch.object(
+            reconciliacao_clientes,
+            "buscar_bloqueio_ativo_por_id_cliente_unidade",
+            return_value=None,
+        ), patch.object(
+            reconciliacao_clientes,
+            "encerrar_conversa",
+            side_effect=lambda *_args: eventos.append("encerrar"),
+        ) as encerrar, patch.object(
+            reconciliacao_clientes,
+            "atualizar_nome_cliente",
+            side_effect=lambda *_args: eventos.append("atualizar_nome"),
+        ) as atualizar_nome, patch.object(
+            reconciliacao_clientes,
+            "atualizar_username_cliente",
+        ), patch.object(
+            reconciliacao_clientes,
+            "reatribuir_conversa_cliente",
+            side_effect=lambda **_kwargs: eventos.append("reatribuir"),
+        ), patch.object(
+            reconciliacao_clientes,
+            "consolidar_vinculo_user_id",
+            side_effect=lambda **_kwargs: eventos.append("consolidar_vinculo"),
+        ), patch.object(
+            reconciliacao_clientes,
+            "preencher_snapshots_conversa_nulos",
+        ), patch.object(
+            reconciliacao_clientes,
+            "consolidar_bloqueio_meta_reconciliacao",
+            return_value=None,
+        ), patch.object(
+            reconciliacao_clientes,
+            "excluir_cliente_provisorio_com_gates",
+            side_effect=lambda *_args: eventos.append("excluir_provisorio"),
+        ):
+            reconciliacao_clientes.reconciliar_cliente_provisorio(
+                **argumentos_reconciliacao
+            )
+
+        encerrar.assert_called_once_with(33, "ativou_privacidade", ANY)
+        atualizar_nome.assert_called_once_with(5, "Maria Nova", ANY)
+        self.assertLess(
+            eventos.index("atualizar_nome"),
+            eventos.index("excluir_provisorio"),
         )
-        linhas_csv = list(
-            csv.DictReader(
-                io.StringIO(relatorio.formatar_saida(documento, "csv"))
+
+    def test_vinculo_confirmado_nao_reescreve_snapshots_de_eventos_antigos(self):
+        mensagem = {
+            "wa_id": WA_ID,
+            "user_id": USER_ID,
+            "username": "username.novo",
+            "id_phone_unidade": PHONE_ID,
+            "referencia_cache_cliente": "cache:identidade",
+            "tipo_identidade_do_item": "wa_id",
+            "identidade_do_item": WA_ID,
+        }
+        resolucao = {
+            "id_cliente": 5,
+            "cliente_inserido": False,
+            "wa_id": WA_ID,
+            "user_id": USER_ID,
+            "conversa": {"id_conversa": 70, "estado": "ativa"},
+        }
+
+        with patch.object(
+            valida_banco,
+            "obter_id_unidade_redis_ou_plsql",
+            return_value=7,
+        ), patch.object(
+            valida_banco,
+            "buscar_cliente_cache",
+            return_value=5,
+        ), patch.object(
+            valida_banco,
+            "_resolver_evento_com_wa_id",
+            return_value=resolucao,
+        ), patch.object(
+            valida_banco,
+            "preencher_snapshots_conversa_nulos",
+        ) as preencher_conversa, patch.object(
+            valida_banco,
+            "buscar_identidades_para_contexto",
+            return_value={
+                "wa_id": WA_ID,
+                "user_id": USER_ID,
+                "username": "username.conversa",
+            },
+        ):
+            valida_banco.validar_banco_mensagem(mensagem, object())
+
+        preencher_conversa.assert_called_once_with(
+            id_conversa=70,
+            wa_id=WA_ID,
+            user_id=USER_ID,
+            cursor=ANY,
+        )
+        self.assertFalse(
+            hasattr(valida_banco, "preencher_snapshots_fila_conversa_nulos")
+        )
+        self.assertFalse(
+            hasattr(
+                valida_banco,
+                "preencher_snapshots_historico_conversa_nulos",
             )
         )
-        self.assertEqual(linhas_csv[0]["id_conversa"], "10")
-        self.assertIn(
-            "conversa=10",
-            relatorio.formatar_saida(documento, "texto"),
-        )
 
+    def test_username_novo_atualiza_cliente_sem_sobrescrever_snapshot_conversa(self):
+        cursor_cliente = FakeCursor(rowcount=1)
+        clientes.atualizar_username_cliente(5, "username.novo", cursor_cliente)
+        sql_cliente, parametros_cliente = cursor_cliente.calls[0]
 
-class BancoSomenteLeituraTests(unittest.TestCase):
-    def _linha_conversa(self, turnos):
-        return (
-            10,
-            99,
-            "Maria da Silva",
-            "5511999998888",
-            "BR.123456789",
-            "maria.silva",
-            2,
-            "Centro",
-            "waba-2",
-            "phone-2",
-            4,
-            True,
-            BASE,
-            None,
-            None,
-            turnos,
-        )
-
-    def _linha_mensagem(self):
-        return (
-            1,
-            1001,
-            10,
-            4,
-            BASE,
-            "text",
-            "bot",
-            "fingerprint",
-            20,
-            False,
-            False,
-            None,
-            1,
-        )
-
-    def test_transacao_timeouts_selects_e_texto_omitido(self):
-        cursor = FakeCursor(
-            possui_turnos=False,
-            conversas=[self._linha_conversa(None)],
-            mensagens=[self._linha_mensagem()],
-        )
-        conn = FakeConn(cursor)
-        documento = relatorio.gerar_relatorio(
-            args_padrao(),
-            connection_factory=lambda **_kwargs: conn,
-        )
-        sql_total = "\n".join(sql for sql, _params in cursor.calls)
-        self.assertIn(
-            "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
-            sql_total,
-        )
-        self.assertIn("statement_timeout", sql_total)
-        self.assertIn("lock_timeout", sql_total)
-        self.assertIn("idle_in_transaction_session_timeout", sql_total)
-        self.assertIn("NULL::integer AS turnos_sem_avanco", sql_total)
-        self.assertIn("NULL::text AS conteudo_texto", sql_total)
-        self.assertIn(
-            "ORDER BY h.received_data_hora DESC, h.id_mensagem DESC",
-            sql_total,
-        )
-        self.assertIn("JOIN chatbot.cliente AS cl", sql_total)
-        self.assertIn("u.waba_id", sql_total)
-        self.assertIn("u.phone_number_id", sql_total)
-        self.assertNotRegex(
-            sql_total.upper(),
-            r"\b(INSERT|UPDATE|DELETE|ALTER|CREATE|DROP|TRUNCATE|FOR UPDATE)\b",
-        )
-        self.assertNotIn("cliente_telefone", sql_total)
-        self.assertNotIn("id_phone_unidade", sql_total)
-        self.assertTrue(conn.closed)
-        self.assertEqual(conn.rollbacks, 1)
-        self.assertFalse(documento["metadados"]["textos_incluidos"])
+        self.assertIn("UPDATE chatbot.cliente", sql_cliente)
         self.assertEqual(
-            documento["conversas"][0]["wa_id"],
-            "*********8888",
-        )
-        self.assertEqual(
-            documento["conversas"][0]["user_id"],
-            "********6789",
-        )
-        self.assertEqual(
-            documento["conversas"][0]["username"],
-            "@m*********a",
+            parametros_cliente,
+            ("username.novo", 5, "username.novo"),
         )
 
-    def test_coluna_futura_e_texto_explicito(self):
-        linha = list(self._linha_mensagem())
-        linha[11] = "contato maria@example.com"
-        cursor = FakeCursor(
-            possui_turnos=True,
-            conversas=[self._linha_conversa(12)],
-            mensagens=[tuple(linha)],
-        )
-        conn = FakeConn(cursor)
-        documento = relatorio.gerar_relatorio(
-            args_padrao(incluir_textos=True),
-            connection_factory=lambda **_kwargs: conn,
-        )
-        sql_total = "\n".join(sql for sql, _params in cursor.calls)
-        self.assertIn("c.turnos_sem_avanco", sql_total)
-        self.assertIn("h.conteudo_texto", sql_total)
-        amostra = documento["conversas"][0]["amostras_texto_mascarado"][0]
-        self.assertEqual(amostra["texto"], "contato [EMAIL]")
-
-    def test_wa_id_completo_exige_flag_explicita(self):
-        cursor = FakeCursor(
-            conversas=[self._linha_conversa(12)],
-            mensagens=[],
-        )
-        documento = relatorio.gerar_relatorio(
-            args_padrao(mostrar_wa_id=True),
-            connection_factory=lambda **_kwargs: FakeConn(cursor),
-        )
-        self.assertEqual(
-            documento["conversas"][0]["wa_id"],
-            "5511999998888",
-        )
-        self.assertEqual(
-            documento["conversas"][0]["user_id"],
-            "BR.123456789",
-        )
-
-    def test_limite_de_conversas_falha_fechando_conexao(self):
-        cursor = FakeCursor(
-            conversas=[
-                self._linha_conversa(0),
-                self._linha_conversa(0),
-            ]
-        )
-        conn = FakeConn(cursor)
-        with self.assertRaisesRegex(RuntimeError, "limite de conversas"):
-            relatorio.gerar_relatorio(
-                args_padrao(limite_conversas=1),
-                connection_factory=lambda **_kwargs: conn,
-            )
-        self.assertTrue(conn.closed)
-
-    def test_filtros_multiunidade_sao_parametrizados(self):
-        cursor = FakeCursor()
-        conn = FakeConn(cursor)
-        relatorio.gerar_relatorio(
-            args_padrao(
-                id_conversa=None,
-                id_unidade=[2, 7],
-                todas_unidades=False,
-            ),
-            connection_factory=lambda **_kwargs: conn,
-        )
-        chamada = next(
-            (sql, params)
-            for sql, params in cursor.calls
-            if "FROM chatbot.conversa AS c" in sql
-        )
-        self.assertIn("c.id_unidade = ANY(%s)", chamada[0])
-        self.assertIn([2, 7], chamada[1])
-
-
-class CliELimitesTests(unittest.TestCase):
-    def test_cli_exige_escopo_explicito(self):
-        parser = relatorio.criar_parser()
-        args = parser.parse_args([])
-        with self.assertRaises(SystemExit):
-            relatorio.validar_args(parser, args)
-
-    def test_janela_maxima_e_validada(self):
-        with self.assertRaisesRegex(ValueError, "31 dias"):
-            relatorio.resolver_janela(
-                args_padrao(
-                    inicio="2025-01-01T00:00:00Z",
-                    fim="2025-03-01T00:00:00Z",
+        for rowcount in (0, 1):
+            with self.subTest(linhas_enriquecidas=rowcount):
+                cursor_conversa = FakeCursor(rowcount=rowcount)
+                linhas = conversas.preencher_snapshots_conversa_nulos(
+                    id_conversa=70,
+                    wa_id=WA_ID,
+                    user_id=USER_ID,
+                    cursor=cursor_conversa,
                 )
-            )
+                sql_conversa, _ = cursor_conversa.calls[0]
 
-    def test_main_escreve_stdout_sem_arquivo(self):
-        documento = {
-            "metadados": {
-                "inicio": BASE.isoformat(),
-                "fim": (BASE + timedelta(hours=1)).isoformat(),
-                "conversas_lidas": 0,
-                "conversas_reportadas": 0,
-                "limiar": 55,
-            },
-            "conversas": [],
+                self.assertEqual(linhas, rowcount)
+                self.assertIn("wa_id = COALESCE(wa_id, %s)", sql_conversa)
+                self.assertIn("user_id = COALESCE(user_id, %s)", sql_conversa)
+                self.assertIn("wa_id IS NULL", sql_conversa)
+                self.assertIn("user_id IS NULL", sql_conversa)
+                self.assertNotIn("username", sql_conversa)
+
+    def test_user_id_vinculado_em_etapa_posterior_envia_pelo_wa_id_canonico(self):
+        vinculo = {
+            "id_cliente": 5,
+            "id_unidade": 7,
+            "user_id": USER_ID,
+        }
+        conversa = {
+            "id_conversa": 70,
+            "id_etapa_atual": 8,
+            "estado": "ativa",
         }
         with patch.object(
-            relatorio,
-            "gerar_relatorio",
-            return_value=documento,
-        ), patch.object(relatorio.sys, "stdout", new_callable=io.StringIO) as saida:
-            codigo = relatorio.main(["--id-conversa", "10"])
-        self.assertEqual(codigo, 0)
-        self.assertIn("RELATÓRIO MANUAL", saida.getvalue())
+            valida_banco,
+            "buscar_vinculo_por_user_id",
+            return_value=vinculo,
+        ), patch.object(
+            valida_banco,
+            "buscar_cliente_por_id",
+            return_value={"id_cliente": 5, "wa_id": WA_ID},
+        ), patch.object(
+            valida_banco,
+            "atualizar_username_cliente",
+        ), patch.object(
+            valida_banco,
+            "valida_conversa",
+            return_value=conversa,
+        ):
+            resolucao = valida_banco._resolver_evento_somente_user_id(
+                {"user_id": USER_ID, "username": "maria.nova"},
+                7,
+                object(),
+            )
+
+        self.assertEqual(resolucao["wa_id"], WA_ID)
+        self.assertEqual(resolucao["user_id"], USER_ID)
+        destinatario = destinatario_sender.resolver_destinatario_sender({
+            "wa_id": resolucao["wa_id"],
+            "user_id": resolucao["user_id"],
+            "id_etapa_atual": 8,
+        })
+        self.assertEqual(destinatario, WA_ID)
+        self.assertNotEqual(destinatario, USER_ID)
+
+    def test_funil_exibe_username_da_conversa_sem_exportar_user_id(self):
+        dados = {
+            "id_conversa": 70,
+            "id_unidade": 7,
+            "nome_unidade": "Supera Teste",
+            "nome_cliente": "Maria",
+            "telefone_cliente": WA_ID,
+            "email_cliente": "maria@example.com",
+            "idade_cliente": 30,
+            "status_dependente": False,
+            "profissao": "Professora",
+            "username": "@@maria.privada",
+            "user_id": USER_ID,
+            "triagem_respostas": [
+                {"id_etapa": etapa, "resposta": "nunca"}
+                for etapa in range(13, 19)
+            ],
+        }
+
+        payload = oportunidades.montar_payload_oportunidade(dados)
+        serializado = json.dumps(payload, ensure_ascii=False)
+
+        self.assertIn("@maria.privada", serializado)
+        self.assertNotIn("@@maria.privada", serializado)
+        self.assertNotIn(USER_ID, serializado)
+        self.assertNotIn('"user_id"', serializado)
 
 
 if __name__ == "__main__":
     unittest.main()
 ````
 
-## Passo 179 — `tests/unit/test_retry_essencial.py`
+## Passo 157 — `tests/unit/test_retry_essencial.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `1534ce7984c42e8b386a487c5da5d0ec0d651277799aff52e8ea7e4e599d147f`
+SHA-256 do conteúdo UTF-8 normalizado: `604fa166b8546d97e044b928ae2967b606d925fdd511b7ba9351971ee1a31ece`
 
 ````python
+import inspect
 import unittest
-from unittest.mock import patch
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
+from webhook import admin as webhook_admin
+from callback.webhook.services import bloqueio_meta_guard, flood_guard
+from core.cache.runtime import cache_conversas_bloqueadas
+from core.database.deploy_database import bank_script
 from core.repositories.atendimento import conversas, fila
-from tests.helpers import FakeCursor
+from core.repositories.seguranca import bloqueio_meta, turno_cliente
+from tests.helpers import FakeConn, FakeCursor
 from workers.tratamento_erros_externos import expection_process
 from workers.worker_flow.suporte import estado_ciclo
-from workers.worker_flow.transacoes import lock_conversa
+from workers.worker_flow.transacoes import lock_conversa, ordem_turno
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 class CursorComRowcounts(FakeCursor):
@@ -37766,32 +31854,51 @@ class RetryEssencialTests(unittest.TestCase):
         self.assertEqual(
             parametros,
             (
+                "123456",
+                "wa_id",
+                "5571999999999",
+                "wa_id",
                 "5571999999999",
                 "123456",
                 7,
+                "wa_id",
+                "5571999999999",
+                "wa_id",
+                "5571999999999",
                 "2026-06-18T10:00:00Z",
                 "2026-06-18T10:00:00Z",
                 7,
             ),
         )
 
-    def test_ordem_da_fila_user_id_usa_coluna_tipificada(self):
+    def test_primeira_prova_verifica_predecessor_nos_dois_aliases(self):
         cursor = FakeCursor(fetchone_result=(False,))
 
-        existe = fila.existe_mensagem_anterior_aberta_atendimento(
-            "user_id",
-            "u_123",
-            "123456",
-            8,
-            "2026-06-18T10:01:00Z",
-            cursor,
+        existe = fila.existe_mensagem_anterior_alias_handoff(
+            wa_id="5571999999999",
+            user_id="BR.123",
+            id_phone_unidade="123456",
+            id_mensagem_atual=8,
+            received_data_hora="2026-06-18T10:01:00Z",
+            cursor=cursor,
         )
 
         sql, parametros = cursor.calls[0]
         self.assertFalse(existe)
-        self.assertIn("user_id = %s", sql)
-        self.assertNotIn("wa_id = %s", sql)
-        self.assertEqual(parametros[0], "u_123")
+        self.assertIn("fila.wa_id = %s OR fila.user_id = %s", sql)
+        self.assertIn("id_phone_unidade = %s", sql)
+        self.assertEqual(
+            parametros,
+            (
+                "123456",
+                8,
+                "5571999999999",
+                "BR.123",
+                "2026-06-18T10:01:00Z",
+                "2026-06-18T10:01:00Z",
+                8,
+            ),
+        )
 
     def test_vinculo_legado_so_e_reparado_sem_historico(self):
         cursor = CursorComRowcounts([0, 1])
@@ -37861,3555 +31968,415 @@ class RetryEssencialTests(unittest.TestCase):
         unlock.assert_not_called()
 
 
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 180 — `tests/unit/test_roteamento_essencial.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `1d1ce67b44134b2d0dcfdc548bb498d8e0488b30942a4af2bdc427bf9f76e8ea`
-
-````python
-import unittest
-from unittest.mock import Mock, patch
-
-import workers.worker_flow.response_flow.flow_sender as flow_sender_module
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-)
-
-
-def contexto_base(
-    *,
-    etapa_atual=1,
-    retry=1,
-    resposta_bot=None,
-    transicoes=None,
-):
-    etapa_origem = etapa_atual if etapa_atual is not None else 1
-    return {
-        "id_conversa": 10,
-        "id_etapa_atual": etapa_atual,
-        "id_etapa_cliente": etapa_origem,
-        "id_etapa_resposta": None,
-        "id_etapa_origem_transicao": etapa_origem,
-        "transicoes_permitidas": transicoes or {"evento_teste": 2},
-        "retry_count": retry,
-        "texto_cliente_atual": "Ola",
-        "tipo_mensagem_atual": "text",
-        "wa_id": "5571999999999",
-        "user_id": "user-id-teste",
-        "username": "maria.teste",
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 20,
-            "id_hash_msg": "wamid.cliente",
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "123456",
-        },
-        "resposta_bot_para_mensagem_atual": resposta_bot,
-    }
-
-
-class RoteamentoEssencialTests(unittest.TestCase):
-    def test_resposta_ja_existente_impede_novo_envio(self):
-        resolver = Mock()
-        with patch.dict(
-            flow_sender_module.RESOLVERS,
-            {3: resolver},
-        ):
-            resultado = flow_sender_module.flow_sender(
-                contexto_base(
-                    etapa_atual=3,
-                    retry=2,
-                    resposta_bot={
-                        "id_mensagem": 99,
-                        "id_hash_msg": "wamid.bot.existente",
-                        "id_etapa": 4,
-                    },
-                    transicoes={
-                        EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: 4,
-                    },
-                )
-            )
-
-        resolver.assert_not_called()
-        self.assertFalse(resultado["enviou"])
-        self.assertTrue(resultado["resposta_ja_existia"])
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-        )
-
-    def test_retry_sem_resposta_existente_continua_no_resolver(self):
-        esperado = {
-            "enviou": True,
-            "id_hash_msg_bot": "wamid.bot",
-            "id_etapa_resultante": 3,
-        }
-
-        resolver = Mock(return_value=esperado)
-        with patch.dict(flow_sender_module.RESOLVERS, {3: resolver}):
-            resultado = flow_sender_module.flow_sender(
-                contexto_base(etapa_atual=3, retry=2)
-            )
-
-        resolver.assert_called_once()
-        self.assertEqual(resultado, esperado)
-
-    def test_cada_etapa_implementada_chama_seu_resolver(self):
-        for etapa_atual in (None, *range(1, 23)):
-            etapa_resolver = 1 if etapa_atual is None else etapa_atual
-            esperado = {
-                "enviou": True,
-                "id_hash_msg_bot": f"wamid.etapa{etapa_resolver}",
-                "id_etapa_resultante": etapa_resolver,
-            }
-
-            resolver = Mock(return_value=esperado)
-            with self.subTest(etapa=etapa_atual), patch.dict(
-                flow_sender_module.RESOLVERS,
-                {etapa_resolver: resolver},
-            ):
-                resultado = flow_sender_module.flow_sender(
-                    contexto_base(etapa_atual=etapa_atual)
-                )
-
-            resolver.assert_called_once()
-            self.assertEqual(resultado, esperado)
-
-    def test_etapa_23_e_terminal_e_nao_possui_resolver(self):
-        with self.assertRaises(NotImplementedError):
-            flow_sender_module.flow_sender(
-                contexto_base(etapa_atual=23)
-            )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 181 — `tests/unit/test_satisfacao_comentario.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `dea29ac6b12627a9f2da701bf298dc6e39235cbbe07d9da949f848fce4952747`
-
-````python
-import unittest
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.etapa22_messages import (
-    montar_mensagem_contexto_invalido_etapa22,
-    montar_mensagem_etapa22,
-    montar_mensagem_midia_etapa22,
-)
-import workers.worker_flow.response_flow.etapas.resolver_etapa21 as etapa21
-import workers.worker_flow.response_flow.etapas.resolver_etapa22 as etapa22
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_21_DECISAO_COMENTARIO,
-    ETAPA_22_COMENTARIO_SATISFACAO,
-    ETAPA_23_FINALIZACAO,
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-)
-
-
-def contexto_etapa21(texto, tipo="text"):
-    return {
-        "id_conversa": 10,
-        "wa_id": "5571999999999",
-        "user_id": None,
-        "username": None,
-        "id_etapa_cliente": ETAPA_21_DECISAO_COMENTARIO,
-        "id_etapa_origem_transicao": ETAPA_21_DECISAO_COMENTARIO,
-        "transicoes_permitidas": {
-            EVENTO_COMENTARIO_SATISFACAO_ACEITO: (
-                ETAPA_22_COMENTARIO_SATISFACAO
-            ),
-            EVENTO_COMENTARIO_SATISFACAO_RECUSADO: ETAPA_23_FINALIZACAO,
-        },
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo,
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 20,
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def contexto_etapa22(texto, tipo="text"):
-    return {
-        "id_conversa": 10,
-        "wa_id": "5571999999999",
-        "user_id": None,
-        "username": None,
-        "id_etapa_cliente": ETAPA_22_COMENTARIO_SATISFACAO,
-        "id_etapa_origem_transicao": ETAPA_22_COMENTARIO_SATISFACAO,
-        "transicoes_permitidas": {
-            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO: ETAPA_23_FINALIZACAO,
-        },
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo,
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 20,
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def contexto_envio(id_etapa, *, tratamento=False):
-    contexto = {
-        "enviou": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "mensagem",
-        "id_hash_msg_bot": "wamid.bot",
-        "id_etapa_resultante": id_etapa,
-        "tipo_mensagem": "text",
-    }
-    if tratamento:
-        contexto.update(
-            {
-                "tratamento": True,
-                "tipo_tratamento": "teste",
-            }
-        )
-    return contexto
-
-
-class SatisfacaoComentarioTests(unittest.TestCase):
-    def test_etapa22_usa_abertura_de_sucesso_apenas_na_entrada(self):
-        mensagem_normal = montar_mensagem_etapa22()
-        retomada = (
-            "Deixa aqui a baixo seu comentário para melhorar nosso "
-            "atendimento."
-        )
-
-        self.assertTrue(mensagem_normal.startswith("Perfeito! 😊\n"))
-        self.assertTrue(mensagem_normal.endswith(retomada))
-
-        for montar_tratamento in (
-            montar_mensagem_midia_etapa22,
-            montar_mensagem_contexto_invalido_etapa22,
-        ):
-            with self.subTest(montador=montar_tratamento.__name__):
-                mensagem = montar_tratamento()
-                self.assertNotIn("Perfeito!", mensagem)
-                self.assertIn("\n\nMas bora lá:\n\n", mensagem)
-                self.assertTrue(mensagem.endswith(retomada))
-
-    def test_etapa21_aceite_encaminha_para_captura_sem_salvar_comentario(self):
-        with (
-            patch.object(
-                etapa21,
-                "enviar_etapa22",
-                return_value=contexto_envio(
-                    ETAPA_22_COMENTARIO_SATISFACAO
-                ),
-            ) as enviar_etapa22,
-            patch.object(etapa21, "enviar_etapa23") as enviar_etapa23,
-        ):
-            resultado = etapa21.resolve_etapa21(
-                contexto_etapa21("Sim, quero comentar")
-            )
-
-        enviar_etapa22.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-        )
-        enviar_etapa23.assert_not_called()
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-        )
-        self.assertEqual(
-            resultado["id_etapa_resultante"],
-            ETAPA_22_COMENTARIO_SATISFACAO,
-        )
-        self.assertNotIn("comentario_satisfacao", resultado)
-
-    def test_etapa21_recusa_pula_para_finalizacao_com_comentario_nulo(self):
-        with (
-            patch.object(etapa21, "enviar_etapa22") as enviar_etapa22,
-            patch.object(
-                etapa21,
-                "enviar_etapa23",
-                return_value=contexto_envio(ETAPA_23_FINALIZACAO),
-            ) as enviar_etapa23,
-        ):
-            resultado = etapa21.resolve_etapa21(
-                contexto_etapa21("Prefiro não comentar", "interactive")
-            )
-
-        enviar_etapa22.assert_not_called()
-        enviar_etapa23.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-        )
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-        )
-        self.assertEqual(resultado["comentario_satisfacao"], None)
-        self.assertEqual(
-            resultado["id_etapa_resultante"],
-            ETAPA_23_FINALIZACAO,
-        )
-
-    def test_etapa21_tratamentos_nao_carregam_transicao(self):
-        casos = (
-            (
-                "Talvez",
-                "text",
-                "enviar_etapa21_contexto_invalido",
-            ),
-            (
-                "Qual o valor?",
-                "text",
-                "enviar_etapa21_financeiro",
-            ),
-            (
-                "Sim",
-                "image",
-                "enviar_etapa21_midia",
-            ),
-        )
-
-        for texto, tipo, nome_sender in casos:
-            with self.subTest(texto=texto, tipo=tipo), patch.object(
-                etapa21,
-                nome_sender,
-                return_value=contexto_envio(
-                    ETAPA_21_DECISAO_COMENTARIO,
-                    tratamento=True,
-                ),
-            ):
-                resultado = etapa21.resolve_etapa21(
-                    contexto_etapa21(texto, tipo)
-                )
-
-            self.assertTrue(resultado["tratamento"])
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_21_DECISAO_COMENTARIO,
-            )
-            self.assertNotIn("evento_transicao", resultado)
-
-    def test_etapa22_salva_texto_livre_e_encaminha_para_finalizacao(self):
-        with patch.object(
-            etapa22,
-            "enviar_etapa23",
-            return_value=contexto_envio(ETAPA_23_FINALIZACAO),
-        ) as enviar_etapa23:
-            resultado = etapa22.resolve_etapa22(
-                contexto_etapa22(
-                    "  O valor poderia ser mais acessível.  "
-                )
-            )
-
-        enviar_etapa23.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-        )
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-        )
-        self.assertEqual(
-            resultado["comentario_satisfacao"],
-            "O valor poderia ser mais acessível.",
-        )
-        self.assertEqual(
-            resultado["id_etapa_resultante"],
-            ETAPA_23_FINALIZACAO,
-        )
-
-    def test_etapa22_permite_desistencia_explicita_com_comentario_nulo(self):
-        with patch.object(
-            etapa22,
-            "enviar_etapa23",
-            return_value=contexto_envio(ETAPA_23_FINALIZACAO),
-        ):
-            resultado = etapa22.resolve_etapa22(
-                contexto_etapa22("Prefiro não comentar", "button")
-            )
-
-        self.assertEqual(
-            resultado["evento_transicao"],
-            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-        )
-        self.assertIsNone(resultado["comentario_satisfacao"])
-        self.assertEqual(
-            resultado["id_etapa_resultante"],
-            ETAPA_23_FINALIZACAO,
-        )
-
-    def test_etapa22_contexto_invalido_e_midia_permanecem_na_etapa(self):
-        casos = (
-            (
-                "Ok",
-                "text",
-                "enviar_etapa22_contexto_invalido",
-            ),
-            (
-                "legenda",
-                "image",
-                "enviar_etapa22_midia",
-            ),
-        )
-
-        for texto, tipo, nome_sender in casos:
-            with self.subTest(texto=texto, tipo=tipo), patch.object(
-                etapa22,
-                nome_sender,
-                return_value=contexto_envio(
-                    ETAPA_22_COMENTARIO_SATISFACAO,
-                    tratamento=True,
-                ),
-            ):
-                resultado = etapa22.resolve_etapa22(
-                    contexto_etapa22(texto, tipo)
-                )
-
-            self.assertTrue(resultado["tratamento"])
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                ETAPA_22_COMENTARIO_SATISFACAO,
-            )
-            self.assertNotIn("evento_transicao", resultado)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 182 — `tests/unit/test_transicoes_etapa.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `8f2171b5bb7088edfe08a3dc1156d2299c1a4ec879010d648c832faf5ab91d77`
-
-````python
-import unittest
-
-from core.repositories.fluxo import transicoes as transicoes_etapa
-from tests.helpers import FakeCursor
-from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
-    montar_contexto_transicao,
-    prever_etapa_resposta,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_21_DECISAO_COMENTARIO,
-    ETAPA_22_COMENTARIO_SATISFACAO,
-    ETAPA_23_FINALIZACAO,
-    ETAPA_3_DESTINO_ATENDIMENTO,
-    ETAPA_4_CONFIRMACAO_DESTINO,
-    ETAPA_5_PROFISSAO,
-    ETAPA_6_NOME_DEPENDENTE,
-    ETAPA_7_IDADE_ALUNO,
-    ETAPA_8_OFERTA_AULA,
-    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-    EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-    EVENTO_IDADE_VALIDA,
-    EVENTO_NOME_DEPENDENTE_VALIDO,
-    EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-    EVENTO_PROFISSAO_TITULAR_VALIDA,
-)
-from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
-    TransicaoEtapaInvalida,
-    anexar_transicao_ao_contexto_envio,
-    identificar_evento_por_destino,
-    resolver_destino_transicao,
-)
-
-
-def contexto_transicao_etapa3():
-    return {
-        "id_etapa_origem_transicao": ETAPA_3_DESTINO_ATENDIMENTO,
-        "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: (
-                ETAPA_4_CONFIRMACAO_DESTINO
-            ),
-        },
-    }
-
-
-def contexto_transicao_etapa4():
-    return {
-        "id_etapa_origem_transicao": ETAPA_4_CONFIRMACAO_DESTINO,
-        "transicoes_permitidas": {
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO: ETAPA_5_PROFISSAO,
-        },
-    }
-
-
-def contexto_transicao_etapa5():
-    return {
-        "id_etapa_origem_transicao": ETAPA_5_PROFISSAO,
-        "transicoes_permitidas": {
-            EVENTO_PROFISSAO_DEPENDENTE_VALIDA: ETAPA_6_NOME_DEPENDENTE,
-            EVENTO_PROFISSAO_TITULAR_VALIDA: ETAPA_7_IDADE_ALUNO,
-        },
-    }
-
-
-def contexto_transicao_etapa6():
-    return {
-        "id_etapa_origem_transicao": ETAPA_6_NOME_DEPENDENTE,
-        "transicoes_permitidas": {
-            EVENTO_NOME_DEPENDENTE_VALIDO: ETAPA_7_IDADE_ALUNO,
-        },
-    }
-
-
-def contexto_transicao_etapa7():
-    return {
-        "id_etapa_origem_transicao": ETAPA_7_IDADE_ALUNO,
-        "transicoes_permitidas": {
-            EVENTO_IDADE_VALIDA: ETAPA_8_OFERTA_AULA,
-        },
-    }
-
-
-def contexto_transicao_etapa21():
-    return {
-        "id_etapa_origem_transicao": ETAPA_21_DECISAO_COMENTARIO,
-        "transicoes_permitidas": {
-            EVENTO_COMENTARIO_SATISFACAO_ACEITO: (
-                ETAPA_22_COMENTARIO_SATISFACAO
-            ),
-            EVENTO_COMENTARIO_SATISFACAO_RECUSADO: ETAPA_23_FINALIZACAO,
-        },
-    }
-
-
-def contexto_transicao_etapa22():
-    return {
-        "id_etapa_origem_transicao": ETAPA_22_COMENTARIO_SATISFACAO,
-        "transicoes_permitidas": {
-            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO: ETAPA_23_FINALIZACAO,
-        },
-    }
-
-
-class TransicoesEtapaTests(unittest.TestCase):
-    def test_resultado_da_consulta_vira_contexto_explicito(self):
-        transicoes = {
-            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: (
-                ETAPA_4_CONFIRMACAO_DESTINO
-            ),
-        }
-
-        resultado = montar_contexto_transicao(
-            ETAPA_3_DESTINO_ATENDIMENTO,
-            transicoes,
-        )
-
-        self.assertEqual(
-            resultado,
-            {
-                "id_etapa_origem_transicao": ETAPA_3_DESTINO_ATENDIMENTO,
-                "transicoes_permitidas": transicoes,
-            },
-        )
-        self.assertIsNot(
-            resultado["transicoes_permitidas"],
-            transicoes,
-        )
-
-    def test_previsao_da_etapa3_aponta_para_confirmacao(self):
-        resultado = prever_etapa_resposta(
-            ETAPA_3_DESTINO_ATENDIMENTO,
-            {
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: (
-                    ETAPA_4_CONFIRMACAO_DESTINO
-                ),
-            },
-            etapa_inicial=1,
-        )
-
-        self.assertEqual(resultado, ETAPA_4_CONFIRMACAO_DESTINO)
-
-    def test_previsao_da_confirmacao_aponta_para_profissao(self):
-        resultado = prever_etapa_resposta(
-            ETAPA_4_CONFIRMACAO_DESTINO,
-            contexto_transicao_etapa4()["transicoes_permitidas"],
-            etapa_inicial=1,
-        )
-
-        self.assertEqual(resultado, ETAPA_5_PROFISSAO)
-
-    def test_previsao_nao_escolhe_entre_os_ramos_da_profissao(self):
-        resultado = prever_etapa_resposta(
-            ETAPA_5_PROFISSAO,
-            contexto_transicao_etapa5()["transicoes_permitidas"],
-            etapa_inicial=1,
-        )
-
-        self.assertIsNone(resultado)
-
-    def test_repositorio_carrega_eventos_e_destinos(self):
-        cursor = FakeCursor(
-            fetchall_result=[
-                (
-                    EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-                    ETAPA_4_CONFIRMACAO_DESTINO,
-                ),
-            ]
-        )
-
-        resultado = transicoes_etapa.listar_transicoes_permitidas(
-            ETAPA_3_DESTINO_ATENDIMENTO,
-            cursor,
-        )
-
-        self.assertEqual(
-            resultado,
-            {
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO: (
-                    ETAPA_4_CONFIRMACAO_DESTINO
-                ),
-            },
-        )
-        sql, params = cursor.calls[0]
-        self.assertIn("FROM chatbot.etapa_transicao", sql)
-        self.assertIn("WHERE id_etapa_origem = %s", sql)
-        self.assertEqual(params, (ETAPA_3_DESTINO_ATENDIMENTO,))
-
-    def test_destino_definido_resolve_confirmacao(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa3(),
-            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-            destinos_esperados={ETAPA_4_CONFIRMACAO_DESTINO},
-        )
-
-        self.assertEqual(destino, ETAPA_4_CONFIRMACAO_DESTINO)
-
-    def test_confirmacao_resolve_profissao_obrigatoria(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa4(),
-            EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO,
-            destinos_esperados={ETAPA_5_PROFISSAO},
-        )
-
-        self.assertEqual(destino, ETAPA_5_PROFISSAO)
-
-    def test_profissao_dependente_resolve_nome_dependente(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa5(),
-            EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-            destinos_esperados={ETAPA_6_NOME_DEPENDENTE},
-        )
-
-        self.assertEqual(destino, ETAPA_6_NOME_DEPENDENTE)
-
-    def test_profissao_titular_resolve_idade(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa5(),
-            EVENTO_PROFISSAO_TITULAR_VALIDA,
-            destinos_esperados={ETAPA_7_IDADE_ALUNO},
-        )
-
-        self.assertEqual(destino, ETAPA_7_IDADE_ALUNO)
-
-    def test_nome_dependente_valido_resolve_idade(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa6(),
-            EVENTO_NOME_DEPENDENTE_VALIDO,
-            destinos_esperados={ETAPA_7_IDADE_ALUNO},
-        )
-
-        self.assertEqual(destino, ETAPA_7_IDADE_ALUNO)
-
-    def test_idade_valida_resolve_oferta(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa7(),
-            EVENTO_IDADE_VALIDA,
-            destinos_esperados={ETAPA_8_OFERTA_AULA},
-        )
-
-        self.assertEqual(destino, ETAPA_8_OFERTA_AULA)
-
-    def test_decisao_de_comentario_resolve_os_dois_ramos(self):
-        casos = (
-            (
-                EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-                ETAPA_22_COMENTARIO_SATISFACAO,
-            ),
-            (
-                EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-                ETAPA_23_FINALIZACAO,
-            ),
-        )
-
-        for evento, destino_esperado in casos:
-            with self.subTest(evento=evento):
-                destino = resolver_destino_transicao(
-                    contexto_transicao_etapa21(),
-                    evento,
-                    destinos_esperados={destino_esperado},
-                )
-                self.assertEqual(destino, destino_esperado)
-
-    def test_comentario_recebido_resolve_finalizacao(self):
-        destino = resolver_destino_transicao(
-            contexto_transicao_etapa22(),
-            EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-            destinos_esperados={ETAPA_23_FINALIZACAO},
-        )
-
-        self.assertEqual(destino, ETAPA_23_FINALIZACAO)
-
-    def test_evento_ausente_e_recusado_antes_do_envio(self):
-        with self.assertRaises(TransicaoEtapaInvalida):
-            resolver_destino_transicao(
-                contexto_transicao_etapa3(),
-                "evento_inventado",
-            )
-
-    def test_destino_trocado_no_seed_e_recusado(self):
-        contexto = contexto_transicao_etapa3()
-        contexto["transicoes_permitidas"][
-            EVENTO_DESTINO_ATENDIMENTO_DEFINIDO
-        ] = ETAPA_6_NOME_DEPENDENTE
-
-        with self.assertRaises(TransicaoEtapaInvalida):
-            resolver_destino_transicao(
-                contexto,
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-                destinos_esperados={ETAPA_4_CONFIRMACAO_DESTINO},
-            )
-
-    def test_sender_nao_pode_retornar_destino_diferente(self):
-        with self.assertRaises(TransicaoEtapaInvalida):
-            anexar_transicao_ao_contexto_envio(
-                contexto_transicao_etapa3(),
-                {
-                    "id_etapa_resultante": ETAPA_6_NOME_DEPENDENTE,
-                    "enviou": True,
-                },
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-                ETAPA_4_CONFIRMACAO_DESTINO,
-            )
-
-    def test_tratamento_nao_pode_carregar_evento(self):
-        with self.assertRaises(TransicaoEtapaInvalida):
-            anexar_transicao_ao_contexto_envio(
-                contexto_transicao_etapa3(),
-                {
-                    "id_etapa_resultante": ETAPA_4_CONFIRMACAO_DESTINO,
-                    "enviou": True,
-                    "tratamento": True,
-                },
-                EVENTO_DESTINO_ATENDIMENTO_DEFINIDO,
-                ETAPA_4_CONFIRMACAO_DESTINO,
-            )
-
-    def test_retry_da_etapa3_reconstroi_evento_unico(self):
-        evento = identificar_evento_por_destino(
-            contexto_transicao_etapa3(),
-            ETAPA_4_CONFIRMACAO_DESTINO,
-        )
-
-        self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_DEFINIDO)
-
-    def test_retry_da_confirmacao_reconstroi_evento_unico(self):
-        evento = identificar_evento_por_destino(
-            contexto_transicao_etapa4(),
-            ETAPA_5_PROFISSAO,
-        )
-
-        self.assertEqual(evento, EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO)
-
-    def test_retry_da_profissao_reconstroi_cada_evento_pelo_destino(self):
-        casos = (
-            (
-                ETAPA_6_NOME_DEPENDENTE,
-                EVENTO_PROFISSAO_DEPENDENTE_VALIDA,
-            ),
-            (ETAPA_7_IDADE_ALUNO, EVENTO_PROFISSAO_TITULAR_VALIDA),
-        )
-
-        for destino, esperado in casos:
-            with self.subTest(destino=destino):
-                evento = identificar_evento_por_destino(
-                    contexto_transicao_etapa5(),
-                    destino,
-                )
-                self.assertEqual(evento, esperado)
-
-    def test_retry_da_decisao_reconstroi_evento_por_destino(self):
-        casos = (
-            (
-                ETAPA_22_COMENTARIO_SATISFACAO,
-                EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-            ),
-            (
-                ETAPA_23_FINALIZACAO,
-                EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-            ),
-        )
-
-        for destino, esperado in casos:
-            with self.subTest(destino=destino):
-                evento = identificar_evento_por_destino(
-                    contexto_transicao_etapa21(),
-                    destino,
-                )
-                self.assertEqual(evento, esperado)
-
-    def test_resposta_na_mesma_etapa_nao_inventa_transicao(self):
-        evento = identificar_evento_por_destino(
-            contexto_transicao_etapa3(),
-            ETAPA_3_DESTINO_ATENDIMENTO,
-        )
-
-        self.assertIsNone(evento)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 183 — `tests/unit/test_tratamento_reforco_escolar.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `ba6627a99d418d8ab47c7c0c544fdfec10f3cfd5a7ddd25c93f35fdb3c34e099`
-
-````python
-import importlib
-import unittest
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
-    RODAPE_ETAPA1_BOAS_VINDAS,
-    RODAPE_OPCAO_UNICA,
-)
-from core.integrations.whatsapp.messages.tratamentos_universais import (
-    MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR,
-    montar_mensagem_tratamento_reforco_escolar,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    validar_pergunta_financeira,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
-    TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-    validar_duvida_reforco_escolar,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_reforco_escolar_etapa5 import (
-    validar_duvida_reforco_escolar_etapa5,
-)
-
-
-class _ClienteWhatsAppFake:
-    def __init__(self):
-        self.ultimo_envio = None
-
-    def send_message(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.reforco-escolar")
-
-    def request_contact_info(self, **kwargs):
-        self.ultimo_envio = kwargs
-        return SimpleNamespace(id="wamid.reforco-escolar-contato")
-
-
-def _contexto_historico(etapa, texto, tipo_mensagem="text", *, dependente=False):
-    return {
-        "id_conversa": 100 + etapa,
-        "id_etapa_atual": etapa,
-        "id_etapa_cliente": etapa,
-        "id_etapa_origem_transicao": etapa,
-        "transicoes_permitidas": {},
-        "texto_cliente_atual": texto,
-        "tipo_mensagem_atual": tipo_mensagem,
-        "status_dependente": dependente,
-        "nome_cliente": "Maria",
-        "nome_dependente": "Ana" if dependente else None,
-        "idade_pessoa_triagem": 12 if dependente else 30,
-        "nome_unidade": "Supera Centro",
-        "wa_id": "5571999999999",
-        "user_id": "user-id-teste",
-        "username": "maria.teste",
-        "link_agendamento_unidade": "https://agenda.example/teste",
-        "link_instagram_unidade": "https://instagram.com/supera",
-        "mensagem_cliente_atual": {
-            "id_mensagem_fila": 200 + etapa,
-            "id_hash_msg": "wamid.cliente",
-            "cliente_telefone": "5571999999999",
-            "id_phone_unidade": "phone-id",
-        },
-    }
-
-
-def _contexto_envio_tratamento(etapa, tipo_tratamento):
-    return {
-        "enviou": True,
-        "resposta_ja_existia": False,
-        "mensagem_bot": "mensagem de tratamento",
-        "id_hash_msg_bot": "wamid.bot",
-        "id_etapa_resultante": etapa,
-        "tipo_mensagem": "text",
-        "tratamento": True,
-        "tipo_tratamento": tipo_tratamento,
-    }
-
-
-_VINCULOS_PROFISSIONAIS_ETAPA5 = (
-    "Trabalho em uma banca",
-    "Trabalho em um cursinho",
-    "Trabalho em um supletivo",
-    "Trabalho em um reforço escolar",
-    "Trabalho em um reforço",
-    "Trabalho em um reforço escola",
-    "Sou professora de matemática em uma banca",
-    "Sou professor de português em um cursinho",
-    "Sou dona de uma banca",
-    "Sou dono de um supletivo",
-    "Sou diretora de um reforço escolar",
-    "Sou diretor de um supletivo",
-    "Sou técnico de um cursinho",
-    "Sou técnica de um reforço escolar",
-    "Sou coordenadora de um reforço",
-    "Diretora de uma banca",
-)
-
-
-class ValidadorReforcoEscolarTests(unittest.TestCase):
-    def test_tipo_do_tratamento_e_estavel(self):
-        self.assertEqual(
-            TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-            "duvida_reforco_escolar",
-        )
-
-    def test_identifica_servicos_escolares_e_formas_naturais(self):
-        frases = (
-            "É reforço escolar?",
-            "Vocês são uma banca?",
-            "Tem banca escolar?",
-            "Vocês oferecem supletivo?",
-            "Trabalham com EJA?",
-            "Isso é um cursinho?",
-            "Tem pré-vestibular?",
-            "É preparatório para o Enem?",
-            "Vocês oferecem aula particular?",
-            "Tem professor particular?",
-            "Faz acompanhamento escolar?",
-            "Ajuda com tarefa de casa?",
-            "REFORÇO ESCOLAR",
-            "banca",
-        )
-
-        for frase in frases:
-            with self.subTest(frase=frase):
-                self.assertTrue(validar_duvida_reforco_escolar(frase))
-
-    def test_identifica_materias_apenas_com_intencao_de_ensino(self):
-        frases = (
-            "Vocês ensinam matemática?",
-            "Tem aula de português?",
-            "Preciso de ajuda em física",
-            "Vocês dão reforço de redação?",
-            "Quero acompanhamento escolar em química",
-            "Tem professor de inglês?",
-        )
-
-        for frase in frases:
-            with self.subTest(frase=frase):
-                self.assertTrue(validar_duvida_reforco_escolar(frase))
-
-    def test_nao_confunde_profissao_ou_palavras_com_outro_sentido(self):
-        frases = (
-            "Sou professora de matemática",
-            "Trabalho como professor de português",
-            "Trabalho com português",
-            "Sou bancário",
-            "Participo de banca examinadora do concurso",
-            "Quero reforçar minha memória",
-            "Uso reforço positivo",
-            "O Supera é um curso de estimulação cognitiva",
-            "Quero a aula gratuita",
-            "Meu filho gosta de matemática",
-            "Quero atendimento em português",
-            "A matemática está presente no raciocínio",
-            "curso superior",
-            "professor",
-            "",
-            None,
-        )
-
-        for frase in frases:
-            with self.subTest(frase=frase):
-                self.assertFalse(validar_duvida_reforco_escolar(frase))
-
-    def test_limites_de_palavra_e_tipos_invalidos(self):
-        for frase in (
-            "bancário",
-            "bancária",
-            "reforçou",
-            "cursista",
-            123,
-            object(),
-        ):
-            with self.subTest(frase=frase):
-                self.assertFalse(validar_duvida_reforco_escolar(frase))
-
-    def test_formas_adicionais_preservam_intencao_e_barram_bancas_nao_escolares(
-        self,
-    ):
-        positivos = (
-            "\u00c9 tipo refor\u00e7o?",
-            "Tem pr\u00e9-Enem?",
-            "Voc\u00eas preparam para o Enem?",
-            "Prepara para vestibular?",
-            "Voc\u00eas ajudam meu filho com matem\u00e1tica?",
-            "Ajudam a crian\u00e7a com portugu\u00eas?",
-            "Tiram d\u00favidas de matem\u00e1tica?",
-            "Tem curso de matem\u00e1tica?",
-            "\u00c9 apoio pedag\u00f3gico?",
-            "Voc\u00eas trabalham com matem\u00e1tica?",
-            "Tem matem\u00e1tica?",
-            "Curso de portugu\u00eas?",
-            "Banca de matem\u00e1tica?",
-            "Refor\u00e7o pro meu filho",
-        )
-        negativos = (
-            "Voc\u00eas s\u00e3o uma banca examinadora?",
-            "Voc\u00eas s\u00e3o uma banca de concurso?",
-            "Esta \u00e9 uma banca de TCC?",
-            "Meu filho tem dificuldade em matem\u00e1tica",
-            "Sou professora de refor\u00e7o escolar",
-            "Trabalho como professora de cursinho",
-            "Professora particular",
-            "Trabalho com aulas particulares",
-            "Dou aula particular",
-            "Professora de refor\u00e7o escolar",
-        )
-
-        for frase in positivos:
-            with self.subTest(frase=frase):
-                self.assertTrue(validar_duvida_reforco_escolar(frase))
-
-        for frase in negativos:
-            with self.subTest(frase=frase):
-                self.assertFalse(validar_duvida_reforco_escolar(frase))
-
-    def test_sobreposicao_com_financeiro_e_detectada_pelos_dois(self):
-        frase = "Quanto custa o reforço escolar?"
-
-        self.assertTrue(validar_duvida_reforco_escolar(frase))
-        self.assertTrue(validar_pergunta_financeira(frase))
-
-    def test_etapa5_preserva_vinculos_profissionais_com_servicos_escolares(
-        self,
-    ):
-        for profissao in _VINCULOS_PROFISSIONAIS_ETAPA5:
-            with self.subTest(profissao=profissao):
-                self.assertFalse(
-                    validar_duvida_reforco_escolar_etapa5(profissao)
-                )
-
-    def test_etapa5_continua_tratando_duvidas_reais(self):
-        duvidas = (
-            "O Supera é uma banca?",
-            "Vocês têm cursinho?",
-            "Isso é supletivo?",
-            "É reforço escolar?",
-            "Tem aula de matemática?",
-        )
-
-        for duvida in duvidas:
-            with self.subTest(duvida=duvida):
-                self.assertTrue(
-                    validar_duvida_reforco_escolar_etapa5(duvida)
-                )
-
-
-class MensagemUniversalReforcoEscolarTests(unittest.TestCase):
-    def test_mensagem_universal_preserva_texto_e_retomada(self):
-        retomada = "Me diz, qual é o seu primeiro nome?"
-        mensagem = montar_mensagem_tratamento_reforco_escolar(retomada)
-
-        self.assertEqual(
-            mensagem,
-            f"{MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR}\n\n"
-            f"Mas bora lá:\n\n{retomada}",
-        )
-        self.assertIn("o Supera não é reforço escolar", mensagem)
-        self.assertIn("atenção, concentração, memória e raciocínio", mensagem)
-        self.assertIn("🧠✨", mensagem)
-
-    def test_todas_as_etapas_retomam_sem_jargao_de_entrada(self):
-        montadores = (
-            (1, "montar_mensagem_reforco_escolar_etapa1", ()),
-            (2, "montar_mensagem_reforco_escolar_etapa2", ()),
-            (3, "montar_mensagem_reforco_escolar_etapa3", ()),
-            (4, "montar_mensagem_reforco_escolar_etapa4", (False,)),
-            (4, "montar_mensagem_reforco_escolar_etapa4", (True,)),
-            (5, "montar_mensagem_reforco_escolar_etapa5", ()),
-            (6, "montar_mensagem_reforco_escolar_etapa6", ()),
-            (7, "montar_mensagem_idade_etapa7_reforco_escolar", ()),
-            (
-                7,
-                "montar_mensagem_idade_dependente_etapa7_reforco_escolar",
-                ("Ana",),
-            ),
-            (
-                8,
-                "montar_mensagem_oferta_cliente_reforco_escolar_etapa8",
-                (),
-            ),
-            (
-                8,
-                "montar_mensagem_oferta_dependente_reforco_escolar_etapa8",
-                ("Ana",),
-            ),
-            (
-                10,
-                "montar_mensagem_retorno_cliente_reforco_escolar_etapa10",
-                (),
-            ),
-            (
-                10,
-                "montar_mensagem_retorno_dependente_reforco_escolar_etapa10",
-                ("Ana",),
-            ),
-            (
-                11,
-                "montar_mensagem_email_etapa11_reforco_escolar",
-                (),
-            ),
-            (12, "montar_mensagem_reforco_escolar_etapa12", ()),
-            (
-                19,
-                "montar_mensagem_reforco_escolar_etapa19",
-                ("https://agenda.example/teste",),
-            ),
-            (21, "montar_mensagem_reforco_escolar_etapa21", ()),
-        )
-        jargoes_iniciais = (
-            "entendi",
-            "certo",
-            "perfeito",
-            "maravilha",
-            "prazer",
-            "que bom",
-            "obrigada",
-        )
-
-        for etapa, nome_funcao, argumentos in montadores:
-            modulo = importlib.import_module(
-                "core.integrations.whatsapp.messages."
-                f"etapa{etapa}_messages"
-            )
-            montar = getattr(modulo, nome_funcao)
-
-            with self.subTest(etapa=etapa, montador=nome_funcao):
-                mensagem = montar(*argumentos)
-                self.assertIn(MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR, mensagem)
-                self.assertEqual(mensagem.count("Mas bora lá:"), 1)
-
-                retomada = mensagem.split("Mas bora lá:\n\n", 1)[1]
-                retomada_normalizada = retomada.lstrip().casefold()
-                self.assertFalse(
-                    retomada_normalizada.startswith(jargoes_iniciais),
-                    retomada,
-                )
-
-    def test_variantes_preservam_estado_nome_e_link(self):
-        etapa4 = importlib.import_module(
-            "core.integrations.whatsapp.messages.etapa4_messages"
-        )
-        etapa7 = importlib.import_module(
-            "core.integrations.whatsapp.messages.etapa7_messages"
-        )
-        etapa8 = importlib.import_module(
-            "core.integrations.whatsapp.messages.etapa8_messages"
-        )
-        etapa10 = importlib.import_module(
-            "core.integrations.whatsapp.messages.etapa10_messages"
-        )
-        etapa19 = importlib.import_module(
-            "core.integrations.whatsapp.messages.etapa19_messages"
-        )
-
-        self.assertIn(
-            "para você?",
-            etapa4.montar_mensagem_reforco_escolar_etapa4(False),
-        )
-        self.assertIn(
-            "para um dependente?",
-            etapa4.montar_mensagem_reforco_escolar_etapa4(True),
-        )
-
-        dependentes = (
-            etapa7.montar_mensagem_idade_dependente_etapa7_reforco_escolar,
-            etapa8.montar_mensagem_oferta_dependente_reforco_escolar_etapa8,
-            etapa10.montar_mensagem_retorno_dependente_reforco_escolar_etapa10,
-        )
-        for montar in dependentes:
-            with self.subTest(montador=montar.__name__):
-                self.assertIn("Ana", montar("Ana"))
-
-        link = "https://agenda.example/teste"
-        mensagem_agendamento = (
-            etapa19.montar_mensagem_reforco_escolar_etapa19(link)
-        )
-        self.assertIn(link, mensagem_agendamento)
-        self.assertIn(
-            etapa19.RODAPE_ETAPA19_AGENDAMENTO,
-            mensagem_agendamento,
-        )
-
-
-class SendersReforcoEscolarTests(unittest.TestCase):
-    def test_senders_preservam_contrato_de_permanencia_nas_treze_etapas(self):
-        casos = (
-            (1, "enviar_etapa1_reforco_escolar", ()),
-            (
-                1,
-                "enviar_etapa1_reforco_escolar_inicio",
-                ("Supera Centro",),
-            ),
-            (2, "enviar_etapa2_reforco_escolar", (100,)),
-            (3, "enviar_etapa3_reforco_escolar", ()),
-            (4, "enviar_etapa4_reforco_escolar", (False,)),
-            (4, "enviar_etapa4_reforco_escolar", (True,)),
-            (5, "enviar_etapa5_reforco_escolar", ()),
-            (6, "enviar_etapa6_reforco_escolar", ()),
-            (7, "enviar_etapa7_cliente_reforco_escolar", ()),
-            (
-                7,
-                "enviar_etapa7_dependente_reforco_escolar",
-                ("Ana",),
-            ),
-            (8, "enviar_etapa8_cliente_reforco_escolar", ()),
-            (
-                8,
-                "enviar_etapa8_dependente_reforco_escolar",
-                ("Ana",),
-            ),
-            (10, "enviar_etapa10_cliente_reforco_escolar", ()),
-            (
-                10,
-                "enviar_etapa10_dependente_reforco_escolar",
-                ("Ana",),
-            ),
-            (11, "enviar_etapa11_reforco_escolar", ()),
-            (12, "enviar_etapa12_reforco_escolar", ()),
-            (
-                19,
-                "enviar_etapa19_reforco_escolar",
-                ("https://agenda.example/teste",),
-            ),
-            (21, "enviar_etapa21_reforco_escolar", ()),
-        )
-
-        for etapa, nome_sender, argumentos in casos:
-            modulo = importlib.import_module(
-                "core.integrations.whatsapp.pywa_functions.pywa_senders."
-                f"etapa{etapa}"
-            )
-            enviar = getattr(modulo, nome_sender)
-            cliente = _ClienteWhatsAppFake()
-
-            with self.subTest(etapa=etapa, sender=nome_sender), patch.object(
-                modulo,
-                "conta_wa",
-                return_value=cliente,
-            ):
-                contexto = enviar(
-                    "5571999999999",
-                    "phone-id",
-                    *argumentos,
-                )
-
-            self.assertTrue(contexto["tratamento"])
-            self.assertEqual(
-                contexto["tipo_tratamento"],
-                TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-            )
-            self.assertEqual(contexto["id_etapa_resultante"], etapa)
-            self.assertNotIn("evento_transicao", contexto)
-            self.assertIn(
-                MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR,
-                cliente.ultimo_envio["text"],
-            )
-            self.assertIn("Mas bora lá:", cliente.ultimo_envio["text"])
-
-    def test_senders_preservam_botoes_rodapes_e_link(self):
-        etapas_com_botoes = (3, 4, 8, 10, 12, 19, 21)
-        nomes_senders = {
-            3: ("enviar_etapa3_reforco_escolar", ()),
-            4: ("enviar_etapa4_reforco_escolar", (False,)),
-            8: ("enviar_etapa8_cliente_reforco_escolar", ()),
-            10: ("enviar_etapa10_cliente_reforco_escolar", ()),
-            12: ("enviar_etapa12_reforco_escolar", ()),
-            19: (
-                "enviar_etapa19_reforco_escolar",
-                ("https://agenda.example/teste",),
-            ),
-            21: ("enviar_etapa21_reforco_escolar", ()),
-        }
-
-        for etapa in etapas_com_botoes:
-            modulo_sender = importlib.import_module(
-                "core.integrations.whatsapp.pywa_functions.pywa_senders."
-                f"etapa{etapa}"
-            )
-            modulo_mensagens = importlib.import_module(
-                "core.integrations.whatsapp.messages."
-                f"etapa{etapa}_messages"
-            )
-            nome_sender, argumentos = nomes_senders[etapa]
-            cliente = _ClienteWhatsAppFake()
-
-            with self.subTest(etapa=etapa), patch.object(
-                modulo_sender,
-                "conta_wa",
-                return_value=cliente,
-            ):
-                getattr(modulo_sender, nome_sender)(
-                    "5571999999999",
-                    "phone-id",
-                    *argumentos,
-                )
-
-            titulos_esperados = list(
-                getattr(modulo_mensagens, f"montar_botoes_etapa{etapa}")()
-            )
-            titulos_enviados = [
-                botao.title for botao in cliente.ultimo_envio["buttons"]
-            ]
-            self.assertEqual(titulos_enviados, titulos_esperados)
-
-            if etapa in (3, 4, 8, 10):
-                self.assertIn(
-                    RODAPE_OPCAO_UNICA,
-                    cliente.ultimo_envio["text"],
-                )
-
-            if etapa == 19:
-                self.assertIn(
-                    "https://agenda.example/teste",
-                    cliente.ultimo_envio["text"],
-                )
-                self.assertIn(
-                    modulo_mensagens.RODAPE_ETAPA19_AGENDAMENTO,
-                    cliente.ultimo_envio["text"],
-                )
-
-    def test_inicio_da_etapa1_preserva_apresentacao_e_rodape(self):
-        modulo = importlib.import_module(
-            "core.integrations.whatsapp.pywa_functions.pywa_senders.etapa1"
-        )
-        cliente = _ClienteWhatsAppFake()
-
-        with (
-            patch.object(modulo, "conta_wa", return_value=cliente),
-            patch.object(
-                modulo,
-                "obter_saudacao_por_horario",
-                return_value="Bom dia",
-            ),
-        ):
-            contexto = modulo.enviar_etapa1_reforco_escolar_inicio(
-                "5571999999999",
-                "phone-id",
-                "Supera Centro",
-            )
-
-        texto = cliente.ultimo_envio["text"]
-        self.assertIn("Bom dia! Sou a Suh", texto)
-        self.assertIn("Supera Centro", texto)
-        self.assertIn(RODAPE_ETAPA1_BOAS_VINDAS, texto)
-        self.assertEqual(contexto["id_etapa_resultante"], 1)
-        self.assertTrue(contexto["tratamento"])
-
-
-class ResolversReforcoEscolarTests(unittest.TestCase):
-    _ROTAS = (
-        (
-            1,
-            "enviar_etapa1_midia",
-            "enviar_etapa1_reforco_escolar",
-            "enviar_etapa1_financeiro",
-        ),
-        (
-            2,
-            "enviar_etapa2_midia",
-            "enviar_etapa2_reforco_escolar",
-            "enviar_etapa2_financeiro",
-        ),
-        (
-            3,
-            "enviar_etapa3_midia",
-            "enviar_etapa3_reforco_escolar",
-            "enviar_etapa3_financeiro",
-        ),
-        (
-            4,
-            "enviar_etapa4_midia",
-            "enviar_etapa4_reforco_escolar",
-            "enviar_etapa4_financeiro",
-        ),
-        (
-            5,
-            "enviar_etapa5_midia",
-            "enviar_etapa5_reforco_escolar",
-            "enviar_etapa5_financeiro",
-        ),
-        (
-            6,
-            "enviar_etapa6_midia",
-            "enviar_etapa6_reforco_escolar",
-            "enviar_etapa6_financeiro",
-        ),
-        (
+class ContratosConcorrenciaIdentidadeTests(unittest.TestCase):
+    def test_retry_preserva_snapshot_user_id_sem_injetar_wa_canonico(self):
+        registro = (
             7,
-            "enviar_etapa7_cliente_midia",
-            "enviar_etapa7_cliente_reforco_escolar",
-            "enviar_etapa7_cliente_financeiro",
-        ),
-        (
-            8,
-            "enviar_etapa8_cliente_midia",
-            "enviar_etapa8_cliente_reforco_escolar",
-            "enviar_etapa8_cliente_financeiro",
-        ),
-        (
-            10,
-            "enviar_etapa10_cliente_midia",
-            "enviar_etapa10_cliente_reforco_escolar",
-            "enviar_etapa10_cliente_financeiro",
-        ),
-        (
-            11,
-            "enviar_etapa11_midia",
-            "enviar_etapa11_reforco_escolar",
-            "enviar_etapa11_financeiro",
-        ),
-        (
-            12,
-            "enviar_etapa12_midia",
-            "enviar_etapa12_reforco_escolar",
-            "enviar_etapa12_financeiro",
-        ),
-        (
-            19,
-            "enviar_etapa19_midia",
-            "enviar_etapa19_reforco_escolar",
-            "enviar_etapa19_financeiro",
-        ),
-        (
-            21,
-            "enviar_etapa21_midia",
-            "enviar_etapa21_reforco_escolar",
-            "enviar_etapa21_financeiro",
-        ),
-    )
-
-    def test_reforco_escolar_supera_financeiro_nas_treze_etapas(self):
-        texto = "Quanto custa o reforço escolar?"
-
-        for etapa, _, sender_reforco, sender_financeiro in self._ROTAS:
-            modulo = importlib.import_module(
-                "workers.worker_flow.response_flow.etapas."
-                f"resolver_etapa{etapa}"
-            )
-            retorno = _contexto_envio_tratamento(
-                etapa,
-                TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-            )
-
-            with (
-                self.subTest(etapa=etapa),
-                patch.object(
-                    modulo,
-                    sender_reforco,
-                    return_value=retorno,
-                ) as enviar_reforco,
-                patch.object(modulo, sender_financeiro) as enviar_financeiro,
-            ):
-                resultado = getattr(modulo, f"resolve_etapa{etapa}")(
-                    _contexto_historico(etapa, texto)
-                )
-
-            enviar_reforco.assert_called_once()
-            enviar_financeiro.assert_not_called()
-            self.assertEqual(resultado, retorno)
-            self.assertTrue(resultado["tratamento"])
-            self.assertEqual(
-                resultado["tipo_tratamento"],
-                TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-            )
-            self.assertEqual(resultado["id_etapa_resultante"], etapa)
-            self.assertNotIn("evento_transicao", resultado)
-
-    def test_midia_supera_reforco_escolar_nas_treze_etapas(self):
-        texto = "Quanto custa o reforço escolar?"
-
-        for etapa, sender_midia, sender_reforco, _ in self._ROTAS:
-            modulo = importlib.import_module(
-                "workers.worker_flow.response_flow.etapas."
-                f"resolver_etapa{etapa}"
-            )
-            retorno = _contexto_envio_tratamento(
-                etapa,
-                "tipo_mensagem_nao_suportado",
-            )
-
-            with (
-                self.subTest(etapa=etapa),
-                patch.object(
-                    modulo,
-                    sender_midia,
-                    return_value=retorno,
-                ) as enviar_midia,
-                patch.object(modulo, sender_reforco) as enviar_reforco,
-            ):
-                resultado = getattr(modulo, f"resolve_etapa{etapa}")(
-                    _contexto_historico(etapa, texto, "image")
-                )
-
-            enviar_midia.assert_called_once()
-            enviar_reforco.assert_not_called()
-            self.assertEqual(resultado, retorno)
-
-    def test_variantes_dependentes_das_etapas_7_8_e_10(self):
-        for etapa in (7, 8, 10):
-            modulo = importlib.import_module(
-                "workers.worker_flow.response_flow.etapas."
-                f"resolver_etapa{etapa}"
-            )
-            sender_cliente = f"enviar_etapa{etapa}_cliente_reforco_escolar"
-            sender_dependente = (
-                f"enviar_etapa{etapa}_dependente_reforco_escolar"
-            )
-            retorno = _contexto_envio_tratamento(
-                etapa,
-                TIPO_TRATAMENTO_REFORCO_ESCOLAR,
-            )
-
-            with (
-                self.subTest(etapa=etapa),
-                patch.object(modulo, sender_cliente) as enviar_cliente,
-                patch.object(
-                    modulo,
-                    sender_dependente,
-                    return_value=retorno,
-                ) as enviar_dependente,
-            ):
-                resultado = getattr(modulo, f"resolve_etapa{etapa}")(
-                    _contexto_historico(
-                        etapa,
-                        "Vocês são reforço escolar?",
-                        dependente=True,
-                    )
-                )
-
-            enviar_dependente.assert_called_once_with(
-                "5571999999999",
-                "phone-id",
-                "Ana",
-            )
-            enviar_cliente.assert_not_called()
-            self.assertEqual(resultado, retorno)
-
-    def test_etapa5_encaminha_vinculos_profissionais_sem_tratamento(self):
-        modulo = importlib.import_module(
-            "workers.worker_flow.response_flow.etapas.resolver_etapa5"
-        )
-        retorno_sender = {
-            "enviou": True,
-            "resposta_ja_existia": False,
-            "mensagem_bot": "Qual é a sua idade?",
-            "id_hash_msg_bot": "wamid.bot",
-            "id_etapa_resultante": modulo.ETAPA_7_IDADE_ALUNO,
-            "tipo_mensagem": "text",
-        }
-
-        for profissao in _VINCULOS_PROFISSIONAIS_ETAPA5:
-            contexto = _contexto_historico(5, profissao)
-            contexto["transicoes_permitidas"] = {
-                modulo.EVENTO_PROFISSAO_TITULAR_VALIDA:
-                    modulo.ETAPA_7_IDADE_ALUNO,
-            }
-
-            with (
-                self.subTest(profissao=profissao),
-                patch.object(modulo, "enviar_etapa5_reforco_escolar")
-                as enviar_reforco,
-                patch.object(modulo, "enviar_etapa5_financeiro")
-                as enviar_financeiro,
-                patch.object(
-                    modulo,
-                    "enviar_etapa7_cliente",
-                    return_value=retorno_sender,
-                ),
-            ):
-                resultado = modulo.resolve_etapa5(contexto)
-
-            enviar_reforco.assert_not_called()
-            enviar_financeiro.assert_not_called()
-            self.assertEqual(resultado["profissao"], profissao)
-            self.assertEqual(
-                resultado["evento_transicao"],
-                modulo.EVENTO_PROFISSAO_TITULAR_VALIDA,
-            )
-            self.assertEqual(
-                resultado["id_etapa_resultante"],
-                modulo.ETAPA_7_IDADE_ALUNO,
-            )
-
-    def test_etapa5_preserva_tratamento_financeiro_especifico(self):
-        modulo = importlib.import_module(
-            "workers.worker_flow.response_flow.etapas.resolver_etapa5"
-        )
-        retorno = _contexto_envio_tratamento(5, "pergunta_financeira")
-
-        with (
-            patch.object(modulo, "enviar_etapa5_reforco_escolar")
-            as enviar_reforco,
-            patch.object(
-                modulo,
-                "enviar_etapa5_financeiro",
-                return_value=retorno,
-            ) as enviar_financeiro,
-        ):
-            resultado = modulo.resolve_etapa5(
-                _contexto_historico(5, "Qual é o valor?")
-            )
-
-        enviar_reforco.assert_not_called()
-        enviar_financeiro.assert_called_once_with(
-            "5571999999999",
-            "phone-id",
-        )
-        self.assertEqual(resultado, retorno)
-        self.assertNotIn("evento_transicao", resultado)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 184 — `tests/unit/test_triagem_faixa_etaria.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `bc206d86f6b2742e2ddd10247b01ee83ac3c1b77dca3bc1a5d94511f4d1f4f0b`
-
-````python
-import importlib
-import unittest
-from unittest.mock import patch
-
-from core.repositories.fluxo.contextos.triagem import (
-    buscar_contexto_triagem,
-)
-from core.triagem.perguntas import (
-    FAIXA_ETARIA_ADULTA,
-    FAIXA_ETARIA_INFANTIL,
-    montar_pergunta_triagem,
-    obter_faixa_etaria_triagem,
-)
-from workers.worker_flow import valida_historico
-
-
-PERGUNTAS_INFANTIS = (
-    "Com que frequência Ana se distrai com facilidade durante tarefas "
-    "ou atividades escolares?",
-    "Com que frequência Ana tem dificuldade para concluir uma atividade "
-    "que começou?",
-    "Com que frequência Ana esquece com frequência orientações ou "
-    "conteúdos que acabou de aprender?",
-    "Com que frequência Ana precisa que as instruções sejam repetidas "
-    "várias vezes para conseguir realizá-las?",
-    "Com que frequência Ana passa mais de 4h por dia em frente a telas "
-    "(celular, tablet ou TV)?",
-    "Com que frequência Ana fica desmotivado(a), impaciente ou "
-    "frustrado(a) diante de atividades que exigem concentração?",
-)
-
-PERGUNTAS_ADULTAS_TITULAR = (
-    "Com que frequência você esquece compromissos, recados ou onde "
-    "guardou objetos pessoais?",
-    "Com que frequência você tem dificuldade para lembrar nomes, "
-    "palavras ou informações recentes?",
-    "Com que frequência você se distrai com facilidade durante "
-    "conversas, leituras ou atividades do dia a dia?",
-    "Com que frequência você tem dificuldade para manter a concentração "
-    "e concluir uma tarefa que começou?",
-    "Com que frequência você se sente ansioso(a), preocupado(a) ou com "
-    "a mente muito acelerada?",
-    "Com que frequência você tem dificuldade para dormir?",
-)
-
-
-class _CursorFake:
-    def __init__(self, resultado):
-        self.resultado = resultado
-        self.calls = []
-
-    def execute(self, sql, parametros):
-        self.calls.append((sql, parametros))
-
-    def fetchone(self):
-        return self.resultado
-
-
-def _mensagem_worker():
-    return {
-        "id_mensagem": 20,
-        "cliente_telefone": "5571999999999",
-        "conteudo_texto": "Iniciar triagem",
-        "tipo_mensagem": "text",
-        "id_phone_unidade": "phone-id",
-        "unidade_telefone": "5571000000000",
-        "id_hash": "wamid.cliente",
-        "retry_count": 1,
-        "tipo_identidade_do_item": "wa_id",
-        "identidade_do_item": "5571999999999",
-    }
-
-
-def _contexto_banco(*, dependente, etapa=12):
-    return {
-        "id_cliente": 7,
-        "id_unidade": 3,
-        "wa_id": "5571999999999",
-        "user_id": None,
-        "username": None,
-        "conversa": {
-            "id_conversa": 10,
-            "id_etapa_atual": etapa,
-            "status_dependente": dependente,
-            "last_message_from": "bot",
-        },
-    }
-
-
-class TriagemFaixaEtariaTests(unittest.TestCase):
-    def test_catalogo_infantil_tem_as_seis_perguntas_canonicas(self):
-        perguntas = tuple(
-            montar_pergunta_triagem(
-                id_etapa,
-                faixa_etaria=FAIXA_ETARIA_INFANTIL,
-                nome_pessoa="Ana",
-            )
-            for id_etapa in range(13, 19)
-        )
-
-        self.assertEqual(perguntas, PERGUNTAS_INFANTIS)
-
-    def test_catalogo_adulto_titular_tem_as_seis_perguntas_canonicas(self):
-        perguntas = tuple(
-            montar_pergunta_triagem(
-                id_etapa,
-                faixa_etaria=FAIXA_ETARIA_ADULTA,
-            )
-            for id_etapa in range(13, 19)
-        )
-
-        self.assertEqual(perguntas, PERGUNTAS_ADULTAS_TITULAR)
-
-    def test_dependente_adulto_usa_o_nome_em_todas_as_perguntas(self):
-        for id_etapa, pergunta_titular in zip(
-            range(13, 19),
-            PERGUNTAS_ADULTAS_TITULAR,
-        ):
-            with self.subTest(id_etapa=id_etapa):
-                pergunta = montar_pergunta_triagem(
-                    id_etapa,
-                    faixa_etaria=FAIXA_ETARIA_ADULTA,
-                    nome_pessoa="João",
-                )
-                self.assertEqual(
-                    pergunta,
-                    pergunta_titular.replace("você", "João", 1),
-                )
-
-    def test_limites_etarios_selecionam_a_variante_correta(self):
-        for idade in (4, 5, 17):
-            with self.subTest(idade=idade):
-                self.assertEqual(
-                    obter_faixa_etaria_triagem(idade),
-                    FAIXA_ETARIA_INFANTIL,
-                )
-
-        for idade in (18, 60, 99):
-            with self.subTest(idade=idade):
-                self.assertEqual(
-                    obter_faixa_etaria_triagem(idade),
-                    FAIXA_ETARIA_ADULTA,
-                )
-
-        for idade in (None, True, 0, -1, 100, "18"):
-            with self.subTest(idade=idade):
-                with self.assertRaises(ValueError):
-                    obter_faixa_etaria_triagem(idade)
-
-    def test_triagem_infantil_exige_nome_persistido(self):
-        with self.assertRaisesRegex(ValueError, "Nome da pessoa"):
-            montar_pergunta_triagem(
-                13,
-                faixa_etaria=FAIXA_ETARIA_INFANTIL,
-            )
-
-    def test_messages_13_a_18_usam_o_mesmo_catalogo_por_idade(self):
-        for id_etapa in range(13, 19):
-            modulo = importlib.import_module(
-                "core.integrations.whatsapp.messages."
-                f"etapa{id_etapa}_messages"
-            )
-            montar_cliente = getattr(
-                modulo,
-                f"montar_mensagem_cliente_etapa{id_etapa}",
-            )
-            montar_dependente = getattr(
-                modulo,
-                f"montar_mensagem_dependente_etapa{id_etapa}",
-            )
-            montar_repeticao_dependente = getattr(
-                modulo,
-                "montar_mensagem_dependente_contexto_invalido_"
-                f"etapa{id_etapa}",
-            )
-
-            with self.subTest(id_etapa=id_etapa):
-                self.assertEqual(
-                    montar_cliente(),
-                    PERGUNTAS_ADULTAS_TITULAR[id_etapa - 13],
-                )
-                self.assertEqual(
-                    montar_dependente("Ana", 17),
-                    PERGUNTAS_INFANTIS[id_etapa - 13],
-                )
-                pergunta_adulta = PERGUNTAS_ADULTAS_TITULAR[
-                    id_etapa - 13
-                ].replace("você", "Ana", 1)
-                self.assertEqual(
-                    montar_dependente("Ana", 18),
-                    pergunta_adulta,
-                )
-                self.assertTrue(
-                    montar_repeticao_dependente("Ana", 17).endswith(
-                        PERGUNTAS_INFANTIS[id_etapa - 13]
-                    )
-                )
-
-    def test_repositorio_rele_status_nome_e_idade_da_pessoa_atendida(self):
-        cursor = _CursorFake((True, "Ana", 12))
-
-        contexto = buscar_contexto_triagem(10, 3, cursor)
-
-        self.assertEqual(
-            contexto,
-            {
-                "status_dependente_contexto_triagem": True,
-                "nome_dependente": "Ana",
-                "idade_pessoa_triagem": 12,
-            },
-        )
-        sql, parametros = cursor.calls[0]
-        self.assertIn("WHEN c.status_dependente IS TRUE THEN d.idade", sql)
-        self.assertIn("WHEN c.status_dependente IS FALSE THEN cl.idade", sql)
-        self.assertEqual(parametros, (10, 3))
-
-    def test_contexto_worker_aceita_titular_adulto_e_dependente_desde_quatro(self):
-        casos = (
-            (False, None, 18),
-            (True, "Ana", 4),
-            (True, "João", 35),
-        )
-
-        for dependente, nome, idade in casos:
-            with self.subTest(dependente=dependente, idade=idade):
-                contexto = self._validar_contexto_worker(
-                    dependente=dependente,
-                    contexto_triagem={
-                        "status_dependente_contexto_triagem": dependente,
-                        "nome_dependente": nome,
-                        "idade_pessoa_triagem": idade,
-                    },
-                )
-                self.assertEqual(contexto["idade_pessoa_triagem"], idade)
-                self.assertNotIn(
-                    "status_dependente_contexto_triagem",
-                    contexto,
-                )
-
-    def test_contexto_worker_falha_fechado_para_identidade_inconsistente(self):
-        casos = (
-            (
-                False,
-                {
-                    "status_dependente_contexto_triagem": False,
-                    "nome_dependente": None,
-                    "idade_pessoa_triagem": 17,
-                },
-                "titular menor",
-            ),
-            (
-                True,
-                {
-                    "status_dependente_contexto_triagem": True,
-                    "nome_dependente": "Ana",
-                    "idade_pessoa_triagem": 3,
-                },
-                "abaixo da idade",
-            ),
-            (
-                True,
-                {
-                    "status_dependente_contexto_triagem": True,
-                    "nome_dependente": " ",
-                    "idade_pessoa_triagem": 12,
-                },
-                "sem nome persistido",
-            ),
-            (
-                True,
-                {
-                    "status_dependente_contexto_triagem": False,
-                    "nome_dependente": "Ana",
-                    "idade_pessoa_triagem": 12,
-                },
-                "inconsistente",
-            ),
-        )
-
-        for dependente, contexto_triagem, mensagem_erro in casos:
-            with self.subTest(
-                dependente=dependente,
-                contexto_triagem=contexto_triagem,
-            ):
-                with self.assertRaisesRegex(ValueError, mensagem_erro):
-                    self._validar_contexto_worker(
-                        dependente=dependente,
-                        contexto_triagem=contexto_triagem,
-                    )
-
-    def _validar_contexto_worker(self, *, dependente, contexto_triagem):
-        with (
-            patch.object(
-                valida_historico,
-                "inserir_historico_mensagem_cliente",
-                return_value=(100, "2026-01-01T00:00:00", 12, True),
-            ),
-            patch.object(
-                valida_historico,
-                "buscar_resposta_bot_por_mensagem_cliente",
-                return_value=None,
-            ),
-            patch.object(
-                valida_historico,
-                "listar_transicoes_permitidas",
-                return_value={"triagem_iniciada": 13},
-            ),
-            patch.object(
-                valida_historico,
-                "buscar_contexto_triagem",
-                return_value=contexto_triagem,
-            ),
-            patch.object(
-                valida_historico,
-                "atualizar_conversa_mensagem_cliente",
-                return_value=1,
-            ),
-        ):
-            return valida_historico.valida_historico(
-                _mensagem_worker(),
-                _contexto_banco(dependente=dependente),
-                object(),
-            )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 185 — `tests/unit/test_user_id_contrato_integrado.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `d3b64019cb1609baa1f6e6f90c44cbf8749e9f3439740f3f5c12d71cb7e2d9f5`
-
-````python
-import ast
-import importlib
-import inspect
-import sys
-import unittest
-from pathlib import Path
-from unittest.mock import patch
-
-from pywa import WhatsApp
-
-from core.cache import redis_client
-from core.integrations.whatsapp.tools import config
-
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def ler(caminho):
-    return (ROOT / caminho).read_text(encoding="utf-8")
-
-
-def literal_python(caminho, nome):
-    arvore = ast.parse(ler(caminho))
-    for node in arvore.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        if any(
-            isinstance(alvo, ast.Name) and alvo.id == nome
-            for alvo in node.targets
-        ):
-            return ast.literal_eval(node.value)
-    raise AssertionError(f"Constante {nome} não encontrada em {caminho}")
-
-
-class ContratoDdlUserIdTests(unittest.TestCase):
-    def test_ddl_python_representa_estado_final_sem_alter_historico(self):
-        banco = ler("core/database/deploy_database/bank_script.py")
-        flood = ler("core/database/deploy_database/floodscript.py")
-
-        self.assertNotIn("ALTER TABLE", banco.upper())
-        for fragmento in (
-            "id_portfolio VARCHAR(100) NOT NULL",
-            "wa_id VARCHAR(50) UNIQUE",
-            "username VARCHAR(255)",
-            "CREATE TABLE IF NOT EXISTS chatbot.user_id_cliente",
-            "UNIQUE (user_id, id_unidade)",
-            "UNIQUE (id_cliente, id_unidade)",
-            "CREATE TABLE IF NOT EXISTS chatbot.fila_mensagens",
-            "user_id VARCHAR(255)",
-            "CREATE TABLE IF NOT EXISTS chatbot.historico_mensagens",
-            "CREATE TABLE IF NOT EXISTS chatbot.conversa",
-            "'ativou_user_id'",
-        ):
-            self.assertIn(fragmento, banco)
-
-        for fragmento in (
-            "CREATE TABLE IF NOT EXISTS chatbot.cliente_bloqueado_meta",
-            "wa_id VARCHAR(50)",
-            "user_id VARCHAR(255)",
-            "username VARCHAR(255)",
-            "CREATE TABLE IF NOT EXISTS chatbot.webhook_flood_evento",
-            "uq_cliente_bloqueado_meta_user_id_unidade",
-            "idx_webhook_flood_evento_user_janela",
-        ):
-            self.assertIn(fragmento, flood)
-
-    def test_catalogo_final_tem_23_etapas_28_arestas_e_funil_19_a_23(self):
-        etapas = literal_python(
-            "core/database/deploy_database/povoar_etapas.py",
-            "ETAPAS",
-        )
-        transicoes = literal_python(
-            "core/database/deploy_database/etapa_transicao_script.py",
-            "TRANSICOES_INICIAIS",
-        )
-
-        self.assertEqual([linha[0] for linha in etapas], list(range(1, 24)))
-        self.assertEqual(len(transicoes), 27)
-        self.assertEqual(len(set(transicoes)), 27)
-        self.assertEqual(
-            [linha[0] for linha in etapas if linha[4]],
-            [19, 20, 21, 22, 23],
-        )
-        self.assertEqual(
-            [(linha[0], linha[3]) for linha in etapas if linha[2]],
-            [(23, 30)],
-        )
-
-    def test_migracao_e_transacional_e_valida_schema_dados_e_catalogo(self):
-        sql = ler("deploy/migrations/20260811_adicionar_user_id_whatsapp.sql")
-
-        self.assertTrue(sql.lstrip().startswith("BEGIN;"))
-        self.assertTrue(sql.rstrip().endswith("COMMIT;"))
-        for fragmento in (
-            "LOCK TABLE",
-            "CREATE TEMP TABLE pg_temp.migracao_portfolios",
-            "ALTER COLUMN id_portfolio SET NOT NULL",
-            "CREATE TABLE chatbot.user_id_cliente",
-            "RENAME COLUMN waid_telefone TO wa_id",
-            "RENAME COLUMN cliente_telefone TO wa_id",
-            "RENAME COLUMN wa_id_cliente TO wa_id",
-            "ADD COLUMN user_id VARCHAR(255) NULL",
-            "ADD COLUMN username VARCHAR(255) NULL",
-            "SET wa_id = cliente.wa_id",
-            "ativou_user_id",
-            "IF (SELECT COUNT(*) FROM chatbot.etapa) <> 23",
-            "OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 27",
-            "Pós-validação",
-        ):
-            self.assertIn(fragmento, sql)
-
-        for tabela in (
-            "chatbot.conversa",
-            "chatbot.dependente",
-            "chatbot.cliente_bloqueado_meta",
-            "chatbot.user_id_cliente",
-        ):
-            self.assertIn(tabela, sql)
-
-
-class ContratoPyWaGraphTests(unittest.TestCase):
-    def test_requirements_fixa_pywa_4_4_0(self):
-        self.assertIn("pywa==4.4.0", ler("requirements.txt").splitlines())
-
-    def test_request_contact_info_possui_parametros_utilizados_pelo_sender(self):
-        parametros = inspect.signature(WhatsApp.request_contact_info).parameters
-
-        for nome in ("to", "text", "sender", "tracker"):
-            self.assertIn(nome, parametros)
-
-    def test_cliente_central_usa_graph_api_configurada_em_26_0(self):
-        cliente = ler(
-            "core/integrations/whatsapp/pywa_functions/cliente.py"
-        )
-
-        self.assertEqual(config.get_meta_graph_api_version(), "26.0")
-        self.assertIn("api_version=get_meta_graph_api_version()", cliente)
-
-
-class OperacoesImportSafeTests(unittest.TestCase):
-    def test_cache_consulta_nao_conecta_ao_redis_durante_import(self):
-        sys.modules.pop("operations.cache_consulta", None)
-        with patch.object(redis_client, "get_redis_safe") as conectar:
-            modulo = importlib.import_module("operations.cache_consulta")
-
-        conectar.assert_not_called()
-        self.assertTrue(callable(modulo.main))
-        self.assertTrue(callable(modulo.listar_bloqueios_cache))
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 186 — `tests/unit/test_user_id_payloads_reais.py`
-
-Criar o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `711cff852a96c20083aa22c01d2650de8763e8401f51376fd40da08a908465be`
-
-````python
-import json
-import unittest
-from copy import deepcopy
-from pathlib import Path
-
-from callback.webhook.services.identidade_meta import (
-    extrair_display_phone_number,
-    extrair_id_hash_msg,
-    extrair_identidade_meta,
-    extrair_phone_number_id,
-)
-from core.integrations.whatsapp.identidade import (
-    TIPO_IDENTIDADE_USER_ID,
-    TIPO_IDENTIDADE_WA_ID,
-    escolher_identidade_do_item,
-    montar_referencia_cache_cliente,
-    selecionar_destinatario,
-)
-
-
-PAYLOADS_DIR = Path(__file__).resolve().parents[2] / "payloads"
-
-
-def carregar_payload(nome):
-    return json.loads((PAYLOADS_DIR / nome).read_text(encoding="utf-8"))
-
-
-def value_do_payload(payload):
-    return payload["entry"][0]["changes"][0]["value"]
-
-
-class PayloadsReaisUserIdTests(unittest.TestCase):
-    def test_fixture_wa_id_conservador(self):
-        payload = carregar_payload("WAID.json")
-        identidade = extrair_identidade_meta(payload)
-
-        self.assertTrue(identidade["processavel"])
-        self.assertEqual(identidade["wa_id_remetente"], "5575999999999")
-        self.assertEqual(identidade["wa_id_fila"], "5575999999999")
-        self.assertIsNone(identidade["user_id"])
-        self.assertEqual(
-            identidade["tipo_identidade_do_item"],
-            TIPO_IDENTIDADE_WA_ID,
-        )
-        self.assertEqual(identidade["identidade_do_item"], "5575999999999")
-
-    def test_fixture_user_id_e_username_sem_wa_id(self):
-        payload = carregar_payload("BSUID_USERNAME.json")
-        identidade = extrair_identidade_meta(payload)
-
-        self.assertTrue(identidade["processavel"])
-        self.assertIsNone(identidade["wa_id_remetente"])
-        self.assertIsNone(identidade["wa_id_fila"])
-        self.assertEqual(
-            identidade["user_id"],
-            "BR.13491208655302741918",
-        )
-        self.assertEqual(identidade["username"], "ana.silva")
-        self.assertEqual(
-            identidade["tipo_identidade_do_item"],
-            TIPO_IDENTIDADE_USER_ID,
-        )
-
-    def test_fixture_completo_prioriza_wa_id_sem_perder_snapshots(self):
-        payload = carregar_payload("WAID_BSUID_USERNAME.json")
-        identidade = extrair_identidade_meta(payload)
-
-        self.assertTrue(identidade["processavel"])
-        self.assertEqual(identidade["wa_id_fila"], "5571988887777")
-        self.assertEqual(
-            identidade["user_id"],
-            "BR.98765432101234567890",
-        )
-        self.assertEqual(identidade["username"], "mariana.oliveira")
-        self.assertEqual(
-            identidade["tipo_identidade_do_item"],
-            TIPO_IDENTIDADE_WA_ID,
-        )
-        self.assertEqual(identidade["identidade_do_item"], "5571988887777")
-
-    def test_fixture_contact_info_congela_user_id_e_separa_wa_compartilhado(self):
-        payload = carregar_payload("CONTACT_INFO.json")
-        identidade = extrair_identidade_meta(payload)
-
-        self.assertTrue(identidade["processavel"])
-        self.assertEqual(identidade["tipo_mensagem"], "contacts")
-        self.assertEqual(identidade["origem_contato"], "contact_request")
-        self.assertEqual(
-            identidade["identidade_do_item"],
-            "BR.13491208655302741918",
-        )
-        self.assertEqual(
-            identidade["tipo_identidade_do_item"],
-            TIPO_IDENTIDADE_USER_ID,
-        )
-        self.assertIsNone(identidade["wa_id_remetente"])
-        self.assertEqual(
-            identidade["wa_id_compartilhado"],
-            "5575999999999",
-        )
-        self.assertEqual(identidade["wa_id_fila"], "5575999999999")
-        self.assertFalse(identidade["contato_ambiguo"])
-
-    def test_fallbacks_from_e_from_user_id(self):
-        payload_wa = carregar_payload("WAID.json")
-        del value_do_payload(payload_wa)["contacts"][0]["wa_id"]
-        identidade_wa = extrair_identidade_meta(payload_wa)
-
-        payload_user = carregar_payload("BSUID_USERNAME.json")
-        del value_do_payload(payload_user)["contacts"][0]["user_id"]
-        identidade_user = extrair_identidade_meta(payload_user)
-
-        self.assertEqual(identidade_wa["wa_id_remetente"], "5575999999999")
-        self.assertEqual(
-            identidade_user["user_id"],
-            "BR.13491208655302741918",
-        )
-
-    def test_divergencias_entre_campos_replicados_rejeitam_evento(self):
-        payload_wa = carregar_payload("WAID_BSUID_USERNAME.json")
-        value_do_payload(payload_wa)["messages"][0]["from"] = "5511000000000"
-        divergencia_wa = extrair_identidade_meta(payload_wa)
-
-        payload_user = carregar_payload("BSUID_USERNAME.json")
-        value_do_payload(payload_user)["messages"][0]["from_user_id"] = (
-            "BR.OUTRO"
-        )
-        divergencia_user = extrair_identidade_meta(payload_user)
-
-        self.assertFalse(divergencia_wa["processavel"])
-        self.assertEqual(divergencia_wa["divergencia"], "wa_id_divergente")
-        self.assertFalse(divergencia_user["processavel"])
-        self.assertEqual(
-            divergencia_user["divergencia"],
-            "user_id_divergente",
-        )
-
-    def test_contact_request_com_dois_wa_ids_e_ambiguo(self):
-        payload = carregar_payload("CONTACT_INFO.json")
-        phones = value_do_payload(payload)["messages"][0]["contacts"][0][
-            "phones"
-        ]
-        phones.append(
-            {
-                "phone": "+55 71 98888-7777",
-                "wa_id": "5571988887777",
-                "type": "CELL",
-            }
-        )
-
-        identidade = extrair_identidade_meta(payload)
-
-        self.assertTrue(identidade["processavel"])
-        self.assertTrue(identidade["contato_ambiguo"])
-        self.assertIsNone(identidade["wa_id_compartilhado"])
-        self.assertIsNone(identidade["wa_id_fila"])
-
-    def test_metadados_e_wamid_vem_do_mesmo_primeiro_evento(self):
-        payload = carregar_payload("WAID.json")
-
-        self.assertEqual(
-            extrair_phone_number_id(payload),
-            "1217356894795355",
-        )
-        self.assertEqual(
-            extrair_display_phone_number(payload),
-            "557536310000",
-        )
-        self.assertEqual(extrair_id_hash_msg(payload), "wamid.EXEMPLO_WA_002")
-
-
-class ContratoIdentidadeTipadaTests(unittest.TestCase):
-    def test_contact_request_preserva_user_id_com_wa_candidato(self):
-        self.assertEqual(
-            escolher_identidade_do_item(
-                "5575999999999",
-                "BR.123",
-                tipo_mensagem="contacts",
-                origem_contato="contact_request",
-            ),
-            (TIPO_IDENTIDADE_USER_ID, "BR.123"),
-        )
-
-    def test_cache_user_id_e_escopado_e_cache_wa_id_permanece_global(self):
-        self.assertEqual(
-            montar_referencia_cache_cliente(
-                TIPO_IDENTIDADE_WA_ID,
-                "5575999999999",
-                "phone-ignorado",
-            ),
-            "cliente_cache:5575999999999",
-        )
-        self.assertEqual(
-            montar_referencia_cache_cliente(
-                TIPO_IDENTIDADE_USER_ID,
-                "BR.123",
-                "phone-1",
-            ),
-            "cliente_cache:user:phone-1:BR.123",
-        )
-
-    def test_sender_so_usa_user_id_quando_a_etapa_autoriza(self):
-        with self.assertRaises(ValueError):
-            selecionar_destinatario(None, "BR.123")
-
-        self.assertEqual(
-            selecionar_destinatario(
-                None,
-                "BR.123",
-                permitir_fallback_user_id=True,
-            ),
-            "BR.123",
-        )
-        self.assertEqual(
-            selecionar_destinatario(
-                "5575999999999",
-                "BR.123",
-                permitir_fallback_user_id=True,
-            ),
-            "5575999999999",
-        )
-
-    def test_fixture_carregada_em_um_teste_nao_contamina_outro(self):
-        original = carregar_payload("WAID.json")
-        copia = deepcopy(original)
-        value_do_payload(copia)["messages"][0]["from"] = "alterado"
-
-        self.assertNotEqual(copia, original)
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 187 — `tests/unit/test_validadores_essenciais.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `35409be1bb7d4dac524dcd75c44a5d82f00e4085906bc963a45234017b58861d`
-
-````python
-import unittest
-
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa3 import (
-    PARENTESCOS_ACEITOS,
-    validar_etapa3,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
-    TAMANHO_MAXIMO_PROFISSAO,
-    validar_profissao_etapa5,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7 import (
-    STATUS_IDADE_ACIMA_LIMITE,
-    STATUS_IDADE_INVALIDA,
-    obter_idade_minima_dependente,
-    validar_idade,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
-    validar_etapa8,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa10 import (
-    validar_etapa10,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa11 import (
-    validar_etapa11,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    validar_etapa20,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa21 import (
-    validar_decisao_comentario_etapa21,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa22 import (
-    normalizar_comentario_etapa22,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa5 import (
-    validar_pergunta_financeira_etapa5,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais import (
-    validador_nome,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    validar_pergunta_financeira,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
-    validar_midia,
-)
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
-    RESPOSTA_TRIAGEM_AS_VEZES,
-    RESPOSTA_TRIAGEM_FREQUENTEMENTE,
-    RESPOSTA_TRIAGEM_NUNCA,
-    validar_resposta_triagem,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-    EVENTO_OFERTA_ACEITA,
-    EVENTO_OFERTA_ADIADA,
-    EVENTO_PARA_MIM,
-    EVENTO_PARA_OUTRA_PESSOA,
-    EVENTO_RETORNO_ADIADO,
-    EVENTO_RETORNO_CONFIRMADO,
-)
-
-
-class ValidadoresEssenciaisTests(unittest.TestCase):
-    def test_etapa3_classifica_frases_para_a_propria_pessoa(self):
-        frases = (
-            "Para mim",
-            "Só para mim!",
-            "Eu mesmo",
-            "Eu mesma",
-            "Sim, é para mim.",
-            "Não, é para mim",
-            "Quero para mim",
-            "Pra eu",
-        )
-
-        for frase in frases:
-            with self.subTest(frase=frase):
-                self.assertEqual(validar_etapa3(frase), EVENTO_PARA_MIM)
-
-    def test_etapa3_classifica_parentescos_e_frases_para_dependente(self):
-        frases = (
-            "Para um dependente",
-            "Para outra pessoa",
-            "Para um dependente meu",
-            "Para alguém que depende de mim",
-            "Para uma criança",
-            "Para um idoso",
-            "Para um deficiente",
-            "Minha irmã",
-            "Sim, para meu filho",
-            "Quero para a minha filha",
-            "Sim eu quero, é para o meu avô",
-            "Quero para a minha",
-            "Pra minha enteada",
-            "Para meu filha",
-            "Não, é para minha filha",
-            "Não é para mim, é para o meu pai",
-            "É pro meu filho",
-            "Sim, é pra minha mãe",
-            "É pra outra pessoa",
-            "Para meus pais",
-            "Sim eu quero, é para as minhas filhas",
-        )
-
-        for frase in frases:
-            with self.subTest(frase=frase):
-                self.assertEqual(
-                    validar_etapa3(frase),
-                    EVENTO_PARA_OUTRA_PESSOA,
-                )
-
-        for parentesco in PARENTESCOS_ACEITOS:
-            with self.subTest(parentesco=parentesco):
-                self.assertEqual(
-                    validar_etapa3(f"Para meu {parentesco}"),
-                    EVENTO_PARA_OUTRA_PESSOA,
-                )
-
-    def test_etapa3_rejeita_respostas_ambiguas_ou_fora_do_contexto(self):
-        for frase in (
-            "",
-            "Sim",
-            "Quero",
-            "Talvez",
-            "Qual o valor?",
-            "Meu nome é Carlos",
-            "Para meu cachorro",
             None,
-        ):
-            with self.subTest(frase=frase):
-                self.assertIsNone(validar_etapa3(frase))
-
-    def test_midia_e_financeiro_preservam_as_barreiras_universais(self):
-        self.assertFalse(validar_midia("text"))
-        self.assertFalse(validar_midia("interactive"))
-        self.assertTrue(validar_midia("image"))
-        self.assertTrue(validar_midia("audio"))
-
-        for texto in (
-            "Qual o valor?",
-            "Quanto custa?",
-            "Aceita pix?",
-            "Tem mensalidade?",
-        ):
-            with self.subTest(texto=texto):
-                self.assertTrue(validar_pergunta_financeira(texto))
-
-        self.assertFalse(validar_pergunta_financeira("Meu nome e Pedro"))
-
-    def test_nome_aceita_formatos_reais_e_extrai_no_maximo_dois_nomes(self):
-        casos = (
-            ("Joao", "João"),
-            ("Maria Julia.", "Maria Julia"),
-            ("Meu nome é Carlos Silva", "Carlos"),
-            ("O nome da minha filha é Aline Braga", "Aline"),
-            ("Ela se chama Alice", "Alice"),
-            ("Ana-Clara", "Ana-Clara"),
-        )
-
-        for texto, esperado in casos:
-            with self.subTest(texto=texto):
-                resultado = validador_nome.validar_nome_cliente(texto)
-                self.assertTrue(resultado.valido)
-                self.assertEqual(resultado.primeiro_nome, esperado)
-                self.assertLessEqual(len(esperado.split()), 2)
-
-    def test_nome_bloqueia_entradas_objetivamente_invalidas(self):
-        entradas = (
-            "",
-            "Pedro99",
-            "Pedro😀",
-            "Maria Puta",
-            "Banana Feliz",
-            "pppjoao",
-            "xzxzxz",
-        )
-
-        for texto in entradas:
-            with self.subTest(texto=texto):
-                resultado = validador_nome.validar_nome_cliente(texto)
-                self.assertFalse(resultado.valido)
-                self.assertIsNone(resultado.primeiro_nome)
-                self.assertIsNotNone(resultado.motivo)
-
-    def test_idade_extrai_um_unico_valor_e_classifica_limites(self):
-        casos_validos = (
-            ("18", 18),
-            ("Eu tenho trinta e nove anos", 39),
-            ("Alice tem cinco anos", 5),
-        )
-
-        for texto, idade in casos_validos:
-            with self.subTest(texto=texto):
-                resultado = validar_idade(texto)
-                self.assertTrue(resultado.valida)
-                self.assertEqual(resultado.idade, idade)
-
-        for texto in ("", "0", "-1", "Tenho 39 e meu filho 7", "18.5"):
-            with self.subTest(texto=texto):
-                self.assertEqual(validar_idade(texto).status, STATUS_IDADE_INVALIDA)
-
-        self.assertEqual(
-            validar_idade("cem anos").status,
-            STATUS_IDADE_ACIMA_LIMITE,
-        )
-        self.assertEqual(obter_idade_minima_dependente(False), 5)
-        self.assertEqual(obter_idade_minima_dependente(True), 4)
-
-    def test_profissao_aceita_textos_livres_reais_e_siglas(self):
-        profissoes = (
-            "PJ",
-            "MEI",
-            "TI",
-            "call center",
-            "telemarketing",
-            "autônomo",
-            "Sou analista de custos",
-            "Trabalho com finanças",
-        )
-
-        for texto in profissoes:
-            with self.subTest(texto=texto):
-                resultado = validar_profissao_etapa5(texto, "text")
-                self.assertTrue(resultado.valida)
-                self.assertEqual(resultado.profissao, texto)
-
-    def test_profissao_rejeita_contextos_minimos_invalidos(self):
-        entradas = (
-            "",
-            "!!!",
-            "12345",
-            "sim",
-            "sim 👍",
-            "Não",
-            "ok",
-            "ok ✅",
-            "Prefiro não informar",
-            "Prefiro não informar 🙏",
-            "Prefiro não responder",
-            "Não quero responder",
-            "a" * (TAMANHO_MAXIMO_PROFISSAO + 1),
-            "TI" + (" " * TAMANHO_MAXIMO_PROFISSAO) + "PJ",
-        )
-
-        for texto in entradas:
-            with self.subTest(texto=texto):
-                resultado = validar_profissao_etapa5(texto, "text")
-                self.assertFalse(resultado.valida)
-                self.assertIsNone(resultado.profissao)
-                self.assertIsNotNone(resultado.motivo)
-
-        resultado_interativo = validar_profissao_etapa5(
-            "Para mim",
-            "interactive",
-        )
-        self.assertFalse(resultado_interativo.valida)
-
-    def test_financeiro_da_profissao_distingue_preco_de_ocupacao(self):
-        perguntas_financeiras = (
-            "Qual o valor?",
-            "Quanto custa?",
-            "Custo",
-            "valor",
-            "Qual a mensalidade?",
-            "O investimento é de R$ 100?",
-            "Tem mensalidade?",
-            "Aceita pix?",
-            "Qual seria o valor?",
-            "Quanto vou investir?",
-            "Quanto vai ser?",
-            "100 reais",
-        )
-
-        for texto in perguntas_financeiras:
-            with self.subTest(texto=texto):
-                self.assertTrue(
-                    validar_pergunta_financeira_etapa5(texto)
-                )
-
-        profissoes = (
-            "Sou analista de custos",
-            "Trabalho com finanças",
-            "Analista de crédito",
-            "Consultor de investimentos",
-            "Analista de valores mobiliários",
-        )
-        for texto in profissoes:
-            with self.subTest(texto=texto):
-                self.assertFalse(
-                    validar_pergunta_financeira_etapa5(texto)
-                )
-
-    def test_decisoes_das_etapas_seis_e_oito_traduzem_eventos(self):
-        validadores = (
-            (
-                validar_etapa8,
-                EVENTO_OFERTA_ACEITA,
-                EVENTO_OFERTA_ADIADA,
-            ),
-            (
-                validar_etapa10,
-                EVENTO_RETORNO_CONFIRMADO,
-                EVENTO_RETORNO_ADIADO,
-            ),
-        )
-
-        for validador, positivo, adiado in validadores:
-            with self.subTest(validador=validador.__name__):
-                self.assertEqual(validador("Quero agendar"), positivo)
-                self.assertEqual(validador("bora"), positivo)
-                self.assertEqual(validador("Talvez mais tarde"), adiado)
-                self.assertIsNone(validador("não quero"))
-                self.assertIsNone(validador("qualquer coisa"))
-
-    def test_email_exige_um_arroba_e_um_ponto_no_dominio(self):
-        resultado = validar_etapa11("Meu email é Ed@Gmail.com.")
-        self.assertTrue(resultado.valido)
-        self.assertEqual(resultado.email, "Ed@gmail.com")
-
-        for texto in (
-            "edcaspgmail.com",
-            "edcasp@gmailcom",
-            "edcarlosgmail",
-            "um@gmail.com e dois@hotmail.com",
-            "nome@@gmail.com",
-        ):
-            with self.subTest(texto=texto):
-                self.assertFalse(validar_etapa11(texto).valido)
-
-    def test_triagem_aceita_somente_o_conteudo_exato_das_opcoes(self):
-        casos = (
-            ("Nunca", "text", RESPOSTA_TRIAGEM_NUNCA),
-            ("Às vezes", "interactive", RESPOSTA_TRIAGEM_AS_VEZES),
-            (
-                "Frequentemente",
-                "button",
-                RESPOSTA_TRIAGEM_FREQUENTEMENTE,
-            ),
-        )
-
-        for texto, tipo, esperado in casos:
-            with self.subTest(texto=texto):
-                self.assertEqual(
-                    validar_resposta_triagem(texto, tipo),
-                    esperado,
-                )
-
-        for texto, tipo in (
-            ("Nunca esqueço", "text"),
-            ("Sempre", "text"),
-            ("Nunca", "image"),
-        ):
-            with self.subTest(texto=texto, tipo=tipo):
-                self.assertIsNone(validar_resposta_triagem(texto, tipo))
-
-    def test_satisfacao_aceita_uma_unica_opcao_coerente(self):
-        casos = (
-            ("1", 1),
-            ("Muito ruim", 1),
-            ("1 - Muito ruim", 1),
-            ("2 Ruim", 2),
-            ("3 - Regular", 3),
-            ("Muito bom", 4),
-            ("satisfacao_5", 5),
-            ("5 Excelente", 5),
-        )
-
-        for texto, nota in casos:
-            with self.subTest(texto=texto):
-                self.assertEqual(validar_etapa20(texto), nota)
-
-        for texto in (
-            "2 - Bom",
-            "2 3",
-            "2 - Ruim 3 - Regular",
-            "5 - Muito bom",
-            "Excelente ou Muito bom",
-            "Qual é o horário?",
-            "",
-        ):
-            with self.subTest(texto=texto):
-                self.assertIsNone(validar_etapa20(texto))
-
-    def test_decisao_de_comentar_aceita_intencoes_claras(self):
-        positivos = (
-            "Sim",
-            "Quero comentar",
-            "Quero sugerir",
-            "Sim, quero comentar",
-            "SIM!!!",
-        )
-        negativos = (
-            "Não",
-            "Nao quero comentar",
-            "Não quero sugerir",
-            "Prefiro não comentar",
-            "PREFIRO NAO COMENTAR!!!",
-        )
-
-        for texto in positivos:
-            with self.subTest(texto=texto):
-                self.assertEqual(
-                    validar_decisao_comentario_etapa21(texto, "text"),
-                    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-                )
-
-        for texto in negativos:
-            with self.subTest(texto=texto):
-                self.assertEqual(
-                    validar_decisao_comentario_etapa21(
-                        texto,
-                        "interactive",
-                    ),
-                    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
-                )
-
-        self.assertEqual(
-            validar_decisao_comentario_etapa21(
-                "Sim, quero comentar",
-                "button",
-            ),
-            EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-        )
-
-    def test_decisao_de_comentar_rejeita_ambiguidade_conteudo_e_midia(self):
-        for texto, tipo in (
-            ("Talvez", "text"),
-            ("Não sei", "text"),
-            ("Sim, mas não quero comentar", "text"),
-            ("Quero comentar, mas não agora", "text"),
-            ("O atendimento foi ótimo", "text"),
-            ("", "text"),
-            ("Sim", "image"),
-        ):
-            with self.subTest(texto=texto, tipo=tipo):
-                self.assertIsNone(
-                    validar_decisao_comentario_etapa21(texto, tipo)
-                )
-
-    def test_comentario_da_etapa22_preserva_texto_e_rejeita_vazio_ou_midia(self):
-        self.assertEqual(
-            normalizar_comentario_etapa22(
-                "  Atendimento muito atencioso!  ",
-                "text",
-            ),
-            "Atendimento muito atencioso!",
-        )
-
-        for texto, tipo in (
-            ("", "text"),
-            ("   ", "text"),
-            ("legenda ignorada", "image"),
-        ):
-            with self.subTest(texto=texto, tipo=tipo):
-                self.assertIsNone(
-                    normalizar_comentario_etapa22(texto, tipo)
-                )
-
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 188 — `tests/unit/test_webhook_post_flow.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `f094d3146ed55977fdd5ee11403569998d5e2f7612e408a16fec2b601a1bc88e`
-
-````python
-import json
-import unittest
-from unittest.mock import patch
-
-from django.http import JsonResponse
-from django.test import override_settings
-
-from callback.webhook.services import post_flow
-from callback.webhook.services.identidade_meta import extrair_identidade_meta
-from tests.helpers import FakeConn, FakeCursor, FakeRequest, json_response_payload
-from tests.payloads import payload_sem_mensagem, payload_texto_meta
-
-
-class WebhookPostFlowTests(unittest.TestCase):
-    def setUp(self):
-        self.print_patcher = patch("builtins.print")
-        self.print_patcher.start()
-        self.addCleanup(self.print_patcher.stop)
-        self.bloqueio_guard_patcher = patch.object(
-            post_flow,
-            "responder_se_cliente_marcado_para_bloqueio",
-            return_value=None,
-        )
-        self.bloqueio_guard = self.bloqueio_guard_patcher.start()
-        self.addCleanup(self.bloqueio_guard_patcher.stop)
-
-    def test_content_type_invalido_retorna_415_antes_de_assinatura(self):
-        request = FakeRequest(
-            payload_texto_meta(),
-            content_type="text/plain",
-        )
-
-        with patch.object(post_flow, "validar_assinatura_meta") as assinatura, patch.object(
-            post_flow,
-            "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 415)
-        self.assertEqual(
-            json_response_payload(response)["status"],
-            "unsupported_media_type",
-        )
-        assinatura.assert_not_called()
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=10)
-    def test_body_grande_retorna_413_antes_de_parse_json(self):
-        request = FakeRequest(
-            payload_texto_meta(),
-            headers={"Content-Length": "999"},
-        )
-
-        with patch.object(post_flow, "validar_assinatura_meta") as assinatura, patch.object(
-            post_flow,
-            "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 413)
-        self.assertEqual(json_response_payload(response)["status"], "payload_too_large")
-        assinatura.assert_not_called()
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_assinatura_invalida_retorna_403(self):
-        request = FakeRequest(payload_texto_meta())
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=False,
-        ), patch.object(post_flow, "get_conn") as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(json_response_payload(response)["status"], "forbidden")
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_json_invalido_retorna_ignored(self):
-        request = FakeRequest("{json quebrado")
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=True,
-        ), patch.object(post_flow, "get_conn") as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json_response_payload(response)["reason"], "invalid_json")
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_utf8_invalido_retorna_ignored(self):
-        request = FakeRequest(b"\xff")
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=True,
-        ), patch.object(post_flow, "get_conn") as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json_response_payload(response)["reason"], "invalid_json")
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    def test_nome_cliente_e_limitado_ao_tamanho_do_banco(self):
-        payload = payload_texto_meta()
-        payload["entry"][0]["changes"][0]["value"]["contacts"][0][
-            "profile"
-        ]["name"] = f"  {'A' * 250}  "
-
-        self.assertEqual(
-            extrair_identidade_meta(payload)["nome_cliente"],
-            "A" * 200,
-        )
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_cliente_marcado_ignora_antes_de_flood_unidade_e_fila(self):
-        request = FakeRequest(payload_texto_meta())
-        self.bloqueio_guard.return_value = JsonResponse({
-            "status": "ignored",
-            "reason": "cliente_marcado_bloqueio_meta",
-        })
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=True,
-        ), patch.object(
-            post_flow,
-            "responder_se_flood",
-        ) as flood, patch.object(
-            post_flow,
-            "unidade_esta_ativa",
-        ) as unidade, patch.object(
-            post_flow,
-            "povoando_fila",
-        ) as fila, patch.object(
-            post_flow,
-            "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            json_response_payload(response)["reason"],
-            "cliente_marcado_bloqueio_meta",
-        )
-        self.bloqueio_guard.assert_called_once_with(
-            "wa_id",
-            "5571999999999",
+            "BR.123",
+            "maria.no-evento",
+            "Ola",
+            "text",
             "123456",
-            nome_cliente="Cliente Teste",
-            wa_id="5571999999999",
-            user_id=None,
-            username=None,
-        )
-        flood.assert_not_called()
-        unidade.assert_not_called()
-        fila.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_lista_bloqueio_indisponivel_retorna_503_sem_seguir_fluxo(self):
-        request = FakeRequest(payload_texto_meta())
-        self.bloqueio_guard.return_value = JsonResponse(
-            {
-                "status": "unavailable",
-                "reason": "blocklist_validation_unavailable",
-            },
-            status=503,
+            None,
+            "2026-06-18T10:00:00Z",
+            "wamid.user.7",
+            2,
         )
 
+        primeira_leitura = estado_ciclo.montar_mensagem_fila(registro)
+        segunda_leitura = estado_ciclo.montar_mensagem_fila(registro)
+
+        for mensagem in (primeira_leitura, segunda_leitura):
+            self.assertIsNone(mensagem["wa_id"])
+            self.assertEqual(mensagem["user_id"], "BR.123")
+            self.assertEqual(mensagem["tipo_identidade_do_item"], "user_id")
+            self.assertEqual(mensagem["identidade_do_item"], "BR.123")
+            self.assertEqual(mensagem["username"], "maria.no-evento")
+
+        # O WA ID contido no cartao oficial nao entra neste contrato: antes
+        # do commit do worker, o flood do contact_request conta apenas o
+        # remetente user ID e nao publica ponte positiva no Redis.
+        conn = FakeConn(FakeCursor())
         with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=True,
+            flood_guard,
+            "buscar_vinculo_flood_redis",
+            side_effect=[
+                {"cache_hit": False, "redis_ok": True},
+                {
+                    "cache_hit": True,
+                    "redis_ok": True,
+                    "encontrado": False,
+                },
+            ],
         ), patch.object(
-            post_flow,
-            "responder_se_flood",
-        ) as flood, patch.object(
-            post_flow,
-            "unidade_esta_ativa",
-        ) as unidade, patch.object(
-            post_flow,
-            "povoando_fila",
-        ) as fila:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            json_response_payload(response)["reason"],
-            "blocklist_validation_unavailable",
-        )
-        flood.assert_not_called()
-        unidade.assert_not_called()
-        fila.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_flood_bloqueia_antes_de_unidade_e_fila(self):
-        request = FakeRequest(payload_texto_meta())
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=JsonResponse({"status": "ignored", "reason": "flood_redis"}),
-        ), patch.object(post_flow, "unidade_esta_ativa") as unidade, patch.object(
-            post_flow,
-            "povoando_fila",
-        ) as fila, patch.object(post_flow, "get_conn") as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json_response_payload(response)["reason"], "flood_redis")
-        unidade.assert_not_called()
-        fila.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_validacao_unidade_indisponivel_retorna_503_sem_abrir_fila(self):
-        request = FakeRequest(payload_texto_meta())
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=None,
-        ), patch.object(
-            post_flow,
-            "unidade_esta_ativa",
-            side_effect=post_flow.ValidacaoUnidadeIndisponivel("infraestrutura caiu"),
-        ), patch.object(post_flow, "povoando_fila") as fila, patch.object(
-            post_flow,
+            flood_guard,
             "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            json_response_payload(response),
-            {
-                "status": "unavailable",
-                "reason": "unit_validation_unavailable",
-            },
-        )
-        fila.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_validacao_bloqueio_conversa_indisponivel_retorna_503_sem_abrir_fila(self):
-        request = FakeRequest(payload_texto_meta())
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=True,
+            return_value=conn,
         ), patch.object(
-            post_flow,
-            "responder_se_flood",
+            flood_guard,
+            "buscar_vinculo_flood_oficial",
             return_value=None,
         ), patch.object(
-            post_flow,
-            "unidade_esta_ativa",
-            return_value=True,
+            flood_guard,
+            "salvar_ausencia_vinculo_flood_redis",
+        ) as salvar_ausencia, patch.object(
+            flood_guard,
+            "salvar_vinculo_flood_redis",
+        ) as salvar_vinculo:
+            resolucao = flood_guard._resolver_identidades_flood(
+                "user_id",
+                "BR.123",
+                "phone-a",
+                wa_id=None,
+                user_id="BR.123",
+            )
+
+        self.assertEqual(resolucao["identidades"], [("user_id", "BR.123")])
+        salvar_ausencia.assert_called_once()
+        salvar_vinculo.assert_not_called()
+
+    def test_falha_redis_com_ausencia_de_vinculo_provada_nao_rejeita_wa(self):
+        conn = FakeConn(FakeCursor())
+        with patch.object(
+            flood_guard,
+            "buscar_vinculo_flood_redis",
+            return_value={"cache_hit": False, "redis_ok": False},
         ), patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-            side_effect=post_flow.ValidacaoBloqueioConversaIndisponivel(
-                "redis e banco indisponiveis"
+            flood_guard,
+            "get_conn",
+            return_value=conn,
+        ), patch.object(
+            flood_guard,
+            "buscar_vinculo_flood_oficial",
+            return_value=None,
+        ), patch.object(
+            flood_guard,
+            "salvar_ausencia_vinculo_flood_redis",
+        ) as salvar_ausencia:
+            resolucao = flood_guard._resolver_identidades_flood(
+                "wa_id",
+                "5571999999999",
+                "phone-a",
+                wa_id="5571999999999",
+                user_id=None,
+            )
+
+        self.assertTrue(resolucao["resolucao_ok"])
+        self.assertEqual(
+            resolucao["identidades"],
+            [("wa_id", "5571999999999")],
+        )
+        salvar_ausencia.assert_not_called()
+        self.assertTrue(conn.closed)
+
+    def test_cache_bloqueio_miss_preserva_fast_path_e_erro_usa_banco(self):
+        redis = SimpleNamespace(exists=lambda _key: False)
+        with patch.object(
+            cache_conversas_bloqueadas,
+            "get_redis_safe",
+            return_value=redis,
+        ), patch.object(
+            cache_conversas_bloqueadas,
+            "_conversa_esta_bloqueada_banco_e_repara_cache",
+        ) as fallback:
+            bloqueada = cache_conversas_bloqueadas.conversa_esta_bloqueada_cache(
+                "wa_id",
+                "5571999999999",
+                "phone-a",
+            )
+
+        self.assertFalse(bloqueada)
+        fallback.assert_not_called()
+
+        with patch.object(
+            cache_conversas_bloqueadas,
+            "get_redis_safe",
+            side_effect=RuntimeError("Redis indisponível"),
+        ), patch.object(
+            cache_conversas_bloqueadas,
+            "_conversa_esta_bloqueada_banco_e_repara_cache",
+            return_value=True,
+        ) as fallback:
+            bloqueada = cache_conversas_bloqueadas.conversa_esta_bloqueada_cache(
+                "wa_id",
+                "5571999999999",
+                "phone-a",
+            )
+
+        self.assertTrue(bloqueada)
+        fallback.assert_called_once()
+
+    def test_conflito_denylist_e_ignorado_sem_meta_em_vez_de_503(self):
+        conn = FakeConn(FakeCursor())
+        with patch.object(
+            bloqueio_meta_guard,
+            "get_conn",
+            return_value=conn,
+        ), patch.object(
+            bloqueio_meta_guard,
+            "buscar_cliente_bloqueado_meta_banco",
+            side_effect=bloqueio_meta.ConflitoAliasesBloqueioMeta(
+                "aliases contraditórios"
             ),
-        ), patch.object(
-            post_flow,
-            "preparar_dados_fila",
-        ) as preparar_fila, patch.object(
-            post_flow,
-            "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            json_response_payload(response),
-            {
-                "status": "unavailable",
-                "reason": "conversation_block_validation_unavailable",
-            },
-        )
-        preparar_fila.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_evento_sem_mensagem_nao_abre_transacao(self):
-        request = FakeRequest(payload_sem_mensagem())
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=None,
-        ), patch.object(post_flow, "unidade_esta_ativa", return_value=True), patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-            return_value=False,
-        ), patch.object(post_flow, "get_conn") as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json_response_payload(response)["status"], "ok")
-        self.bloqueio_guard.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_payload_valido_commita_e_fecha(self):
-        request = FakeRequest(payload_texto_meta())
-        cursor = FakeCursor()
-        conn = FakeConn(cursor=cursor)
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=None,
-        ), patch.object(post_flow, "unidade_esta_ativa", return_value=True), patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-            return_value=False,
-        ), patch.object(post_flow, "get_conn", return_value=conn), patch.object(
-            post_flow,
-            "povoando_fila",
-            return_value={"status": "inserted", "reason": None},
-        ) as fila:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.content.decode("utf-8"))["status"], "ok")
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 0)
-        self.assertTrue(conn.closed)
-        fila.assert_called_once()
-        self.assertIs(fila.call_args.args[1], cursor)
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_resultado_ignored_commita_para_liberar_lock(self):
-        request = FakeRequest(payload_texto_meta())
-        conn = FakeConn()
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=None,
-        ), patch.object(post_flow, "unidade_esta_ativa", return_value=True), patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-            return_value=False,
-        ), patch.object(post_flow, "get_conn", return_value=conn), patch.object(
-            post_flow,
-            "povoando_fila",
-            return_value={
-                "status": "ignored",
-                "reason": "fila_aberta_sem_resposta_bot",
-            },
         ):
-            response = post_flow.responder_post_webhook(request)
+            resultado = (
+                bloqueio_meta_guard._consultar_cliente_marcado_para_bloqueio(
+                    "wa_id",
+                    "5571999999999",
+                    "phone-a",
+                    wa_id="5571999999999",
+                    user_id="BR.123",
+                )
+            )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(conn.commits, 1)
-        self.assertEqual(conn.rollbacks, 0)
-        self.assertTrue(conn.closed)
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_falha_na_insercao_faz_rollback_fecha_e_retorna_503(self):
-        request = FakeRequest(payload_texto_meta())
-        conn = FakeConn()
-
-        with patch.object(post_flow, "validar_assinatura_meta", return_value=True), patch.object(
-            post_flow,
-            "responder_se_flood",
-            return_value=None,
-        ), patch.object(post_flow, "unidade_esta_ativa", return_value=True), patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-            return_value=False,
-        ), patch.object(post_flow, "get_conn", return_value=conn), patch.object(
-            post_flow,
-            "povoando_fila",
-            side_effect=RuntimeError("banco caiu"),
-        ):
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            json_response_payload(response),
-            {
-                "status": "unavailable",
-                "reason": "insert_exception",
-            },
-        )
-        self.assertEqual(conn.commits, 0)
+        self.assertTrue(resultado["banco_ok"])
+        self.assertTrue(resultado["conflito"])
+        self.assertIsNone(resultado["bloqueio"])
         self.assertEqual(conn.rollbacks, 1)
         self.assertTrue(conn.closed)
 
-
-if __name__ == "__main__":
-    unittest.main()
-````
-
-## Passo 189 — `tests/unit/test_webhook_statuses_e_cronologia.py`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `f0ae828a976e4c5e9f945023e433a944d301e10baecd7417d5298bbda3270f64`
-
-````python
-import unittest
-from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
-
-from django.test import override_settings
-
-from callback.webhook.services import post_flow
-from callback.webhook.services import populating_fila_mensagens as fila
-from core.repositories.seguranca import turno_cliente
-from tests.helpers import FakeCursor, FakeRequest, json_response_payload
-from tests.payloads import payload_texto_meta
-
-
-CLIENTE = "5571999999999"
-PHONE_ID = "123456"
-
-
-def payload_status_meta(status="sent"):
-    return {
-        "object": "whatsapp_business_account",
-        "entry": [
-            {
-                "id": "waba.test",
-                "changes": [
-                    {
-                        "value": {
-                            "messaging_product": "whatsapp",
-                            "metadata": {
-                                "display_phone_number": "5571000000000",
-                                "phone_number_id": PHONE_ID,
-                            },
-                            "contacts": [
-                                {
-                                    "wa_id": CLIENTE,
-                                }
-                            ],
-                            "statuses": [
-                                {
-                                    "id": "wamid.bot.test",
-                                    "status": status,
-                                    "timestamp": "1782509800",
-                                    "recipient_id": CLIENTE,
-                                    "pricing": {
-                                        "billable": False,
-                                        "pricing_model": "PMP",
-                                        "category": "service",
-                                        "type": "free_customer_service",
-                                    },
-                                }
-                            ],
-                        },
-                        "field": "messages",
-                    }
-                ],
-            }
-        ],
-    }
-
-
-class WebhookStatusesTests(unittest.TestCase):
-    def setUp(self):
-        self.print_patcher = patch("builtins.print")
-        self.print_patcher.start()
-        self.addCleanup(self.print_patcher.stop)
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_status_valido_retorna_200_sem_flood_redis_banco_ou_fila(self):
-        request = FakeRequest(payload_status_meta())
-
+    def test_predecessor_com_rowcount_zero_interrompe_e_alerta_corrida(self):
+        mensagem = {
+            "id_mensagem": 7,
+            "tipo_identidade_do_item": "wa_id",
+            "identidade_do_item": "5571999999999",
+            "id_phone_unidade": "phone-a",
+            "data_recebimento": "2026-06-18T10:00:00Z",
+        }
         with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
+            ordem_turno,
+            "existe_mensagem_anterior_aberta_atendimento",
             return_value=True,
         ), patch.object(
-            post_flow,
-            "responder_se_cliente_marcado_para_bloqueio",
-        ) as bloqueio_meta, patch.object(
-            post_flow,
-            "responder_se_flood",
-        ) as flood, patch.object(
-            post_flow,
-            "unidade_esta_ativa",
-        ) as unidade, patch.object(
-            post_flow,
-            "conversa_esta_bloqueada_cache",
-        ) as bloqueio, patch.object(
-            post_flow,
-            "get_conn",
-        ) as get_conn:
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(json_response_payload(response), {"status": "ok"})
-        bloqueio_meta.assert_not_called()
-        flood.assert_not_called()
-        unidade.assert_not_called()
-        bloqueio.assert_not_called()
-        get_conn.assert_not_called()
-
-    @override_settings(WEBHOOK_MAX_BODY_BYTES=1024 * 256)
-    def test_status_com_assinatura_invalida_continua_rejeitado(self):
-        request = FakeRequest(payload_status_meta())
-
-        with patch.object(
-            post_flow,
-            "validar_assinatura_meta",
-            return_value=False,
-        ):
-            response = post_flow.responder_post_webhook(request)
-
-        self.assertEqual(response.status_code, 403)
-
-    def test_classificador_distingue_messages_de_statuses(self):
-        self.assertEqual(
-            post_flow._classificar_evento_meta(payload_texto_meta()),
-            post_flow.TIPO_EVENTO_MENSAGEM,
-        )
-        self.assertEqual(
-            post_flow._classificar_evento_meta(payload_status_meta()),
-            post_flow.TIPO_EVENTO_STATUS,
-        )
-
-
-class BarreiraCronologicaTests(unittest.TestCase):
-    def test_timestamp_meta_preserva_instante_utc_com_fuso_explicito(self):
-        timestamp_meta = "1760000000"
-
-        dados = fila.extrair_dados_whatsapp(
-            payload_texto_meta(timestamp=timestamp_meta)
-        )
-
-        esperado = datetime.fromtimestamp(
-            int(timestamp_meta),
-            tz=timezone.utc,
-        )
-        self.assertEqual(dados["received_data_hora"], esperado)
-        self.assertEqual(dados["next_attempt_at"], esperado)
-        self.assertIs(dados["received_data_hora"].tzinfo, timezone.utc)
-
-    def test_mensagem_unica_reentregue_sem_interacao_posterior_e_aceita(self):
-        recebida_em = datetime(2026, 6, 26, 18, 22, 11)
-
-        with patch.object(
-            turno_cliente,
-            "buscar_interacao_posterior_a_mensagem",
-            return_value=None,
-        ), patch.object(
-            turno_cliente,
-            "avaliar_filas_abertas_turno",
-            return_value={
-                "existe_fila_aberta": False,
-                "todas_abertas_respondidas": False,
-                "total_abertas": 0,
-                "id_mensagem_bloqueadora": None,
-            },
-        ):
-            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
-                cursor=object(),
-                tipo_identidade="wa_id",
-                identidade=CLIENTE,
-                id_phone_unidade=PHONE_ID,
-                received_data_hora=recebida_em,
+            ordem_turno,
+            "reagendar_mensagem_sem_erro",
+            return_value=0,
+        ), patch.object(ordem_turno.logger, "warning") as warning:
+            interromper = ordem_turno.reagendar_se_houver_mensagem_anterior(
+                mensagem,
+                object(),
             )
 
-        self.assertTrue(resultado["pode_enfileirar"])
-        self.assertEqual(resultado["motivo"], "sem_fila_aberta")
+        self.assertTrue(interromper)
+        warning.assert_called_once()
+        self.assertIn("linha_nao_disponivel", warning.call_args.args[0])
 
-    def test_mensagem_antiga_reentregue_depois_do_bot_e_ignorada(self):
-        recebida_em = datetime(2026, 6, 26, 18, 22, 11)
-        resposta_bot_em = datetime(2026, 6, 26, 18, 36, 46)
-
-        with patch.object(
-            turno_cliente,
-            "buscar_interacao_posterior_a_mensagem",
-            return_value=resposta_bot_em,
-        ), patch.object(
-            turno_cliente,
-            "avaliar_filas_abertas_turno",
-        ) as avaliar_filas:
-            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
-                cursor=object(),
-                tipo_identidade="wa_id",
-                identidade=CLIENTE,
-                id_phone_unidade=PHONE_ID,
-                received_data_hora=recebida_em,
-            )
-
-        self.assertFalse(resultado["pode_enfileirar"])
-        self.assertEqual(
-            resultado["motivo"],
-            "mensagem_reentregue_fora_de_ordem",
+    def test_turno_e_predecessor_resolvem_aliases_comprovados_por_unidade(self):
+        fonte_turno = "\n".join((
+            inspect.getsource(turno_cliente._resolver_sujeito_turno),
+            inspect.getsource(turno_cliente.avaliar_filas_abertas_turno),
+        ))
+        fonte_fila = inspect.getsource(
+            fila.existe_mensagem_anterior_aberta_atendimento
         )
-        avaliar_filas.assert_not_called()
 
-    def test_mensagem_nova_depois_do_bot_continua_fluxo_normal(self):
-        resposta_bot_em = datetime(2026, 6, 26, 18, 36, 46)
-        mensagem_nova_em = resposta_bot_em + timedelta(seconds=10)
-
-        with patch.object(
-            turno_cliente,
-            "buscar_interacao_posterior_a_mensagem",
-            return_value=None,
-        ), patch.object(
-            turno_cliente,
-            "avaliar_filas_abertas_turno",
-            return_value={
-                "existe_fila_aberta": False,
-                "todas_abertas_respondidas": False,
-                "total_abertas": 0,
-                "id_mensagem_bloqueadora": None,
-            },
+        for nome, fonte in (
+            ("turno", fonte_turno),
+            ("predecessor", fonte_fila),
         ):
-            resultado = turno_cliente.avaliar_turno_cliente_para_fila(
-                cursor=object(),
-                tipo_identidade="wa_id",
-                identidade=CLIENTE,
-                id_phone_unidade=PHONE_ID,
-                received_data_hora=mensagem_nova_em,
-            )
+            with self.subTest(componente=nome):
+                self.assertRegex(
+                    fonte,
+                    r"resolver_aliases_comprovados|user_id_cliente",
+                )
+                self.assertIn("wa_id", fonte)
+                self.assertIn("user_id", fonte)
+                self.assertIn("id_phone_unidade", fonte)
 
-        self.assertTrue(resultado["pode_enfileirar"])
-
-    def test_consulta_cronologica_usa_timestamp_meta_e_comparacao_estrita(self):
-        recebida_em = datetime(2026, 6, 26, 18, 22, 11)
-        cursor = FakeCursor(fetchone_result=None)
-
-        resultado = turno_cliente.buscar_interacao_posterior_a_mensagem(
-            cursor,
-            "wa_id",
-            CLIENTE,
-            PHONE_ID,
-            recebida_em,
+    def test_lock_fresco_stale_de_110_segundos_e_unlock_com_fencing(self):
+        fonte_lock = inspect.getsource(bank_script.criar_funcoes_lock)
+        fonte_merge = inspect.getsource(
+            conversas.bloquear_conversas_reconciliacao
         )
 
-        sql, params = cursor.calls[0]
-        self.assertIsNone(resultado)
-        self.assertIn("%s < c.last_interaction_at", sql)
-        self.assertEqual(params, (CLIENTE, PHONE_ID, recebida_em))
+        self.assertIn("c.processing = FALSE", fonte_lock)
+        self.assertIn("INTERVAL '110.0 seconds'", fonte_lock)
+        self.assertIn(
+            "lock_version = COALESCE(c.lock_version, 0) + 1",
+            fonte_lock,
+        )
+        self.assertIn("AND lock_version = p_lock_version", fonte_lock)
+        self.assertIn("FOR UPDATE", fonte_merge)
+        self.assertIn("ORDER BY id_conversa", fonte_merge)
+        self.assertIn("processing_started_at IS NULL", fonte_merge)
+        self.assertIn(">= NOW() - INTERVAL '110.0 seconds'", fonte_merge)
+        self.assertIn("< NOW() - INTERVAL '110.0 seconds'", fonte_merge)
+        self.assertIn(
+            "lock_version = COALESCE(lock_version, 0) + 1",
+            fonte_merge,
+        )
 
-    def test_insercao_repassa_timestamp_meta_para_regra_de_turno(self):
-        dados = fila.extrair_dados_whatsapp(payload_texto_meta())
-        cursor = FakeCursor(rowcount=1)
+        sql_final = (
+            ROOT
+            / "deploy"
+            / "migrations"
+            / "20260813_adicionar_user_id_whatsapp.sql"
+        ).read_text(encoding="utf-8")
+        self.assertIn("status_ativa IS TRUE", sql_final)
+        self.assertIn("INTERVAL '110.0 seconds'", sql_final)
+        self.assertIn("'ativou_privacidade'", sql_final)
+        self.assertIn("'bloqueio_reconciliado'", sql_final)
+        self.assertIn("ck_bloqueio_identidade_meta", sql_final)
+        self.assertNotIn("ativou_user_id", sql_final)
 
-        with patch.object(
-            fila,
-            "avaliar_turno_cliente_para_fila",
-            return_value={
-                "pode_enfileirar": False,
-                "motivo": "mensagem_reentregue_fora_de_ordem",
-            },
-        ) as avaliar_turno:
-            resultado = fila.inserir_dados_na_tabela_fila(dados, cursor)
+    def test_chave_de_bloqueio_isola_o_mesmo_user_id_por_unidade(self):
+        chave_unidade_a = cache_conversas_bloqueadas._cache_key(
+            "user_id",
+            "BR.123",
+            "phone-a",
+        )
+        chave_unidade_b = cache_conversas_bloqueadas._cache_key(
+            "user_id",
+            "BR.123",
+            "phone-b",
+        )
 
-        self.assertEqual(resultado["status"], "ignored")
+        self.assertNotEqual(chave_unidade_a, chave_unidade_b)
         self.assertEqual(
-            resultado["reason"],
-            "mensagem_reentregue_fora_de_ordem",
+            chave_unidade_a,
+            cache_conversas_bloqueadas._cache_key(
+                "user_id",
+                "BR.123",
+                "phone-a",
+            ),
         )
-        avaliar_turno.assert_called_once_with(
+
+    def test_denylist_enriquece_alias_nulo_e_conflito_falha_fechado(self):
+        cursor = FakeCursor(
+            fetchone_result=(41,),
+            fetchall_result=[
+                (41, 5, "Maria", "5571999999999", None, "maria", "phone-a")
+            ],
+            rowcount=1,
+        )
+
+        bloqueio = bloqueio_meta._consolidar_linhas_bloqueio_meta(
+            id_cliente_destino=5,
+            ids_cliente_equivalentes={5},
+            id_unidade=2,
+            phone_id_unidade="phone-a",
+            wa_id="5571999999999",
+            user_id="BR.123",
+            username="maria.nova",
+            nome=None,
             cursor=cursor,
-            tipo_identidade=dados["tipo_identidade_do_item"],
-            identidade=dados["identidade_do_item"],
-            id_phone_unidade=dados["id_phone_unidade"],
-            received_data_hora=dados["received_data_hora"],
-            usar_lock=True,
+            criar_se_ausente=False,
         )
-        self.assertFalse(
-            any(
-                "INSERT INTO chatbot.fila_mensagens" in chamada[0]
-                for chamada in cursor.calls
+
+        sql_advisory, parametros_advisory = cursor.calls[0]
+        sql_busca, parametros_busca = cursor.calls[1]
+        sql_update, parametros_update = cursor.calls[-1]
+        self.assertIn("pg_advisory_xact_lock", sql_advisory)
+        self.assertEqual(parametros_advisory, (2,))
+        self.assertIn("WHERE id_unidade = %s", sql_busca)
+        self.assertEqual(parametros_busca[0], 2)
+        self.assertIn("UPDATE chatbot.cliente_bloqueado_meta", sql_update)
+        self.assertEqual(parametros_update[2], "5571999999999")
+        self.assertEqual(parametros_update[3], "BR.123")
+        self.assertEqual(bloqueio["identidades_meta"], [
+            "5571999999999",
+            "BR.123",
+        ])
+
+        with patch.object(
+            bloqueio_meta,
+            "resolver_aliases_comprovados",
+            side_effect=[
+                {
+                    "id_cliente": 5,
+                    "id_unidade": 2,
+                    "wa_id": "5571999999999",
+                    "user_id": "BR.antigo",
+                },
+                {
+                    "id_cliente": 9,
+                    "id_unidade": 2,
+                    "wa_id": "5571888888888",
+                    "user_id": "BR.123",
+                },
+            ],
+        ):
+            with self.assertRaises(
+                bloqueio_meta.ConflitoAliasesBloqueioMeta
+            ):
+                bloqueio_meta.validar_aliases_explicitos_bloqueio_meta(
+                    "5571999999999",
+                    "BR.123",
+                    "phone-a",
+                    object(),
+                )
+
+        with patch.object(
+            flood_guard,
+            "_resolver_identidades_flood",
+            return_value={
+                "resolucao_ok": False,
+                "identidades": [],
+                "conflito": True,
+            },
+        ), patch.object(
+            flood_guard,
+            "bloquear_usuarios_meta",
+        ) as bloquear_meta, patch.object(
+            flood_guard,
+            "_registrar_intencao_bloqueio_banco",
+        ) as registrar_local:
+            resultado = flood_guard.bloquear_cliente_se_flood(
+                "wa_id",
+                "5571999999999",
+                "phone-a",
+                "wamid.conflito",
+                wa_id="5571999999999",
+                user_id="BR.123",
             )
+
+        self.assertTrue(resultado["ignorar"])
+        self.assertEqual(resultado["motivo"], "flood_conflito_aliases")
+        bloquear_meta.assert_not_called()
+        registrar_local.assert_not_called()
+
+        # O helper Admin faz somente I/O Meta. O delete_view inicia a
+        # transacao local depois disso e agrupa consolidacao + exclusao.
+        admin_obj = object.__new__(webhook_admin.ClienteBloqueadoMetaAdmin)
+        admin_obj.message_user = Mock()
+        request = SimpleNamespace(user="admin-teste")
+        obj = SimpleNamespace(
+            id_bloqueio=41,
+            wa_id="5571999999999",
+            user_id="BR.123",
+            phone_id_unidade="phone-a",
+        )
+        with patch.object(
+            webhook_admin,
+            "desbloquear_usuarios_meta",
+        ) as desbloquear:
+            self.assertTrue(
+                admin_obj._desbloquear_meta_antes_de_excluir(request, obj)
+            )
+
+        desbloquear.assert_called_once_with(
+            ["5571999999999", "BR.123"],
+            "phone-a",
+        )
+        fonte_delete = inspect.getsource(
+            webhook_admin.ClienteBloqueadoMetaAdmin.delete_view
+        )
+        self.assertLess(
+            fonte_delete.index("_desbloquear_meta_antes_de_excluir"),
+            fonte_delete.index("transaction.atomic"),
+        )
+        self.assertLess(
+            fonte_delete.index("transaction.atomic"),
+            fonte_delete.index(
+                "consolidar_prova_bloqueio_meta_antes_desbloqueio"
+            ),
+        )
+        self.assertLess(
+            fonte_delete.index(
+                "consolidar_prova_bloqueio_meta_antes_desbloqueio"
+            ),
+            fonte_delete.index("super().delete_view"),
         )
 
 
@@ -41417,21 +32384,27 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
-## Passo 190 — `tests/unit/test_worker_flow_runtime.py`
+## Passo 158 — `tests/unit/test_worker_flow_runtime.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `fdd53b74b05794091268698c99b58e23aff480797d99557046e452eedaea65b2`
+SHA-256 do conteúdo UTF-8 normalizado: `f5ee04d5181ba998644b5f9ad03799674c2e0188f40100a698df3f7dfcedcf90`
 
 ````python
+import inspect
 import unittest
 from contextlib import ExitStack
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from callback.webhook.services import post_flow
+from core.cache.runtime import cache_conversas_bloqueadas
 from tests.helpers import FakeConn, FakeCursor
-from workers.worker_flow.response_flow import flow_worker
+from workers.worker_flow.response_flow import destinatario_sender, flow_worker
+from workers.worker_flow.response_flow.etapas import resolver_etapa1
 from workers.worker_flow.suporte import estado_ciclo
+from workers.worker_flow.transacoes import finalizacao_fila
 
 
 class PararWorker(BaseException):
@@ -41516,6 +32489,17 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
+    def test_webhook_preserva_ordem_denylist_flood_unidade_e_bloqueio(self):
+        fonte = inspect.getsource(post_flow.responder_post_webhook)
+        posicoes = [
+            fonte.index("responder_se_cliente_marcado_para_bloqueio"),
+            fonte.index("responder_se_flood"),
+            fonte.index("unidade_esta_ativa"),
+            fonte.index("conversa_esta_bloqueada_cache"),
+        ]
+
+        self.assertEqual(posicoes, sorted(posicoes))
+
     def test_fila_vazia_aguarda_um_segundo_e_meio(self):
         with (
             patch.object(estado_ciclo.time, "sleep") as sleep,
@@ -41685,6 +32669,61 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         vincular.assert_not_called()
         self.assertEqual(conn.commits, 2)
         self.assertEqual(conn.rollbacks, 0)
+        self.assertTrue(conn.closed)
+
+    def test_primeira_prova_com_predecessor_reagenda_sem_consumir_retry(self):
+        conn = FakeConn(FakeCursor())
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("builtins.print"))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=registro_fila(),
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_se_houver_mensagem_anterior",
+                return_value=False,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "validar_banco_mensagem",
+                side_effect=flow_worker.HandoffAguardandoPredecessor(
+                    "alias anterior ainda aberto"
+                ),
+            ))
+            reagendar = stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_mensagem_sem_erro",
+                return_value=1,
+            ))
+            tratar_erro = stack.enter_context(patch.object(
+                flow_worker,
+                "handle_erro_generico",
+            ))
+            enviar = stack.enter_context(patch.object(
+                flow_worker,
+                "flow_sender",
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        reagendar.assert_called_once_with(
+            7,
+            conn.cursor_obj,
+            delay_seconds=5,
+        )
+        tratar_erro.assert_not_called()
+        enviar.assert_not_called()
+        self.assertEqual(conn.rollbacks, 1)
+        self.assertEqual(conn.commits, 2)
         self.assertTrue(conn.closed)
 
     def test_ciclo_normal_persiste_resposta_antes_de_marcar_sent(self):
@@ -41922,6 +32961,350 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertTrue(conn.closed)
 
 
+class IdentidadeRuntimeTests(unittest.TestCase):
+    def _contexto_etapa1(
+        self,
+        *,
+        wa_id=None,
+        user_id="BR.123",
+        id_etapa_atual=1,
+    ):
+        return {
+            "id_conversa": 10,
+            "id_cliente": 6,
+            "id_etapa_atual": id_etapa_atual,
+            "id_etapa_cliente": 1,
+            "texto_cliente_atual": "resposta",
+            "tipo_mensagem_atual": "text",
+            "wa_id": wa_id,
+            "user_id": user_id,
+            "username": "maria.teste",
+            "nome_unidade": "Supera Teste",
+            "nome_agente": "Lia",
+            "genero": "feminino",
+            "mensagem_cliente_atual": {
+                "id_mensagem_fila": 7,
+                "id_hash_msg": "wamid.cliente.7",
+                "wa_id": wa_id,
+                "user_id": user_id,
+                "id_phone_unidade": "123456",
+            },
+        }
+
+    def test_tratamentos_etapa1_usam_user_id_sem_quebrar(self):
+        casos = (
+            (
+                "midia_inicial",
+                None,
+                True,
+                False,
+                False,
+                None,
+                "enviar_etapa1_midia_inicio",
+            ),
+            (
+                "reforco_inicial",
+                None,
+                False,
+                True,
+                False,
+                None,
+                "enviar_etapa1_reforco_escolar_inicio",
+            ),
+            (
+                "financeiro_inicial",
+                None,
+                False,
+                False,
+                True,
+                None,
+                "enviar_etapa1_financeiro_inicio",
+            ),
+            (
+                "padrao_inicial",
+                None,
+                False,
+                False,
+                False,
+                None,
+                "enviar_etapa1",
+            ),
+            (
+                "nome_invalido",
+                1,
+                False,
+                False,
+                False,
+                SimpleNamespace(valido=False, motivo="nome_invalido"),
+                "enviar_etapa1_contexto_nome_invalido",
+            ),
+        )
+
+        for (
+            nome,
+            id_etapa_atual,
+            eh_midia,
+            eh_reforco,
+            eh_financeiro,
+            resultado_nome,
+            sender_esperado,
+        ) in casos:
+            contexto = self._contexto_etapa1(
+                id_etapa_atual=id_etapa_atual,
+            )
+            if eh_midia:
+                contexto["tipo_mensagem_atual"] = "image"
+
+            with self.subTest(caso=nome), ExitStack() as stack:
+                stack.enter_context(patch.object(
+                    resolver_etapa1,
+                    "validar_midia",
+                    return_value=eh_midia,
+                ))
+                stack.enter_context(patch.object(
+                    resolver_etapa1,
+                    "validar_duvida_reforco_escolar",
+                    return_value=eh_reforco,
+                ))
+                stack.enter_context(patch.object(
+                    resolver_etapa1,
+                    "validar_pergunta_financeira",
+                    return_value=eh_financeiro,
+                ))
+                stack.enter_context(patch.object(
+                    resolver_etapa1,
+                    "validar_nome_cliente",
+                    return_value=resultado_nome,
+                ))
+                senders = {
+                    nome_sender: stack.enter_context(patch.object(
+                        resolver_etapa1,
+                        nome_sender,
+                        return_value={
+                            "enviou": True,
+                            "destinatario": "BR.123",
+                        },
+                    ))
+                    for nome_sender in (
+                        "enviar_etapa1",
+                        "enviar_etapa1_midia",
+                        "enviar_etapa1_midia_inicio",
+                        "enviar_etapa1_reforco_escolar",
+                        "enviar_etapa1_reforco_escolar_inicio",
+                        "enviar_etapa1_financeiro",
+                        "enviar_etapa1_financeiro_inicio",
+                        "enviar_etapa1_contexto_nome_invalido",
+                    )
+                }
+
+                resultado = resolver_etapa1.resolve_etapa1(contexto)
+
+            self.assertTrue(resultado["enviou"])
+            argumentos_esperados = ["BR.123", "123456"]
+            if id_etapa_atual is None:
+                argumentos_esperados.extend([
+                    "Supera Teste",
+                    "Lia",
+                    "feminino",
+                ])
+            senders[sender_esperado].assert_called_once_with(
+                *argumentos_esperados
+            )
+            for nome_sender, sender in senders.items():
+                if nome_sender != sender_esperado:
+                    sender.assert_not_called()
+
+    def test_sender_prioriza_wa_id_quando_os_dois_aliases_estao_presentes(self):
+        contexto = self._contexto_etapa1(
+            wa_id="5571999999999",
+            user_id="BR.123",
+        )
+
+        destinatario = destinatario_sender.resolver_destinatario_sender(
+            contexto,
+            permitir_user_id=True,
+        )
+
+        self.assertEqual(destinatario, "5571999999999")
+
+    def test_resultado_terminal_do_merge_para_antes_de_lock_historico_e_sender(self):
+        conn = FakeConn(FakeCursor())
+        registro_handoff = (
+            7,
+            "5571999999999",
+            "BR.123",
+            "maria.teste",
+            "contact_request",
+            "contacts",
+            "123456",
+            "5571000000000",
+            datetime(2026, 6, 18, 10, 0),
+            "wamid.cliente.7",
+            1,
+        )
+        bloqueado = contexto_banco()
+        bloqueado["resultado_terminal"] = "bloqueio_reconciliado"
+        bloqueado["bloqueio_reconciliado"] = {
+            "comercial": {
+                "finalizou_em": datetime.now(timezone.utc) - timedelta(days=5),
+                "bloqueio_dias": 30,
+            },
+            "meta": None,
+        }
+        bloqueado["conversa"] = {
+            "id_conversa": 10,
+            "estado": "bloqueada",
+            "resultado_terminal": "bloqueio_reconciliado",
+        }
+
+        with ExitStack() as stack:
+            stack.enter_context(patch("builtins.print"))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=registro_handoff,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "reagendar_se_houver_mensagem_anterior",
+                return_value=False,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "validar_banco_mensagem",
+                return_value=bloqueado,
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "confirmar_cache_cliente_se_pendente",
+                return_value=False,
+            ))
+            registrar_cache = stack.enter_context(patch.object(
+                flow_worker,
+                "registrar_cache_bloqueio_reconciliado_apos_commit",
+                return_value=True,
+            ))
+            tratar = stack.enter_context(patch.object(
+                flow_worker,
+                "tratar_conversa_bloqueada",
+            ))
+            lock = stack.enter_context(patch.object(
+                flow_worker,
+                "tentar_lock_conversa",
+            ))
+            enviar = stack.enter_context(patch.object(
+                flow_worker,
+                "flow_sender",
+            ))
+            historico = stack.enter_context(patch.object(
+                flow_worker,
+                "valida_historico",
+            ))
+            stack.enter_context(patch.object(
+                flow_worker,
+                "liberar_lock_conversa_se_necessario",
+                return_value=None,
+            ))
+
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+
+        registrar_cache.assert_called_once_with(bloqueado)
+        tratar.assert_not_called()
+        lock.assert_not_called()
+        historico.assert_not_called()
+        enviar.assert_not_called()
+        self.assertEqual(conn.rollbacks, 0)
+
+        contexto_meta = contexto_banco()
+        contexto_meta["bloqueio_reconciliado"] = {
+            "comercial": None,
+            "meta": {
+                "wa_id": "5571999999999",
+                "user_id": "BR.123",
+            },
+        }
+        with patch.object(
+            finalizacao_fila,
+            "bloquear_usuarios_meta",
+            return_value=[True, True],
+        ) as bloquear_meta:
+            self.assertTrue(
+                finalizacao_fila.registrar_cache_bloqueio_reconciliado_apos_commit(
+                    contexto_meta
+                )
+            )
+        bloquear_meta.assert_called_once_with(
+            ["5571999999999", "BR.123"],
+            "123456",
+        )
+
+        with patch.object(
+            finalizacao_fila,
+            "bloquear_usuarios_meta",
+            side_effect=RuntimeError("Meta indisponivel"),
+        ):
+            self.assertFalse(
+                finalizacao_fila.registrar_cache_bloqueio_reconciliado_apos_commit(
+                    contexto_meta
+                )
+            )
+
+    def test_bloqueio_terminal_registra_wa_e_user_na_mesma_unidade(self):
+        mensagem = {
+            "tipo_identidade_do_item": "wa_id",
+            "identidade_do_item": "5571999999999",
+            "wa_id": "5571999999999",
+            "user_id": "BR.123",
+            "id_phone_unidade": "123456",
+        }
+        encerramento = {
+            "atendimento_encerrado": True,
+            "finalizou_em": datetime.now(timezone.utc),
+            "bloqueio_dias": 30,
+        }
+
+        with patch.object(
+            finalizacao_fila,
+            "registrar_bloqueio_conversa_cache",
+            return_value=True,
+        ) as registrar:
+            resultado = finalizacao_fila.registrar_cache_bloqueio_apos_commit(
+                mensagem,
+                {
+                    "wa_id": "5571999999999",
+                    "user_id": "BR.123",
+                },
+                encerramento,
+            )
+
+        self.assertTrue(resultado)
+        registrar.assert_called_once_with(
+            "wa_id",
+            "5571999999999",
+            "123456",
+            encerramento["finalizou_em"],
+            30,
+            aliases={
+                "wa_id": "5571999999999",
+                "user_id": "BR.123",
+            },
+        )
+
+    def test_bloqueio_de_30_dias_preserva_apenas_o_tempo_restante(self):
+        finalizou_em = datetime.now(timezone.utc) - timedelta(days=5)
+
+        ttl = cache_conversas_bloqueadas._calcular_ttl(finalizou_em, 30)
+
+        self.assertGreaterEqual(ttl, (25 * 24 * 60 * 60) - 5)
+        self.assertLessEqual(ttl, 25 * 24 * 60 * 60)
+
+
 if __name__ == "__main__":
     unittest.main()
 ````
@@ -41933,8 +33316,8 @@ if __name__ == "__main__":
 Depois de materializar todos os arquivos anteriores, executar obrigatoriamente, sem credenciais externas:
 
 ```powershell
-python -m compileall -q callback core workers operations tests
-python -m unittest tests.unit.test_user_id_payloads_reais tests.unit.test_reconciliacao_user_id tests.unit.test_user_id_contrato_integrado
+python -m compileall -q callback core workers tests
+python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_worker_flow_runtime
 python -m unittest discover -s tests -p "test_*.py" -b
 python -m pip check
 python callback/manage.py check --deploy
@@ -41947,21 +33330,25 @@ Validar também a versão e a assinatura efetivamente instaladas:
 
 ```powershell
 python -c "import importlib.metadata as m, inspect; from pywa import WhatsApp; assert m.version('pywa') == '4.4.0'; p=inspect.signature(WhatsApp.request_contact_info).parameters; assert {'to','sender','text','tracker'} <= set(p)"
-python -m unittest tests.unit.test_meta_graph_api_version tests.unit.test_user_id_contrato_integrado
 ```
 
 Os testes devem provar, no mínimo:
 
 1. os quatro JSONs reais de `payloads/`, inclusive fallbacks `wa_id/from` e `user_id/from_user_id`, divergência de réplicas e `CONTACT_INFO` ambíguo;
 2. identidade do item congelada, cache/turno tipados e sender usando `user_id` somente nas etapas autorizadas;
-3. promoção e reconciliação provisório/canônico, conversa antiga encerrada por `ativou_user_id`, quatro gates de exclusão, rollback e retry idempotente;
+3. promoção e reconciliação provisório/canônico, conversa antiga encerrada por `ativou_privacidade`, bloqueio herdado encerrando a nova por `bloqueio_reconciliado`, quatro gates de exclusão, rollback e retry idempotente;
 4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
 5. Funil 19–23, username complementar e triagem 13–18 com pergunta/resposta em ordem;
 6. DDL final completo, constraints, FKs, índices e ausência de `ALTER TABLE` histórico nos scripts Python declarativos;
-7. importação dos utilitários sem Redis/RDS/Meta e ausência de nomes físicos legados;
-8. continuidade anti-flood: 8 eventos por user ID, o `contact_request` oficial e 6 eventos imediatos por WA ID — ainda antes do commit do worker — atingem juntos o limite de 15; o mesmo WAMID não duplica, vínculo pendente conflitante é recusado, pessoas/unidades sem prova não são somadas e falha de cache/prova produz 503 sem bloqueio Meta.
+7. ausência de nomes físicos legados nos módulos versionados do runtime;
+8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.6.
+9. prova diferencial da V1.0.6: depois de normalizar somente a renumeração
+   `1 -> 1` e `2..22 -> 3..23`, catálogo/mapa, textos e botões das 22 etapas
+   legadas e o payload do Funil WA-only sem username permanecem idênticos; os
+   testes funcionais existentes continuam provando destinatário WA, persistência,
+   retry e turno.
 
-Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.5. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
+Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.6 `e052625`. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
 
 ### Preflight somente leitura do RDS
 
@@ -41976,32 +33363,37 @@ SELECT EXISTS (
       AND column_name = 'id_portfolio'
 ) AS id_portfolio_ja_existe;
 
-SELECT id_unidade, nome, waba_id, phone_number_id
+SELECT id_unidade, nome_unidade, waba_id, phone_number_id
 FROM chatbot.unidade
 ORDER BY id_unidade;
 ```
 
 - Se `id_portfolio_ja_existe = false`, confirmar manualmente todos os pares usados no mapa do SQL final. O mapa preparado contém a unidade conhecida na baseline, mas deverá coincidir com a lista real no momento do deploy.
-- Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
+- Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome_unidade, nome_agente, genero, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
 
 Antes de abrir a transação de produção, confirmar os três serviços `inactive`, snapshot `Disponível`, ausência de itens `processing` e ausência de envio do Funil em curso. Depois do `COMMIT`, publicar exatamente o código validado, executar smokes de webhook/worker/Funil e inspecionar logs e `NRestarts` antes de encerrar o deploy.
 
 O smoke com credenciais reais é separado da suíte offline e deve usar ambiente controlado, destinatário autorizado e versão Graph `v26.0`. Ele deve validar tanto envio por WA ID quanto o fallback por `user_id` na etapa permitida.
 
-O único risco conhecido aceito por este plano continua sendo a janela rara Meta→banco: a Meta pode aceitar uma resposta e o processo cair antes da persistência final, levando o retry a reenviar a mesma mensagem. O antigo reset da janela anti-flood na promoção `user_id`→`wa_id` foi eliminado pelos passos 12, 16, 19 e 22. Nenhum outro desvio de identidade, transação ou retry é aceito como risco conhecido.
+O único risco conhecido aceito por este plano continua sendo a janela rara Meta→banco: a Meta pode aceitar uma resposta e o processo cair antes da persistência final, levando o retry a reenviar a mesma mensagem. O antigo reset da janela anti-flood na promoção `user_id`→`wa_id` foi eliminado pelos passos 12, 16, 19, 22, 28, 36 e 45, usando somente vínculo persistido e barreira de predecessor. Nenhum outro desvio de identidade, transação ou retry é aceito como risco conhecido.
 
 # Fase final — Migração manual no DBeaver
 
-## Passo 191 (final) — `deploy/migrations/20260811_adicionar_user_id_whatsapp.sql` e comando manual integral
+## Passo 159 (final) — `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql` e comando manual integral
 
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
-O preflight aceita exclusivamente a baseline consolidada de 22 etapas/25
+O preflight bancário aceita exclusivamente o schema da baseline V1.0.6 `e052625`, com
+22 etapas/25
 transições e a pós-validação exige exatamente 23 etapas/27 transições. Toda a
 migração ocorre em uma única transação: qualquer erro desfaz inclusive o
 remapeamento de etapas. Depois de um `COMMIT` bem-sucedido, uma reexecução
 aborta no preflight sem alterar dados, pois o schema já não corresponde à
 baseline; ela nunca tenta aplicar parcialmente a promoção uma segunda vez.
+
+`deploy/migrations/20260812_personalizar_agente_unidade.sql` já pertence à
+baseline e não é incorporada nem reexecutada aqui. O SQL abaixo apenas exige e
+preserva `nome_unidade`, `nome_agente`, `genero` e suas quatro constraints.
 
 Pré-condições obrigatórias:
 
@@ -42016,7 +33408,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `a9e2572c78fd90bb5a6f9791d233c56ce52e0d10e61e1eed76c1eda82b1ad695`
+SHA-256 do SQL UTF-8 normalizado: `1f13fd037e18b22a5d03887edd6922078c120262c97593a71a23e21a9145665e`
 
 ````sql
 BEGIN;
@@ -42039,6 +33431,27 @@ LOCK TABLE
     chatbot.funil_envios
 IN ACCESS EXCLUSIVE MODE;
 
+-- Contrato canônico já implantado pela V1.0.6. A tabela temporária permite
+-- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
+-- formatação textual manual e sem alterar chatbot.unidade.
+CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
+    nome_unidade VARCHAR(300),
+    nome_agente VARCHAR(100),
+    genero VARCHAR(9),
+
+    CONSTRAINT uq_unidade_nome_unidade
+        UNIQUE (nome_unidade),
+
+    CONSTRAINT ck_unidade_nome_unidade_nao_vazio
+        CHECK (nome_unidade ~ '[^[:space:]]'),
+
+    CONSTRAINT ck_unidade_nome_agente_nao_vazio
+        CHECK (nome_agente ~ '[^[:space:]]'),
+
+    CONSTRAINT ck_unidade_genero
+        CHECK (genero IN ('masculino', 'feminino'))
+) ON COMMIT DROP;
+
 DO $preflight$
 DECLARE
     etapas_atuais INTEGER;
@@ -42051,7 +33464,132 @@ DECLARE
     definicao_motivo TEXT;
     motivos_atuais TEXT[];
     corpo_dequeue_atual TEXT;
+    corpo_lock_atual TEXT;
+    corpo_unlock_atual TEXT;
 BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            VALUES
+                ('nome_unidade', 'character varying', 300),
+                ('nome_agente',   'character varying', 100),
+                ('genero',        'character varying',   9)
+        ) AS esperado(column_name, data_type, max_length)
+        LEFT JOIN information_schema.columns AS coluna
+          ON coluna.table_schema = 'chatbot'
+         AND coluna.table_name = 'unidade'
+         AND coluna.column_name = esperado.column_name
+        WHERE coluna.column_name IS NULL
+           OR coluna.data_type <> esperado.data_type
+           OR coluna.character_maximum_length IS DISTINCT FROM esperado.max_length
+           OR coluna.is_nullable <> 'NO'
+           OR coluna.column_default IS NOT NULL
+    ) OR EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'chatbot'
+          AND table_name = 'unidade'
+          AND column_name = 'nome'
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.6 e052625.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM chatbot.unidade
+        WHERE nome_unidade !~ '[^[:space:]]'
+           OR nome_agente !~ '[^[:space:]]'
+           OR genero NOT IN ('masculino', 'feminino')
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: dados de apresentação da unidade violam a V1.0.6 e052625.';
+    END IF;
+
+    IF EXISTS (
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_constraint AS extra
+        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
+          AND extra.contype <> 'n'
+          AND extra.conname NOT IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+          AND EXISTS (
+              SELECT 1
+              FROM UNNEST(extra.conkey) AS chave(attnum)
+              JOIN pg_attribute AS coluna
+                ON coluna.attrelid = extra.conrelid
+               AND coluna.attnum = chave.attnum
+              WHERE coluna.attname IN (
+                  'nome_unidade',
+                  'nome_agente',
+                  'genero'
+              )
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.6 e052625.';
+    END IF;
+
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
     SELECT COUNT(*) INTO transicoes_atuais FROM chatbot.etapa_transicao;
 
@@ -42102,7 +33640,7 @@ BEGIN
         VALUES
             (1,  'nome_cliente_valido',                    2),
             (2,  'destino_atendimento_definido',           3),
-            (3,  'destino_atendimento_confirmado',         4),
+            (3,  'destino_atendimento_confirmado',          4),
             (4,  'profissao_dependente_valida',            5),
             (4,  'profissao_titular_valida',               6),
             (5,  'nome_dependente_valido',                 6),
@@ -42164,7 +33702,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.5 (etapas=%/%; transições=%/%).',
+            'à V1.0.6 e052625 (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -42181,7 +33719,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.5.';
+            'Migração recusada: etapa final atual não corresponde à V1.0.6 e052625.';
     END IF;
 
     IF EXISTS (
@@ -42190,7 +33728,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.5.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.6 e052625.';
     END IF;
 
     IF NOT EXISTS (
@@ -42345,6 +33883,37 @@ BEGIN
             'Migração recusada: assinatura ou algoritmo atual de dequeue_message diverge da base esperada.';
     END IF;
 
+    SELECT p.prosrc
+    INTO corpo_lock_atual
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_lock_atual IS NULL
+       OR POSITION('PROCESSING = TRUE' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_atual)) = 0
+       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_atual)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Migração recusada: lock_conversa atual diverge do contrato de versão de posse.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_unlock_atual
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_unlock_atual IS NULL
+       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_atual)) = 0
+       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_atual)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Migração recusada: unlock_conversa atual diverge do contrato de versão de posse.';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM chatbot.fila_mensagens
@@ -42360,9 +33929,17 @@ BEGIN
 END
 $preflight$;
 
+-- O snapshot vem depois do gate das colunas para que uma baseline incompatível
+-- seja recusada pela mensagem controlada, em vez de falhar com undefined_column.
+CREATE TEMP TABLE migracao_apresentacao_unidade_antes
+ON COMMIT DROP
+AS
+SELECT id_unidade, nome_unidade, nome_agente, genero
+FROM chatbot.unidade;
+
 -- Mapa explícito do estado atual. Antes do deploy, revisar este bloco e incluir
 -- exatamente uma linha para cada unidade existente. Não inferir pelo WABA.
-CREATE TEMP TABLE pg_temp.migracao_portfolios (
+CREATE TEMP TABLE migracao_portfolios (
     id_unidade INTEGER PRIMARY KEY,
     id_portfolio VARCHAR(100) NOT NULL,
     CONSTRAINT ck_migracao_portfolio_nao_vazio
@@ -42389,7 +33966,7 @@ BEGIN
 END
 $validar_mapa_portfolios$;
 
-CREATE TEMP TABLE pg_temp.migracao_user_id_contagens
+CREATE TEMP TABLE migracao_user_id_contagens
 ON COMMIT DROP
 AS
 SELECT 'cliente' AS tabela, COUNT(*)::BIGINT AS registros
@@ -42413,7 +33990,7 @@ FROM chatbot.webhook_flood_evento
 UNION ALL
 SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios;
 
-CREATE TEMP TABLE pg_temp.migracao_respostas_etapas (
+CREATE TEMP TABLE migracao_respostas_etapas (
     id_resposta_desafio INTEGER PRIMARY KEY,
     id_etapa INTEGER NOT NULL
 ) ON COMMIT DROP;
@@ -42471,13 +34048,15 @@ ALTER TABLE chatbot.fila_mensagens
     ADD COLUMN user_id VARCHAR(255) NULL,
     ADD COLUMN username VARCHAR(255) NULL,
     ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL;
+    ALTER COLUMN wa_id DROP NOT NULL,
+    ALTER COLUMN unidade_telefone DROP NOT NULL;
 
 ALTER TABLE chatbot.historico_mensagens
     ADD COLUMN user_id VARCHAR(255) NULL,
     ADD COLUMN username VARCHAR(255) NULL,
     ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL;
+    ALTER COLUMN wa_id DROP NOT NULL,
+    ALTER COLUMN unidade_telefone DROP NOT NULL;
 
 ALTER TABLE chatbot.conversa
     ADD COLUMN wa_id VARCHAR(50) NULL,
@@ -42542,7 +34121,8 @@ ALTER TABLE chatbot.conversa
             OR motivo_encerramento IN (
                 'idade_invalida',
                 'foi_agendado',
-                'ativou_user_id'
+                'ativou_privacidade',
+                'bloqueio_reconciliado'
             )
         );
 
@@ -42764,7 +34344,7 @@ VALUES
     (1,  'nome_cliente_valido_sem_wa_id',          2),
     (2,  'contato_oficial_compartilhado',          3),
     (3,  'destino_atendimento_definido',           4),
-    (4,  'destino_atendimento_confirmado',         5),
+    (4,  'destino_atendimento_confirmado',          5),
     (5,  'profissao_dependente_valida',            6),
     (5,  'profissao_titular_valida',               7),
     (6,  'nome_dependente_valido',                 7),
@@ -42796,9 +34376,69 @@ SELECT setval(
 
 SELECT setval(
     pg_get_serial_sequence('chatbot.etapa_transicao', 'id_transicao'),
-    COALESCE((SELECT MAX(id_transicao) FROM chatbot.etapa_transicao), 1),
+    27,
     TRUE
 );
+
+CREATE OR REPLACE FUNCTION chatbot.lock_conversa(p_id_conversa INT)
+RETURNS TABLE (
+    lock_ok BOOLEAN,
+    lock_version_atual INT
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_lock_version INT;
+BEGIN
+    UPDATE chatbot.conversa AS conversa
+    SET
+        processing = TRUE,
+        processing_started_at = NOW(),
+        lock_version = COALESCE(conversa.lock_version, 0) + 1
+    WHERE conversa.id_conversa = p_id_conversa
+      AND conversa.status_ativa IS TRUE
+      AND (
+          COALESCE(conversa.processing, FALSE) IS FALSE
+          OR (
+              conversa.processing IS TRUE
+              AND conversa.processing_started_at IS NOT NULL
+              AND conversa.processing_started_at
+                  < NOW() - INTERVAL '110.0 seconds'
+          )
+      )
+    RETURNING conversa.lock_version INTO v_lock_version;
+
+    IF v_lock_version IS NULL THEN
+        RETURN QUERY SELECT FALSE, NULL::INT;
+        RETURN;
+    END IF;
+
+    RETURN QUERY SELECT TRUE, v_lock_version;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(
+    p_id_conversa INT,
+    p_lock_version INT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    updated_rows INTEGER;
+BEGIN
+    UPDATE chatbot.conversa
+    SET
+        processing = FALSE,
+        processing_started_at = NULL
+    WHERE id_conversa = p_id_conversa
+      AND processing IS TRUE
+      AND lock_version = p_lock_version;
+
+    GET DIAGNOSTICS updated_rows = ROW_COUNT;
+    RETURN updated_rows = 1;
+END;
+$$;
 
 CREATE FUNCTION chatbot.dequeue_message()
 RETURNS TABLE (
@@ -42873,6 +34513,8 @@ DECLARE
     transicoes_finais_corretas INTEGER;
     referencias_invalidas RECORD;
     corpo_dequeue_final TEXT;
+    corpo_lock_final TEXT;
+    corpo_unlock_final TEXT;
     definicao_motivo_final TEXT;
     motivos_finais TEXT[];
 BEGIN
@@ -42885,9 +34527,11 @@ BEGIN
             ('fila_mensagens',          'wa_id',         50),
             ('fila_mensagens',          'user_id',      255),
             ('fila_mensagens',          'username',     255),
+            ('fila_mensagens',          'unidade_telefone', 100),
             ('historico_mensagens',     'wa_id',         50),
             ('historico_mensagens',     'user_id',      255),
             ('historico_mensagens',     'username',     255),
+            ('historico_mensagens',     'unidade_telefone', 100),
             ('conversa',                'wa_id',         50),
             ('conversa',                'user_id',      255),
             ('conversa',                'username',     255),
@@ -42918,6 +34562,9 @@ BEGIN
     INTO colunas_obrigatorias_invalidas
     FROM (
         VALUES
+            ('unidade',          'nome_unidade',      'character varying', 300),
+            ('unidade',          'nome_agente',       'character varying', 100),
+            ('unidade',          'genero',            'character varying',   9),
             ('unidade',          'id_portfolio',       'character varying', 100),
             ('user_id_cliente',  'id_user_id_cliente', 'bigint',            NULL),
             ('user_id_cliente',  'id_cliente',         'integer',           NULL),
@@ -42955,6 +34602,7 @@ BEGIN
         SELECT 1
         FROM (
             VALUES
+                ('unidade',               'nome'),
                 ('cliente',                'waid_telefone'),
                 ('fila_mensagens',         'cliente_telefone'),
                 ('historico_mensagens',    'cliente_telefone'),
@@ -42967,7 +34615,7 @@ BEGIN
          AND coluna.column_name = legado.column_name
     ) THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: coluna legada de identidade permaneceu.';
+            'Pós-validação falhou: coluna legada de identidade ou apresentação permaneceu.';
     END IF;
 
     IF EXISTS (
@@ -43002,15 +34650,122 @@ BEGIN
         SELECT 1
         FROM chatbot.unidade
         WHERE NULLIF(BTRIM(id_portfolio), '') IS NULL
+           OR nome_unidade !~ '[^[:space:]]'
+           OR nome_agente !~ '[^[:space:]]'
+           OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: unidade sem id_portfolio válido.';
+            'Pós-validação falhou: cadastro ou apresentação da unidade inválido.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_temp.migracao_apresentacao_unidade_antes AS antes
+        FULL JOIN chatbot.unidade AS depois
+          ON depois.id_unidade = antes.id_unidade
+        WHERE antes.id_unidade IS NULL
+           OR depois.id_unidade IS NULL
+           OR depois.nome_unidade IS DISTINCT FROM antes.nome_unidade
+           OR depois.nome_agente IS DISTINCT FROM antes.nome_agente
+           OR depois.genero IS DISTINCT FROM antes.genero
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: apresentação da unidade mudou durante a migração de user_id.';
+    END IF;
+
+    IF EXISTS (
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT
+            atual.conname,
+            atual.contype,
+            PG_GET_CONSTRAINTDEF(atual.oid)
+        FROM pg_constraint AS atual
+        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
+          AND atual.convalidated IS TRUE
+          AND atual.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+        EXCEPT
+        SELECT
+            esperado.conname,
+            esperado.contype,
+            PG_GET_CONSTRAINTDEF(esperado.oid)
+        FROM pg_constraint AS esperado
+        WHERE esperado.conrelid =
+              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
+          AND esperado.conname IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero'
+          )
+    ) OR EXISTS (
+        SELECT 1
+        FROM pg_constraint AS extra
+        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
+          AND extra.contype <> 'n'
+          AND extra.conname NOT IN (
+              'uq_unidade_nome_unidade',
+              'ck_unidade_nome_unidade_nao_vazio',
+              'ck_unidade_nome_agente_nao_vazio',
+              'ck_unidade_genero',
+              'ck_unidade_id_portfolio_nao_vazio'
+          )
+          AND EXISTS (
+              SELECT 1
+              FROM UNNEST(extra.conkey) AS chave(attnum)
+              JOIN pg_attribute AS coluna
+                ON coluna.attrelid = extra.conrelid
+               AND coluna.attnum = chave.attnum
+              WHERE coluna.attname IN (
+                  'nome_unidade',
+                  'nome_agente',
+                  'genero'
+              )
+          )
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: constraints de apresentação da unidade divergentes.';
     END IF;
 
     SELECT COUNT(*)
     INTO constraints_obrigatorias
     FROM (
         VALUES
+            ('unidade',                 'uq_unidade_nome_unidade',                    'u'),
+            ('unidade',                 'ck_unidade_nome_unidade_nao_vazio',          'c'),
+            ('unidade',                 'ck_unidade_nome_agente_nao_vazio',           'c'),
+            ('unidade',                 'ck_unidade_genero',                          'c'),
             ('unidade',                 'ck_unidade_id_portfolio_nao_vazio',         'c'),
             ('cliente',                 'cliente_wa_id_key',                         'u'),
             ('cliente',                 'ck_cliente_wa_id_nao_vazio',                'c'),
@@ -43052,9 +34807,9 @@ BEGIN
      AND constraint_atual.contype::TEXT = esperado.constraint_type
      AND constraint_atual.convalidated IS TRUE;
 
-    IF constraints_obrigatorias <> 32 THEN
+    IF constraints_obrigatorias <> 36 THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: esperado 32 constraints do contrato; obtido %.',
+            'Pós-validação falhou: esperado 36 constraints do contrato; obtido %.',
             constraints_obrigatorias;
     END IF;
 
@@ -43104,7 +34859,8 @@ BEGIN
            IN UPPER(definicao_motivo_final)
        ) = 0
        OR motivos_finais IS DISTINCT FROM ARRAY[
-           'ativou_user_id',
+           'ativou_privacidade',
+           'bloqueio_reconciliado',
            'foi_agendado',
            'idade_invalida'
        ]::TEXT[]
@@ -43387,7 +35143,7 @@ BEGIN
             (1,  'nome_cliente_valido_sem_wa_id',          2),
             (2,  'contato_oficial_compartilhado',          3),
             (3,  'destino_atendimento_definido',           4),
-            (4,  'destino_atendimento_confirmado',         5),
+            (4,  'destino_atendimento_confirmado',          5),
             (5,  'profissao_dependente_valida',            6),
             (5,  'profissao_titular_valida',               7),
             (6,  'nome_dependente_valido',                 7),
@@ -43516,10 +35272,45 @@ BEGIN
        OR POSITION('LIMIT 1' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('RETRY_COUNT = F.RETRY_COUNT + 1' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_dequeue_final)) = 0
+       OR POSITION('< NOW() - INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
        OR POSITION('INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
     THEN
         RAISE EXCEPTION
             'Pós-validação falhou: assinatura ou invariantes da dequeue divergentes.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_lock_final
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_lock_final IS NULL
+       OR POSITION('STATUS_ATIVA IS TRUE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('COALESCE(CONVERSA.PROCESSING, FALSE) IS FALSE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('PROCESSING_STARTED_AT IS NOT NULL' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_final)) = 0
+       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_final)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: lock_conversa não preserva o limiar de 110 segundos e a versão de posse.';
+    END IF;
+
+    SELECT p.prosrc
+    INTO corpo_unlock_final
+    FROM pg_proc AS p
+    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
+      AND p.prokind = 'f';
+
+    IF corpo_unlock_final IS NULL
+       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_unlock_final)) = 0
+       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_final)) = 0
+       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_final)) = 0
+    THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: unlock_conversa não protege a posse por lock_version.';
     END IF;
 END
 $pos_validacao$;

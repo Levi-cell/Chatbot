@@ -16,19 +16,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from operations.bootstrap import configure_local_operations
+from utilitarios.bootstrap import configurar_ambiente_local
 
 
 def carregar_estado_banco(*, connection_factory=None):
     """Carrega unidades e bloqueios locais em uma única fotografia read-only."""
     if connection_factory is None:
-        configure_local_operations()
+        configurar_ambiente_local()
         from core.database.connection_aws import get_conn
 
         connection_factory = get_conn
 
     conn = connection_factory(
-        application_name="operations_blocked_users_readonly",
+        application_name="utilitarios_blocked_users_readonly",
     )
     try:
         cursor = conn.cursor()
@@ -101,7 +101,7 @@ def carregar_estado_banco(*, connection_factory=None):
 
 def listar_usuarios_bloqueados_meta(phone_id_unidade):
     """Lista todos os bloqueados de um phone ID usando paginação do PyWa."""
-    configure_local_operations()
+    configurar_ambiente_local()
     from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 
     cliente_wa = conta_wa(str(phone_id_unidade))
@@ -358,7 +358,7 @@ def imprimir_reconciliacao_bloqueios(resultado, *, mostrar_wa_id=False):
 
 def listar_numeros_waba_meta(waba_id, *, request_get=None):
     """Lista todos os números de uma WABA conhecida pelo banco."""
-    configure_local_operations()
+    configurar_ambiente_local()
     from core.integrations.whatsapp.tools.config import (
         construir_url_graph_api,
         get_meta_http_timeout,
@@ -628,7 +628,7 @@ def criar_parser():
 
 def executar_monitoramento_bloqueios():
     """Atalho local: executar o arquivo no PyCharm já gera o relatório."""
-    configure_local_operations()
+    configurar_ambiente_local()
     return reconciliar_bloqueios_meta_banco(
         imprimir=True,
         mostrar_wa_id=True,

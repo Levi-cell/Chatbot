@@ -1282,14 +1282,6 @@ def validar_nome_cliente(texto):
     )
 
 
-def detecta_nome_invalido(texto):
-    return not validar_nome_cliente(texto).valido
-
-
-def extrair_primeiro_nome_cliente(texto):
-    return validar_nome_cliente(texto).primeiro_nome
-
-
 def extrair_candidato_nome(palavras_originais, palavras_normalizadas):
     prefixo = _encontrar_prefixo(
         palavras_normalizadas,

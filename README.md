@@ -20,7 +20,7 @@ Para desenvolver novas etapas, siga a
 | [Webhook](callback/README.md) | Entrada HTTP, validações, anti-flood e persistência na fila. |
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
-| [Operations](operations/README.md) | Monitoramento e manutenção executados manualmente. |
+| [Utilitários](utilitarios/README.md) | Monitoramento e manutenção executados manualmente. |
 | [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
 | [Rotina de deploy](regras_deploy/rotina_deploy.md) | Publicação da `prod`, atualização da Lightsail e ciclo dos serviços. |
 | [Ambiente e banco em produção](regras_deploy/modificando_env_e_banco_em_prod.md) | Troca segura do `.env` e evolução controlada do schema no RDS. |
@@ -66,7 +66,7 @@ core/repositories SQL de runtime
 core/database     conexão, DDL e setup
 core/cache        Redis, fallback e autocura
 core/integrations serviços externos
-operations        relatórios e comandos manuais; nunca orquestradores
+utilitarios       relatórios e comandos manuais; nunca orquestradores
 tests             testes, fakes, mocks e contratos
 ```
 

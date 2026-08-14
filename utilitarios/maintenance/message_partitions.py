@@ -8,7 +8,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from operations.bootstrap import configure_local_operations
+from utilitarios.bootstrap import configurar_ambiente_local
 
 logger = logging.getLogger("db.particoes")
 
@@ -41,7 +41,7 @@ def criar_particoes_historico_mensagens(
     particoes_criadas = []
 
     if connection_factory is None:
-        configure_local_operations()
+        configurar_ambiente_local()
         from core.database.connection_aws import get_conn
 
         connection_factory = get_conn
@@ -49,7 +49,7 @@ def criar_particoes_historico_mensagens(
     conn = None
     try:
         conn = connection_factory(
-            application_name="operations_message_partitions",
+            application_name="utilitarios_message_partitions",
         )
         cursor = conn.cursor()
 

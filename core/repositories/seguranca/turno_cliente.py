@@ -189,12 +189,3 @@ def avaliar_filas_abertas_turno(cursor, cliente_telefone, id_phone_unidade):
         "total_abertas": total_abertas,
         "id_mensagem_bloqueadora": id_mensagem_bloqueadora,
     }
-
-
-def fila_tem_mensagem_aberta_turno(cursor, cliente_telefone, id_phone_unidade):
-    turno = avaliar_filas_abertas_turno(
-        cursor,
-        cliente_telefone,
-        id_phone_unidade,
-    )
-    return turno["existe_fila_aberta"]

@@ -9,53 +9,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-if __name__ == "__main__":
-    from operations.bootstrap import configure_local_operations
-
-    configure_local_operations()
-
-from core.cache.cache_unidade import (
-    CACHE_DB_VERSION_KEY,
-    CACHE_TEMP_KEY,
-    CACHE_VERSION_KEY,
-    REDIS_KEY,
-    recarregar_cache_unidades_ou_erro,
-)
-from core.cache.runtime.cache_cliente import REDIS_PREFIX as CLIENTE_PREFIX
-from core.cache.runtime.cache_conversas_bloqueadas import (
-    REDIS_PREFIX as CONVERSA_BLOQUEADA_PREFIX,
-)
-from core.cache.runtime.cache_flood_redis import RATE_PREFIX
-from core.cache.runtime.cache_webhook_erro_inesperado import (
-    REDIS_PREFIX as ERRO_INESPERADO_PREFIX,
-)
-from core.cache.redis_client import get_redis_safe, validar_redis_remoto
-
-
-logger = logging.getLogger("operations.cache_reset")
-
-CHAVES_EXATAS_RESET = (
-    REDIS_KEY,
-    CACHE_VERSION_KEY,
-    CACHE_DB_VERSION_KEY,
-    CACHE_TEMP_KEY,
-)
-
-PADROES_OPERACIONAIS_RESET = (
-    f"{CLIENTE_PREFIX}*",
-    f"{CONVERSA_BLOQUEADA_PREFIX}:*",
-    f"{RATE_PREFIX}:*",
-    f"{ERRO_INESPERADO_PREFIX}:*",
-)
+logger = logging.getLogger("utilitarios.cache_reset")
 
 
 def resetar_cache_operacional(redis_client=None):
     """Remove estado efêmero sem apagar o cache de unidades."""
-    redis = redis_client or get_redis_safe(retries=1, delay=0)
-    destino = validar_redis_remoto(redis)
+    dependencias = _carregar_dependencias_cache()
+    redis = redis_client or dependencias["get_redis_safe"](
+        retries=1,
+        delay=0,
+    )
+    destino = dependencias["validar_redis_remoto"](redis)
     removidas_por_padrao = {
         padrao: _remover_por_padrao(redis, padrao)
-        for padrao in PADROES_OPERACIONAIS_RESET
+        for padrao in dependencias["padroes_operacionais"]
     }
     total_removido = sum(removidas_por_padrao.values())
     logger.warning(
@@ -73,9 +40,13 @@ def resetar_cache_operacional(redis_client=None):
 
 def resetar_bloqueios_conversa(redis_client=None):
     """Remove somente os bloqueios temporários de conversa."""
-    redis = redis_client or get_redis_safe(retries=1, delay=0)
-    destino = validar_redis_remoto(redis)
-    padrao = f"{CONVERSA_BLOQUEADA_PREFIX}:*"
+    dependencias = _carregar_dependencias_cache()
+    redis = redis_client or dependencias["get_redis_safe"](
+        retries=1,
+        delay=0,
+    )
+    destino = dependencias["validar_redis_remoto"](redis)
+    padrao = dependencias["padrao_bloqueios"]
     total_removido = _remover_por_padrao(redis, padrao)
     logger.warning(
         "cache_bloqueios_resetado | destino=%s total=%s padrao=%s",
@@ -92,8 +63,38 @@ def resetar_bloqueios_conversa(redis_client=None):
 
 def recarregar_unidades():
     """Reconstrói de forma explícita o cache derivado de unidades."""
-    total = recarregar_cache_unidades_ou_erro()
+    dependencias = _carregar_dependencias_cache()
+    total = dependencias["recarregar_cache_unidades_ou_erro"]()
     return {"unidades_recriadas": total}
+
+
+def _carregar_dependencias_cache():
+    """Importa o runtime somente depois de a fonte de ambiente ser escolhida."""
+    from core.cache.cache_unidade import recarregar_cache_unidades_ou_erro
+    from core.cache.redis_client import get_redis_safe, validar_redis_remoto
+    from core.cache.runtime.cache_cliente import REDIS_PREFIX as cliente_prefix
+    from core.cache.runtime.cache_conversas_bloqueadas import (
+        REDIS_PREFIX as conversa_bloqueada_prefix,
+    )
+    from core.cache.runtime.cache_flood_redis import RATE_PREFIX
+    from core.cache.runtime.cache_webhook_erro_inesperado import (
+        REDIS_PREFIX as erro_inesperado_prefix,
+    )
+
+    return {
+        "get_redis_safe": get_redis_safe,
+        "validar_redis_remoto": validar_redis_remoto,
+        "recarregar_cache_unidades_ou_erro": (
+            recarregar_cache_unidades_ou_erro
+        ),
+        "padrao_bloqueios": f"{conversa_bloqueada_prefix}:*",
+        "padroes_operacionais": (
+            f"{cliente_prefix}*",
+            f"{conversa_bloqueada_prefix}:*",
+            f"{RATE_PREFIX}:*",
+            f"{erro_inesperado_prefix}:*",
+        ),
+    }
 
 
 def _remover_por_padrao(redis_client, padrao):
@@ -132,7 +133,14 @@ def criar_parser():
     parser.add_argument(
         "--confirmar",
         action="store_true",
-        help="confirma a exclusão de bloqueios temporários",
+        help="confirma a exclusão das chaves selecionadas",
+    )
+    parser.add_argument(
+        "--env-file",
+        help=(
+            "usa explicitamente este arquivo de ambiente; sem a opção, "
+            "usa utilitarios/local_settings.py"
+        ),
     )
     return parser
 
@@ -141,10 +149,14 @@ def main(argv=None):
     parser = criar_parser()
     args = parser.parse_args(argv)
 
-    if args.bloqueios and not args.confirmar:
-        parser.error("--bloqueios exige --confirmar")
+    if not args.confirmar:
+        parser.error("toda alteração de cache exige --confirmar")
 
     try:
+        from utilitarios.bootstrap import configurar_ambiente_utilitario
+
+        configurar_ambiente_utilitario(args.env_file)
+
         if args.bloqueios:
             resultado = resetar_bloqueios_conversa()
             print(

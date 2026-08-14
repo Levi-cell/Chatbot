@@ -22,6 +22,12 @@ Commit: 345e8767946a4cab41c9f31359db137c40fb60e7
 Correção V1.0.5 - Profissão obrigatória após confirmação
 Commit: 5f1889f5e2c81f3c233b3ea81940cbab98a84620
 
+V1.0.6 - Apresentação personalizada do agente por unidade
+Commit: e052625d7707627a8c28945003ed2506c34e02d3
+
+V1.0.7 - Organização operacional e limpeza estrutural
+Commit -
+
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================
 

@@ -108,7 +108,7 @@ fallbacks é Redis, banco e memória local. O bloqueio utiliza
 `core/integrations/whatsapp/pywa_functions/usuarios.py` e segue Meta-first.
 
 Relatórios e reconciliação manual ficam em
-`operations/monitoring/blocked_users.py`.
+`utilitarios/monitoring/blocked_users.py`.
 
 O relatório é somente leitura e possui duas conferências distintas:
 
@@ -152,11 +152,9 @@ não deve ser confirmada no banco ou Redis.
 
 ## Testes relacionados
 
-- `tests/unit/test_webhook_post_flow.py`;
-- `tests/unit/test_webhook_statuses_e_cronologia.py`;
-- `tests/unit/test_webhook_statuses_e_cronologia.py`;
 - `tests/unit/test_fluxo_turno_abc.py`;
-- `tests/unit/test_fluxo_turno_abc.py`;
-- `tests/unit/test_flood_guard.py`;
-- `tests/unit/test_cache_essencial.py`;
-- `tests/unit/test_webhook_post_flow.py`.
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.

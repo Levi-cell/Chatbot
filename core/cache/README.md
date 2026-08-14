@@ -90,7 +90,7 @@ ao processo, limitada e não substitui Redis em ambiente com múltiplas instânc
 
 `cache_reset.py` conserva apenas o reset completo usado pelo setup de
 desenvolvimento. Comandos manuais ficam em
-[`operations/maintenance/cache_reset.py`](../../operations/maintenance/cache_reset.py).
+[`utilitarios/maintenance/cache_reset.py`](../../utilitarios/maintenance/cache_reset.py).
 
 ## Reset operacional de produção
 
@@ -101,7 +101,7 @@ VM:
 
 ```bash
 cd /opt/chatbot/app
-sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python -m operations.maintenance.cache_reset --operacional'
+sudo -u chatbot env -i PYTHONPATH=/opt/chatbot/app /opt/chatbot/venv/bin/python -m utilitarios.maintenance.cache_reset --env-file /etc/chatbot/chatbot.env --operacional --confirmar
 ```
 
 Esse modo remove somente os prefixos `cliente_cache:`,
@@ -116,7 +116,8 @@ Para apagar exclusivamente bloqueios de 30 dias, siga o comando protegido em
 
 ## Testes relacionados
 
-- `tests/unit/test_cache_essencial.py`;
-- `tests/unit/test_cache_reset_operacional.py`;
-- `tests/unit/test_flood_guard.py`;
-- `tests/unit/test_retry_essencial.py`.
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.

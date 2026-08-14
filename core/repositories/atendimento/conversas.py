@@ -40,32 +40,6 @@ def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
     )
 
 
-def buscar_last_message_from_conversa(
-    cliente_telefone,
-    id_phone_unidade,
-    cursor,
-):
-    cursor.execute("""
-        SELECT c.last_message_from
-        FROM chatbot.conversa c
-        JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
-        WHERE cl.waid_telefone = %s
-          AND u.phone_number_id = %s
-          AND c.status_ativa = TRUE
-        LIMIT 1;
-    """, (cliente_telefone, id_phone_unidade))
-
-    resultado = cursor.fetchone()
-    logger.debug(
-        "conversa_consulta | acao=last_message_from cliente=%s phone_number_id=%s encontrada=%s",
-        cliente_telefone,
-        id_phone_unidade,
-        bool(resultado),
-    )
-    return resultado[0] if resultado else None
-
-
 def tentar_lock_conversa(id_conversa, cursor):
     cursor.execute(
         "SELECT lock_ok, lock_version_atual "

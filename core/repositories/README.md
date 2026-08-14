@@ -105,5 +105,7 @@ DDL para esta pasta.
 
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_fluxo_turno_abc.py`;
-- `tests/unit/test_transicoes_etapa.py`;
-- `tests/unit/test_lastfrom_semantico.py`.
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`.
+
+A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
