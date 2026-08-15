@@ -1,7 +1,7 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
-> Documento de implementação preparado sobre a baseline funcional V1.0.6,
-> commit `e052625`. A pasta local `utilitarios/` e todos os seus arquivos ficam
+> Documento de implementação preparado sobre a baseline funcional V1.0.7,
+> commit `c248155`. A pasta local `utilitarios/` e todos os seus arquivos ficam
 > integralmente fora deste plano: nenhum passo os cria, substitui, remove, importa
 > ou executa. Este arquivo não altera o runtime; ele registra o estado final
 > completo a aplicar em uma tarefa futura.
@@ -25,7 +25,7 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
-- Antes de aplicar, confirmar `e052625` como baseline, gerar um manifesto SHA-256
+- Antes de aplicar, confirmar `c248155` como baseline, gerar um manifesto SHA-256
   dos caminhos versionados de entrada e recusar qualquer árvore divergente. A
   pasta local `utilitarios/` não participa do manifesto nem da aplicação.
 - Preservar as fronteiras transacionais, retries, ordem do worker, idempotência e contratos descritos no plano teórico.
@@ -63,7 +63,7 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
   segundos para impedir uma consulta ao RDS por evento.
 - Em cache miss, o banco revalida a prova persistida. Se o RDS confirmar que não
   existe vínculo, uma falha isolada do Redis conserva o alias unitário e o
-  anti-flood segue pelo fallback banco -> memória da V1.0.6. Conflito
+  anti-flood segue pelo fallback banco -> memória da V1.0.7. Conflito
   determinístico recebe HTTP 200 sem mutação; HTTP 503 fica reservado à
   indisponibilidade transitória de uma fonte autoritativa necessária.
 - O limite continua exatamente 15 WAMIDs distintos em 5 segundos. Portanto, um cliente real não ganha uma nova causa de bloqueio; apenas deixa de poder dividir a mesma rajada entre duas identidades oficialmente vinculadas.
@@ -71,7 +71,7 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 
 ## Estado dos dados na migração
 
-- Na baseline V1.0.6 (`e052625`) do projeto, `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna `VARCHAR(100) NOT NULL` de `unidade`.
+- Na baseline V1.0.7 (`c248155`) do projeto, `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna `VARCHAR(100) NOT NULL` de `unidade`.
 - O “mapa de `id_portfolio`” não é outra tabela: é somente a lista de pares `(id_unidade, id_portfolio)` usada para preencher cada unidade que já existe antes de aplicar `NOT NULL`.
 - O valor de portfolio de cada unidade precisa ser conferido com a Meta. O gate detecta unidade ausente ou valor vazio, mas não consegue provar que um número não vazio pertence semanticamente à unidade correta.
 - Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
@@ -88,7 +88,7 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
   `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
   identidade/anti-flood/apresentação e descoberta offline completa. A baseline
-  V1.0.6 possui 22 etapas/25 transições.
+  V1.0.7 possui 22 etapas/25 transições.
 - PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API `v26.0` são gates explícitos.
 - Os testes offline usam fixtures, fakes e mocks e não exigem credenciais de Meta, Redis ou RDS. Smokes reais ficam separados e controlados.
 
@@ -5787,7 +5787,7 @@ def _id_cliente_valido(id_cliente):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `99f53c554ec06ff32f26d12fb8ce652995514ab091ca7ad9d6234e3da33a0e91`
+SHA-256 do conteúdo UTF-8 normalizado: `fc420b95df342d149e2114072cf1349ccb94396419a9dfd8e29e421814786829`
 
 ````python
 import hashlib
@@ -5822,7 +5822,7 @@ def conversa_esta_bloqueada_cache(
 
     try:
         redis = get_redis_safe(retries=1, delay=0, validate=False)
-        # Mantém a semântica da V1.0.6: miss válido significa "não bloqueado"
+        # Mantém a semântica da V1.0.7: miss válido significa "não bloqueado"
         # e não transforma toda mensagem normal em consulta ao PostgreSQL.
         return bool(redis.exists(key))
     except Exception as exc:
@@ -8280,7 +8280,7 @@ def _normalizar_cliente(registro):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `9284dace37b9fc8ff7a520424b87a886563898383f1dfa0fab314e2b504cb765`
+SHA-256 do conteúdo UTF-8 normalizado: `c0fe9fa0412564a28ac7b173cb06d21f69a03984303b942e3da3db15f13877b3`
 
 ````python
 import logging
@@ -8481,7 +8481,7 @@ def bloquear_conversas_reconciliacao(ids_conversa, cursor):
 
     # Um dono com lock stale perde apenas a versão e a capacidade de executar
     # unlock sobre uma posse posterior. Este é exatamente o limiar de 110
-    # segundos da V1.0.6, aplicado antes de qualquer efeito do merge.
+    # segundos da V1.0.7, aplicado antes de qualquer efeito do merge.
     cursor.execute(
         """
         UPDATE chatbot.conversa
@@ -26890,7 +26890,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6ab13be6cb2664f0c372b14e971d83faa509cf21123c92f4c6beb25f4786da00`
+SHA-256 do conteúdo UTF-8 normalizado: `6afc173509057172ecadd3f08d4f9e4adf1ce7db17943c81cb8c8c5a4c929dfd`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -27164,7 +27164,7 @@ O worker é o único dono da promoção/reconciliação. O gate autoritativo oco
 `validar_banco_mensagem()` antes da primeira mutação e diferencia o remetente do
 cartão compartilhado. Clientes e conversas envolvidos são bloqueados em ordem
 determinística. Um lock que ainda não ultrapassou o limiar de 110 segundos da
-V1.0.6 gera rollback e requeue sem erro; um lock stale segue a recuperação
+V1.0.7 gera rollback e requeue sem erro; um lock stale segue a recuperação
 versionada já existente.
 
 O resultado terminal `bloqueio_reconciliado` pertence à mesma transação do
@@ -27790,7 +27790,7 @@ regras de negócio.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `377e7e516025d889d600bf658e850dcf00f0005da0e60b8f28e978b399814e6c`
+SHA-256 do conteúdo UTF-8 normalizado: `9784fcd9aa36de9238ba448078f899577aef7b9a15cfa93fdbb7ee5f6e922fd7`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -28056,7 +28056,7 @@ Implementação principal:
 ## 5. Ordenação e exclusão mútua
 
 - Uma conversa deve ser processada por apenas um worker por vez.
-- O lock da conversa preserva exatamente o predicado da V1.0.6: só poderá ser
+- O lock da conversa preserva exatamente o predicado da V1.0.7: só poderá ser
   retomado quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`.
 - `lock_version` impede que um worker antigo libere o lock adquirido por um
   worker mais novo.
@@ -28140,7 +28140,7 @@ Implementação principal:
   fecha com `ativou_privacidade`.
 - Lock fresco em qualquer conversa envolvida cancela o merge inteiro e reagenda
   o item por 5 segundos sem consumir retry. Lock stale segue exatamente o limiar
-  de 110 segundos da V1.0.6 e incrementa `lock_version`; o dono antigo não pode
+  de 110 segundos da V1.0.7 e incrementa `lock_version`; o dono antigo não pode
   liberar a versão nova.
 - Se o cliente canônico ainda possui bloqueio comercial vigente, a conversa nova
   fecha com `bloqueio_reconciliado`, o item atual é removido atomicamente e nada
@@ -30216,7 +30216,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a966a281c222f6942295170429043ebc36bc8c8116a1c68ebb88ac09f0c7dd40`
+SHA-256 do conteúdo UTF-8 normalizado: `e8ebbd7347795c087906faed73744dc0544571f55fe1400a40b5e15f3a781d4a`
 
 ````python
 import ast
@@ -30276,9 +30276,9 @@ WA_ID = "5575999999999"
 USER_ID = "BR.13491208655302741918"
 
 
-def _ler_arquivo_da_v106(caminho):
+def _ler_arquivo_da_v107(caminho):
     processo = subprocess.run(
-        ["git", "show", f"e052625:{caminho}"],
+        ["git", "show", f"c248155:{caminho}"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.PIPE,
@@ -30297,7 +30297,7 @@ def _literal_atribuido(fonte, nome):
             for alvo in no.targets
         ):
             return ast.literal_eval(no.value)
-    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.0.6")
+    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.0.7")
 
 
 def _strings_executaveis(fonte):
@@ -30328,12 +30328,12 @@ def _strings_executaveis(fonte):
     )
 
 
-def _executar_modulo_v106(caminho):
+def _executar_modulo_v107(caminho):
     namespace = {
-        "__name__": f"baseline_v106_{Path(caminho).stem}",
+        "__name__": f"baseline_v107_{Path(caminho).stem}",
         "__file__": str(ROOT / caminho),
     }
-    fonte = _ler_arquivo_da_v106(caminho)
+    fonte = _ler_arquivo_da_v107(caminho)
     exec(compile(fonte, caminho, "exec"), namespace)
     return namespace
 
@@ -30402,10 +30402,10 @@ def contexto_historico_base(
     }
 
 
-class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
+class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
     def test_catalogo_e_mapa_legados_so_mudam_pela_renumeracao(self):
-        etapas_v106 = _literal_atribuido(
-            _ler_arquivo_da_v106(
+        etapas_v107 = _literal_atribuido(
+            _ler_arquivo_da_v107(
                 "core/database/deploy_database/povoar_etapas.py"
             ),
             "ETAPAS",
@@ -30427,10 +30427,10 @@ class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
             ) in ETAPAS
             if id_etapa != 2
         )
-        self.assertEqual(etapas_futuras_normalizadas, etapas_v106)
+        self.assertEqual(etapas_futuras_normalizadas, etapas_v107)
 
-        transicoes_v106 = _literal_atribuido(
-            _ler_arquivo_da_v106(
+        transicoes_v107 = _literal_atribuido(
+            _ler_arquivo_da_v107(
                 "core/database/deploy_database/etapa_transicao_script.py"
             ),
             "TRANSICOES_INICIAIS",
@@ -30456,15 +30456,15 @@ class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(transicoes_futuras_normalizadas),
-            transicoes_v106,
+            transicoes_v107,
         )
 
     def test_textos_e_botoes_das_22_etapas_legadas_sao_identicos(self):
-        for etapa_v106 in range(1, 23):
-            etapa_futura = 1 if etapa_v106 == 1 else etapa_v106 + 1
-            caminho_v106 = (
+        for etapa_v107 in range(1, 23):
+            etapa_futura = 1 if etapa_v107 == 1 else etapa_v107 + 1
+            caminho_v107 = (
                 "core/integrations/whatsapp/messages/"
-                f"etapa{etapa_v106}_messages.py"
+                f"etapa{etapa_v107}_messages.py"
             )
             caminho_futuro = ROOT / (
                 "core/integrations/whatsapp/messages/"
@@ -30472,18 +30472,18 @@ class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
             )
 
             with self.subTest(
-                etapa_v106=etapa_v106,
+                etapa_v107=etapa_v107,
                 etapa_futura=etapa_futura,
             ):
                 self.assertEqual(
                     _strings_executaveis(
                         caminho_futuro.read_text(encoding="utf-8-sig")
                     ),
-                    _strings_executaveis(_ler_arquivo_da_v106(caminho_v106)),
+                    _strings_executaveis(_ler_arquivo_da_v107(caminho_v107)),
                 )
 
-    def test_funil_wa_only_sem_username_preserva_payload_v106(self):
-        dados_v106 = {
+    def test_funil_wa_only_sem_username_preserva_payload_v107(self):
+        dados_v107 = {
             "id_conversa": 10,
             "id_unidade": 1,
             "nome_unidade": "Supera Teste",
@@ -30501,14 +30501,14 @@ class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
             ],
         }
         dados_futuros = {
-            **dados_v106,
+            **dados_v107,
             "username": None,
             "triagem_respostas": [
                 {**item, "id_etapa": item["id_etapa"] + 1}
-                for item in dados_v106["triagem_respostas"]
+                for item in dados_v107["triagem_respostas"]
             ],
         }
-        baseline = _executar_modulo_v106(
+        baseline = _executar_modulo_v107(
             "core/integrations/funil/oportunidades.py"
         )
         baseline["montar_pergunta_triagem"] = (
@@ -30523,7 +30523,7 @@ class CompatibilidadeV106WaOnlyTests(unittest.TestCase):
 
         self.assertEqual(
             oportunidades.montar_payload_oportunidade(dados_futuros),
-            baseline["montar_payload_oportunidade"](dados_v106),
+            baseline["montar_payload_oportunidade"](dados_v107),
         )
 
 
@@ -33341,14 +33341,14 @@ Os testes devem provar, no mínimo:
 5. Funil 19–23, username complementar e triagem 13–18 com pergunta/resposta em ordem;
 6. DDL final completo, constraints, FKs, índices e ausência de `ALTER TABLE` histórico nos scripts Python declarativos;
 7. ausência de nomes físicos legados nos módulos versionados do runtime;
-8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.6.
-9. prova diferencial da V1.0.6: depois de normalizar somente a renumeração
+8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.7.
+9. prova diferencial da V1.0.7: depois de normalizar somente a renumeração
    `1 -> 1` e `2..22 -> 3..23`, catálogo/mapa, textos e botões das 22 etapas
    legadas e o payload do Funil WA-only sem username permanecem idênticos; os
    testes funcionais existentes continuam provando destinatário WA, persistência,
    retry e turno.
 
-Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.6 `e052625`. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
+Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.7 `c248155`. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
 
 ### Preflight somente leitura do RDS
 
@@ -33383,7 +33383,7 @@ O único risco conhecido aceito por este plano continua sendo a janela rara Meta
 
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
-O preflight bancário aceita exclusivamente o schema da baseline V1.0.6 `e052625`, com
+O preflight bancário aceita exclusivamente o schema da baseline V1.0.7 `c248155`, com
 22 etapas/25
 transições e a pós-validação exige exatamente 23 etapas/27 transições. Toda a
 migração ocorre em uma única transação: qualquer erro desfaz inclusive o
@@ -33408,7 +33408,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `1f13fd037e18b22a5d03887edd6922078c120262c97593a71a23e21a9145665e`
+SHA-256 do SQL UTF-8 normalizado: `07b5111b92028862b772ec40d9b24ffb19b6ca8ec27d38850acc4a7d00002524`
 
 ````sql
 BEGIN;
@@ -33431,7 +33431,7 @@ LOCK TABLE
     chatbot.funil_envios
 IN ACCESS EXCLUSIVE MODE;
 
--- Contrato canônico já implantado pela V1.0.6. A tabela temporária permite
+-- Contrato canônico já implantado pela V1.0.7. A tabela temporária permite
 -- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
 -- formatação textual manual e sem alterar chatbot.unidade.
 CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
@@ -33492,7 +33492,7 @@ BEGIN
           AND column_name = 'nome'
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.6 e052625.';
+            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -33503,7 +33503,7 @@ BEGIN
            OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a V1.0.6 e052625.';
+            'Migração recusada: dados de apresentação da unidade violam a V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -33587,7 +33587,7 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.6 e052625.';
+            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.7 c248155.';
     END IF;
 
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
@@ -33702,7 +33702,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.6 e052625 (etapas=%/%; transições=%/%).',
+            'à V1.0.7 c248155 (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -33719,7 +33719,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.6 e052625.';
+            'Migração recusada: etapa final atual não corresponde à V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -33728,7 +33728,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.6 e052625.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.7 c248155.';
     END IF;
 
     IF NOT EXISTS (

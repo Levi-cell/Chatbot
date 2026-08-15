@@ -1,6 +1,6 @@
 # Plano autoritativo — `user_id`, WA ID e PyWa 4.x
 
-> **Baseline autoritativa — V1.0.6 (`e052625`):** o estado inicial deste plano
+> **Baseline autoritativa — V1.0.7 (`c248155`):** o estado inicial deste plano
 > já possui `unidade.nome_unidade`, `unidade.nome_agente` e `unidade.genero`,
 > com gênero restrito a `masculino` ou `feminino`. Esses campos configuram
 > somente as apresentações iniciais padrão, de mídia, financeira e de
@@ -17,7 +17,7 @@ Ele ainda **não foi aplicado ao runtime**. Nesta revisão, os dois planos
 Markdown são sincronizados com a baseline; todos os caminhos de código, banco,
 testes e deploy citados abaixo continuam descrevendo impacto futuro.
 
-A baseline operacional usada nesta revisão é a V1.0.6, commit `e052625`, com 22
+A baseline operacional usada nesta revisão é a V1.0.7, commit `c248155`, com 22
 etapas e 25 transições. Ela inclui a profissão obrigatória para titular e
 dependente, a confirmação do destino, os tratamentos atuais, a triagem por faixa
 etária, o detalhamento das perguntas no Funil e a apresentação inicial
@@ -109,7 +109,7 @@ As extensões comportamentais aprovadas neste plano são:
    oficialmente comprovado do cliente na unidade, sem exigir que clientes
    legados passem a possuir user ID;
 5. tornar a reconciliação consciente da posse das conversas envolvidas: o merge
-   reutiliza exatamente o limiar da V1.0.6, no qual um lock só é stale quando
+   reutiliza exatamente o limiar da V1.0.7, no qual um lock só é stale quando
    `processing_started_at < NOW() - INTERVAL '110.0 seconds'`; antes disso ele
    nunca é removido. O takeover incrementa `lock_version`, preservando a proteção
    já existente no `unlock` sem prometer cancelamento de um trabalho externo já
@@ -171,7 +171,7 @@ identifica cliente ou unidade e jamais é passado como `sender`; todo envio usa 
 `phone_number_id` canônico da unidade validada no banco. HTTP 503 fica reservado
 a falha transitória depois de uma entrada estruturalmente válida quando não
 existir fallback seguro, como RDS indisponível, falha de `INSERT` ou de commit.
-Falha isolada do Redis continua usando os fallbacks já definidos pela V1.0.6.
+Falha isolada do Redis continua usando os fallbacks já definidos pela V1.0.7.
 
 ### 3.2 Campos do cliente
 
@@ -561,7 +561,7 @@ CONSTRAINT ck_unidade_genero
 ```
 
 As três primeiras colunas e suas quatro constraints já pertencem à baseline
-V1.0.6 e são preservadas sem nova migração ou backfill por este plano.
+V1.0.7 e são preservadas sem nova migração ou backfill por este plano.
 `id_portfolio` é a única ampliação futura da unidade pertencente à feature de
 `user_id`.
 
@@ -643,7 +643,7 @@ chatbot.conversa.motivo_encerramento
 
 O delta da feature de `user_id` soma 22 campos listados nesta seção, contando
 chaves/FKs da tabela de vínculo e colunas renomeadas. As três colunas de
-apresentação da unidade já existentes na baseline V1.0.6 não entram nessa conta.
+apresentação da unidade já existentes na baseline V1.0.7 não entram nessa conta.
 Renome não cria uma segunda cópia do WA ID legado.
 
 Não existirão `telefone_informado`, `username_informado`,
@@ -753,7 +753,7 @@ haverá `ALTER TABLE` em Python.
 O último passo do plano conterá um único SQL puro, transacional, para produção,
 com:
 
-1. preflight exato do schema V1.0.6, inclusive das três colunas de apresentação
+1. preflight exato do schema V1.0.7, inclusive das três colunas de apresentação
    da unidade, suas quatro constraints e a ausência de `unidade.nome`;
 2. serviços parados e filas operacionais vazias;
 3. renome das cinco colunas existentes de WA ID;
@@ -770,7 +770,7 @@ com:
 11. recriação controlada de `chatbot.dequeue_message()` e preservação semântica
     de `chatbot.lock_conversa()`/`chatbot.unlock_conversa()`: a fila mantém sua
     recuperação própria de 2 minutos, enquanto a conversa conserva o predicado
-    exato da V1.0.6, `processing_started_at < NOW() - INTERVAL '110.0 seconds'`,
+    exato da V1.0.7, `processing_started_at < NOW() - INTERVAL '110.0 seconds'`,
     com `lock_version` no takeover e `unlock` condicionado à versão vigente;
 12. pós-validação completa, incluindo apresentação da unidade, ações das FKs e
     definição dos índices;
@@ -783,7 +783,7 @@ migração de `user_id`. O SQL futuro apenas prova que seu estado final continua
 
 A transação desse SQL pertence exclusivamente à futura janela de migração com
 os serviços parados. Ela não move commits, rollbacks, ponto do lock ou política
-de retry do `flow_worker`; preserva os dois limiares distintos da V1.0.6 — 2
+de retry do `flow_worker`; preserva os dois limiares distintos da V1.0.7 — 2
 minutos para recuperação da fila e 110 segundos para posse da conversa — e a
 proteção de versão já exigida para o `unlock`.
 
@@ -994,7 +994,7 @@ permanecem 15 WAMIDs distintos em 5 segundos.
 Ausência de vínculo pode receber cache negativo de 5 segundos para evitar uma
 consulta ao RDS por evento. Se o RDS responder autoritativamente que não existe
 vínculo, falha do Redis conserva o alias unitário e deixa o anti-flood seguir seu
-fallback banco -> memória da V1.0.6; o cache negativo e sua releitura são apenas
+fallback banco -> memória da V1.0.7; o cache negativo e sua releitura são apenas
 otimizações. Conflito determinístico é descartado com HTTP 200, sem mutação ou
 bloqueio Meta. HTTP 503 fica reservado à indisponibilidade transitória do RDS ou
 de outra fonte indispensável à decisão. Contato manual, username, nome,
@@ -1110,7 +1110,7 @@ A sequência abaixo permanece exatamente no mesmo lugar no caminho normal:
 No passo 2, encontrar predecessor sempre interrompe o ciclo atual. O retorno de
 `reagendar_mensagem_sem_erro()` diferente de uma linha continua gerando o alerta
 de corrida `mensagem_ordem_nao_reagendada`; ele não autoriza ultrapassar a
-mensagem anterior e não muda o `return True` da V1.0.6.
+mensagem anterior e não muda o `return True` da V1.0.7.
 
 Durante o passo 3, a reconciliação pode devolver dois resultados controlados:
 
@@ -1144,7 +1144,7 @@ Também permanecem:
 - espera atual de 1,5 segundo quando a fila está vazia;
 - toda a verdade lógica de `tests/unit/test_fluxo_turno_abc.py`.
 
-A janela de posse da conversa permanece exatamente a da V1.0.6 e não deve ser
+A janela de posse da conversa permanece exatamente a da V1.0.7 e não deve ser
 confundida com os 2 minutos de recuperação da fila. O takeover da conversa só é
 permitido quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`;
 enquanto esse predicado não for verdadeiro, o lock é fresco e recusado. A
@@ -1196,7 +1196,7 @@ três chaves, ainda que o valor de alguma delas seja `None`:
 Admin, mas não substitui silenciosamente o snapshot da conversa no contexto nem
 no histórico do bot.
 
-Em paralelo e sem integrar esse trio de identidade, a baseline V1.0.6 conserva
+Em paralelo e sem integrar esse trio de identidade, a baseline V1.0.7 conserva
 o contexto editorial da etapa 1. Quando `id_etapa_atual is None`, e somente
 nesse primeiro contato, `valida_historico()` chama
 `core/repositories/fluxo/contextos/etapa1.py` e acrescenta ao
@@ -1681,7 +1681,7 @@ O catálogo final terá 23 etapas:
 | 22 | Satisfação — comentário | sim | não |
 | 23 | Finalização | sim | sim, bloqueio de 30 dias |
 
-A baseline V1.0.6 já possui 22 etapas. Na migração futura, as etapas atuais
+A baseline V1.0.7 já possui 22 etapas. Na migração futura, as etapas atuais
 2..22 serão remapeadas para 3..23 sem apagar dados. A etapa 1 permanece no
 mesmo ID e a única etapa realmente adicionada sobre essa baseline é a etapa 2
 de compartilhamento oficial.
@@ -1755,7 +1755,7 @@ validador contextual:
 
 ### 9.2 Confirmação do destino preservada
 
-A confirmação implantada na V1.0.4 e preservada na baseline V1.0.6 passa da etapa
+A confirmação implantada na V1.0.4 e preservada na baseline V1.0.7 passa da etapa
 atual 3 para a futura etapa 4 sem ampliar sua gramática. Na baseline corrigida,
 ela produz o evento único `destino_atendimento_confirmado` e sempre segue de 3
 para a profissão atual 4; depois da renumeração, a mesma regra segue da
@@ -1867,7 +1867,7 @@ canônico relido do banco.
 
 ### 10.1 Tratamentos atuais preservados
 
-A implementação futura não volta ao conjunto de validadores anterior à V1.0.6.
+A implementação futura não volta ao conjunto de validadores anterior à V1.0.7.
 Toda etapa que possui tratamento financeiro continua possuindo também o
 tratamento universal de dúvida sobre reforço escolar, inclusive a nova etapa 2.
 O tipo técnico permanece `duvida_reforco_escolar`.
@@ -1947,7 +1947,7 @@ do atendimento, devolve ambos no dicionário do snapshot e filtra
 `respostas_desafios.id_etapa BETWEEN 13 AND 18`. Não usa
 `cliente.username` como atalho e não projeta `user_id` para a integração.
 
-O detalhamento preservado na V1.0.6 também é obrigatório:
+O detalhamento preservado na V1.0.7 também é obrigatório:
 
 - `buscar_dados_lead_funil()` lê as respostas das futuras etapas 13..18 em
   ordem crescente;
@@ -2108,7 +2108,7 @@ Atualizar, com arquivo completo:
 - `callback/webhook/admin.py`.
 
 Ao mesclar o estado final, `bank_script.py`, models e Admin devem partir do
-contrato já implantado na V1.0.6: `nome_unidade`, `nome_agente`, `genero`, suas
+contrato já implantado na V1.0.7: `nome_unidade`, `nome_agente`, `genero`, suas
 quatro constraints e todos os caminhos ORM com `nome_unidade` são preservados.
 Este passo acrescenta `id_portfolio` e o contrato de identidade sem restaurar
 `unidade.nome` nem reaplicar a migração de apresentação.
@@ -2154,7 +2154,7 @@ falha de forma fechada sem criar equivalência ou bloqueio por hipótese: confli
 determinístico recebe HTTP 200 e indisponibilidade transitória do RDS recebe HTTP
 503. Quando o RDS prova que ainda não existe vínculo, Redis indisponível não
 descarta a mensagem válida; o alias unitário continua pelo fallback banco ->
-memória da V1.0.6. O limite continua 15 WAMIDs distintos em 5 segundos. Antes do primeiro
+memória da V1.0.7. O limite continua 15 WAMIDs distintos em 5 segundos. Antes do primeiro
 commit, a segunda barreira de predecessor do worker impede que a prova posterior
 ultrapasse item anterior do outro alias. Essa continuidade
 fica nas camadas próprias do webhook/cache/repositório e não cria efeito lateral
@@ -2208,7 +2208,7 @@ cache de outra unidade.
 Os mesmos arquivos preservam `lock_version` no contrato atual de posse e
 `unlock`. Os helpers de reconciliação bloqueiam linhas em ordem determinística,
 recusam todo lock que ainda não satisfaça o predicado stale de 110 segundos da
-V1.0.6 e, no takeover stale, incrementam a versão antes de limpar a posse. Assim,
+V1.0.7 e, no takeover stale, incrementam a versão antes de limpar a posse. Assim,
 um `unlock` tardio com a
 versão anterior não libera um lock novo; esta feature não reescreve toda a
 persistência pós-lock. Os helpers também copiam o nome provisório para o canônico
@@ -2217,7 +2217,7 @@ e nunca fazem backfill de fila/histórico/username da conversa.
 ### Passo 5 — Etapa especial e renumeração
 
 Antes de criar a etapa especial, atualizar e entregar completos os arquivos da
-etapa 1 já personalizados na baseline V1.0.6:
+etapa 1 já personalizados na baseline V1.0.7:
 
 - `core/integrations/whatsapp/messages/etapa1_messages.py`;
 - `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa1.py`;
@@ -2318,7 +2318,7 @@ Na implementação futura, atualizar as choices e
 `MOTIVOS_ENCERRAMENTO_VALIDOS` com `ativou_privacidade` e
 `bloqueio_reconciliado`, mantendo os usos distintos definidos na seção 4.5.
 
-No Admin de unidade, preservar ainda os campos V1.0.6 `nome_unidade`,
+No Admin de unidade, preservar ainda os campos V1.0.7 `nome_unidade`,
 `nome_agente` e `genero`, incluindo pesquisa, filtro, ordenação e referências
 ORM por `id_unidade__nome_unidade`; acrescentar `id_portfolio` sem reduzir esse
 contrato.
@@ -2330,8 +2330,8 @@ smokes reais antes de produção.
 
 ### Passo 9 — SQL manual final
 
-O SQL abaixo é a migração-base completa para o schema da V1.0.6, commit
-`e052625`. Ele deverá ser revalidado contra o commit definitivo antes da
+O SQL abaixo é a migração-base completa para o schema da V1.0.7, commit
+`c248155`. Ele deverá ser revalidado contra o commit definitivo antes da
 execução, porque os serviços e o banco ainda não receberam a feature de
 `user_id`. A personalização da unidade já é pré-condição e não é reaplicada por
 este SQL.
@@ -2357,7 +2357,7 @@ LOCK TABLE
     chatbot.funil_envios
 IN ACCESS EXCLUSIVE MODE;
 
--- Contrato canônico já implantado pela V1.0.6. A tabela temporária permite
+-- Contrato canônico já implantado pela V1.0.7. A tabela temporária permite
 -- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
 -- formatação textual manual e sem alterar chatbot.unidade.
 CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
@@ -2418,7 +2418,7 @@ BEGIN
           AND column_name = 'nome'
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.6 e052625.';
+            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -2429,7 +2429,7 @@ BEGIN
            OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a V1.0.6 e052625.';
+            'Migração recusada: dados de apresentação da unidade violam a V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -2513,7 +2513,7 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.6 e052625.';
+            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.7 c248155.';
     END IF;
 
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
@@ -2628,7 +2628,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.6 e052625 (etapas=%/%; transições=%/%).',
+            'à V1.0.7 c248155 (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -2645,7 +2645,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.6 e052625.';
+            'Migração recusada: etapa final atual não corresponde à V1.0.7 c248155.';
     END IF;
 
     IF EXISTS (
@@ -2654,7 +2654,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.6 e052625.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.7 c248155.';
     END IF;
 
     IF NOT EXISTS (
@@ -4251,7 +4251,7 @@ promoção para produção só poderá usar o mesmo artefato já validado em dev
 O SQL garante aquisição/takeover e `unlock` por versão. A implementação Python
 preserva o uso atual do `lock_version` na posse e no `unlock`. Para esta feature,
 o requisito adicional é delimitado: o merge nunca limpa um lock enquanto não for
-verdadeiro o predicado stale de 110 segundos da V1.0.6; depois disso, o takeover
+verdadeiro o predicado stale de 110 segundos da V1.0.7; depois disso, o takeover
 incrementa a versão sob row lock, de modo que um `unlock` atrasado com a versão
 anterior não solte a posse nova.
 Não se inclui neste plano uma conversão de cada escrita pós-lock em CAS.
@@ -4266,7 +4266,7 @@ de testes que repitam a mesma regra. O plano prático consolida essa cobertura n
 quatro arquivos essenciais já definidos, com 64 métodos no total; esta lista não
 autoriza ampliar esse número automaticamente.
 
-Três desses métodos formam uma prova diferencial explícita da V1.0.6: depois de
+Três desses métodos formam uma prova diferencial explícita da V1.0.7: depois de
 normalizar somente a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles
 comparam o catálogo e o mapa legados, os textos e botões das 22 etapas existentes
 e o payload do Funil no caminho WA-only sem username. Essa prova complementa os
@@ -4335,7 +4335,7 @@ copiar a implementação antiga nem enfraquecer os testes aditivos de `user_id`.
 - todas as colunas finais existem com os nomes exatos;
 - `unidade.nome` não existe e `nome_unidade VARCHAR(300)`,
   `nome_agente VARCHAR(100)` e `genero VARCHAR(9)` permanecem `NOT NULL`, sem
-  default e com as quatro constraints canônicas da V1.0.6 validadas;
+  default e com as quatro constraints canônicas da V1.0.7 validadas;
 - `nome_unidade` e `nome_agente` rejeitam valores sem caractere não branco,
   `nome_unidade` permanece único e `genero` rejeita qualquer valor diferente de
   `masculino`/`feminino`;
@@ -4603,7 +4603,7 @@ copiar a implementação antiga nem enfraquecer os testes aditivos de `user_id`.
 
 ## 16. Sequência de deploy futura
 
-1. congelar e commitar a baseline definitiva derivada da V1.0.6 `e052625`;
+1. congelar e commitar a baseline definitiva derivada da V1.0.7 `c248155`;
 2. regenerar o apêndice de código completo deste plano;
 3. implementar em branch separada;
 4. executar testes unitários e de integração;
@@ -4628,7 +4628,7 @@ O plano só poderá ser aplicado se:
 - os nomes das colunas forem exatamente os da seção 5;
 - não existir `unidade.nome`, e `nome_unidade`, `nome_agente` e `genero`
   corresponderem exatamente aos tipos, à nulabilidade, aos dados e às quatro
-  constraints da V1.0.6 `e052625`;
+  constraints da V1.0.7 `c248155`;
 - `id_portfolio` estiver escrito corretamente, obrigatório e preenchido em toda
   unidade;
 - `user_id_cliente` possuir PK técnica, duas unicidades, FKs e CHECK definidos
@@ -4646,7 +4646,7 @@ O plano só poderá ser aplicado se:
   WA ID canônico como prova da origem do payload;
 - username nunca for identidade técnica;
 - WA ID for obrigatório para chegar ao funil;
-- somente a etapa especial 2 for adicionada sobre a baseline V1.0.6;
+- somente a etapa especial 2 for adicionada sobre a baseline V1.0.7;
 - catálogo tiver 23 etapas e mapa 27 transições;
 - somente etapa 23 encerrar e bloquear por 30 dias;
 - etapa 23 não tiver resolver;
@@ -4727,7 +4727,7 @@ O plano só poderá ser aplicado se:
   bloqueio vigente fecha a conversa, exclui a fila atual na mesma transação, usa
   o commit pós-validação e interrompe o ciclo antes de histórico, lock normal,
   `bot_resposta_atual()` e sender;
-- `lock_conversa()` preservar o predicado exato da V1.0.6: lock fresco enquanto
+- `lock_conversa()` preservar o predicado exato da V1.0.7: lock fresco enquanto
   `processing_started_at >= NOW() - INTERVAL '110.0 seconds'` e stale takeover
   somente com `<`, incrementando `lock_version`; `unlock_conversa()` exige o
   token;
@@ -4736,7 +4736,7 @@ O plano só poderá ser aplicado se:
   a conversão de toda escrita pós-lock em CAS;
 - `dequeue_message()` mantiver seu CTE, ordem, `SKIP LOCKED` e retry, com seu
   limiar próprio de 2 minutos, enquanto `lock_conversa()` preservar literalmente
-  o limiar de 110 segundos da V1.0.6;
+  o limiar de 110 segundos da V1.0.7;
 - no caminho normal, commits, rollbacks, retries, locks, turnos e autocura
   permanecerem nos mesmos pontos; os dois ramos controlados reutilizarem o
   rollback/commit da validação, sem nova fronteira transacional;
@@ -4806,7 +4806,7 @@ Há somente duas ramificações delimitadas: lock fresco interrompe o merge ante
 de mutação e usa rollback/requeue sem erro de 5 segundos; bloqueio vigente fecha
 a conversa e remove sua fila na transação de validação, usa o commit já existente
 e termina o ciclo sem histórico, lock normal ou sender. No stale takeover da
-conversa, a janela de 110 segundos da V1.0.6 é mantida e `lock_version` é
+conversa, a janela de 110 segundos da V1.0.7 é mantida e `lock_version` é
 incrementado antes de limpar a posse.
 
 O anti-flood também preserva a continuidade de identidade: quando a prova
@@ -4830,7 +4830,7 @@ na qual um retry pode duplicar a resposta externa. A continuidade anti-flood nã
 acrescenta um segundo risco aceito e elimina o reset de janela que a versão
 anterior deste plano tolerava.
 
-Sobre essa identidade nova, o comportamento funcional da V1.0.6 permanece
+Sobre essa identidade nova, o comportamento funcional da V1.0.7 permanece
 reconhecível: a apresentação inicial dinâmica por unidade é preservada nos
 quatro ramos, enquanto confirmação binária, tratamentos atuais, triagem por
 faixa etária, perguntas e respostas detalhadas no Funil e terminalidade de 30
