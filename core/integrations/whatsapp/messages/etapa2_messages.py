@@ -8,10 +8,10 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 
 MENSAGEM_ETAPA2 = (
     "Prazer, {nome}! ☺️\n\n"
-    "O Supera é um curso de estimulação cognitiva. "
-    "Aqui nós iremos potencializar as habilidades cognitivas, socioemocionais "
-    "e éticas do aluno, como atenção, concentração e memória.\n\n"
-    "Conta para mim, esse atendimento é para você ou para um dependente?"
+    "O Supera é um curso de *estimulação cognitiva* "
+    "que trabalha habilidades cognitivas e socioemocionais por meio de atividades que estimulam "
+    "atenção, concentração, memória, raciocínio e outras funções importantes para o dia a dia.\n\n"
+    "Para eu entender melhor como podemos ajudar, me conta: *esse atendimento é para você ou para um dependente?*"
 )
 
 def montar_mensagem_etapa2(nome):

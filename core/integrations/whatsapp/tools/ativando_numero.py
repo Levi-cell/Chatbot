@@ -34,7 +34,12 @@ def registrar_numero_whatsapp(phone_number_id, pin=None):
         json=payload,
         timeout=get_meta_http_timeout(),
     )
+
+    # resposta = _normalizar_resposta(response)
+
+    # print(response)
     # print(response.json())
+    # print(resposta)
 
     logger.info(
         "whatsapp_numero_registro_resposta | acao=registrar_numero phone_number_id=%s status=%s",
@@ -55,4 +60,35 @@ def _normalizar_resposta(response):
             "text": response.text,
         }
 
-# registrar_numero_whatsapp(1217356894795355, pin=None)
+# registrar_numero_whatsapp(1238343616032627)
+
+
+
+
+
+
+
+
+
+# def consultar_status_numero(phone_number_id):
+#     url = construir_url_graph_api(phone_number_id)
+#
+#     headers = {
+#         "Authorization": f"Bearer {get_token_usuario_meta()}",
+#     }
+#
+#     response = requests.get(
+#         url,
+#         headers=headers,
+#         params={
+#             "fields": "display_phone_number,verified_name,status,name_status"
+#         },
+#         timeout=get_meta_http_timeout(),
+#     )
+#
+#     print("HTTP:", response.status_code)
+#     print(response.json())
+#
+#     return response.status_code, response.json()
+#
+# consultar_status_numero(1238343616032627)

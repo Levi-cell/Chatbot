@@ -37,9 +37,25 @@ def alterar_pin(phone_number_id, *, session=requests):
         raise RuntimeError("Falha HTTP ao alterar o PIN na Meta") from exc
 
     if not response.ok:
+        try:
+            dados_erro = response.json()
+            erro = dados_erro.get("error", {})
+
+            detalhes = (
+                f"message={erro.get('message')!r}, "
+                f"type={erro.get('type')!r}, "
+                f"code={erro.get('code')!r}, "
+                f"error_subcode={erro.get('error_subcode')!r}, "
+                f"fbtrace_id={erro.get('fbtrace_id')!r}"
+            )
+        except ValueError:
+            detalhes = "resposta da Meta não contém JSON válido"
+
         raise RuntimeError(
-            f"A Meta recusou a alteração do PIN (HTTP {response.status_code})"
+            f"A Meta recusou a alteração do PIN "
+            f"(HTTP {response.status_code}): {detalhes}"
         )
+
 
     try:
         dados = response.json()
@@ -111,6 +127,17 @@ def main(argv=None):
         )
         return 1
 
-
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(
+        main([
+            "--phone-number-id",
+            "1238343616032627",
+            "--confirm-phone-number-id",
+            "1238343616032627",
+            "--confirm-real-change",
+        ])
+    )
+
+
+
+

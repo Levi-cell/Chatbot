@@ -6,8 +6,9 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 # ENTRADA NA ETAPA 11
 
 MENSAGEM_TRIAGEM_COGNITIVA_ETAPA11 = (
-    "Antes de continuarmos o agendamento, vamos realizar uma pequena triagem "
-    "cognitiva com 6 perguntas objetivas de seleção única, ok?"
+    "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
+    "para conhecer melhor o seu perfil e suas necessidades. "
+    "É bem simples e leva poucos minutos. Podemos começar? ☺️"
 )
 
 

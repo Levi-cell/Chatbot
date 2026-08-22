@@ -9544,7 +9544,6 @@ def inserir_historico_mensagem_bot(
             f"(id_conversa={contexto_historico['id_conversa']})"
         )
     return resultado[0], resultado[1], bool(resultado[2])
-
 ````
 
 ## Passo 30 — `core/repositories/atendimento/identidades.py`
@@ -14613,7 +14612,7 @@ def montar_botoes_etapa10():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5e3eda5f344f834b9734301aafab44e1277bb4eea8b4b3705741f9b5cb72e1f7`
+SHA-256 do conteúdo UTF-8 normalizado: `48bc97e42bb375c3ed90db922a13b5c1f388fdf05848e80bee4c59f824b4d7c0`
 
 ````python
 from core.integrations.whatsapp.messages.tratamentos_universais import (
@@ -14623,7 +14622,7 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 
 # ENTRADA NA ETAPA 11
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA11 = "Qual o seu melhor email?"
+MENSAGEM_PERGUNTA_EMAIL_ETAPA11 = "Para completar seu cadastro, qual é o seu melhor email? ☺️"
 
 
 def montar_mensagem_email_etapa11():
@@ -14683,7 +14682,7 @@ def montar_mensagem_contexto_email_invalido_etapa11():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `96f9f41a2bc3e39f102d3ec1ad00cbde9752a84c8939133d5aa016727f83affa`
+SHA-256 do conteúdo UTF-8 normalizado: `a03e126d33913a01ad46a8cb044423333e8c127a41d9218d7403564b4ec8de93`
 
 ````python
 from core.integrations.whatsapp.messages.tratamentos_universais import (
@@ -14694,8 +14693,9 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 # ENTRADA NA ETAPA 12
 
 MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12 = (
-    "Antes de continuarmos o agendamento, vamos realizar uma pequena triagem "
-    "cognitiva com 6 perguntas objetivas de seleção única, ok?"
+    "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
+    "para conhecer melhor o seu perfil e suas necessidades. "
+    "É bem simples e leva poucos minutos. Podemos começar? ☺️"
 )
 
 
@@ -15365,14 +15365,14 @@ def montar_mensagem_contexto_invalido_etapa22():
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a3b604ac7bb6fc05c841d97a18473f9b77b1e5e1f24d4554eea0329bddca2d2f`
+SHA-256 do conteúdo UTF-8 normalizado: `ed0b87412d632f901c247b34a8fb8f1f4ed19979b17649240243214cd2993512`
 
 ````python
 # ETAPA 23 - MENSAGEM TERMINAL DO ATENDIMENTO
 
 MENSAGEM_ETAPA23 = (
-    "Perfeito! 🥰\n"
-    "Agora é só aguardar o dia da avaliação.\n"
+    "Perfeito, foi um prazer falar com você! 🥰\n\n"
+    "Agora é só aguardar o dia da avaliação, esperamos você para viver sua experiência no SUPERA! 🧡\n\n"
     "No próximo dia útil, nossa equipe entrará em contato.\n"
     "Até breve! 👋🏼😉"
 )
@@ -15450,7 +15450,7 @@ def _montar_mensagem_tratamento(tratamento):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f43fbf5c0b26486f94be6f039829fb045c78b20a5de6ac83236f76160190dbe6`
+SHA-256 do conteúdo UTF-8 normalizado: `f0a30be1b7a2a1e33d50c140841db6f54113d70dbf3e1aaf794977d03841520c`
 
 ````python
 
@@ -15463,10 +15463,10 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 
 MENSAGEM_ETAPA3 = (
     "Prazer, {nome}! ☺️\n\n"
-    "O Supera é um curso de estimulação cognitiva. "
-    "Aqui nós iremos potencializar as habilidades cognitivas, socioemocionais "
-    "e éticas do aluno, como atenção, concentração e memória.\n\n"
-    "Conta para mim, esse atendimento é para você ou para um dependente?"
+    "O Supera é um curso de *estimulação cognitiva* "
+    "que trabalha habilidades cognitivas e socioemocionais por meio de atividades que estimulam "
+    "atenção, concentração, memória, raciocínio e outras funções importantes para o dia a dia.\n\n"
+    "Para eu entender melhor como podemos ajudar, me conta: *esse atendimento é para você ou para um dependente?*"
 )
 
 def montar_mensagem_etapa3(nome):
@@ -30216,7 +30216,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e8ebbd7347795c087906faed73744dc0544571f55fe1400a40b5e15f3a781d4a`
+SHA-256 do conteúdo UTF-8 normalizado: `6fa3dde16604787560798f3130dd87d441f24986b0186c55d9c5cd66695d5bd1`
 
 ````python
 import ast
@@ -30274,6 +30274,50 @@ PHONE_ID = "1217356894795355"
 DISPLAY_PHONE = "557536310000"
 WA_ID = "5575999999999"
 USER_ID = "BR.13491208655302741918"
+
+ALTERACOES_EDITORIAIS_AUTORIZADAS_V107 = {
+    2: (
+        (
+            "Prazer, {nome}! ☺️\n\n"
+            "O Supera é um curso de estimulação cognitiva. "
+            "Aqui nós iremos potencializar as habilidades cognitivas, socioemocionais "
+            "e éticas do aluno, como atenção, concentração e memória.\n\n"
+            "Conta para mim, esse atendimento é para você ou para um dependente?",
+            "Prazer, {nome}! ☺️\n\n"
+            "O Supera é um curso de *estimulação cognitiva* "
+            "que trabalha habilidades cognitivas e socioemocionais por meio de atividades que estimulam "
+            "atenção, concentração, memória, raciocínio e outras funções importantes para o dia a dia.\n\n"
+            "Para eu entender melhor como podemos ajudar, me conta: *esse atendimento é para você ou para um dependente?*",
+        ),
+    ),
+    10: (
+        (
+            "Qual o seu melhor email?",
+            "Para completar seu cadastro, qual é o seu melhor email? ☺️",
+        ),
+    ),
+    11: (
+        (
+            "Antes de continuarmos o agendamento, vamos realizar uma pequena triagem "
+            "cognitiva com 6 perguntas objetivas de seleção única, ok?",
+            "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
+            "para conhecer melhor o seu perfil e suas necessidades. "
+            "É bem simples e leva poucos minutos. Podemos começar? ☺️",
+        ),
+    ),
+    22: (
+        (
+            "Perfeito! 🥰\n"
+            "Agora é só aguardar o dia da avaliação.\n"
+            "No próximo dia útil, nossa equipe entrará em contato.\n"
+            "Até breve! 👋🏼😉",
+            "Perfeito, foi um prazer falar com você! 🥰\n\n"
+            "Agora é só aguardar o dia da avaliação, esperamos você para viver sua experiência no SUPERA! 🧡\n\n"
+            "No próximo dia útil, nossa equipe entrará em contato.\n"
+            "Até breve! 👋🏼😉",
+        ),
+    ),
+}
 
 
 def _ler_arquivo_da_v107(caminho):
@@ -30459,7 +30503,18 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             transicoes_v107,
         )
 
-    def test_textos_e_botoes_das_22_etapas_legadas_sao_identicos(self):
+    def test_textos_e_botoes_legados_so_tem_quatro_edicoes_autorizadas(self):
+        self.assertEqual(
+            set(ALTERACOES_EDITORIAIS_AUTORIZADAS_V107),
+            {2, 10, 11, 22},
+        )
+        self.assertTrue(
+            all(
+                len(alteracoes) == 1
+                for alteracoes in ALTERACOES_EDITORIAIS_AUTORIZADAS_V107.values()
+            )
+        )
+
         for etapa_v107 in range(1, 23):
             etapa_futura = 1 if etapa_v107 == 1 else etapa_v107 + 1
             caminho_v107 = (
@@ -30475,11 +30530,26 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
                 etapa_v107=etapa_v107,
                 etapa_futura=etapa_futura,
             ):
+                strings_esperadas = _strings_executaveis(
+                    _ler_arquivo_da_v107(caminho_v107)
+                )
+                for texto_v107, texto_autorizado in (
+                    ALTERACOES_EDITORIAIS_AUTORIZADAS_V107.get(
+                        etapa_v107,
+                        (),
+                    )
+                ):
+                    self.assertEqual(strings_esperadas[texto_v107], 1)
+                    strings_esperadas.subtract({texto_v107: 1})
+                    if not strings_esperadas[texto_v107]:
+                        del strings_esperadas[texto_v107]
+                    strings_esperadas.update({texto_autorizado: 1})
+
                 self.assertEqual(
                     _strings_executaveis(
                         caminho_futuro.read_text(encoding="utf-8-sig")
                     ),
-                    _strings_executaveis(_ler_arquivo_da_v107(caminho_v107)),
+                    strings_esperadas,
                 )
 
     def test_funil_wa_only_sem_username_preserva_payload_v107(self):
@@ -33342,11 +33412,14 @@ Os testes devem provar, no mínimo:
 6. DDL final completo, constraints, FKs, índices e ausência de `ALTER TABLE` histórico nos scripts Python declarativos;
 7. ausência de nomes físicos legados nos módulos versionados do runtime;
 8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.7.
-9. prova diferencial da V1.0.7: depois de normalizar somente a renumeração
-   `1 -> 1` e `2..22 -> 3..23`, catálogo/mapa, textos e botões das 22 etapas
-   legadas e o payload do Funil WA-only sem username permanecem idênticos; os
-   testes funcionais existentes continuam provando destinatário WA, persistência,
-   retry e turno.
+9. prova diferencial da V1.0.7: depois de normalizar a renumeração `1 -> 1` e
+   `2..22 -> 3..23`, catálogo/mapa e botões das 22 etapas legadas permanecem
+   idênticos; as únicas diferenças textuais autorizadas são as mensagens iniciais
+   das etapas legadas 2, 10, 11 e 22, mapeadas respectivamente para as etapas
+   futuras 3, 11, 12 e 23 e comparadas por substituições literais fechadas no
+   teste. Todo outro texto legado e o payload do Funil WA-only sem username
+   permanecem idênticos; os testes funcionais existentes continuam provando
+   destinatário WA, persistência, retry e turno.
 
 Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.7 `c248155`. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
 

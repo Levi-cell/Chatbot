@@ -5,7 +5,7 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 
 # ENTRADA NA ETAPA 10
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA10 = "Qual o seu melhor email?"
+MENSAGEM_PERGUNTA_EMAIL_ETAPA10 = "Para completar seu cadastro, qual é o seu melhor email? ☺️"
 
 
 def montar_mensagem_email_etapa10():

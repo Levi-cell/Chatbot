@@ -146,3 +146,5 @@ def _normalizar_resposta(response):
         }
 
 # validar_phone_number_id_da_waba(1334896588725096,1238343616032627)
+
+

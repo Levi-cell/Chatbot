@@ -25,6 +25,12 @@ configurável por unidade. A futura implementação deste plano acrescentará
 somente a etapa de compartilhamento oficial do contato após o nome; por isso o
 estado final terá 23 etapas e 27 transições.
 
+Há quatro deltas editoriais aprovados posteriores à V1.0.7 `c248155`: as
+mensagens iniciais das etapas atuais 2, 10, 11 e 22, que na numeração futura
+correspondem às etapas 3, 11, 12 e 23. Essas alterações são exclusivamente de
+texto; todos os botões, inclusive os dessas quatro etapas, e todos os demais
+textos permanecem diferencialmente idênticos à baseline.
+
 Os contratos de payload usados como referência são:
 
 - `payloads/WAID.json`;
@@ -2245,8 +2251,9 @@ repete SQL de identidade.
 
 Renumerar mecanicamente todos os arquivos atuais 2..22 para 3..23, incluindo
 mensagens, senders, validadores, resolvers, constantes, imports, IDs usados nos
-efeitos, testes, catálogo e mapa. O conteúdo/regra das etapas atuais não muda e
-a etapa terminal 23 não ganha resolver.
+efeitos, testes, catálogo e mapa. A regra das etapas atuais não muda; o conteúdo
+muda somente nas quatro mensagens iniciais editoriais aprovadas das etapas
+atuais 2, 10, 11 e 22. A etapa terminal 23 não ganha resolver.
 
 Nos caminhos físicos, a movimentação ocorre em ordem decrescente — 22 -> 23 até
 2 -> 3 — ou por nomes temporários equivalentes. Só depois é criado o novo
@@ -4267,11 +4274,15 @@ quatro arquivos essenciais já definidos, com 64 métodos no total; esta lista n
 autoriza ampliar esse número automaticamente.
 
 Três desses métodos formam uma prova diferencial explícita da V1.0.7: depois de
-normalizar somente a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles
-comparam o catálogo e o mapa legados, os textos e botões das 22 etapas existentes
-e o payload do Funil no caminho WA-only sem username. Essa prova complementa os
-testes funcionais de destinatário, persistência, retry e turno; ela não autoriza
-copiar a implementação antiga nem enfraquecer os testes aditivos de `user_id`.
+normalizar a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles comparam o
+catálogo e o mapa legados, os textos e botões das 22 etapas existentes e o
+payload do Funil no caminho WA-only sem username. A comparação textual aceita
+exclusivamente os quatro deltas editoriais aprovados nas mensagens iniciais das
+etapas atuais 2, 10, 11 e 22, futuras 3, 11, 12 e 23; todos os botões e todos os
+demais textos devem permanecer idênticos à V1.0.7 `c248155`. Essa prova
+complementa os testes funcionais de destinatário, persistência, retry e turno;
+ela não autoriza copiar a implementação antiga nem enfraquecer os testes
+aditivos de `user_id`.
 
 ### 15.1 Payload e webhook
 
