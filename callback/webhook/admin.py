@@ -882,12 +882,14 @@ class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "waid_telefone",
         "email",
         "idade",
+        "profissao",
     )
 
     search_fields = (
         "nome",
         "waid_telefone",
         "email",
+        "profissao",
     )
 
     ordering = ("nome",)

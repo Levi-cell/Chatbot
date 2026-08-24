@@ -18,7 +18,7 @@ Markdown são sincronizados com a baseline; todos os caminhos de código, banco,
 testes e deploy citados abaixo continuam descrevendo impacto futuro.
 
 A baseline operacional usada nesta revisão é a V1.0.7, commit `c248155`, com 22
-etapas e 25 transições. Ela inclui a profissão obrigatória para titular e
+etapas e 25 transições. Ela já inclui a profissão obrigatória para titular e
 dependente, a confirmação do destino, os tratamentos atuais, a triagem por faixa
 etária, o detalhamento das perguntas no Funil e a apresentação inicial
 configurável por unidade. A futura implementação deste plano acrescentará
@@ -30,6 +30,17 @@ mensagens iniciais das etapas atuais 2, 10, 11 e 22, que na numeração futura
 correspondem às etapas 3, 11, 12 e 23. Essas alterações são exclusivamente de
 texto; todos os botões, inclusive os dessas quatro etapas, e todos os demais
 textos permanecem diferencialmente idênticos à baseline.
+
+Há também dois deltas funcionais aprovados anteriores à feature de `user_id`.
+O primeiro é `cliente.profissao VARCHAR(100) NULL`: sua migração própria
+adiciona a coluna, preenche apenas clientes ainda sem profissão usando o
+snapshot não vazio da conversa mais recente e não altera
+`conversa.profissao`. Depois de aplicada no ambiente de desenvolvimento, essa
+coluna passa a ser pré-condição deste plano; a migração de `user_id` deve apenas
+validá-la, sem recriá-la ou refazer seu backfill. O segundo é uma proteção
+aditiva no validador da profissão atual: somente oito respostas completas já
+observadas como fora de contexto são recusadas e fazem a própria etapa repetir,
+sem criar nova etapa, evento ou persistência.
 
 Os contratos de payload usados como referência são:
 
@@ -358,6 +369,39 @@ Reconciliação oficialmente provada não preenche nem reescreve fila, históric
 banco, mas isso não altera o registro histórico do evento. A única coluna
 mutável de username é `cliente.username`, sempre pelo último valor não vazio.
 
+### 4.3.1 Profissão canônica e snapshot da conversa
+
+`cliente.profissao` pertence ao delta funcional aprovado sobre a baseline e
+guarda a profissão válida mais recente do cliente global.
+`conversa.profissao` continua sendo o snapshot da
+conversa em que aquela profissão foi aceita e nunca é reescrita por uma conversa
+posterior.
+
+As duas colunas só são persistidas quando a etapa de profissão aceita o valor;
+criar ou retomar uma conversa não copia automaticamente a profissão canônica para
+ela. O efeito da transição atualiza `conversa.profissao` e
+`cliente.profissao` com o mesmo cursor e na mesma transação. A repetição do mesmo
+efeito é idempotente, e uma conversa futura com outra profissão válida atualiza
+somente seu próprio snapshot e o último valor do cliente, sem retroagir nas
+conversas anteriores.
+
+Antes de produzir um evento de profissão válida, o validador compara a resposta
+inteira após a normalização já existente. Somente estas oito respostas
+observadas retornam `profissao_fora_contexto`: `Pra minha filha na verdade`,
+`Não entendi`, `Para meu filho`, `Pra meu filho`, `Minha filha é autista e
+percebo q ela tem dificuldade no aprendizado , vcs atende autista tambem`,
+`não seria pra meu filho`, `Meu filho` e `Vc ouviu áudio ou ligação`. Esse
+resultado reapresenta a pergunta da etapa de profissão sem evento, avanço ou
+persistência. A proteção não procura palavras isoladas e, portanto, não pode
+barrar por si só respostas legítimas como `Técnica de áudio`, `Faço ligações,
+trabalho com telemarketing` ou `Sou psicóloga, mas é para minha filha de 16
+anos`.
+
+O Funil continua lendo exclusivamente `conversa.profissao`. No handoff de um
+cliente provisório para um cliente canônico, uma profissão válida já capturada na
+conversa/cliente provisório é copiada para `cliente.profissao` do canônico antes
+da exclusão do provisório; o snapshot da conversa reatribuída permanece intacto.
+
 ### 4.4 Handoff seguro de user ID para WA ID
 
 O evento `CONTACT_INFO.json` contém o `user_id` do remetente e o novo WA ID em
@@ -451,7 +495,10 @@ executa somente estes efeitos de dados, depois do gate completo da seção 4.4:
    o lock normal do sender nem redesenha todas as escritas pós-lock existentes;
 5. copiar o nome capturado na etapa 1 do cliente provisório para o cliente
    canônico **sempre sobrescrevendo** `cliente.nome`, inclusive quando o canônico
-   já possuía outro nome. Nome/username de perfil Meta nunca substitui esse nome;
+   já possuía outro nome. Copiar também a profissão válida mais recente do
+   provisório para `cliente.profissao` do canônico antes de excluir o provisório,
+   sem reescrever `conversa.profissao`. Nome/username de perfil Meta nunca
+   substitui esse nome;
 6. se existir conversa canônica anterior ativa e diferente da atual, encerrá-la
    com `motivo_encerramento='ativou_privacidade'`; ela é preservada e não é
    retomada;
@@ -576,10 +623,14 @@ V1.0.7 e são preservadas sem nova migração ou backfill por este plano.
 ```sql
 wa_id VARCHAR(50) NULL
 username VARCHAR(255) NULL
+profissao VARCHAR(100) NULL
 ```
 
 `cliente` não recebe `user_id`: ele continua global. Os user IDs escopados
-ficam exclusivamente na relação por unidade abaixo.
+ficam exclusivamente na relação por unidade abaixo. `cliente.profissao` já
+existe no estado pré-`user_id` após a aplicação de sua migração própria, não faz
+parte das 22 alterações da feature e não deve ser adicionada novamente pela
+migração de `user_id`.
 
 `chatbot.user_id_cliente`:
 
@@ -617,7 +668,11 @@ username VARCHAR(255) NULL
 wa_id VARCHAR(50) NULL
 user_id VARCHAR(255) NULL
 username VARCHAR(255) NULL
+profissao VARCHAR(100) NULL
 ```
+
+Em `conversa`, `profissao` é o snapshot imutável daquela conversa; o Funil lê
+esse campo, não `cliente.profissao`.
 
 `chatbot.cliente_bloqueado_meta`:
 
@@ -649,8 +704,9 @@ chatbot.conversa.motivo_encerramento
 
 O delta da feature de `user_id` soma 22 campos listados nesta seção, contando
 chaves/FKs da tabela de vínculo e colunas renomeadas. As três colunas de
-apresentação da unidade já existentes na baseline V1.0.7 não entram nessa conta.
-Renome não cria uma segunda cópia do WA ID legado.
+apresentação da unidade já existentes na baseline V1.0.7 e as profissões já
+presentes no estado pré-`user_id` não entram nessa conta. Renome não cria uma
+segunda cópia do WA ID legado.
 
 Não existirão `telefone_informado`, `username_informado`,
 `telefone_contato_compartilhado`, `wa_id_contato_compartilhado`,
@@ -759,11 +815,14 @@ haverá `ALTER TABLE` em Python.
 O último passo do plano conterá um único SQL puro, transacional, para produção,
 com:
 
-1. preflight exato do schema V1.0.7, inclusive das três colunas de apresentação
-   da unidade, suas quatro constraints e a ausência de `unidade.nome`;
+1. preflight exato do estado pré-`user_id` — baseline V1.0.7 mais o delta de
+   profissão —, inclusive `cliente.profissao VARCHAR(100) NULL` sem default,
+   as três colunas de apresentação da unidade, suas quatro constraints e a
+   ausência de `unidade.nome`;
 2. serviços parados e filas operacionais vazias;
 3. renome das cinco colunas existentes de WA ID;
-4. preservação, sem renome ou recriação, de `nome_unidade`, `nome_agente` e
+4. preservação, sem renome, recriação ou novo `ADD COLUMN`, de
+   `cliente.profissao`, `nome_unidade`, `nome_agente` e
    `genero`;
 5. criação das colunas novas e de `user_id_cliente`;
 6. preenchimento explícito de `id_portfolio` para todas as unidades e aplicação
@@ -1913,6 +1972,13 @@ protegendo declarações inequívocas de vínculo profissional com banca, cursin
 supletivo ou reforço. O classificador universal não é enfraquecido para as
 demais etapas.
 
+O validador renumerado da futura etapa 5 também preserva a proteção exata das
+oito respostas completas fora de contexto definida na seção 4.3.1. Uma
+correspondência apenas repete a pergunta na etapa 5, sem evento, transição,
+persistência ou confirmação adicional. Não são permitidas regex ou listas de
+palavras como `áudio`, `ligação`, `filho`, `filha` e `autista`, pois esses termos
+podem fazer parte de uma profissão legítima ou de uma explicação válida.
+
 Essa bifurcação também é fail-closed: `status_dependente` precisa ser um
 booleano persistido tanto no resolver quanto no efeito da profissão. Ausência
 ou tipo inválido interrompe o ciclo para retry, sem transformar `None` em
@@ -2265,7 +2331,10 @@ A renumeração inclui explicitamente:
   `flow_sender.py`, seu evento único `destino_atendimento_confirmado`, a saída
   obrigatória para a profissão e os efeitos de valor absoluto reconstruídos
   somente de `status_dependente` booleano persistido;
-- a profissão atual 4 -> futura 5 e os adaptadores contextuais
+- a profissão atual 4 -> futura 5, inclusive
+  `validadores_contexto/valida_etapa4.py` ->
+  `validadores_contexto/valida_etapa5.py`, preservando a comparação exata das
+  oito respostas completas fora de contexto, e os adaptadores contextuais
   `validador_reforco_escolar_etapa4.py` ->
   `validador_reforco_escolar_etapa5.py` e
   `validador_financeiro_etapa4.py` ->
@@ -2426,6 +2495,21 @@ BEGIN
     ) THEN
         RAISE EXCEPTION
             'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'chatbot'
+          AND table_name = 'cliente'
+          AND column_name = 'profissao'
+          AND data_type = 'character varying'
+          AND character_maximum_length = 100
+          AND is_nullable = 'YES'
+          AND column_default IS NULL
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: cliente.profissao VARCHAR(100) NULL não corresponde ao estado pré-user_id.';
     END IF;
 
     IF EXISTS (
@@ -4270,7 +4354,7 @@ isolado por linha. A implementação deve agrupá-los em poucas suítes
 parametrizadas: preservar A/B/C, acrescentar somente cenários controlados de
 identidade/handoff, bloqueio e dois workers, e evitar multiplicação combinatória
 de testes que repitam a mesma regra. O plano prático consolida essa cobertura nos
-quatro arquivos essenciais já definidos, com 64 métodos no total; esta lista não
+cinco arquivos essenciais já definidos, com 68 métodos no total; esta lista não
 autoriza ampliar esse número automaticamente.
 
 Três desses métodos formam uma prova diferencial explícita da V1.0.7: depois de
@@ -4532,6 +4616,10 @@ aditivos de `user_id`.
   financeiro -> contexto/regra específica;
 - a profissão futura 5 não classifica como dúvida escolar uma declaração
   profissional inequívoca com banca, cursinho, supletivo ou reforço;
+- as oito respostas completas fora de contexto já observadas repetem a futura
+  etapa 5 sem evento nem persistência, enquanto controles legítimos que contêm
+  termos como `áudio`, `ligação`, `filho`, `filha` ou `autista` continuam
+  aceitos;
 - mensagens de tratamento reapresentam a etapa com texto neutro, sem repetir
   aberturas de confirmação ou avanço;
 - o catálogo de perguntas usa as futuras etapas 13..18 e seleciona corretamente
@@ -4665,8 +4753,10 @@ O plano só poderá ser aplicado se:
   persistir o valor final absoluto de forma idempotente, sempre avançar para a
   profissão futura 5 e exigir `status_dependente` booleano no replay;
 - a profissão futura 5 conservar seus validadores contextuais para não barrar
-  vínculos profissionais inequívocos com serviços escolares e ser a única
-  etapa que bifurca dependente para 6 ou titular para 7;
+  vínculos profissionais inequívocos com serviços escolares, rejeitar somente
+  as oito respostas completas fora de contexto após normalização, sem filtro
+  por palavra isolada, e ser a única etapa que bifurca dependente para 6 ou
+  titular para 7;
 - contato oficial válido ser reconhecido antes dos tratamentos da etapa 2 e,
   nas entradas comuns, a prioridade permanecer mídia -> reforço -> financeiro
   -> contexto;

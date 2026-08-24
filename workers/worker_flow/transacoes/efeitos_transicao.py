@@ -5,6 +5,7 @@ from core.repositories.atendimento.clientes import (
     atualizar_email_cliente,
     atualizar_idade_cliente,
     atualizar_nome_cliente_por_telefone,
+    atualizar_profissao_cliente,
 )
 from core.repositories.atendimento.conversas import (
     atualizar_profissao_conversa,
@@ -770,15 +771,21 @@ def _persistir_profissao_capturada_na_etapa4(
         profissao,
         cursor,
     )
+    atualizar_profissao_cliente(
+        contexto_historico["id_cliente"],
+        profissao,
+        cursor,
+    )
 
     logger.info(
-        "profissao_persistida | acao=salvar_efeito_transicao "
+        "profissao_persistida | acao=salvar_snapshot_e_atualizar_cliente "
         "evento=%s etapa_origem=%s etapa_resultante=%s "
-        "id_conversa=%s profissao=%s",
+        "id_conversa=%s id_cliente=%s profissao=%s",
         contexto_envio.get("evento_transicao"),
         contexto_historico["id_etapa_origem_transicao"],
         contexto_envio["id_etapa_resultante"],
         contexto_historico["id_conversa"],
+        contexto_historico["id_cliente"],
         short_value(profissao),
     )
 

@@ -1,7 +1,8 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
 > Documento de implementação preparado sobre a baseline funcional V1.0.7,
-> commit `c248155`. A pasta local `utilitarios/` e todos os seus arquivos ficam
+> commit `c248155`, acrescida do delta funcional pré-`user_id` de profissão. A
+> pasta local `utilitarios/` e todos os seus arquivos ficam
 > integralmente fora deste plano: nenhum passo os cria, substitui, remove, importa
 > ou executa. Este arquivo não altera o runtime; ele registra o estado final
 > completo a aplicar em uma tarefa futura.
@@ -11,6 +12,15 @@
 > e as apresentações iniciais dinâmica padrão, de mídia, financeira e de reforço
 > escolar da etapa 1. Esses dados editoriais não participam da identidade, turno,
 > lock, fila, cache, anti-flood, reconciliação ou atomicidade.
+> O commit-base V1.0.7 `c248155` já possui `conversa.profissao` como snapshot,
+> mas ainda não possui `cliente.profissao`. Antes da feature de `user_id`, o
+> delta funcional `20260823_adicionar_profissao_cliente.sql` adiciona
+> `cliente.profissao VARCHAR(100) NULL` e faz seu backfill inicial. A migração de
+> `user_id` exige esse estado prévio e preserva ambas as colunas; ela não repete
+> o `ADD` nem o backfill. O mesmo estado pré-`user_id` já contém a proteção
+> literal do validador de profissão: somente as oito respostas completas fora
+> de contexto observadas são recusadas após normalização e repetem a própria
+> etapa, sem filtro por palavras, novo evento ou persistência.
 
 > **Regra de negócio da numeração:** a tabela `etapa` representa, em ordem
 > cronológica, o percurso integral do cliente elegível a todas as etapas. Por
@@ -25,9 +35,11 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
-- Antes de aplicar, confirmar `c248155` como baseline, gerar um manifesto SHA-256
-  dos caminhos versionados de entrada e recusar qualquer árvore divergente. A
-  pasta local `utilitarios/` não participa do manifesto nem da aplicação.
+- Antes de aplicar, confirmar `c248155` como ancestral da baseline, confirmar o
+  delta versionado `20260823_adicionar_profissao_cliente.sql` já materializado e
+  gerar um manifesto SHA-256 do estado pré-`user_id` resultante. Recusar qualquer
+  árvore divergente. A pasta local `utilitarios/` não participa do manifesto nem
+  da aplicação.
 - Preservar as fronteiras transacionais, retries, ordem do worker, idempotência e contratos descritos no plano teórico.
 - Não executar o SQL antes de todo o código estar revisado, testado e pronto para publicação.
 - O último passo contém tanto o arquivo versionado da migração quanto o comando manual integral para execução no DBeaver.
@@ -41,6 +53,11 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - `identidade.py` e os validadores permanecem puros: normalizam e classificam dados, sem SQL, cache, commit ou I/O com a Meta.
 - O webhook apenas extrai e congela o snapshot do evento; repositórios concentram SQL; caches recebem chaves tipadas; o worker preserva turno, retry e ordem transacional.
 - Messages constroem texto e componentes; senders fazem somente o envio e devolvem o contrato; resolvers escolhem evento/mapa/sender; efeitos transacionais persistem o resultado final.
+- Ao aceitar a profissão na etapa atual 4 — futura etapa 5 depois da renumeração
+  de `user_id` — o mesmo efeito e o mesmo cursor gravam o snapshot em
+  `conversa.profissao` e substituem `cliente.profissao`. O retry reaplica o mesmo
+  valor de forma idempotente e a transação externa confirma ou desfaz as duas
+  escritas em conjunto.
 - Nenhum sender, validador ou resolver recebe autorização para fazer `commit`, reconciliar clientes ou promover um WA ID candidato.
 - Comentários novos explicam invariantes, riscos e o motivo de uma decisão. Eles não narram linha por linha nem escondem regra de negócio em comentário.
 - Nomes de módulos, funções, constantes e etapas de runtime acompanham a numeração final. Imports legados e aliases mortos do runtime são removidos; `utilitarios/` permanece intocado.
@@ -76,19 +93,24 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - O valor de portfolio de cada unidade precisa ser conferido com a Meta. O gate detecta unidade ausente ou valor vazio, mas não consegue provar que um número não vazio pertence semanticamente à unidade correta.
 - Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
 - Novas colunas opcionais de `user_id` e `username` começam `NULL` nos registros antigos. Colunas de WA ID apenas renomeadas preservam seus dados.
+- `conversa.profissao VARCHAR(100) NULL` já pertence ao commit-base V1.0.7;
+  `cliente.profissao VARCHAR(100) NULL` pertence ao delta funcional aplicado
+  antes de `user_id`. Depois desse pré-requisito, a migração de `user_id`
+  fotografa os dois conjuntos de valores e prova no pós-flight que nenhum
+  cadastro ou snapshot foi alterado; não existe `ADD COLUMN profissao` nesse SQL.
 - Há duas exceções deliberadas ao “tudo novo fica NULL”: `unidade.id_portfolio` é preenchida e torna-se obrigatória; `conversa.wa_id` é preenchida a partir do WA canônico do cliente para que conversas antigas continuem enviando com identidade canônica.
 - `chatbot.user_id_cliente` nasce vazia: não existe `user_id` histórico confiável para inventar ou retropreencher.
 
 ## Inventário preparado
 
 - Arquivos finais criados: 21
-- Arquivos finais substituídos: 130
+- Arquivos finais substituídos: 131
 - Arquivos removidos: 8
-- Total de ações, incluindo a migração: 159
+- Total de ações, incluindo a migração: 160
 - Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
   `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
-  identidade/anti-flood/apresentação e descoberta offline completa. A baseline
-  V1.0.7 possui 22 etapas/25 transições.
+  identidade/anti-flood/apresentação/profissão e descoberta offline completa. A
+  baseline V1.0.7 possui 22 etapas/25 transições.
 - PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API `v26.0` são gates explícitos.
 - Os testes offline usam fixtures, fakes e mocks e não exigem credenciais de Meta, Redis ou RDS. Smokes reais ficam separados e controlados.
 
@@ -138,7 +160,7 @@ pelos serviços.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cc5974c40ef1e8d4a9d3948277cabafb3491645d404523c9de65b87dc4609e0b`
+SHA-256 do conteúdo UTF-8 normalizado: `c6eba1f4f719784fa219518075a4fff4b4f974b957d3c20904638904c6c7fa58`
 
 ````python
 import logging
@@ -1032,6 +1054,7 @@ class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "username",
         "email",
         "idade",
+        "profissao",
     )
 
     search_fields = (
@@ -1039,6 +1062,7 @@ class ClienteAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
         "wa_id",
         "username",
         "email",
+        "profissao",
     )
 
     ordering = ("nome",)
@@ -1619,7 +1643,7 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8b64304098e45ff12ed0a4abcd3b1301d14ff5b3ebfde99f4f0fd2fd00dc2a95`
+SHA-256 do conteúdo UTF-8 normalizado: `b6f4fdca544ad37accddb0722d2fb2ac6098a863bc30cbd63e8e29e8ab46158a`
 
 ````python
 from django.db import models
@@ -1637,6 +1661,7 @@ class Cliente(models.Model):
     username = models.CharField(max_length=255, blank=True, null=True)
     email = models.CharField(unique=True, max_length=200, blank=True, null=True)
     idade = models.IntegerField(blank=True, null=True)
+    profissao = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.nome or self.wa_id or f"Cliente {self.id_cliente}"
@@ -2115,7 +2140,7 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `499f385a47d1caeed07f015f32a20fc9f319a465d23f03e491b783ee6688b48a`
+SHA-256 do conteúdo UTF-8 normalizado: `d6a031e7db71a984b9ca2fb77de570cf78b838014d250abdf25c0543d9829a2d`
 
 ````python
 import logging
@@ -2289,6 +2314,7 @@ def criar_tabelas():
             username VARCHAR(255) NULL,
             email VARCHAR(200) UNIQUE,
             idade INTEGER,
+            profissao VARCHAR(100) NULL,
 
             CONSTRAINT ck_cliente_wa_id_nao_vazio
                 CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
@@ -3244,7 +3270,7 @@ def criar_indices_turno_cliente():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `82550c5c65043a052fcc76b656c9d0bc9285af2f7cab6d2e3e6739093bad0bbc`
+SHA-256 do conteúdo UTF-8 normalizado: `5c1834ad29dcb3ad9d61baf3edd25f15a8b590b055e67d53266932e3481b2ef9`
 
 ````markdown
 # Banco de dados
@@ -3326,8 +3352,11 @@ estrangeiras e constraints já nasçam prontas.
 
 O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
-cliente naquela conversa e `pesquisa_satisfacao`, registro 1:1 de nota e
-comentário opcional da conversa. As etapas 19 a 23 são marcadas como
+cliente naquela conversa, a profissão válida mais recente no cadastro do
+cliente e `pesquisa_satisfacao`, registro 1:1 de nota e comentário opcional da
+conversa. `conversa.profissao` é o snapshot usado pelo Funil;
+`cliente.profissao` nunca substitui retroativamente esse valor. As etapas 19 a
+23 são marcadas como
 `elegivel_funil`; os dados da pesquisa não compõem o payload do Funil. A etapa
 21 registra a decisão de comentar, a etapa 22 coleta o comentário quando aceito
 e a recusa salta diretamente da etapa 21 para a 23. Encerramento e bloqueio de
@@ -3344,6 +3373,13 @@ está em
 `deploy/migrations/20260811_tornar_profissao_obrigatoria_apos_confirmacao.sql`.
 Ela troca somente o catálogo de transições, aceita reexecução no estado final e
 não retrocede conversas que já passaram pela profissão.
+
+A migração que adiciona `cliente.profissao` está em
+`deploy/migrations/20260823_adicionar_profissao_cliente.sql`. Ela é um delta
+funcional obrigatório sobre a baseline V1.0.7, mantém `conversa.profissao` como
+snapshot e preenche o cadastro com a profissão não vazia da conversa mais
+recente de cada cliente. A migração posterior de `user_id` apenas exige esse
+estado; ela não repete o `ADD COLUMN` nem o backfill.
 
 A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
 apresentação configurável do agente está em
@@ -3410,6 +3446,7 @@ gerenciador de segredos.
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_retry_essencial.py`;
 - `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_validador_profissao.py`;
 - `tests/unit/test_worker_flow_runtime.py`.
 
 A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
@@ -8015,7 +8052,7 @@ def _resolver_sujeito_turno(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `2cce7773e5dfdcc4e831b685223867a91935610490e073471efe81df6079ace8`
+SHA-256 do conteúdo UTF-8 normalizado: `154d0e79a17d5af5b76baa5989e4a77a7b41728cb720033d600cf23712186a69`
 
 ````python
 import logging
@@ -8033,7 +8070,7 @@ def bloquear_clientes_por_ids(ids_cliente, cursor):
         return {}
     cursor.execute(
         """
-        SELECT id_cliente, wa_id, username, nome
+        SELECT id_cliente, wa_id, username, nome, profissao
         FROM chatbot.cliente
         WHERE id_cliente = ANY(%s::int[])
         ORDER BY id_cliente
@@ -8057,7 +8094,7 @@ def buscar_cliente_por_wa_id(wa_id, cursor, *, for_update=False):
     sufixo_lock = " FOR UPDATE" if for_update else ""
     cursor.execute(
         f"""
-        SELECT id_cliente, wa_id, username, nome
+        SELECT id_cliente, wa_id, username, nome, profissao
         FROM chatbot.cliente
         WHERE wa_id = %s
         {sufixo_lock};
@@ -8071,7 +8108,7 @@ def buscar_cliente_por_id(id_cliente, cursor, *, for_update=False):
     sufixo_lock = " FOR UPDATE" if for_update else ""
     cursor.execute(
         f"""
-        SELECT id_cliente, wa_id, username, nome
+        SELECT id_cliente, wa_id, username, nome, profissao
         FROM chatbot.cliente
         WHERE id_cliente = %s
         {sufixo_lock};
@@ -8224,6 +8261,42 @@ def atualizar_idade_cliente(id_cliente, idade, cursor):
         )
 
 
+def atualizar_profissao_cliente(id_cliente, profissao, cursor):
+    if not id_cliente:
+        raise ValueError(
+            "id_cliente nao informado para atualizar profissao"
+        )
+    if not isinstance(profissao, str):
+        raise ValueError("profissao deve ser um texto")
+
+    profissao = profissao.strip()
+    if (
+        not profissao
+        or len(profissao) > 100
+        or "\n" in profissao
+        or "\r" in profissao
+    ):
+        raise ValueError(
+            "profissao deve conter uma unica linha entre 1 e 100 caracteres"
+        )
+
+    # SET absoluto: repetir o efeito com a mesma profissão é idempotente.
+    cursor.execute(
+        """
+        UPDATE chatbot.cliente
+        SET profissao = %s
+        WHERE id_cliente = %s;
+        """,
+        (profissao, id_cliente),
+    )
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Cliente nao foi atualizado com profissao "
+            f"(id_cliente={id_cliente}, linhas={cursor.rowcount})"
+        )
+    return cursor.rowcount
+
+
 def excluir_cliente_provisorio_com_gates(id_cliente, cursor):
     """Exclui somente após os quatro gates explícitos aprovados."""
     cursor.execute(
@@ -8273,6 +8346,7 @@ def _normalizar_cliente(registro):
         "wa_id": registro[1],
         "username": registro[2],
         "nome": registro[3],
+        "profissao": registro[4],
     }
 ````
 
@@ -9603,13 +9677,14 @@ def buscar_identidades_para_contexto(
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a121f64571b4ea149b201a8e5e55ce151575f60dc0823b08cb9ab6a2cbb6032a`
+SHA-256 do conteúdo UTF-8 normalizado: `81fbc2d409eefaec571f53ba612237edb52917208aa4298727ab5a9aa7a96dd1`
 
 ````python
 import logging
 
 from core.repositories.atendimento.clientes import (
     atualizar_nome_cliente,
+    atualizar_profissao_cliente,
     atualizar_username_cliente,
     bloquear_clientes_por_ids,
     excluir_cliente_provisorio_com_gates,
@@ -9749,6 +9824,20 @@ def reconciliar_cliente_provisorio(
         username,
         cursor,
     )
+
+    # O row lock do provisório congela seu valor canônico mais recente. Como a
+    # etapa de profissão grava cliente e conversa atomicamente, este campo é a
+    # profissão válida mais recente do provisório. Copiá-lo antes da exclusão
+    # conserva o cadastro sem reescrever o snapshot da conversa reatribuída.
+    profissao_provisoria = clientes_bloqueados[
+        id_cliente_provisorio
+    ].get("profissao")
+    if isinstance(profissao_provisoria, str) and profissao_provisoria.strip():
+        atualizar_profissao_cliente(
+            id_cliente_canonico,
+            profissao_provisoria,
+            cursor,
+        )
 
     if conversa_canonica_anterior:
         encerrar_conversa(
@@ -11311,7 +11400,7 @@ def reconhecer_contato_oficial_persistido(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cc9e97eed5679be41fc247a52ca7b4d3a1b447d2e54a9a9b6e8199a934a838e0`
+SHA-256 do conteúdo UTF-8 normalizado: `4a791b16aad1367469bcbc8b98daa2b995daec33b5bd526ea965f59e6ac8625f`
 
 ````python
 import logging
@@ -11320,6 +11409,7 @@ from core.logging_config import short_value
 from core.repositories.atendimento.clientes import (
     atualizar_email_cliente,
     atualizar_idade_cliente,
+    atualizar_profissao_cliente,
 )
 from core.repositories.atendimento.conversas import (
     atualizar_profissao_conversa,
@@ -12063,15 +12153,21 @@ def _persistir_profissao_capturada_na_etapa5(
         profissao,
         cursor,
     )
+    atualizar_profissao_cliente(
+        contexto_historico["id_cliente"],
+        profissao,
+        cursor,
+    )
 
     logger.info(
-        "profissao_persistida | acao=salvar_efeito_transicao "
+        "profissao_persistida | acao=salvar_snapshot_e_atualizar_cliente "
         "evento=%s etapa_origem=%s etapa_resultante=%s "
-        "id_conversa=%s profissao=%s",
+        "id_conversa=%s id_cliente=%s profissao=%s",
         contexto_envio.get("evento_transicao"),
         contexto_historico["id_etapa_origem_transicao"],
         contexto_envio["id_etapa_resultante"],
         contexto_historico["id_conversa"],
+        contexto_historico["id_cliente"],
         short_value(profissao),
     )
 
@@ -25740,7 +25836,7 @@ def _resultado_invalido(motivo):
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `bf5f75c50d2167a15dd01f0d192f0f06e4d155d41fdd62f103e21734af9af09d`
+SHA-256 do conteúdo UTF-8 normalizado: `1a2fb04f223b8d2a71594723b12f4406e2a1547f38e0062a8e362185a5bdadf5`
 
 ````python
 import re
@@ -25755,6 +25851,7 @@ MOTIVO_PROFISSAO_LONGA = "profissao_acima_limite"
 MOTIVO_PROFISSAO_SEM_TEXTO = "profissao_sem_texto"
 MOTIVO_PROFISSAO_TIPO_INVALIDO = "profissao_tipo_mensagem_invalido"
 MOTIVO_PROFISSAO_GENERICA = "profissao_generica"
+MOTIVO_PROFISSAO_FORA_CONTEXTO = "profissao_fora_contexto"
 MOTIVO_RECUSA_EXPLICITA = "recusa_explicita"
 
 _RESPOSTAS_GENERICAS = {
@@ -25801,6 +25898,18 @@ _RECUSAS_EXPLICITAS = {
     "segredo",
 }
 
+_RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = {
+    "meu filho",
+    "minha filha e autista e percebo q ela tem dificuldade no aprendizado "
+    "vcs atende autista tambem",
+    "nao entendi",
+    "nao seria pra meu filho",
+    "para meu filho",
+    "pra meu filho",
+    "pra minha filha na verdade",
+    "vc ouviu audio ou ligacao",
+}
+
 
 @dataclass(frozen=True)
 class ResultadoValidacaoProfissao:
@@ -25837,6 +25946,9 @@ def validar_profissao_etapa5(conteudo_texto, tipo_mensagem="text"):
     if texto_normalizado in _RECUSAS_EXPLICITAS:
         return _resultado_invalido(MOTIVO_RECUSA_EXPLICITA)
 
+    if _resposta_fora_contexto_profissao(texto_normalizado):
+        return _resultado_invalido(MOTIVO_PROFISSAO_FORA_CONTEXTO)
+
     return ResultadoValidacaoProfissao(
         valida=True,
         profissao=profissao,
@@ -25857,6 +25969,13 @@ def _normalizar_texto(texto):
         flags=re.UNICODE,
     ).replace("_", " ")
     return " ".join(texto_sem_simbolos.split())
+
+
+def _resposta_fora_contexto_profissao(texto_normalizado):
+    return (
+        texto_normalizado
+        in _RESPOSTAS_FORA_CONTEXTO_OBSERVADAS
+    )
 
 
 def _resultado_invalido(motivo):
@@ -26808,14 +26927,17 @@ def _obter_respostas_triagem_validadas(dados_lead):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d9cf6ce1405840fe73554575f011217ca72dfb04b47f6f24c4b5e113affe1599`
+SHA-256 do conteúdo UTF-8 normalizado: `d75782168092fc91c4e2109cab97c72692862de761165a802288c5475333509c`
 
 ````python
 """Leitura do snapshot completo de uma conversa elegível ao Funil."""
 
 
 def buscar_dados_lead_funil(id_conversa, cursor):
-    """Retorna cliente, profissão, dependente e respostas da triagem."""
+    """Retorna o snapshot da conversa, inclusive sua profissão histórica.
+
+    cliente.profissao é mutável entre atendimentos e não participa do lead.
+    """
     cursor.execute(
         """
         SELECT
@@ -26890,7 +27012,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6afc173509057172ecadd3f08d4f9e4adf1ce7db17943c81cb8c8c5a4c929dfd`
+SHA-256 do conteúdo UTF-8 normalizado: `8e04d1a368537fcf5733db4b0fc78c22b8b3ab34b2f303943c40a4a8d5af8c5d`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -27173,6 +27295,12 @@ nova e remove o item atual antes do commit. Depois do commit, o worker apenas
 repara o cache com a expiração original e não chama histórico, lock normal,
 resolver, sender, transição ou Funil.
 
+Quando o merge usa um cliente provisório distinto, a profissão válida mais
+recente já consolidada nesse provisório é copiada para `cliente.profissao` do
+canônico sob os mesmos row locks e antes da exclusão. A reatribuição conserva
+`conversa.profissao`: o snapshot de cada atendimento nunca é reescrito pelo
+handoff.
+
 `cliente_bloqueado_meta` mantém uma linha por pessoa/unidade. O repositório de
 segurança pode completar um alias nulo quando WA+user forem comprovados, mas não
 infere equivalência por username/nome e não transforma o bloqueio em global.
@@ -27282,6 +27410,11 @@ Contém orquestração de respostas:
 - `transacoes/efeitos_transicao.py`: efeitos de banco específicos de cada
   aresta autorizada.
 
+O efeito da profissão futura 5 executa dois `SET`s absolutos com o mesmo cursor:
+preserva a resposta em `conversa.profissao` e atualiza o valor mais recente em
+`cliente.profissao`. A transação do worker torna as escritas atômicas; no retry,
+reaplicar a mesma profissão produz o mesmo estado final.
+
 Esses arquivos podem escolher qual integração chamar, mas não devem criar cliente
 PyWa, montar `Button` ou manter textos de saída.
 
@@ -27311,6 +27444,15 @@ somente a exceção local. Esse adaptador não envia mensagem, não acessa banco
 não altera contexto e não modifica o classificador compartilhado. A etapa 5
 usa esse padrão para distinguir dúvida sobre reforço escolar de uma declaração
 de profissão ou vínculo de trabalho com banca, cursinho, supletivo ou reforço.
+
+O próprio `valida_etapa5.py` mantém ainda uma proteção mínima e estritamente
+literal para oito respostas completas fora de contexto já observadas. A
+comparação só ocorre depois da normalização já existente de caixa, acentos,
+pontuação e espaços. Não se extraem palavras, não se usa correspondência parcial
+e não se cria regex semântica: qualquer frase diferente continua submetida às
+regras liberais anteriores. O motivo técnico exclusivo é
+`profissao_fora_contexto`; o resolver o trata como profissão inválida, repete a
+etapa 5 e não produz evento nem efeito de persistência.
 
 Um validador pertence a `validadores_contexto` quando a resposta produz eventos
 próprios daquela etapa, especialmente quando pode pular ou retroceder no mapa.
@@ -27790,7 +27932,7 @@ regras de negócio.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `9784fcd9aa36de9238ba448078f899577aef7b9a15cfa93fdbb7ee5f6e922fd7`
+SHA-256 do conteúdo UTF-8 normalizado: `5e03340f1b3a5d2edf4c58edcc3630cf103db8ba8a5f22a84d09968730c9b82a`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -28094,6 +28236,24 @@ Implementação principal:
 - A etapa 5 coleta obrigatoriamente, em texto livre, a profissão do cliente.
   Após uma profissão válida, dependente segue para a etapa 6 e titular segue
   diretamente para a etapa 7, conforme o `status_dependente` final persistido.
+  O mesmo efeito transacional grava `conversa.profissao` como snapshot e
+  substitui `cliente.profissao` pelo valor válido mais recente. Uma conversa
+  posterior não altera o snapshot das conversas anteriores.
+- A proteção mínima da profissão rejeita somente estas oito respostas completas
+  fora de contexto já observadas, comparadas por igualdade depois da
+  normalização de caixa, acentos, pontuação e espaços: `Pra minha filha na
+  verdade`, `Não entendi`, `Para meu filho`, `Pra meu filho`, `Minha filha é
+  autista e percebo q ela tem dificuldade no aprendizado , vcs atende autista
+  tambem`, `não seria pra meu filho`, `Meu filho` e `Vc ouviu áudio ou ligação`.
+  Não há bloqueio por palavra isolada, substring ou regex semântica.
+- O retorno inválido usa o motivo exclusivo `profissao_fora_contexto`, reapresenta
+  a etapa 5 pelo tratamento `profissao_invalida` e não gera
+  `evento_transicao`, resolução de destino ou persistência de profissão.
+- Os controles que devem continuar válidos são exatamente: `Lavradora`,
+  `Autonona`, `Técnica de áudio`, `Faço ligações, trabalho com telemarketing`,
+  `Trabalho para meu filho`, `Sou psicopedagoga e minha filha é autista`, `Não
+  entendi antes; sou professora` e `Sou psicóloga, mas é para minha filha de 16
+  anos`.
 - A etapa 12 introduz a triagem, as etapas 13 a 18 fazem as seis perguntas e a
   etapa 19 apresenta o agendamento. A etapa 19 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
@@ -28138,6 +28298,9 @@ Implementação principal:
 - No merge, o nome válido do provisório sempre sobrescreve o nome canônico antes
   da exclusão; a conversa nova é reparentada e a conversa canônica ativa anterior
   fecha com `ativou_privacidade`.
+- A profissão válida mais recente do provisório também sobrescreve
+  `cliente.profissao` do canônico antes da exclusão. A reatribuição não modifica
+  `conversa.profissao`, que continua sendo o snapshot daquele atendimento.
 - Lock fresco em qualquer conversa envolvida cancela o merge inteiro e reagenda
   o item por 5 segundos sem consumir retry. Lock stale segue exatamente o limiar
   de 110 segundos da V1.0.7 e incrementa `lock_version`; o dono antigo não pode
@@ -28168,7 +28331,9 @@ Implementação principal:
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
 - O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
   respostas canônicas da triagem. A profissão da conversa é exibida nas
-  observações; conversas legadas podem apresentá-la como não informada.
+  observações; o Funil lê exclusivamente `conversa.profissao` e não usa
+  `cliente.profissao`, pois o cadastro pode ter sido atualizado por outro
+  atendimento. Conversas legadas podem apresentá-la como não informada.
 - As observações apresentam as seis perguntas e suas respostas na ordem das
   etapas 13 a 18. O Funil usa o mesmo catálogo de perguntas do WhatsApp e não
   envia mais o resumo por quantidade de `Nunca`, `Às vezes` e
@@ -28947,7 +29112,7 @@ Antes de modificar o fluxo:
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `9cfe134f58de6c57bffafbe31577067d51e6f0b10f79cf55ecf87ccc7f2bee1d`
+SHA-256 do conteúdo UTF-8 normalizado: `de3310e2f4985d9c05ce5a304195f4287ae559beb08dce5807b470a8353cef24`
 
 ````markdown
 # Rotina de implementação de novas etapas
@@ -29037,7 +29202,7 @@ Origem: etapa 5
 Pergunta: qual sua profissão?
 Eventos válidos: profissao_dependente_valida ou profissao_titular_valida
 Destinos: etapa 6 ou etapa 7
-Efeito: salvar conversa.profissao
+Efeito: salvar conversa.profissao e atualizar cliente.profissao
 ```
 
 ### 2. Cadastrar a etapa no deploy
@@ -29441,10 +29606,12 @@ destino_atendimento_definido
 
 profissao_dependente_valida
 -> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
 -> seguir para o nome do dependente
 
 profissao_titular_valida
 -> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
 -> seguir diretamente para a idade
 
 nome_dependente_valido
@@ -29458,6 +29625,8 @@ Os efeitos devem:
 
 - usar o mesmo cursor da transação final;
 - ser idempotentes;
+- no efeito de profissão, gravar conversa e cliente com esse mesmo cursor para
+  que qualquer falha reverta as duas escritas;
 - validar evento, origem e destino esperados;
 - conseguir reconstruir dados a partir da mensagem original no retry;
 - levantar erro quando faltar um dado obrigatório;
@@ -29612,6 +29781,14 @@ Evitar comentários que apenas repetem o código:
 - mapa ausente impede sender;
 - destino incompatível impede sender.
 
+Para a profissão futura 5, acrescentar os quatro contratos de
+`test_validador_profissao.py`: as oito respostas completas observadas retornam
+`profissao_fora_contexto`; variações de caixa, acentos, pontuação e espaços só
+são comparadas depois da normalização; os oito controles legítimos continuam
+válidos; e o resolver repete a etapa sem consultar o mapa nem devolver profissão
+para persistência. A lista é literal e fechada, sem derivação de palavras ou
+regex.
+
 ### Persistência
 
 - PostgreSQL aceita somente origem, evento e destino cadastrados;
@@ -29630,6 +29807,7 @@ Sempre executar:
 test_fluxo_turno_abc
 test_retry_essencial
 test_persistencia_essencial
+test_validador_profissao
 test_worker_flow_runtime
 ```
 
@@ -29645,6 +29823,7 @@ Uma etapa está concluída somente quando:
 [ ] messages criada
 [ ] sender criado
 [ ] validador criado ou reutilizado
+[ ] falsos positivos observados e controles legítimos cobertos literalmente
 [ ] resolver criado
 [ ] flow_sender atualizado
 [ ] efeitos transacionais implementados
@@ -30216,7 +30395,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6fa3dde16604787560798f3130dd87d441f24986b0186c55d9c5cd66695d5bd1`
+SHA-256 do conteúdo UTF-8 normalizado: `6dedde62b05f3240cc7a2718a065bed6822bbf6485b66d9ebd8379226e82db79`
 
 ````python
 import ast
@@ -30240,6 +30419,7 @@ from core.repositories.atendimento import (
     conversas,
     reconciliacao_clientes,
 )
+from core.repositories.funil import leads
 from core.repositories.fluxo.politicas import PoliticaEtapa
 from core.triagem import perguntas as perguntas_futuras
 from tests.helpers import FakeCursor
@@ -30479,6 +30659,22 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             ),
             "TRANSICOES_INICIAIS",
         )
+        self.assertIn(
+            (4, "profissao_dependente_valida", 5),
+            transicoes_v107,
+        )
+        self.assertIn(
+            (4, "profissao_titular_valida", 6),
+            transicoes_v107,
+        )
+        self.assertIn(
+            (5, "profissao_dependente_valida", 6),
+            TRANSICOES_INICIAIS,
+        )
+        self.assertIn(
+            (5, "profissao_titular_valida", 7),
+            TRANSICOES_INICIAIS,
+        )
         eventos_aditivos = {
             "nome_cliente_valido_sem_wa_id",
             "contato_oficial_compartilhado",
@@ -30595,6 +30791,15 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             oportunidades.montar_payload_oportunidade(dados_futuros),
             baseline["montar_payload_oportunidade"](dados_v107),
         )
+        fontes_snapshot = (
+            _ler_arquivo_da_v107(
+                "core/repositories/funil/leads.py"
+            ),
+            inspect.getsource(leads.buscar_dados_lead_funil),
+        )
+        for fonte_snapshot in fontes_snapshot:
+            self.assertIn("c.profissao", fonte_snapshot)
+            self.assertNotIn("cl.profissao", fonte_snapshot)
 
 
 class PersistenciaEssencialTests(unittest.TestCase):
@@ -31001,7 +31206,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 efeitos,
                 "atualizar_profissao_conversa",
                 return_value=1,
-            ) as atualizar_profissao:
+            ) as atualizar_profissao_conversa, patch.object(
+                efeitos,
+                "atualizar_profissao_cliente",
+                return_value=1,
+            ) as atualizar_profissao_cliente:
                 cursor = object()
                 resultado = (
                     efeitos.atualizar_banco_conforme_transicao_de_etapa(
@@ -31019,13 +31228,31 @@ class PersistenciaEssencialTests(unittest.TestCase):
                     )
                 )
 
-            atualizar_profissao.assert_called_once_with(
+            atualizar_profissao_conversa.assert_called_once_with(
                 10,
+                "Sou engenheiro",
+                cursor,
+            )
+            atualizar_profissao_cliente.assert_called_once_with(
+                5,
                 "Sou engenheiro",
                 cursor,
             )
             self.assertTrue(resultado["profissao_atualizada"])
             self.assertEqual(resultado["profissao"], "Sou engenheiro")
+
+        cursor_repositorio = FakeCursor(rowcount=1)
+        self.assertEqual(
+            clientes.atualizar_profissao_cliente(
+                5,
+                "  Trabalhadora autônoma  ",
+                cursor_repositorio,
+            ),
+            1,
+        )
+        sql, parametros = cursor_repositorio.calls[0]
+        self.assertIn("UPDATE chatbot.cliente", sql)
+        self.assertEqual(parametros, ("Trabalhadora autônoma", 5))
 
     def test_retry_da_profissao_reconstroi_texto_original(self):
         cursor = object()
@@ -31034,7 +31261,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
             efeitos,
             "atualizar_profissao_conversa",
             return_value=1,
-        ) as atualizar_profissao:
+        ) as atualizar_profissao_conversa, patch.object(
+            efeitos,
+            "atualizar_profissao_cliente",
+            return_value=1,
+        ) as atualizar_profissao_cliente:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=5,
@@ -31050,8 +31281,13 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 cursor,
             )
 
-        atualizar_profissao.assert_called_once_with(
+        atualizar_profissao_conversa.assert_called_once_with(
             10,
+            "Trabalho com finanças",
+            cursor,
+        )
+        atualizar_profissao_cliente.assert_called_once_with(
+            5,
             "Trabalho com finanças",
             cursor,
         )
@@ -31562,8 +31798,16 @@ class IdentidadePrivadaEssencialTests(unittest.TestCase):
             reconciliacao_clientes,
             "bloquear_clientes_por_ids",
             return_value={
-                5: {"id_cliente": 5, "wa_id": WA_ID},
-                91: {"id_cliente": 91, "wa_id": None},
+                5: {
+                    "id_cliente": 5,
+                    "wa_id": WA_ID,
+                    "profissao": "Professora",
+                },
+                91: {
+                    "id_cliente": 91,
+                    "wa_id": None,
+                    "profissao": "Engenheira",
+                },
             },
         ), patch.object(
             reconciliacao_clientes,
@@ -31612,6 +31856,12 @@ class IdentidadePrivadaEssencialTests(unittest.TestCase):
             "atualizar_username_cliente",
         ), patch.object(
             reconciliacao_clientes,
+            "atualizar_profissao_cliente",
+            side_effect=lambda *_args: eventos.append(
+                "atualizar_profissao"
+            ),
+        ) as atualizar_profissao, patch.object(
+            reconciliacao_clientes,
             "reatribuir_conversa_cliente",
             side_effect=lambda **_kwargs: eventos.append("reatribuir"),
         ), patch.object(
@@ -31636,8 +31886,13 @@ class IdentidadePrivadaEssencialTests(unittest.TestCase):
 
         encerrar.assert_called_once_with(33, "ativou_privacidade", ANY)
         atualizar_nome.assert_called_once_with(5, "Maria Nova", ANY)
+        atualizar_profissao.assert_called_once_with(5, "Engenheira", ANY)
         self.assertLess(
             eventos.index("atualizar_nome"),
+            eventos.index("excluir_provisorio"),
+        )
+        self.assertLess(
+            eventos.index("atualizar_profissao"),
             eventos.index("excluir_provisorio"),
         )
 
@@ -31809,7 +32064,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `604fa166b8546d97e044b928ae2967b606d925fdd511b7ba9351971ee1a31ece`
+SHA-256 do conteúdo UTF-8 normalizado: `f3b8c8f6795871e478154469a088c567b337b01e9dd0977ffcb52a5a423b1632`
 
 ````python
 import inspect
@@ -32289,6 +32544,19 @@ class ContratosConcorrenciaIdentidadeTests(unittest.TestCase):
         self.assertIn("'bloqueio_reconciliado'", sql_final)
         self.assertIn("ck_bloqueio_identidade_meta", sql_final)
         self.assertNotIn("ativou_user_id", sql_final)
+        self.assertRegex(
+            sql_final,
+            r"(?is)\('cliente'\s*,\s*'profissao'\s*,\s*100\)",
+        )
+        self.assertRegex(
+            sql_final,
+            r"(?is)\('conversa'\s*,\s*'profissao'\s*,\s*100\)",
+        )
+        self.assertIn("migracao_profissoes_antes", sql_final)
+        self.assertNotRegex(
+            sql_final,
+            r"(?is)ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?profissao",
+        )
 
     def test_chave_de_bloqueio_isola_o_mesmo_user_id_por_unidade(self):
         chave_unidade_a = cache_conversas_bloqueadas._cache_key(
@@ -33379,6 +33647,130 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
+## Passo 159 — `tests/unit/test_validador_profissao.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Esta suíte é a transposição
+literal da proteção pré-`user_id`: muda apenas a numeração atual 4 para a futura
+5 e os imports correspondentes, sem ampliar a lista, criar palavras-chave ou
+introduzir regex semântica.
+
+SHA-256 do conteúdo UTF-8 normalizado: `6f9ffc08ca9a03c7809162234412456d2e5d1b617f7db99c6f909bbd548df279`
+
+````python
+import unittest
+from unittest.mock import patch
+
+from workers.worker_flow.response_flow.etapas import resolver_etapa5
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5 import (
+    MOTIVO_PROFISSAO_FORA_CONTEXTO,
+    validar_profissao_etapa5,
+)
+
+
+RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = (
+    "Pra minha filha na verdade",
+    "Não entendi",
+    "Para meu filho",
+    "Pra meu filho",
+    (
+        "Minha filha é autista e percebo q ela tem dificuldade no "
+        "aprendizado , vcs atende autista tambem"
+    ),
+    "não seria pra meu filho",
+    "Meu filho",
+    "Vc ouviu áudio ou ligação",
+)
+
+
+class ValidadorProfissaoTests(unittest.TestCase):
+    def test_rejeita_somente_respostas_fora_contexto_ja_observadas(self):
+        for resposta in RESPOSTAS_FORA_CONTEXTO_OBSERVADAS:
+            with self.subTest(resposta=resposta):
+                resultado = validar_profissao_etapa5(resposta)
+
+                self.assertFalse(resultado.valida)
+                self.assertIsNone(resultado.profissao)
+                self.assertEqual(
+                    resultado.motivo,
+                    MOTIVO_PROFISSAO_FORA_CONTEXTO,
+                )
+
+    def test_normalizacao_cobre_caixa_acentos_pontuacao_e_espacos(self):
+        resultado = validar_profissao_etapa5(
+            "  VC   OUVIU ÁUDIO OU LIGAÇÃO???  "
+        )
+
+        self.assertFalse(resultado.valida)
+        self.assertEqual(
+            resultado.motivo,
+            MOTIVO_PROFISSAO_FORA_CONTEXTO,
+        )
+
+    def test_nao_bloqueia_profissoes_legitimas_com_palavras_semelhantes(self):
+        profissoes_validas = (
+            "Lavradora",
+            "Autonona",
+            "Técnica de áudio",
+            "Faço ligações, trabalho com telemarketing",
+            "Trabalho para meu filho",
+            "Sou psicopedagoga e minha filha é autista",
+            "Não entendi antes; sou professora",
+            "Sou psicóloga, mas é para minha filha de 16 anos",
+        )
+
+        for profissao in profissoes_validas:
+            with self.subTest(profissao=profissao):
+                resultado = validar_profissao_etapa5(profissao)
+
+                self.assertTrue(resultado.valida)
+                self.assertEqual(resultado.profissao, profissao)
+                self.assertIsNone(resultado.motivo)
+
+    def test_resolver_repete_etapa_sem_transicionar_ou_persistir_profissao(self):
+        contexto = {
+            "id_conversa": 121,
+            "id_etapa_cliente": 5,
+            "tipo_mensagem_atual": "text",
+            "texto_cliente_atual": "Vc ouviu áudio ou ligação",
+            "status_dependente": False,
+            "mensagem_cliente_atual": {
+                "id_mensagem_fila": 9001,
+                "cliente_telefone": "5571999999999",
+                "id_phone_unidade": "123456",
+            },
+        }
+        resposta_repeticao = {
+            "id_etapa_resultante": 5,
+            "tratamento": True,
+            "tipo_tratamento": "profissao_invalida",
+        }
+
+        with (
+            patch.object(
+                resolver_etapa5,
+                "enviar_etapa5_contexto_profissao_invalida",
+                return_value=resposta_repeticao,
+            ) as enviar_repeticao,
+            patch.object(
+                resolver_etapa5,
+                "resolver_destino_transicao",
+            ) as resolver_transicao,
+        ):
+            resultado = resolver_etapa5.resolve_etapa5(contexto)
+
+        self.assertIs(resultado, resposta_repeticao)
+        enviar_repeticao.assert_called_once_with(
+            "5571999999999",
+            "123456",
+        )
+        resolver_transicao.assert_not_called()
+        self.assertNotIn("profissao", resultado)
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
 # Fase 8 — Validação antes da migração
 
 ## Gate integrado de aplicação
@@ -33387,7 +33779,7 @@ Depois de materializar todos os arquivos anteriores, executar obrigatoriamente, 
 
 ```powershell
 python -m compileall -q callback core workers tests
-python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_worker_flow_runtime
+python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_worker_flow_runtime
 python -m unittest discover -s tests -p "test_*.py" -b
 python -m pip check
 python callback/manage.py check --deploy
@@ -33406,10 +33798,10 @@ Os testes devem provar, no mínimo:
 
 1. os quatro JSONs reais de `payloads/`, inclusive fallbacks `wa_id/from` e `user_id/from_user_id`, divergência de réplicas e `CONTACT_INFO` ambíguo;
 2. identidade do item congelada, cache/turno tipados e sender usando `user_id` somente nas etapas autorizadas;
-3. promoção e reconciliação provisório/canônico, conversa antiga encerrada por `ativou_privacidade`, bloqueio herdado encerrando a nova por `bloqueio_reconciliado`, quatro gates de exclusão, rollback e retry idempotente;
-4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
-5. Funil 19–23, username complementar e triagem 13–18 com pergunta/resposta em ordem;
-6. DDL final completo, constraints, FKs, índices e ausência de `ALTER TABLE` histórico nos scripts Python declarativos;
+3. promoção e reconciliação provisório/canônico, profissão válida mais recente copiada ao canônico antes da exclusão, conversa antiga encerrada por `ativou_privacidade`, bloqueio herdado encerrando a nova por `bloqueio_reconciliado`, quatro gates de exclusão, rollback e retry idempotente;
+4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória gravada atomicamente em conversa/cliente e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
+5. Funil 19–23 lendo `conversa.profissao`, nunca `cliente.profissao`, username complementar e triagem 13–18 com pergunta/resposta em ordem;
+6. DDL final completo, inclusive `cliente.profissao VARCHAR(100) NULL`, constraints, FKs, índices, ausência de `ALTER TABLE` histórico nos scripts Python declarativos e ausência de novo `ADD COLUMN profissao` na migração de `user_id`;
 7. ausência de nomes físicos legados nos módulos versionados do runtime;
 8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.7.
 9. prova diferencial da V1.0.7: depois de normalizar a renumeração `1 -> 1` e
@@ -33418,10 +33810,23 @@ Os testes devem provar, no mínimo:
    das etapas legadas 2, 10, 11 e 22, mapeadas respectivamente para as etapas
    futuras 3, 11, 12 e 23 e comparadas por substituições literais fechadas no
    teste. Todo outro texto legado e o payload do Funil WA-only sem username
-   permanecem idênticos; os testes funcionais existentes continuam provando
-   destinatário WA, persistência, retry e turno.
+   permanecem idênticos; a prova fixa explicitamente o caminho da profissão
+   atual 4 para a futura 5 e confirma que o Funil continua projetando o snapshot
+   de `conversa.profissao`. Os testes funcionais existentes continuam provando
+   as duas escritas de profissão com o mesmo cursor, destinatário WA,
+   persistência, retry e turno.
+10. proteção mínima da profissão: somente as oito respostas completas observadas
+    são recusadas por igualdade após normalização e recebem
+    `profissao_fora_contexto`; os oito controles legítimos permanecem válidos;
+    a recusa repete a etapa 5 sem evento, consulta ao mapa ou profissão no
+    contexto que alimenta a persistência.
 
-Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL descartável que reflita exatamente a baseline V1.0.7 `c248155`. Executar nele o SQL integral deste documento e comparar catálogo, colunas, constraints, FKs, índices e dados com o DDL final. Testes estáticos de strings complementam essa prova, mas não substituem a execução real da migração num clone descartável.
+Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL
+descartável que reflita exatamente a baseline V1.0.7 `c248155`, aplicar nele o
+delta `20260823_adicionar_profissao_cliente.sql` e só então executar o SQL
+integral de `user_id` deste documento. Comparar catálogo, colunas, constraints,
+FKs, índices e dados com o DDL final. Testes estáticos de strings complementam
+essa prova, mas não substituem a execução real da sequência em clone descartável.
 
 ### Preflight somente leitura do RDS
 
@@ -33439,10 +33844,24 @@ SELECT EXISTS (
 SELECT id_unidade, nome_unidade, waba_id, phone_number_id
 FROM chatbot.unidade
 ORDER BY id_unidade;
+
+SELECT table_name, column_name, data_type, character_maximum_length,
+       is_nullable, column_default
+FROM information_schema.columns
+WHERE table_schema = 'chatbot'
+  AND (table_name, column_name) IN (
+      ('cliente', 'profissao'),
+      ('conversa', 'profissao')
+  )
+ORDER BY table_name;
 ```
 
 - Se `id_portfolio_ja_existe = false`, confirmar manualmente todos os pares usados no mapa do SQL final. O mapa preparado contém a unidade conhecida na baseline, mas deverá coincidir com a lista real no momento do deploy.
 - Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome_unidade, nome_agente, genero, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
+- Se a consulta das profissões não devolver exatamente duas linhas
+  `VARCHAR(100)`, anuláveis e sem default, parar: o banco não corresponde à
+  baseline somada ao delta funcional exigido, e a migração de `user_id` não
+  pode criar a coluna faltante.
 
 Antes de abrir a transação de produção, confirmar os três serviços `inactive`, snapshot `Disponível`, ausência de itens `processing` e ausência de envio do Funil em curso. Depois do `COMMIT`, publicar exatamente o código validado, executar smokes de webhook/worker/Funil e inspecionar logs e `NRestarts` antes de encerrar o deploy.
 
@@ -33452,13 +33871,14 @@ O único risco conhecido aceito por este plano continua sendo a janela rara Meta
 
 # Fase final — Migração manual no DBeaver
 
-## Passo 159 (final) — `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql` e comando manual integral
+## Passo 160 (final) — `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql` e comando manual integral
 
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
-O preflight bancário aceita exclusivamente o schema da baseline V1.0.7 `c248155`, com
-22 etapas/25
-transições e a pós-validação exige exatamente 23 etapas/27 transições. Toda a
+O preflight bancário aceita exclusivamente o estado pré-`user_id` composto pelo
+schema da baseline V1.0.7 `c248155` mais o delta funcional de profissão
+`20260823_adicionar_profissao_cliente.sql`, ainda com 22 etapas/25 transições. A
+pós-validação exige exatamente 23 etapas/27 transições. Toda a
 migração ocorre em uma única transação: qualquer erro desfaz inclusive o
 remapeamento de etapas. Depois de um `COMMIT` bem-sucedido, uma reexecução
 aborta no preflight sem alterar dados, pois o schema já não corresponde à
@@ -33467,10 +33887,18 @@ baseline; ela nunca tenta aplicar parcialmente a promoção uma segunda vez.
 `deploy/migrations/20260812_personalizar_agente_unidade.sql` já pertence à
 baseline e não é incorporada nem reexecutada aqui. O SQL abaixo apenas exige e
 preserva `nome_unidade`, `nome_agente`, `genero` e suas quatro constraints.
+Separadamente, `deploy/migrations/20260823_adicionar_profissao_cliente.sql` é
+pré-requisito funcional sobre a baseline: o preflight de `user_id` exige
+`cliente.profissao` e `conversa.profissao`, o corpo não contém novo
+`ADD COLUMN profissao` e o pós-flight prova que seus valores permaneceram
+idênticos.
 
 Pré-condições obrigatórias:
 
 - concluir todos os gates offline e a execução bem-sucedida em PostgreSQL descartável/clone da baseline;
+- aplicar e validar primeiro
+  `deploy/migrations/20260823_adicionar_profissao_cliente.sql`; sem esse delta,
+  o preflight de `user_id` deve abortar;
 - parar webhook, worker-flow e worker-funil e confirmar os três como `inactive`;
 - criar snapshot do RDS após a parada e aguardar `Disponível`;
 - confirmar servidor, database e usuário corretos no DBeaver;
@@ -33481,7 +33909,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `07b5111b92028862b772ec40d9b24ffb19b6ca8ec27d38850acc4a7d00002524`
+SHA-256 do SQL UTF-8 normalizado: `bdd3efcbf572e0df6f7f0dd6af2cb2a0988b3c0efdff1888276b4ebbdd435bce`
 
 ````sql
 BEGIN;
@@ -33566,6 +33994,30 @@ BEGIN
     ) THEN
         RAISE EXCEPTION
             'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
+    END IF;
+
+    -- conversa.profissao vem da V1.0.7; cliente.profissao vem do delta funcional
+    -- obrigatório anterior. A feature de user_id não possui autorização para
+    -- criar, tipar, preencher ou apagar nenhuma delas.
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            VALUES
+                ('cliente',  'profissao', 100),
+                ('conversa', 'profissao', 100)
+        ) AS esperado(table_name, column_name, max_length)
+        LEFT JOIN information_schema.columns AS coluna
+          ON coluna.table_schema = 'chatbot'
+         AND coluna.table_name = esperado.table_name
+         AND coluna.column_name = esperado.column_name
+        WHERE coluna.column_name IS NULL
+           OR coluna.data_type <> 'character varying'
+           OR coluna.character_maximum_length IS DISTINCT FROM esperado.max_length
+           OR coluna.is_nullable <> 'YES'
+           OR coluna.column_default IS NOT NULL
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: profissões de cliente/conversa não correspondem ao estado pré-user_id (V1.0.7 c248155 + delta 20260823).';
     END IF;
 
     IF EXISTS (
@@ -34010,6 +34462,23 @@ AS
 SELECT id_unidade, nome_unidade, nome_agente, genero
 FROM chatbot.unidade;
 
+-- A migração não sincroniza profissão: ela prova diferencialmente que o valor
+-- canônico de cada cliente e todos os snapshots de conversa permanecem iguais.
+CREATE TEMP TABLE migracao_profissoes_antes
+ON COMMIT DROP
+AS
+SELECT
+    'cliente'::TEXT AS tabela,
+    id_cliente::BIGINT AS id_registro,
+    profissao
+FROM chatbot.cliente
+UNION ALL
+SELECT
+    'conversa'::TEXT,
+    id_conversa::BIGINT,
+    profissao
+FROM chatbot.conversa;
+
 -- Mapa explícito do estado atual. Antes do deploy, revisar este bloco e incluir
 -- exatamente uma linha para cada unidade existente. Não inferir pelo WABA.
 CREATE TEMP TABLE migracao_portfolios (
@@ -34113,6 +34582,8 @@ WHERE mapa.id_unidade = unidade.id_unidade;
 ALTER TABLE chatbot.unidade
     ALTER COLUMN id_portfolio SET NOT NULL;
 
+-- cliente.profissao já foi exigida pelo preflight e é preservada sem ADD ou
+-- backfill; somente username e a nulabilidade do WA ID pertencem a este delta.
 ALTER TABLE chatbot.cliente
     ADD COLUMN username VARCHAR(255) NULL,
     ALTER COLUMN wa_id DROP NOT NULL;
@@ -34597,6 +35068,7 @@ BEGIN
         VALUES
             ('cliente',                 'wa_id',         50),
             ('cliente',                 'username',     255),
+            ('cliente',                 'profissao',    100),
             ('fila_mensagens',          'wa_id',         50),
             ('fila_mensagens',          'user_id',      255),
             ('fila_mensagens',          'username',     255),
@@ -34608,6 +35080,7 @@ BEGIN
             ('conversa',                'wa_id',         50),
             ('conversa',                'user_id',      255),
             ('conversa',                'username',     255),
+            ('conversa',                'profissao',    100),
             ('cliente_bloqueado_meta',  'wa_id',         50),
             ('cliente_bloqueado_meta',  'user_id',      255),
             ('cliente_bloqueado_meta',  'username',     255),
@@ -35147,6 +35620,32 @@ BEGIN
     ) THEN
         RAISE EXCEPTION
             'Pós-validação falhou: contagem operacional mudou durante a migração.';
+    END IF;
+
+    IF EXISTS (
+        WITH atual AS (
+            SELECT
+                'cliente'::TEXT AS tabela,
+                id_cliente::BIGINT AS id_registro,
+                profissao
+            FROM chatbot.cliente
+            UNION ALL
+            SELECT
+                'conversa'::TEXT,
+                id_conversa::BIGINT,
+                profissao
+            FROM chatbot.conversa
+        )
+        SELECT 1
+        FROM pg_temp.migracao_profissoes_antes AS antes
+        FULL JOIN atual AS depois
+          USING (tabela, id_registro)
+        WHERE antes.tabela IS NULL
+           OR depois.tabela IS NULL
+           OR antes.profissao IS DISTINCT FROM depois.profissao
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: profissão canônica ou snapshot de conversa mudou durante a migração de user_id.';
     END IF;
 
     IF EXISTS (

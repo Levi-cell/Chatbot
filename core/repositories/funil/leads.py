@@ -2,7 +2,10 @@
 
 
 def buscar_dados_lead_funil(id_conversa, cursor):
-    """Retorna cliente, profissão, dependente e respostas da triagem."""
+    """Retorna o snapshot da conversa, inclusive sua profissão histórica.
+
+    ``cliente.profissao`` é mutável entre atendimentos e não participa do lead.
+    """
     cursor.execute(
         """
         SELECT

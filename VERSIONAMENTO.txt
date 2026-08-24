@@ -26,7 +26,7 @@ V1.0.6 - Apresentação personalizada do agente por unidade
 Commit: e052625d7707627a8c28945003ed2506c34e02d3
 
 V1.0.7 - Organização operacional e limpeza estrutural
-Commit: c248155acb3f056e67ab8b758c2c1c7f67b027fc
+Commit: 613bf5ca776e69e4969002036597588596b8bb5c
 
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================

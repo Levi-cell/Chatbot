@@ -10,6 +10,7 @@ MOTIVO_PROFISSAO_LONGA = "profissao_acima_limite"
 MOTIVO_PROFISSAO_SEM_TEXTO = "profissao_sem_texto"
 MOTIVO_PROFISSAO_TIPO_INVALIDO = "profissao_tipo_mensagem_invalido"
 MOTIVO_PROFISSAO_GENERICA = "profissao_generica"
+MOTIVO_PROFISSAO_FORA_CONTEXTO = "profissao_fora_contexto"
 MOTIVO_RECUSA_EXPLICITA = "recusa_explicita"
 
 _RESPOSTAS_GENERICAS = {
@@ -56,6 +57,18 @@ _RECUSAS_EXPLICITAS = {
     "segredo",
 }
 
+_RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = {
+    "meu filho",
+    "minha filha e autista e percebo q ela tem dificuldade no aprendizado "
+    "vcs atende autista tambem",
+    "nao entendi",
+    "nao seria pra meu filho",
+    "para meu filho",
+    "pra meu filho",
+    "pra minha filha na verdade",
+    "vc ouviu audio ou ligacao",
+}
+
 
 @dataclass(frozen=True)
 class ResultadoValidacaoProfissao:
@@ -92,6 +105,9 @@ def validar_profissao_etapa4(conteudo_texto, tipo_mensagem="text"):
     if texto_normalizado in _RECUSAS_EXPLICITAS:
         return _resultado_invalido(MOTIVO_RECUSA_EXPLICITA)
 
+    if _resposta_fora_contexto_profissao(texto_normalizado):
+        return _resultado_invalido(MOTIVO_PROFISSAO_FORA_CONTEXTO)
+
     return ResultadoValidacaoProfissao(
         valida=True,
         profissao=profissao,
@@ -112,6 +128,13 @@ def _normalizar_texto(texto):
         flags=re.UNICODE,
     ).replace("_", " ")
     return " ".join(texto_sem_simbolos.split())
+
+
+def _resposta_fora_contexto_profissao(texto_normalizado):
+    return (
+        texto_normalizado
+        in _RESPOSTAS_FORA_CONTEXTO_OBSERVADAS
+    )
 
 
 def _resultado_invalido(motivo):

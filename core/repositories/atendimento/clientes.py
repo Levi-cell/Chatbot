@@ -99,3 +99,49 @@ def atualizar_idade_cliente(id_cliente, idade, cursor):
             "Cliente não atualizado com idade "
             f"(id_cliente={id_cliente}, linhas={cursor.rowcount})"
         )
+
+
+def atualizar_profissao_cliente(id_cliente, profissao, cursor):
+    if not id_cliente:
+        raise ValueError(
+            "id_cliente nao informado para atualizar profissao"
+        )
+
+    if not isinstance(profissao, str):
+        raise ValueError("profissao deve ser um texto")
+
+    profissao_normalizada = profissao.strip()
+
+    if (
+        not profissao_normalizada
+        or len(profissao_normalizada) > 100
+        or "\n" in profissao_normalizada
+        or "\r" in profissao_normalizada
+    ):
+        raise ValueError(
+            "profissao deve conter uma unica linha entre 1 e 100 caracteres"
+        )
+
+    cursor.execute(
+        """
+        UPDATE chatbot.cliente
+        SET profissao = %s
+        WHERE id_cliente = %s;
+        """,
+        (profissao_normalizada, id_cliente),
+    )
+
+    logger.debug(
+        "cliente_update | acao=atualizar_profissao "
+        "id_cliente=%s linhas=%s",
+        id_cliente,
+        cursor.rowcount,
+    )
+
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Cliente nao foi atualizado com profissao "
+            f"(id_cliente={id_cliente}, linhas={cursor.rowcount})"
+        )
+
+    return cursor.rowcount

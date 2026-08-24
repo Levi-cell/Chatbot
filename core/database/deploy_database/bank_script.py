@@ -162,7 +162,8 @@ def criar_tabelas():
             nome VARCHAR(200),
             waid_telefone VARCHAR(50) UNIQUE NOT NULL,
             email VARCHAR(200) UNIQUE,
-            idade INTEGER
+            idade INTEGER,
+            profissao VARCHAR(100)
         );
 
         CREATE TABLE IF NOT EXISTS chatbot.unidade (

@@ -85,7 +85,9 @@ Origem: etapa 4
 Pergunta: qual sua profissão?
 Eventos válidos: profissao_dependente_valida ou profissao_titular_valida
 Destinos: etapa 5 ou etapa 6
-Efeito: salvar conversa.profissao
+Efeito: salvar conversa.profissao e atualizar cliente.profissao
+Tratamento: respostas completas fora de contexto já auditadas repetem a etapa
+             sem evento nem persistência; não bloquear palavras isoladas
 ```
 
 ### 2. Cadastrar a etapa no deploy
@@ -488,10 +490,12 @@ destino_atendimento_definido
 
 profissao_dependente_valida
 -> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
 -> seguir para o nome do dependente
 
 profissao_titular_valida
 -> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
 -> seguir diretamente para a idade
 
 nome_dependente_valido

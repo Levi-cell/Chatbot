@@ -77,8 +77,9 @@ estrangeiras e constraints já nasçam prontas.
 
 O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
-cliente naquela conversa e `pesquisa_satisfacao`, registro 1:1 de nota e
-comentário opcional da conversa. As etapas 18 a 22 são marcadas como
+cliente naquela conversa, a profissão válida mais recente no cadastro do
+cliente e `pesquisa_satisfacao`, registro 1:1 de nota e comentário opcional da
+conversa. As etapas 18 a 22 são marcadas como
 `elegivel_funil`; os dados da pesquisa não compõem o payload do Funil. A etapa
 20 registra a decisão de comentar, a etapa 21 coleta o comentário quando aceito
 e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
@@ -95,6 +96,11 @@ está em
 `deploy/migrations/20260811_tornar_profissao_obrigatoria_apos_confirmacao.sql`.
 Ela troca somente o catálogo de transições, aceita reexecução no estado final e
 não retrocede conversas que já passaram pela profissão.
+
+A migração que adiciona `cliente.profissao` está em
+`deploy/migrations/20260823_adicionar_profissao_cliente.sql`. Ela mantém
+`conversa.profissao` como snapshot e preenche o cadastro com a profissão não
+vazia da conversa mais recente de cada cliente.
 
 A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
 apresentação configurável do agente está em

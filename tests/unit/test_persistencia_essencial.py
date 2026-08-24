@@ -1,6 +1,8 @@
 import unittest
-from unittest.mock import ANY, patch
+from unittest.mock import ANY, MagicMock, patch
 
+from core.repositories.atendimento import clientes
+from core.repositories.funil import leads
 from core.repositories.fluxo.politicas import PoliticaEtapa
 from workers.worker_flow.response_flow.transicoes.eventos import (
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
@@ -52,6 +54,21 @@ def contexto_historico_base(
 
 
 class PersistenciaEssencialTests(unittest.TestCase):
+    def test_repositorio_normaliza_e_atualiza_profissao_do_cliente(self):
+        cursor = MagicMock()
+        cursor.rowcount = 1
+
+        linhas = clientes.atualizar_profissao_cliente(
+            5,
+            "  Trabalhadora autônoma  ",
+            cursor,
+        )
+
+        consulta, parametros = cursor.execute.call_args.args
+        self.assertIn("UPDATE chatbot.cliente", consulta)
+        self.assertEqual(parametros, ("Trabalhadora autônoma", 5))
+        self.assertEqual(linhas, 1)
+
     def test_resposta_normal_persiste_bot_e_avanca_conversa(self):
         cursor = object()
 
@@ -436,7 +453,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 efeitos,
                 "atualizar_profissao_conversa",
                 return_value=1,
-            ) as atualizar_profissao:
+            ) as atualizar_profissao_conversa, patch.object(
+                efeitos,
+                "atualizar_profissao_cliente",
+                return_value=1,
+            ) as atualizar_profissao_cliente:
                 cursor = object()
                 resultado = (
                     efeitos.atualizar_banco_conforme_transicao_de_etapa(
@@ -454,8 +475,13 @@ class PersistenciaEssencialTests(unittest.TestCase):
                     )
                 )
 
-            atualizar_profissao.assert_called_once_with(
+            atualizar_profissao_conversa.assert_called_once_with(
                 10,
+                "Sou engenheiro",
+                cursor,
+            )
+            atualizar_profissao_cliente.assert_called_once_with(
+                5,
                 "Sou engenheiro",
                 cursor,
             )
@@ -488,7 +514,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
             efeitos,
             "atualizar_profissao_conversa",
             return_value=1,
-        ) as atualizar_profissao:
+        ) as atualizar_profissao_conversa, patch.object(
+            efeitos,
+            "atualizar_profissao_cliente",
+            return_value=1,
+        ) as atualizar_profissao_cliente:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
                     id_etapa_atual=4,
@@ -504,12 +534,138 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 cursor,
             )
 
-        atualizar_profissao.assert_called_once_with(
+        atualizar_profissao_conversa.assert_called_once_with(
             10,
             "Trabalho com finanças",
             cursor,
         )
+        atualizar_profissao_cliente.assert_called_once_with(
+            5,
+            "Trabalho com finanças",
+            cursor,
+        )
         self.assertEqual(resultado["profissao"], "Trabalho com finanças")
+
+    def test_conversa_nova_atualiza_cliente_sem_reescrever_snapshot_antigo(self):
+        cursor = object()
+        atualizacoes_conversa = []
+        atualizacoes_cliente = []
+
+        def registrar_conversa(id_conversa, profissao, cursor_recebido):
+            atualizacoes_conversa.append(
+                (id_conversa, profissao, cursor_recebido)
+            )
+            return 1
+
+        def registrar_cliente(id_cliente, profissao, cursor_recebido):
+            atualizacoes_cliente.append(
+                (id_cliente, profissao, cursor_recebido)
+            )
+            return 1
+
+        with patch.object(
+            efeitos,
+            "atualizar_profissao_conversa",
+            side_effect=registrar_conversa,
+        ), patch.object(
+            efeitos,
+            "atualizar_profissao_cliente",
+            side_effect=registrar_cliente,
+        ):
+            for id_conversa, profissao in (
+                (121, "Professora"),
+                (122, "Lavradora"),
+            ):
+                contexto = contexto_historico_base(
+                    id_etapa_atual=4,
+                    status_dependente=False,
+                )
+                contexto["id_conversa"] = id_conversa
+                contexto["id_cliente"] = 111
+
+                efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                    contexto,
+                    {
+                        "id_etapa_resultante": 6,
+                        "evento_transicao": (
+                            EVENTO_PROFISSAO_TITULAR_VALIDA
+                        ),
+                        "profissao": profissao,
+                    },
+                    cursor,
+                )
+
+        self.assertEqual(
+            atualizacoes_conversa,
+            [
+                (121, "Professora", cursor),
+                (122, "Lavradora", cursor),
+            ],
+        )
+        self.assertEqual(
+            atualizacoes_cliente,
+            [
+                (111, "Professora", cursor),
+                (111, "Lavradora", cursor),
+            ],
+        )
+
+    def test_funil_le_profissao_do_snapshot_da_conversa(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (
+            122,
+            1,
+            "Rio Vermelho",
+            False,
+            "Maria",
+            "5571999999999",
+            "maria@example.com",
+            40,
+            "Lavradora",
+            None,
+            None,
+            [],
+        )
+
+        dados = leads.buscar_dados_lead_funil(122, cursor)
+
+        consulta, parametros = cursor.execute.call_args.args
+        self.assertIn("c.profissao", consulta)
+        self.assertNotIn("cl.profissao", consulta)
+        self.assertEqual(parametros, (122,))
+        self.assertEqual(dados["profissao"], "Lavradora")
+
+    def test_falha_ao_atualizar_cliente_interrompe_efeito_da_profissao(self):
+        cursor = object()
+
+        with patch.object(
+            efeitos,
+            "atualizar_profissao_conversa",
+            return_value=1,
+        ) as atualizar_conversa, patch.object(
+            efeitos,
+            "atualizar_profissao_cliente",
+            side_effect=RuntimeError("cliente indisponivel"),
+        ) as atualizar_cliente:
+            with self.assertRaisesRegex(RuntimeError, "cliente indisponivel"):
+                efeitos.atualizar_banco_conforme_transicao_de_etapa(
+                    contexto_historico_base(
+                        id_etapa_atual=4,
+                        texto_cliente="Lavradora",
+                        status_dependente=False,
+                    ),
+                    {
+                        "id_etapa_resultante": 6,
+                        "evento_transicao": (
+                            EVENTO_PROFISSAO_TITULAR_VALIDA
+                        ),
+                        "profissao": "Lavradora",
+                    },
+                    cursor,
+                )
+
+        atualizar_conversa.assert_called_once_with(10, "Lavradora", cursor)
+        atualizar_cliente.assert_called_once_with(5, "Lavradora", cursor)
 
     def test_decisao_de_comentar_so_persiste_quando_ha_recusa_ou_texto(self):
         cursor = object()

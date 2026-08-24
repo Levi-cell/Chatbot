@@ -7,6 +7,7 @@ class Cliente(models.Model):
     waid_telefone = models.CharField(unique=True, max_length=50)
     email = models.CharField(unique=True, max_length=200, blank=True, null=True)
     idade = models.IntegerField(blank=True, null=True)
+    profissao = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
         return self.nome or self.waid_telefone

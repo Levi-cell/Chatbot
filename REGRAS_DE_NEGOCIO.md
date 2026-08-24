@@ -291,6 +291,21 @@ Implementação principal:
   persistir esse dado ela consulta o `status_dependente` final: dependente
   segue para a etapa 5, que pergunta o nome; titular segue para a etapa 6,
   que pergunta a idade. Assim, nenhum fluxo novo pula a profissão.
+- A profissão válida da etapa 4 é salva, na mesma transação, em dois níveis:
+  `conversa.profissao` preserva o snapshot daquele atendimento e
+  `cliente.profissao` é substituída pelo valor válido mais recente informado
+  pelo cliente. Uma conversa posterior nunca reescreve a profissão das
+  conversas anteriores.
+- Antes dessa persistência, o validador rejeita como
+  `profissao_fora_contexto` somente as oito respostas completas já observadas:
+  `Pra minha filha na verdade`, `Não entendi`, `Para meu filho`,
+  `Pra meu filho`, `Minha filha é autista e percebo q ela tem dificuldade no
+  aprendizado , vcs atende autista tambem`, `não seria pra meu filho`,
+  `Meu filho` e `Vc ouviu áudio ou ligação`. A comparação ocorre sobre a frase
+  inteira normalizada, nunca pela presença isolada de palavras como `áudio`,
+  `ligação`, `filho`, `filha` ou `autista`. Quando houver correspondência, a
+  etapa 4 apenas reapresenta a pergunta, sem evento, avanço ou persistência e
+  sem criar uma etapa de confirmação adicional.
 - A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
   etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
@@ -330,7 +345,9 @@ Implementação principal:
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
 - O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
   respostas canônicas da triagem. A profissão da conversa é exibida nas
-  observações; conversas legadas podem apresentá-la como não informada.
+  observações; o Funil não usa `cliente.profissao`, pois ela pode ter sido
+  atualizada por outro atendimento. Conversas legadas podem apresentar a
+  profissão como não informada.
 - As observações apresentam as seis perguntas e suas respostas na ordem das
   etapas 12 a 17. O Funil usa o mesmo catálogo de perguntas do WhatsApp e não
   envia mais o resumo por quantidade de `Nunca`, `Às vezes` e
