@@ -4,6 +4,51 @@ import logging
 logger = logging.getLogger("db.atendimento.historico")
 
 
+def buscar_contexto_saudacao_retorno(
+    id_conversa,
+    id_cliente,
+    cursor,
+):
+    """Busca nome e último envio confirmado do bot na conversa atual."""
+    cursor.execute("""
+        SELECT
+            NULLIF(BTRIM(cl.nome), '') AS nome_cliente,
+            (
+                SELECT hm.received_data_hora
+                FROM chatbot.historico_mensagens hm
+                WHERE hm.id_conversa = cv.id_conversa
+                  AND hm.quem_enviou = 'bot'
+                  AND hm.status_envio = 'sent'
+                ORDER BY
+                    hm.received_data_hora DESC,
+                    hm.id_mensagem DESC
+                LIMIT 1
+            ) AS ultima_mensagem_bot_em
+        FROM chatbot.conversa cv
+        INNER JOIN chatbot.cliente cl
+            ON cl.id_cliente = cv.id_cliente
+        WHERE cv.id_conversa = %s
+          AND cv.id_cliente = %s
+        LIMIT 1;
+    """, (id_conversa, id_cliente))
+
+    resultado = cursor.fetchone()
+    logger.debug(
+        "saudacao_retorno_contexto_consultado | "
+        "acao=buscar_nome_e_ultimo_bot id_conversa=%s id_cliente=%s "
+        "conversa_encontrada=%s ultimo_bot_encontrado=%s",
+        id_conversa,
+        id_cliente,
+        bool(resultado),
+        bool(resultado and resultado[1]),
+    )
+
+    if not resultado:
+        return None, None
+
+    return resultado[0], resultado[1]
+
+
 def buscar_resposta_bot_por_mensagem_cliente(
     id_conversa,
     id_mensagem_fila,

@@ -1,21 +1,45 @@
-"""Fornece o snapshot fictício usado somente pelas sondas manuais do Funil."""
+"""Fornece snapshots fictícios isolados para as sondas do Funil."""
 
 from datetime import datetime
 
 
-def montar_dados_lead_teste():
-    """Monta dados inofensivos sem consultar banco nem executar requisição."""
+def montar_dados_lead_teste_saj():
+    """Monta um lead fictício identificado com a unidade SAJ."""
+    return _montar_dados_lead_teste(
+        id_unidade=1,
+        nome_unidade="Supera Santo Antônio de Jesus",
+        identificador="SAJ",
+    )
+
+
+def montar_dados_lead_teste_rio_vermelho():
+    """Monta um lead fictício identificado com a unidade Rio Vermelho."""
+    return _montar_dados_lead_teste(
+        id_unidade=2,
+        nome_unidade="Supera Rio Vermelho",
+        identificador="Rio Vermelho",
+    )
+
+
+def _montar_dados_lead_teste(
+    *,
+    id_unidade,
+    nome_unidade,
+    identificador,
+):
+    """Monta a estrutura comum sem consultar banco ou executar requisição."""
+    marcador = identificador.casefold().replace(" ", "-")
     return {
         "id_conversa": int(datetime.now().strftime("%m%d%H%M%S")),
-        "id_unidade": 1,
-        "nome_unidade": "Supera Santo Antônio de Jesus",
+        "id_unidade": id_unidade,
+        "nome_unidade": nome_unidade,
         "status_dependente": True,
-        "nome_cliente": "Edcarlos Teste - Não contatar",
+        "nome_cliente": f"Edcarlos Teste {identificador} - Não contatar",
         "telefone_cliente": "5571994111866",
-        "email_cliente": "edcaspfilho+teste@gmail.com",
+        "email_cliente": f"edcaspfilho+teste-{marcador}@gmail.com",
         "idade_cliente": None,
         "profissao": "Engenheiro",
-        "nome_dependente": "Enzo Teste",
+        "nome_dependente": f"Enzo Teste {identificador}",
         "idade_dependente": 12,
         "triagem_respostas": [
             {"id_etapa": 12, "resposta": "nunca"},

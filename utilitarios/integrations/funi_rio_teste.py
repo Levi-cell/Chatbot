@@ -16,7 +16,9 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.integrations.funil.cliente import enviar_oportunidade
 from core.integrations.funil.oportunidades import montar_payload_oportunidade
-from utilitarios.montar_lead_teste import montar_dados_lead_teste
+from utilitarios.montar_lead_teste import (
+    montar_dados_lead_teste_rio_vermelho,
+)
 
 
 # ============================================================
@@ -46,7 +48,7 @@ def montar_payload_oportunidade_teste():
     definido em utilitarios.montar_lead_teste.
     """
 
-    dados_lead = montar_dados_lead_teste()
+    dados_lead = montar_dados_lead_teste_rio_vermelho()
 
     return montar_payload_oportunidade(dados_lead)
 
@@ -169,7 +171,7 @@ def main(argv=None):
     ) as exc:
 
         print(
-            f"FUNIL_PROBE_FALHOU: "
+            f"FUNIL_RIO_FALHOU: "
             f"{type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
@@ -178,12 +180,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(
-        main([
-            "send-test",
-            "--confirm-real-send",
-        ])
-    )
-
-# if __name__ == "__main__":
-#     raise SystemExit(main())
+    raise SystemExit(main())

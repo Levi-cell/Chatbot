@@ -85,6 +85,11 @@ conversa. As etapas 18 a 22 são marcadas como
 e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
 30 dias são exclusivos da política da etapa 22.
 
+Cada unidade também possui `suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE` e
+`email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`. A primeira flag encaminha
+titulares de 60 a 99 anos ao comercial sem bloqueio; a segunda controla a
+coleta de e-mail, preservando a exceção universal do titular 60+.
+
 A migração incremental que insere a confirmação como etapa 3 e remapeia as
 referências existentes está em
 `deploy/migrations/20260809_adicionar_confirmacao_etapa3.sql`. Ela deve ser
@@ -101,6 +106,12 @@ A migração que adiciona `cliente.profissao` está em
 `deploy/migrations/20260823_adicionar_profissao_cliente.sql`. Ela mantém
 `conversa.profissao` como snapshot e preenche o cadastro com a profissão não
 vazia da conversa mais recente de cada cliente.
+
+A migração que adiciona as duas políticas da unidade e amplia o domínio de
+`conversa.motivo_encerramento` está em
+`deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`.
+Ela altera somente o schema, aceita reexecução no estado final e não executa
+`UPDATE` nem `INSERT` sobre os dados de negócio.
 
 A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
 apresentação configurável do agente está em

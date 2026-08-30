@@ -12,6 +12,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
     enviar_etapa6_dependente_midia,
     enviar_etapa6_dependente_reforco_escolar,
     enviar_etapa6_idade_acima_99,
+    enviar_etapa6_suporte_idoso,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa7 import (
     enviar_etapa7_cliente,
@@ -48,6 +49,7 @@ logger = logging.getLogger("worker.etapa6")
 MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
 MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+MOTIVO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 
 
 def resolve_etapa6(contexto_historico):
@@ -60,6 +62,10 @@ def resolve_etapa6(contexto_historico):
         contexto_historico.get("status_dependente")
     )
     bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
+    suporte_idoso = contexto_historico.get(
+        "suporte_idoso_unidade",
+        False,
+    )
     nome_dependente = contexto_historico.get("nome_dependente")
     nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
@@ -132,6 +138,25 @@ def resolve_etapa6(contexto_historico):
         )
 
     idade = resultado_idade.idade
+
+    if not isinstance(suporte_idoso, bool):
+        raise ValueError(
+            "Configuração suporte_idoso ausente ou inválida no contexto"
+        )
+
+    # A regra de 100+ já foi resolvida acima. O suporte especializado só
+    # alcança o próprio titular no intervalo aprovado de 60 a 99 anos.
+    if not status_dependente and idade >= 60 and suporte_idoso:
+        contexto_envio = enviar_etapa6_suporte_idoso(
+            cliente_telefone,
+            phone_id_unidade,
+            contexto_historico.get("numero_comercial_unidade"),
+        )
+        return _anexar_encerramento(
+            contexto_envio,
+            idade,
+            MOTIVO_SUPORTE_IDOSO,
+        )
 
     if not status_dependente and idade < 18:
         contexto_envio = enviar_etapa6_cliente_menor_18(

@@ -175,6 +175,8 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
+            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
@@ -278,7 +280,8 @@ def criar_tabelas():
                     motivo_encerramento IS NULL
                     OR motivo_encerramento IN (
                         'idade_invalida',
-                        'foi_agendado'
+                        'foi_agendado',
+                        'encaminhado_suporte_idoso'
                     )
                 ),
 

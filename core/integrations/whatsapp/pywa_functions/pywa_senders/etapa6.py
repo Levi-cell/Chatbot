@@ -1,11 +1,10 @@
 import logging
-import re
-
 from pywa.types import URLButton
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.etapa6_messages import (
     montar_botao_idade_acima_99_etapa6,
+    montar_botao_suporte_idoso_etapa6,
     montar_mensagem_cliente_menor_18_etapa6,
     montar_mensagem_contexto_idade_dependente_invalida_etapa6,
     montar_mensagem_contexto_idade_invalida_etapa6,
@@ -19,6 +18,10 @@ from core.integrations.whatsapp.messages.etapa6_messages import (
     montar_mensagem_idade_etapa6_financeiro,
     montar_mensagem_idade_etapa6_midia,
     montar_mensagem_idade_etapa6_reforco_escolar,
+    montar_mensagem_suporte_idoso_etapa6,
+)
+from core.integrations.whatsapp.numero_comercial import (
+    montar_link_numero_comercial_whatsapp,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -248,7 +251,7 @@ def enviar_etapa6_idade_acima_99(
     mensagem_bot = montar_mensagem_idade_acima_99_etapa6()
     botao_url = URLButton(
         title=montar_botao_idade_acima_99_etapa6(),
-        url=_montar_link_whatsapp_numero_comercial(numero_comercial),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial),
     )
 
     return _enviar_texto_etapa6(
@@ -256,6 +259,26 @@ def enviar_etapa6_idade_acima_99(
         phone_id_unidade,
         mensagem_bot,
         evento="enviar_etapa6_idade_acima_99",
+        botao_url=botao_url,
+    )
+
+
+def enviar_etapa6_suporte_idoso(
+    cliente_telefone,
+    phone_id_unidade,
+    numero_comercial,
+):
+    mensagem_bot = montar_mensagem_suporte_idoso_etapa6()
+    botao_url = URLButton(
+        title=montar_botao_suporte_idoso_etapa6(),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial),
+    )
+
+    return _enviar_texto_etapa6(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa6_suporte_idoso",
         botao_url=botao_url,
     )
 
@@ -328,18 +351,3 @@ def _enviar_texto_etapa6(
             phone_id_unidade=phone_id_unidade,
             cliente_telefone=cliente_telefone,
         ) from erro
-
-
-def _montar_link_whatsapp_numero_comercial(numero_comercial):
-    """Converte o número da unidade para o formato internacional do wa.me."""
-    numero = re.sub(r"\D", "", str(numero_comercial or ""))
-
-    if len(numero) in {10, 11}:
-        numero = f"55{numero}"
-
-    if not numero.startswith("55") or len(numero) not in {12, 13}:
-        raise ValueError(
-            "Número comercial da unidade inválido para link do WhatsApp"
-        )
-
-    return f"https://wa.me/{numero}"

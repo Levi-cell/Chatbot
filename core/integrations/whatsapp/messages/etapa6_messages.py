@@ -176,3 +176,24 @@ def montar_mensagem_idade_acima_99_etapa6():
 
 def montar_botao_idade_acima_99_etapa6():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA6
+
+
+### TITULAR DE 60 A 99 ANOS COM SUPORTE ESPECIALIZADO ATIVO
+
+MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
+    "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
+    "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
+    "nossa equipe comercial.\n\n"
+    "Vou te passar o contato para continuar o atendimento. Basta clicar "
+    "no botão abaixo."
+)
+
+BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar com Comercial"
+
+
+def montar_mensagem_suporte_idoso_etapa6():
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA6
+
+
+def montar_botao_suporte_idoso_etapa6():
+    return BOTAO_SUPORTE_IDOSO_ETAPA6

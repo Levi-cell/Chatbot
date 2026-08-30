@@ -20,7 +20,8 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             c.profissao,
             d.nome_dependente,
             d.idade AS idade_dependente,
-            triagem.respostas
+            triagem.respostas,
+            coleta_email.conteudo_texto AS resposta_email_conversa
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -46,6 +47,26 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             WHERE r.id_conversa = c.id_conversa
               AND r.id_etapa BETWEEN 12 AND 17
         ) AS triagem
+        LEFT JOIN LATERAL (
+            SELECT mensagem_cliente.conteudo_texto
+            FROM chatbot.historico_mensagens mensagem_bot
+            JOIN chatbot.historico_mensagens mensagem_cliente
+              ON mensagem_cliente.id_conversa = mensagem_bot.id_conversa
+             AND mensagem_cliente.quem_enviou = 'cliente'
+             AND mensagem_cliente.id_etapa = 10
+             AND mensagem_cliente.id_mensagem_fila
+                 = mensagem_bot.id_mensagem_fila
+             AND mensagem_cliente.id_hash_msg
+                 = mensagem_bot.id_hash_cliente_origem
+            WHERE mensagem_bot.id_conversa = c.id_conversa
+              AND mensagem_bot.quem_enviou = 'bot'
+              AND mensagem_bot.status_envio = 'sent'
+              AND mensagem_bot.id_etapa = 11
+            ORDER BY
+                mensagem_bot.received_data_hora DESC,
+                mensagem_bot.id_mensagem DESC
+            LIMIT 1
+        ) AS coleta_email ON TRUE
         WHERE c.id_conversa = %s
           AND etapa_atual.elegivel_funil = TRUE
           AND c.lead_no_funil IS NOT TRUE
@@ -71,4 +92,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         "nome_dependente": resultado[9],
         "idade_dependente": resultado[10],
         "triagem_respostas": resultado[11],
+        "resposta_email_conversa": (
+            resultado[12] if len(resultado) > 12 else None
+        ),
     }

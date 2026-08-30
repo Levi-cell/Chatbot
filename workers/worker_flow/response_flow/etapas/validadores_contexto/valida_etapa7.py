@@ -28,6 +28,25 @@ PADRAO_RESPOSTA_NEGATIVA = re.compile(
     r")"
 )
 
+# Pedidos informativos precisam prevalecer sobre palavras positivas genéricas.
+# Os padrões usam construções completas para não invalidar "quero", "gostaria"
+# e outras confirmações curtas quando elas aparecem sozinhas.
+PADRAO_PEDIDO_INFORMACOES = re.compile(
+    r"(?:"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?"
+    r"(?:\s+(?:receber|ter|obter))?"
+    r"(?:\s+(?:mais|alguma|algumas))?"
+    r"\s+(?:informacoes?|detalhes?|explicacoes?|esclarecimentos?)\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+(?:saber|entender)\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+tirar\s+(?:uma\s+|algumas?\s+)?duvidas?\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+(?:fazer\s+(?:uma\s+)?perguntas?|perguntar)\b"
+    r")"
+)
+
 PADRAO_RESPOSTA_POSITIVA = re.compile(
     r"(?:"
     r"\bsim\b|"
@@ -89,6 +108,11 @@ def validar_etapa7(conteudo_texto):
 
     # A negação prevalece mesmo quando a frase também contém termo positivo.
     if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):
+        return None
+
+    # "Sim" ou "quero" não representam aceite quando compõem um pedido de
+    # informação, como em "sim, quero mais informações".
+    if PADRAO_PEDIDO_INFORMACOES.search(texto_normalizado):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_QUERO_AGENDAR:

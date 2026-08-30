@@ -1,26 +1,45 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
 > Documento de implementação preparado sobre a baseline funcional V1.0.7,
-> commit `c248155`, acrescida do delta funcional pré-`user_id` de profissão. A
-> pasta local `utilitarios/` e todos os seus arquivos ficam
-> integralmente fora deste plano: nenhum passo os cria, substitui, remove, importa
-> ou executa. Este arquivo não altera o runtime; ele registra o estado final
-> completo a aplicar em uma tarefa futura.
+> commit completo `2bc41888db4987e957c5653825acf4a55e9d611d`, acrescida do
+> estado funcional pré-`user_id` auditado em 29/08/2026. Ele inclui profissão, saudação
+> de retorno, proteção contextual da oferta, suporte ao idoso, política de e-mail
+> e o rótulo `Começar triagem`. Este arquivo não altera o runtime; ele registra o
+> estado final completo a aplicar em uma tarefa futura.
 >
 > A baseline já possui `unidade.nome_unidade`, `unidade.nome_agente` e
 > `unidade.genero`. O estado final abaixo preserva essas colunas, suas constraints
 > e as apresentações iniciais dinâmica padrão, de mídia, financeira e de reforço
 > escolar da etapa 1. Esses dados editoriais não participam da identidade, turno,
 > lock, fila, cache, anti-flood, reconciliação ou atomicidade.
-> O commit-base V1.0.7 `c248155` já possui `conversa.profissao` como snapshot,
-> mas ainda não possui `cliente.profissao`. Antes da feature de `user_id`, o
-> delta funcional `20260823_adicionar_profissao_cliente.sql` adiciona
-> `cliente.profissao VARCHAR(100) NULL` e faz seu backfill inicial. A migração de
-> `user_id` exige esse estado prévio e preserva ambas as colunas; ela não repete
-> o `ADD` nem o backfill. O mesmo estado pré-`user_id` já contém a proteção
+> O commit-base V1.0.7 `2bc41888db4987e957c5653825acf4a55e9d611d` já possui
+> `conversa.profissao` como snapshot, `cliente.profissao` como valor canônico
+> mais recente e a migração versionada
+> `20260823_adicionar_profissao_cliente.sql`, responsável por materializar a
+> coluna do cliente e seu backfill no banco existente. A migração de `user_id`
+> exige que esse componente da própria baseline já esteja aplicado e preserva
+> ambas as colunas; ela não repete o `ADD` nem o backfill. O mesmo estado
+> pré-`user_id` já contém a proteção
 > literal do validador de profissão: somente as oito respostas completas fora
 > de contexto observadas são recusadas após normalização e repetem a própria
 > etapa, sem filtro por palavras, novo evento ou persistência.
+> O mesmo estado pré-`user_id` contém a saudação aditiva de retorno: depois que
+> a etapa 1 foi concluída, uma mensagem recebida `>= 3 horas` após o último
+> envio `sent` do bot na mesma `id_conversa` recebe `Olá novamente, {nome}!`
+> como prefixo da resposta normal. Ela não cria etapa, envio ou histórico
+> separado, não altera a barreira idempotente da V1.0.7 e não exige DDL: a
+> consulta reutiliza o histórico e seu índice cronológico por conversa.
+> O estado pré-`user_id` também exige a migração
+> `20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, com
+> `unidade.suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
+> `unidade.email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE` e o motivo
+> `encaminhado_suporte_idoso`. O plano preserva a lógica de titular 60–99,
+> encerramento sem bloqueio, classificação de e-mail opcional e reconstrução
+> histórica no Funil. Ele não recria as duas colunas nem altera seus valores.
+> A proteção de oferta que recusa pedidos como `quero mais informações`, sem
+> recusar confirmações curtas como `quero`, migra da etapa atual 7 para a futura
+> 8. A introdução atual da triagem migra para a futura etapa 12 com o texto
+> iniciado por `Certo, antes...` e o botão `Começar triagem`.
 
 > **Regra de negócio da numeração:** a tabela `etapa` representa, em ordem
 > cronológica, o percurso integral do cliente elegível a todas as etapas. Por
@@ -35,11 +54,15 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
-- Antes de aplicar, confirmar `c248155` como ancestral da baseline, confirmar o
-  delta versionado `20260823_adicionar_profissao_cliente.sql` já materializado e
+- Antes de aplicar, confirmar
+  `2bc41888db4987e957c5653825acf4a55e9d611d` como ancestral da baseline,
+  confirmar a migração versionada
+  `20260823_adicionar_profissao_cliente.sql` e o delta
+  `20260829_adicionar_suporte_idoso_email_obrigatorio.sql` já materializados e
   gerar um manifesto SHA-256 do estado pré-`user_id` resultante. Recusar qualquer
-  árvore divergente. A pasta local `utilitarios/` não participa do manifesto nem
-  da aplicação.
+  árvore divergente. Utilitários executáveis que consultam colunas/etapas
+  renomeadas participam do manifesto e recebem passos completos; artefatos
+  gerados em `monitoramento/`, `output/` e `tmp/` permanecem fora.
 - Preservar as fronteiras transacionais, retries, ordem do worker, idempotência e contratos descritos no plano teórico.
 - Não executar o SQL antes de todo o código estar revisado, testado e pronto para publicação.
 - O último passo contém tanto o arquivo versionado da migração quanto o comando manual integral para execução no DBeaver.
@@ -47,6 +70,16 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - Este plano será aplicado e validado primeiro em ambiente dev controlado. Por
   decisão de escopo, não cria kill switch nem SQL inverso e não autoriza mudar
   os pontos, a ordem ou a semântica dos `rollback()` atuais do `flow_worker`.
+- Arquivos atuais que não recebem um passo explícito permanecem byte a byte como
+  estão na baseline pré-`user_id`; aplicar o plano não autoriza apagá-los nem
+  restaurá-los pelo commit-base. Isso inclui os auxiliares já implementados
+  `core/integrations/whatsapp/numero_comercial.py`,
+  `core/validacoes/__init__.py` e `core/validacoes/email.py`, usados pelos blocos
+  finais de suporte ao idoso e política de e-mail. Também permanecem intactos os
+  utilitários e testes atuais que não dependem de nomes físicos ou IDs de etapas
+  migrados. A migração `20260829_adicionar_suporte_idoso_email_obrigatorio.sql`
+  é pré-requisito já aplicado, não um artefato a recriar pela migração de
+  `user_id`.
 
 ## Garantias de arquitetura, legibilidade e comentários
 
@@ -59,8 +92,23 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
   valor de forma idempotente e a transação externa confirma ou desfaz as duas
   escritas em conjunto.
 - Nenhum sender, validador ou resolver recebe autorização para fazer `commit`, reconciliar clientes ou promover um WA ID candidato.
+- A saudação de retorno usa o horário original do evento atual e o último envio
+  `sent` do bot na mesma conversa; atividade em outra unidade não interfere. O
+  cálculo é inclusivo em três horas e só ocorre depois da etapa 1, com nome já
+  validado e persistido.
+- A saudação é prefixada na única mensagem que o fluxo já enviaria, tanto no
+  avanço válido quanto no tratamento inválido. Nome ou timestamps ausentes e
+  falhas na composição apenas preservam a resposta normal. O retry que já possui
+  resposta exata sai pela barreira idempotente antes de qualquer composição ou
+  sender.
 - Comentários novos explicam invariantes, riscos e o motivo de uma decisão. Eles não narram linha por linha nem escondem regra de negócio em comentário.
-- Nomes de módulos, funções, constantes e etapas de runtime acompanham a numeração final. Imports legados e aliases mortos do runtime são removidos; `utilitarios/` permanece intocado.
+- O suporte especializado conserva a precedência de idade acima de 99, alcança
+  apenas titular de 60 a 99 anos quando a flag está ativa, persiste a idade,
+  encerra sem bloqueio e é reconstruído pela resposta histórica no retry.
+- A futura etapa 11 conserva mídia -> reforço -> financeiro -> política de
+  e-mail; respostas opcionais continuam na aresta técnica `email_valido`, mas
+  gravam endereço ou `NULL` segundo a classificação transportada/reconstruída.
+- Nomes de módulos, funções, constantes e etapas de runtime acompanham a numeração final. Imports legados e aliases mortos do runtime são removidos; utilitários consumidores do schema acompanham os mesmos nomes e IDs.
 - Dicionários de contexto como `identidade_do_item`, `wa_id_compartilhado` e `wa_id_canonico` são contratos de runtime, não novas colunas com esses nomes.
 
 ## Continuidade anti-flood na promoção de identidade
@@ -88,25 +136,34 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 
 ## Estado dos dados na migração
 
-- Na baseline V1.0.7 (`c248155`) do projeto, `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna `VARCHAR(100) NOT NULL` de `unidade`.
+- Na baseline V1.0.7 derivada de
+  `2bc41888db4987e957c5653825acf4a55e9d611d`,
+  `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna
+  `VARCHAR(100) NOT NULL` de `unidade`.
 - O “mapa de `id_portfolio`” não é outra tabela: é somente a lista de pares `(id_unidade, id_portfolio)` usada para preencher cada unidade que já existe antes de aplicar `NOT NULL`.
 - O valor de portfolio de cada unidade precisa ser conferido com a Meta. O gate detecta unidade ausente ou valor vazio, mas não consegue provar que um número não vazio pertence semanticamente à unidade correta.
 - Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
 - Novas colunas opcionais de `user_id` e `username` começam `NULL` nos registros antigos. Colunas de WA ID apenas renomeadas preservam seus dados.
-- `conversa.profissao VARCHAR(100) NULL` já pertence ao commit-base V1.0.7;
-  `cliente.profissao VARCHAR(100) NULL` pertence ao delta funcional aplicado
-  antes de `user_id`. Depois desse pré-requisito, a migração de `user_id`
+- `conversa.profissao VARCHAR(100) NULL`, `cliente.profissao VARCHAR(100) NULL`
+  e a migração que materializa a coluna do cliente já pertencem ao commit-base
+  V1.0.7. Depois de confirmar esse pré-requisito no banco, a migração de `user_id`
   fotografa os dois conjuntos de valores e prova no pós-flight que nenhum
   cadastro ou snapshot foi alterado; não existe `ADD COLUMN profissao` nesse SQL.
 - Há duas exceções deliberadas ao “tudo novo fica NULL”: `unidade.id_portfolio` é preenchida e torna-se obrigatória; `conversa.wa_id` é preenchida a partir do WA canônico do cliente para que conversas antigas continuem enviando com identidade canônica.
 - `chatbot.user_id_cliente` nasce vazia: não existe `user_id` histórico confiável para inventar ou retropreencher.
+- `suporte_idoso`, `email_obrigatorio` e seus valores atuais são fotografados no
+  preflight e provados no pós-flight; a migração de `user_id` não os recria,
+  não os redefine e não executa atualização de dados nessas colunas.
 
 ## Inventário preparado
 
-- Arquivos finais criados: 21
-- Arquivos finais substituídos: 131
-- Arquivos removidos: 8
-- Total de ações, incluindo a migração: 160
+- Arquivos finais criados: 22
+- Arquivos finais substituídos: 141
+- Arquivos removidos: 9
+- Total de ações, incluindo a migração: 172
+- Os rótulos aditivos `34A`, `97A`, `150A` a `150F` e `159A` a `159D`
+  preservam a numeração já revisada dos passos seguintes; cada um representa
+  uma ação real no total acima.
 - Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
   `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
   identidade/anti-flood/apresentação/profissão e descoberta offline completa. A
@@ -160,7 +217,7 @@ pelos serviços.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `c6eba1f4f719784fa219518075a4fff4b4f974b957d3c20904638904c6c7fa58`
+SHA-256 do conteúdo UTF-8 normalizado: `eb5e8994e1b625c5573649b1e0a99b975554db10f8d221b65fdd62e33e58291c`
 
 ````python
 import logging
@@ -185,6 +242,9 @@ from core.integrations.whatsapp.tools.usuarios import (
 )
 from core.integrations.whatsapp.tools.validando_phone_waba import (
     validar_phone_number_id_da_waba,
+)
+from core.integrations.whatsapp.numero_comercial import (
+    numero_comercial_whatsapp_valido,
 )
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
@@ -307,6 +367,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "cnpj",
         "telefone",
         "numero_comercial",
+        "suporte_idoso",
+        "email_obrigatorio",
         "email_responsavel",
         "waba_id",
         "phone_number_id",
@@ -331,7 +393,13 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_instagram",
     )
 
-    list_filter = ("genero", "bpa_ativo", "status_pagamento")
+    list_filter = (
+        "genero",
+        "bpa_ativo",
+        "suporte_idoso",
+        "email_obrigatorio",
+        "status_pagamento",
+    )
     ordering = ("nome_unidade",)
 
     list_per_page = 50
@@ -387,6 +455,18 @@ class UnidadeAdmin(admin.ModelAdmin):
         class UnidadeAdminForm(base_form):
             def _post_clean(self):
                 super()._post_clean()
+
+                if (
+                    self.cleaned_data.get("suporte_idoso")
+                    and not numero_comercial_whatsapp_valido(
+                        self.cleaned_data.get("numero_comercial")
+                    )
+                ):
+                    self.add_error(
+                        "numero_comercial",
+                        "Informe um número comercial brasileiro válido "
+                        "antes de ativar o suporte ao idoso.",
+                    )
 
                 if change or self.errors:
                     if change and not self.errors:
@@ -1643,7 +1723,7 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b6f4fdca544ad37accddb0722d2fb2ac6098a863bc30cbd63e8e29e8ab46158a`
+SHA-256 do conteúdo UTF-8 normalizado: `c28622e3c85ee8ef98d46fadc1f41f79acf9cfdf14ba2913cdc228b351a866c7`
 
 ````python
 from django.db import models
@@ -1732,6 +1812,10 @@ class Conversa(models.Model):
         choices=[
             ("idade_invalida", "Idade inválida"),
             ("foi_agendado", "Foi agendado"),
+            (
+                "encaminhado_suporte_idoso",
+                "Encaminhado ao suporte ao idoso",
+            ),
             ("ativou_privacidade", "Ativou privacidade"),
             ("bloqueio_reconciliado", "Bloqueio reconciliado"),
         ],
@@ -1930,6 +2014,21 @@ class Unidade(models.Model):
         max_length=30,
         blank=True,
         null=True,
+    )
+    suporte_idoso = models.BooleanField(
+        "suporte ao idoso",
+        default=False,
+        help_text=(
+            "Encaminha titulares de 60 a 99 anos ao contato comercial e "
+            "encerra o atendimento sem bloqueio."
+        ),
+    )
+    email_obrigatorio = models.BooleanField(
+        "e-mail obrigatório",
+        default=True,
+        help_text=(
+            "Exige um e-mail válido, exceto do titular com 60 anos ou mais."
+        ),
     )
     waba_id = models.CharField(
         unique=True,
@@ -2140,7 +2239,7 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d6a031e7db71a984b9ca2fb77de570cf78b838014d250abdf25c0543d9829a2d`
+SHA-256 do conteúdo UTF-8 normalizado: `d8c391dc930b10cef50c78a815234819028a0b62f632dd429f76a81908524c58`
 
 ````python
 import logging
@@ -2332,6 +2431,8 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
+            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
@@ -2476,6 +2577,7 @@ def criar_tabelas():
                     OR motivo_encerramento IN (
                         'idade_invalida',
                         'foi_agendado',
+                        'encaminhado_suporte_idoso',
                         'ativou_privacidade',
                         'bloqueio_reconciliado'
                     )
@@ -3270,7 +3372,7 @@ def criar_indices_turno_cliente():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5c1834ad29dcb3ad9d61baf3edd25f15a8b590b055e67d53266932e3481b2ef9`
+SHA-256 do conteúdo UTF-8 normalizado: `b1a49de6ca944251ef7dec208a8bb2749c1942ce724fb16332998935089567eb`
 
 ````markdown
 # Banco de dados
@@ -3375,11 +3477,12 @@ Ela troca somente o catálogo de transições, aceita reexecução no estado fin
 não retrocede conversas que já passaram pela profissão.
 
 A migração que adiciona `cliente.profissao` está em
-`deploy/migrations/20260823_adicionar_profissao_cliente.sql`. Ela é um delta
-funcional obrigatório sobre a baseline V1.0.7, mantém `conversa.profissao` como
-snapshot e preenche o cadastro com a profissão não vazia da conversa mais
-recente de cada cliente. A migração posterior de `user_id` apenas exige esse
-estado; ela não repete o `ADD COLUMN` nem o backfill.
+`deploy/migrations/20260823_adicionar_profissao_cliente.sql` e já integra o
+commit-base V1.0.7. No banco existente, ela precisa estar materializada antes de
+`user_id`: mantém `conversa.profissao` como snapshot e preenche o cadastro com a
+profissão não vazia da conversa mais recente de cada cliente. A migração
+posterior de `user_id` apenas exige esse estado; ela não repete o `ADD COLUMN`
+nem o backfill.
 
 A migração que renomeia `unidade.nome` para `nome_unidade` e adiciona a
 apresentação configurável do agente está em
@@ -8354,7 +8457,7 @@ def _normalizar_cliente(registro):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `c0fe9fa0412564a28ac7b173cb06d21f69a03984303b942e3da3db15f13877b3`
+SHA-256 do conteúdo UTF-8 normalizado: `31d0b505f3ac8a7d1a3f26efec189d0fef3172734f0db5e3b0c98acbd747a8f6`
 
 ````python
 import logging
@@ -8367,6 +8470,7 @@ ETAPA_INICIAL = 1
 MOTIVOS_ENCERRAMENTO_VALIDOS = {
     "idade_invalida",
     "foi_agendado",
+    "encaminhado_suporte_idoso",
     "ativou_privacidade",
     "bloqueio_reconciliado",
 }
@@ -9416,7 +9520,7 @@ def deletar_mensagem_se_max_retry(id_mensagem, max_retry, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `30cabef262b2978c5e51ff59f98be1239fc6dc8d4469ff85d1137ab6e341e0b6`
+SHA-256 do conteúdo UTF-8 normalizado: `dfe6e7b3c83d699026a640ca48ba5802891f21ac4aec2b9a01c7d7d27536e95b`
 
 ````python
 import logging
@@ -9442,6 +9546,51 @@ CAMPOS_HISTORICO = """
     quem_enviou,
     status_envio
 """
+
+
+def buscar_contexto_saudacao_retorno(
+    id_conversa,
+    id_cliente,
+    cursor,
+):
+    """Busca nome e último envio confirmado do bot na conversa atual."""
+    cursor.execute("""
+        SELECT
+            NULLIF(BTRIM(cl.nome), '') AS nome_cliente,
+            (
+                SELECT hm.received_data_hora
+                FROM chatbot.historico_mensagens hm
+                WHERE hm.id_conversa = cv.id_conversa
+                  AND hm.quem_enviou = 'bot'
+                  AND hm.status_envio = 'sent'
+                ORDER BY
+                    hm.received_data_hora DESC,
+                    hm.id_mensagem DESC
+                LIMIT 1
+            ) AS ultima_mensagem_bot_em
+        FROM chatbot.conversa cv
+        INNER JOIN chatbot.cliente cl
+            ON cl.id_cliente = cv.id_cliente
+        WHERE cv.id_conversa = %s
+          AND cv.id_cliente = %s
+        LIMIT 1;
+    """, (id_conversa, id_cliente))
+
+    resultado = cursor.fetchone()
+    logger.debug(
+        "saudacao_retorno_contexto_consultado | "
+        "acao=buscar_nome_e_ultimo_bot id_conversa=%s id_cliente=%s "
+        "conversa_encontrada=%s ultimo_bot_encontrado=%s",
+        id_conversa,
+        id_cliente,
+        bool(resultado),
+        bool(resultado and resultado[1]),
+    )
+
+    if not resultado:
+        return None, None
+
+    return resultado[0], resultado[1]
 
 
 def buscar_resposta_bot_por_mensagem_cliente(
@@ -10562,15 +10711,129 @@ def resolver_destinatario_sender(
     )
 ````
 
+## Passo 34A — `core/integrations/whatsapp/pywa_functions/cliente.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. O cliente
+continua sendo criado do mesmo modo; o proxy existe somente durante o escopo de
+uma saudação e intercepta os dois transportes textuais usados pelo plano,
+`send_message` e `request_contact_info`.
+
+SHA-256 do conteúdo UTF-8 normalizado: `694da243a08f26c5686d4537c12f1a006dfde1100e5e35cc7882a33578809269`
+
+````python
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+from pywa import WhatsApp
+
+from core.integrations.whatsapp.tools.config import (
+    TOKEN_USUARIO_META,
+    get_meta_graph_api_version,
+)
+
+
+_PREFIXO_MENSAGEM_BOT = ContextVar(
+    "prefixo_mensagem_bot",
+    default=None,
+)
+
+
+def conta_wa(phone_id, token=TOKEN_USUARIO_META):
+    phone_id = _normalizar_phone_id(phone_id)
+
+    cliente = WhatsApp(
+        token=token,
+        phone_id=phone_id,
+        api_version=get_meta_graph_api_version(),
+    )
+
+    if _PREFIXO_MENSAGEM_BOT.get():
+        return _ClienteWhatsAppComPrefixo(cliente)
+
+    return cliente
+
+
+@contextmanager
+def usar_prefixo_mensagem_bot(prefixo):
+    """Limita o prefixo à resolução corrente, inclusive sob exceção."""
+    prefixo_normalizado = prefixo if isinstance(prefixo, str) else None
+    token = _PREFIXO_MENSAGEM_BOT.set(prefixo_normalizado or None)
+
+    try:
+        yield
+    finally:
+        _PREFIXO_MENSAGEM_BOT.reset(token)
+
+
+def aplicar_prefixo_mensagem_bot(texto, prefixo=None):
+    prefixo = prefixo if prefixo is not None else _PREFIXO_MENSAGEM_BOT.get()
+
+    if not prefixo or not isinstance(texto, str):
+        return texto
+
+    if texto.startswith(prefixo):
+        return texto
+
+    return f"{prefixo}{texto}"
+
+
+class _ClienteWhatsAppComPrefixo:
+    """Decora textos enviados no escopo corrente do flow sender."""
+
+    def __init__(self, cliente):
+        self._cliente = cliente
+
+    def send_message(self, *args, **kwargs):
+        return self._enviar_com_prefixo(
+            self._cliente.send_message,
+            args,
+            kwargs,
+        )
+
+    def request_contact_info(self, *args, **kwargs):
+        return self._enviar_com_prefixo(
+            self._cliente.request_contact_info,
+            args,
+            kwargs,
+        )
+
+    @staticmethod
+    def _enviar_com_prefixo(metodo, args, kwargs):
+        if "text" in kwargs:
+            kwargs = dict(kwargs)
+            kwargs["text"] = aplicar_prefixo_mensagem_bot(kwargs["text"])
+
+        return metodo(*args, **kwargs)
+
+    def __getattr__(self, nome):
+        return getattr(self._cliente, nome)
+
+
+def _normalizar_phone_id(phone_id):
+    if phone_id is None:
+        raise ValueError("phone_id da unidade nao informado")
+
+    phone_id = str(phone_id).strip()
+
+    if not phone_id:
+        raise ValueError("phone_id da unidade vazio")
+
+    return phone_id
+````
+
 ## Passo 35 — `workers/worker_flow/response_flow/flow_sender.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0ebae6a5816268fdff6749cd2b7d2073437c23a51d0fd37e9cf97bb214017891`
+SHA-256 do conteúdo UTF-8 normalizado: `d6a7cb1d7d7d5527e9123949f12a09c5d404d840fdd2c62373185b3d0005ad50`
 
 ````python
 import logging
 
+from core.integrations.whatsapp.pywa_functions.cliente import (
+    aplicar_prefixo_mensagem_bot,
+    usar_prefixo_mensagem_bot,
+)
 from workers.worker_flow.response_flow.etapas.resolver_etapa1 import resolve_etapa1
 from workers.worker_flow.response_flow.etapas.resolver_etapa2 import resolve_etapa2
 from workers.worker_flow.response_flow.etapas.resolver_etapa3 import resolve_etapa3
@@ -10697,8 +10960,7 @@ def flow_sender(contexto_historico):
             retry_count,
         )
 
-    etapa_resolver = 1 if id_etapa_atual is None else id_etapa_atual
-    resolver = RESOLVERS.get(etapa_resolver)
+    resolver = _buscar_resolver_etapa(id_etapa_atual)
     if resolver is None:
         # A etapa 23 é terminal e não possui resolver.
         logger.warning(
@@ -10711,8 +10973,25 @@ def flow_sender(contexto_historico):
             f"Sender da etapa atual {id_etapa_atual} ainda nao implementado"
         )
 
-    contexto_envio = resolver(contexto_historico)
+    saudacao_retorno = contexto_historico.get("saudacao_retorno")
+
+    with usar_prefixo_mensagem_bot(saudacao_retorno):
+        contexto_envio = resolver(contexto_historico)
+
+    if saudacao_retorno and contexto_envio.get("mensagem_bot"):
+        contexto_envio = dict(contexto_envio)
+        contexto_envio["mensagem_bot"] = aplicar_prefixo_mensagem_bot(
+            contexto_envio["mensagem_bot"],
+            saudacao_retorno,
+        )
+        contexto_envio["saudacao_retorno_aplicada"] = True
+
     return _anexar_identidades(contexto_envio, contexto_historico)
+
+
+def _buscar_resolver_etapa(id_etapa_atual):
+    etapa_resolver = 1 if id_etapa_atual is None else id_etapa_atual
+    return RESOLVERS.get(etapa_resolver)
 
 
 def _anexar_identidades(contexto_envio, contexto_historico):
@@ -11400,7 +11679,7 @@ def reconhecer_contato_oficial_persistido(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `4a791b16aad1367469bcbc8b98daa2b995daec33b5bd526ea965f59e6ac8625f`
+SHA-256 do conteúdo UTF-8 normalizado: `09ad24f275500c1749f824e7f199e6a41c38eb278ac2ebab17920dabc14f17b4`
 
 ````python
 import logging
@@ -11450,6 +11729,12 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa5
     validar_profissao_etapa5,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa11 import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
+    classificar_resposta_email_aceita,
     validar_etapa11,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -11512,6 +11797,8 @@ from workers.worker_flow.transacoes.efeitos_identidade import (
 
 logger = logging.getLogger("worker.support")
 
+MOTIVO_ENCAMINHAMENTO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
+
 
 def atualizar_banco_conforme_transicao_de_etapa(
     contexto_historico,
@@ -11529,6 +11816,18 @@ def atualizar_banco_conforme_transicao_de_etapa(
     )
     evento = contexto_envio.get("evento_transicao")
     etapa_destino = contexto_envio.get("id_etapa_resultante")
+
+    if (
+        etapa_origem == ETAPA_7_IDADE_ALUNO
+        and contexto_envio.get("encerrar_atendimento")
+        and contexto_envio.get("motivo_encerramento")
+        == MOTIVO_ENCAMINHAMENTO_SUPORTE_IDOSO
+    ):
+        return _persistir_idade_encaminhamento_suporte_idoso(
+            contexto_historico,
+            contexto_envio,
+            cursor,
+        )
 
     # Sem evento não existe transição nem efeito específico de etapa.
     if not evento:
@@ -12293,6 +12592,53 @@ def _persistir_idade_capturada_na_etapa7(
     }
 
 
+def _persistir_idade_encaminhamento_suporte_idoso(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    if contexto_historico.get("status_dependente"):
+        raise ValueError(
+            "Encaminhamento de suporte ao idoso não aceita dependente"
+        )
+
+    idade = contexto_envio.get("idade_aluno")
+    if idade is None:
+        resultado = validar_idade(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+        idade = resultado.idade if resultado.valida else None
+
+    if (
+        isinstance(idade, bool)
+        or not isinstance(idade, int)
+        or not 60 <= idade <= 99
+    ):
+        raise ValueError(
+            "Idade inválida no encaminhamento de suporte ao idoso "
+            f"(idade={idade!r})"
+        )
+
+    atualizar_idade_cliente(
+        contexto_historico["id_cliente"],
+        idade,
+        cursor,
+    )
+
+    logger.info(
+        "idade_titular_persistida | acao=encaminhar_suporte_idoso "
+        "id_conversa=%s id_cliente=%s faixa=60_99",
+        contexto_historico["id_conversa"],
+        contexto_historico["id_cliente"],
+    )
+    return {
+        "idade_aluno_atualizada": True,
+        "idade_aluno": idade,
+        "destino_dado": "cliente",
+        "encaminhamento_suporte_idoso": True,
+    }
+
+
 def _confirmar_decisao_oferta_da_etapa8(
     contexto_historico,
     evento,
@@ -12376,27 +12722,60 @@ def _persistir_email_capturado_na_etapa11(
     contexto_envio,
     cursor,
 ):
-    """
-    Persiste somente o email extraído e validado na etapa 11.
-
-    Em reaplicação idempotente, o contexto de envio não carrega o email.
-    Nesse caso, o dado é revalidado na mensagem original do cliente.
-    """
+    """Persiste de forma absoluta o resultado aceito na conversa atual."""
+    classificacao = contexto_envio.get("resultado_coleta_email")
     email = contexto_envio.get("email_cliente")
 
-    if email is None:
-        resultado_email = validar_etapa11(
-            contexto_historico.get("texto_cliente_atual") or ""
-        )
+    if classificacao is None and email:
+        classificacao = CLASSIFICACAO_EMAIL_VALIDO
+        email = validar_etapa11(email).email
 
-        if not resultado_email.valido:
-            raise ValueError(
-                "Email nao reconstruido na transicao 11 -> 12"
+    if classificacao is None:
+        texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
+
+        if contexto_envio.get("resposta_ja_existia"):
+            resultado_email = classificar_resposta_email_aceita(
+                texto_cliente
+            )
+        else:
+            email_obrigatorio = calcular_email_obrigatorio_efetivo(
+                contexto_historico.get("email_obrigatorio_unidade"),
+                contexto_historico.get("status_dependente"),
+                contexto_historico.get("idade_cliente"),
+            )
+            resultado_email = classificar_resposta_email(
+                texto_cliente,
+                email_obrigatorio=email_obrigatorio,
             )
 
+        if not resultado_email.aceita:
+            raise ValueError(
+                "Resultado de email nao reconstruido na transicao 11 -> 12"
+            )
+
+        classificacao = resultado_email.classificacao
         email = resultado_email.email
 
-    email = str(email).strip()
+    classificacoes_validas = {
+        CLASSIFICACAO_EMAIL_VALIDO,
+        CLASSIFICACAO_EMAIL_AUSENTE,
+        CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    }
+    if classificacao not in classificacoes_validas:
+        raise ValueError(
+            "Classificacao de email invalida na transicao 11 -> 12 "
+            f"(classificacao={classificacao!r})"
+        )
+
+    if classificacao == CLASSIFICACAO_EMAIL_VALIDO:
+        resultado_estrutural = validar_etapa11(email)
+        if not resultado_estrutural.valido:
+            raise ValueError(
+                "Email valido sem endereco reconstruivel na transicao 11 -> 12"
+            )
+        email = resultado_estrutural.email
+    else:
+        email = None
 
     atualizar_email_cliente(
         contexto_historico["id_cliente"],
@@ -12407,18 +12786,21 @@ def _persistir_email_capturado_na_etapa11(
     logger.info(
         "cliente_email_persistido | acao=salvar_efeito_transicao "
         "evento=%s etapa_origem=%s etapa_resultante=%s "
-        "id_conversa=%s id_cliente=%s email_preenchido=%s",
+        "id_conversa=%s id_cliente=%s email_preenchido=%s "
+        "resultado_coleta=%s",
         EVENTO_EMAIL_VALIDO,
         contexto_historico["id_etapa_origem_transicao"],
         contexto_envio["id_etapa_resultante"],
         contexto_historico["id_conversa"],
         contexto_historico["id_cliente"],
         bool(email),
+        classificacao,
     )
 
     return {
         "cliente_email_atualizado": True,
         "email_preenchido": bool(email),
+        "resultado_coleta_email": classificacao,
     }
 
 
@@ -12669,11 +13051,14 @@ def _persistir_comentario_satisfacao_da_etapa22(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5d817447dfd5297878d2d94fc8a172252df9a4ae7586e3b739e4b2cdfbec7f19`
+SHA-256 do conteúdo UTF-8 normalizado: `dd58497cbaeda27d54e48e69c6a3ed82839640bbfa7d2e0c705b797695980bbc`
 
 ````python
 import logging
 
+from core.integrations.whatsapp.messages.etapa7_messages import (
+    montar_mensagem_suporte_idoso_etapa7,
+)
 from core.repositories.atendimento.conversas import encerrar_conversa
 from core.repositories.atendimento.dependentes import (
     excluir_dependente_da_conversa,
@@ -12693,10 +13078,12 @@ logger = logging.getLogger("worker.support")
 MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
 MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+MOTIVO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 MOTIVO_ETAPA_FINAL = "etapa_final"
 
 MOTIVO_ENCERRAMENTO_IDADE_INVALIDA = "idade_invalida"
 MOTIVO_ENCERRAMENTO_FOI_AGENDADO = "foi_agendado"
+MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 
 
 def resolver_intencao_encerramento(
@@ -12705,9 +13092,15 @@ def resolver_intencao_encerramento(
     cursor,
 ):
     if contexto_envio.get("encerrar_atendimento"):
+        motivo = contexto_envio["motivo_encerramento"]
+        motivo_banco = (
+            MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO
+            if motivo == MOTIVO_SUPORTE_IDOSO
+            else MOTIVO_ENCERRAMENTO_IDADE_INVALIDA
+        )
         return {
-            "motivo": contexto_envio["motivo_encerramento"],
-            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
+            "motivo": motivo,
+            "motivo_encerramento": motivo_banco,
             "excluir_dependente": bool(
                 contexto_envio.get("excluir_dependente")
             ),
@@ -12765,6 +13158,20 @@ def _reconstruir_encerramento_etapa7(contexto_historico):
     if not resultado.valida:
         return None
 
+    if (
+        not contexto_historico.get("status_dependente")
+        and 60 <= resultado.idade <= 99
+        and _resposta_bot_e_encaminhamento_suporte_idoso(
+            contexto_historico
+        )
+    ):
+        return {
+            "motivo": MOTIVO_SUPORTE_IDOSO,
+            "motivo_encerramento": MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO,
+            "excluir_dependente": False,
+            "bloqueio_dias": 0,
+        }
+
     if contexto_historico.get("status_dependente"):
         idade_minima = obter_idade_minima_dependente(
             contexto_historico.get("bpa_ativo_unidade")
@@ -12788,6 +13195,18 @@ def _reconstruir_encerramento_etapa7(contexto_historico):
         }
 
     return None
+
+
+def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
+    resposta_bot = (
+        contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
+    )
+    if resposta_bot.get("tipo_mensagem") != "interactive_cta_url":
+        return False
+
+    conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
+    mensagem_esperada = montar_mensagem_suporte_idoso_etapa7().strip()
+    return conteudo.endswith(mensagem_esperada)
 
 
 def aplicar_encerramento_se_necessario(
@@ -13941,17 +14360,21 @@ def _garantir_ordem_primeira_prova(mensagem, wa_id, user_id, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0e74f0e9ac4643daf266a4dd031217f2cd92ca0f4ace8d45bae30d6e8fd03b05`
+SHA-256 do conteúdo UTF-8 normalizado: `cdbd638dadac7dfa9e17eb04f4fb0454ea851e753473eb4f9266fd80112da3ca`
 
 ````python
 import logging
 
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_saudacao_retorno,
+)
 from core.logging_config import short_value
 from core.repositories.atendimento.conversas import (
     atualizar_conversa_mensagem_cliente,
     atualizar_conversa_resposta_bot_sem_avancar,
 )
 from core.repositories.atendimento.historico import (
+    buscar_contexto_saudacao_retorno,
     buscar_resposta_bot_por_mensagem_cliente,
     inserir_historico_mensagem_cliente,
 )
@@ -13960,6 +14383,7 @@ from core.repositories.fluxo.contextos.etapa2 import buscar_contexto_etapa2
 from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
 from core.repositories.fluxo.contextos.etapa8 import buscar_contexto_etapa8
 from core.repositories.fluxo.contextos.etapa10 import buscar_contexto_etapa10
+from core.repositories.fluxo.contextos.etapa11 import buscar_contexto_etapa11
 from core.repositories.fluxo.contextos.etapa19 import buscar_contexto_etapa19
 from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
 from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
@@ -13973,6 +14397,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_8_OFERTA_AULA,
     ETAPA_9_OFERTA_ADIADA,
     ETAPA_10_RETORNO_OFERTA,
+    ETAPA_11_EMAIL,
     ETAPA_12_INTRODUCAO_TRIAGEM,
     ETAPA_13_TRIAGEM_PERGUNTA_1,
     ETAPA_14_TRIAGEM_PERGUNTA_2,
@@ -14044,6 +14469,37 @@ def valida_historico(mensagem, contexto_banco, cursor):
             cursor=cursor,
         )
     )
+
+    saudacao_retorno = None
+    if (
+        not resposta_bot_para_mensagem_atual
+        and contexto_conversa.get("id_etapa_atual") not in {None, 1}
+    ):
+        nome_cliente, ultima_mensagem_bot_em = (
+            buscar_contexto_saudacao_retorno(
+                id_conversa,
+                contexto_banco["id_cliente"],
+                cursor,
+            )
+        )
+        saudacao_retorno = montar_saudacao_retorno(
+            nome_cliente,
+            ultima_mensagem_bot_em,
+            data_historico_cliente,
+            contexto_conversa.get("id_etapa_atual"),
+        )
+
+        if saudacao_retorno:
+            logger.info(
+                "saudacao_retorno_ativada | acao=prefixar_resposta "
+                "id_conversa=%s id_cliente=%s etapa=%s "
+                "ultima_mensagem_bot_em=%s mensagem_cliente_em=%s",
+                id_conversa,
+                contexto_banco["id_cliente"],
+                contexto_conversa.get("id_etapa_atual"),
+                ultima_mensagem_bot_em,
+                data_historico_cliente,
+            )
 
     transicoes_permitidas = listar_transicoes_permitidas(
         id_etapa_cliente,
@@ -14119,6 +14575,26 @@ def valida_historico(mensagem, contexto_banco, cursor):
             and not contexto_especifico_etapa["nome_dependente"]
         ):
             raise ValueError("Retorno de dependente sem nome persistido")
+
+    if id_etapa_cliente == ETAPA_11_EMAIL:
+        contexto_email = buscar_contexto_etapa11(
+            id_conversa,
+            contexto_banco["id_unidade"],
+            cursor,
+        )
+        status_dependente_email = contexto_email.pop(
+            "status_dependente_contexto_email"
+        )
+
+        if status_dependente_email != contexto_conversa.get(
+            "status_dependente"
+        ):
+            raise ValueError(
+                "Etapa 11 com destino de atendimento inconsistente "
+                f"(id_conversa={id_conversa})"
+            )
+
+        contexto_especifico_etapa.update(contexto_email)
 
     if id_etapa_cliente in ETAPAS_TRIAGEM:
         contexto_especifico_etapa.update(
@@ -14202,6 +14678,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         "retry_count": mensagem["retry_count"],
         "precisa_tratamento_erro": False,
         "motivo_tratamento_erro": None,
+        "saudacao_retorno": saudacao_retorno,
         "wa_id": contexto_banco["wa_id"],
         "user_id": contexto_banco["user_id"],
         "username": contexto_banco["username"],
@@ -14520,7 +14997,7 @@ def _montar_contexto_apresentacao(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d8a71e18e28a7bdf91538482b3a0839d5fd4d55402ad8d2ff5ad5ee551f6b400`
+SHA-256 do conteúdo UTF-8 normalizado: `13c9c9c435c8ca7d0ff20cc7d570b023f39653cfa1897e6a10558033944000fa`
 
 ````python
 """Componentes de apresentação compartilhados pelo fluxo do WhatsApp.
@@ -14528,6 +15005,8 @@ SHA-256 do conteúdo UTF-8 normalizado: `d8a71e18e28a7bdf91538482b3a0839d5fd4d55
 Fora da triagem, o fluxo utiliza somente rodapés pontuais. Cabeçalhos
 compartilhados identificam a introdução da triagem e a pesquisa final.
 """
+
+from datetime import datetime, timedelta
 
 
 CABECALHO_ETAPA12_TRIAGEM = "Triagem cognitiva"
@@ -14537,6 +15016,8 @@ RODAPE_ETAPA1_BOAS_VINDAS = "Seja muito bem-vindo(a)!"
 RODAPE_ETAPA9_ESPERA = "Estaremos te esperando!"
 RODAPE_OPCAO_UNICA = "Selecione apenas uma opção abaixo."
 
+INTERVALO_SAUDACAO_RETORNO = timedelta(hours=3)
+
 
 def montar_texto_com_cabecalho(mensagem, cabecalho):
     """Mantém o cabeçalho no corpo para padronizar sua exibição no WhatsApp."""
@@ -14545,6 +15026,42 @@ def montar_texto_com_cabecalho(mensagem, cabecalho):
 
 def montar_texto_com_rodape(mensagem, rodape):
     return f"{mensagem}\n\n_{rodape}_"
+
+
+def montar_saudacao_retorno(
+    nome_cliente,
+    ultima_mensagem_bot_em,
+    mensagem_cliente_atual_em,
+    id_etapa_atual,
+):
+    """Monta a saudação após três horas sem resposta do cliente.
+
+    A etapa 1 fica fora da regra porque o nome ainda não foi confirmado para
+    a conversa atual. Timestamps ausentes ou incompatíveis não podem impedir
+    o fluxo principal; nesses casos, a saudação simplesmente não é aplicada.
+    """
+    if id_etapa_atual in {None, 1}:
+        return None
+
+    nome_normalizado = " ".join(str(nome_cliente or "").split())
+    if not nome_normalizado:
+        return None
+
+    if not isinstance(ultima_mensagem_bot_em, datetime):
+        return None
+
+    if not isinstance(mensagem_cliente_atual_em, datetime):
+        return None
+
+    try:
+        intervalo = mensagem_cliente_atual_em - ultima_mensagem_bot_em
+    except TypeError:
+        return None
+
+    if intervalo < INTERVALO_SAUDACAO_RETORNO:
+        return None
+
+    return f"Olá novamente, {nome_normalizado}!\n\n"
 ````
 
 ## Passo 49 — `core/integrations/whatsapp/messages/etapa10_messages.py`
@@ -14778,7 +15295,7 @@ def montar_mensagem_contexto_email_invalido_etapa11():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a03e126d33913a01ad46a8cb044423333e8c127a41d9218d7403564b4ec8de93`
+SHA-256 do conteúdo UTF-8 normalizado: `5c9678f3567fbfe4c289e1fbdd949f01ee1dc464863a0d0d20c34363b682a101`
 
 ````python
 from core.integrations.whatsapp.messages.tratamentos_universais import (
@@ -14789,7 +15306,7 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 # ENTRADA NA ETAPA 12
 
 MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12 = (
-    "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
+    "Certo, antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
     "para conhecer melhor o seu perfil e suas necessidades. "
     "É bem simples e leva poucos minutos. Podemos começar? ☺️"
 )
@@ -14823,7 +15340,7 @@ MENSAGEM_CONTEXTO_INVALIDO_ETAPA12 = (
 )
 
 
-BOTAO_ETAPA12_INICIAR_TRIAGEM = "Iniciar triagem"
+BOTAO_ETAPA12_INICIAR_TRIAGEM = "Começar triagem"
 
 
 def montar_mensagem_triagem_cognitiva_etapa12():
@@ -15845,7 +16362,7 @@ def montar_mensagem_contexto_nome_invalido_etapa6():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `643aaf1679056c25ba907cfd1d2ca395eabf6446e93f75f814c30d2742efdc5e`
+SHA-256 do conteúdo UTF-8 normalizado: `35e5dc7ac070192c2f3c0f57f77f5027858ee414f6be84cd8885f9cce792ba78`
 
 ````python
 from core.integrations.whatsapp.messages.tratamentos_universais import (
@@ -16026,6 +16543,27 @@ def montar_mensagem_idade_acima_99_etapa7():
 
 def montar_botao_idade_acima_99_etapa7():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA7
+
+
+### TITULAR DE 60 A 99 ANOS COM SUPORTE ESPECIALIZADO ATIVO
+
+MENSAGEM_SUPORTE_IDOSO_ETAPA7 = (
+    "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
+    "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
+    "nossa equipe comercial.\n\n"
+    "Vou te passar o contato para continuar o atendimento. Basta clicar "
+    "no botão abaixo."
+)
+
+BOTAO_SUPORTE_IDOSO_ETAPA7 = "Falar com Comercial"
+
+
+def montar_mensagem_suporte_idoso_etapa7():
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA7
+
+
+def montar_botao_suporte_idoso_etapa7():
+    return BOTAO_SUPORTE_IDOSO_ETAPA7
 ````
 
 ## Passo 69 — `core/integrations/whatsapp/messages/etapa8_messages.py`
@@ -19455,17 +19993,17 @@ def _enviar_texto_etapa6(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `3a249d532a9e551c99d82bd37eec0b5a0b91d9f85ed9c06ef7fdb9266ddcbb32`
+SHA-256 do conteúdo UTF-8 normalizado: `d3c97e89688dc76dd9aac9c4f0f4030cf3c63ee89591117c7f8b0dcfa0aa42f6`
 
 ````python
 import logging
-import re
 
 from pywa.types import URLButton
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.etapa7_messages import (
     montar_botao_idade_acima_99_etapa7,
+    montar_botao_suporte_idoso_etapa7,
     montar_mensagem_cliente_menor_18_etapa7,
     montar_mensagem_contexto_idade_dependente_invalida_etapa7,
     montar_mensagem_contexto_idade_invalida_etapa7,
@@ -19479,6 +20017,10 @@ from core.integrations.whatsapp.messages.etapa7_messages import (
     montar_mensagem_idade_etapa7_financeiro,
     montar_mensagem_idade_etapa7_midia,
     montar_mensagem_idade_etapa7_reforco_escolar,
+    montar_mensagem_suporte_idoso_etapa7,
+)
+from core.integrations.whatsapp.numero_comercial import (
+    montar_link_numero_comercial_whatsapp,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -19708,7 +20250,7 @@ def enviar_etapa7_idade_acima_99(
     mensagem_bot = montar_mensagem_idade_acima_99_etapa7()
     botao_url = URLButton(
         title=montar_botao_idade_acima_99_etapa7(),
-        url=_montar_link_whatsapp_numero_comercial(numero_comercial),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial),
     )
 
     return _enviar_texto_etapa7(
@@ -19716,6 +20258,26 @@ def enviar_etapa7_idade_acima_99(
         phone_id_unidade,
         mensagem_bot,
         evento="enviar_etapa7_idade_acima_99",
+        botao_url=botao_url,
+    )
+
+
+def enviar_etapa7_suporte_idoso(
+    cliente_telefone,
+    phone_id_unidade,
+    numero_comercial,
+):
+    mensagem_bot = montar_mensagem_suporte_idoso_etapa7()
+    botao_url = URLButton(
+        title=montar_botao_suporte_idoso_etapa7(),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial),
+    )
+
+    return _enviar_texto_etapa7(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa7_suporte_idoso",
         botao_url=botao_url,
     )
 
@@ -19788,21 +20350,6 @@ def _enviar_texto_etapa7(
             phone_id_unidade=phone_id_unidade,
             cliente_telefone=cliente_telefone,
         ) from erro
-
-
-def _montar_link_whatsapp_numero_comercial(numero_comercial):
-    """Converte o número da unidade para o formato internacional do wa.me."""
-    numero = re.sub(r"\D", "", str(numero_comercial or ""))
-
-    if len(numero) in {10, 11}:
-        numero = f"55{numero}"
-
-    if not numero.startswith("55") or len(numero) not in {12, 13}:
-        raise ValueError(
-            "Número comercial da unidade inválido para link do WhatsApp"
-        )
-
-    return f"https://wa.me/{numero}"
 ````
 
 ## Passo 93 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa8.py`
@@ -20386,7 +20933,10 @@ def buscar_contexto_etapa1(id_unidade, cursor):
 
 ## Passo 97 — `core/repositories/fluxo/contextos/etapa10.py`
 
-Criar o arquivo com o conteúdo completo abaixo.
+Substituir integralmente o arquivo com o conteúdo completo abaixo. O caminho já
+existe no estado pré-`user_id` como contexto da coleta atual de e-mail; essa
+regra é preservada no novo `etapa11.py` do passo 97A antes de o caminho 10
+receber o contexto da etapa atual 9 renumerada.
 
 SHA-256 do conteúdo UTF-8 normalizado: `46df6801c81049824fc27482f9e4e4d3d76ea5893efe63d9913de4ad506870ce`
 
@@ -20448,6 +20998,95 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
         "link_instagram_unidade": link_instagram,
+    }
+````
+
+## Passo 97A — `core/repositories/fluxo/contextos/etapa11.py`
+
+Criar o arquivo com o conteúdo completo abaixo. Este é o contexto da coleta de
+e-mail atual 10 renumerada para 11; ele deve existir antes da substituição do
+caminho `etapa10.py` descrita no passo 97.
+
+SHA-256 do conteúdo UTF-8 normalizado: `09568a5f3098c6ad0e3e343d92fd865ebade24668560ddc0f17088cecef3857d`
+
+````python
+import logging
+
+
+logger = logging.getLogger("db.contexto_etapa11")
+
+
+def buscar_contexto_etapa11(id_conversa, id_unidade, cursor):
+    """Carrega a política de e-mail e a pessoa atendida no mesmo snapshot."""
+    cursor.execute(
+        """
+        SELECT
+            u.email_obrigatorio,
+            c.status_dependente,
+            cl.idade
+        FROM chatbot.conversa c
+        JOIN chatbot.unidade u
+          ON u.id_unidade = c.id_unidade
+        JOIN chatbot.cliente cl
+          ON cl.id_cliente = c.id_cliente
+        WHERE c.id_conversa = %s
+          AND c.id_unidade = %s
+        LIMIT 1;
+        """,
+        (id_conversa, id_unidade),
+    )
+
+    resultado = cursor.fetchone()
+
+    if not resultado:
+        raise ValueError(
+            "Contexto da etapa 11 não encontrado "
+            f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
+        )
+
+    email_obrigatorio, status_dependente, idade_cliente = resultado
+
+    if not isinstance(email_obrigatorio, bool):
+        raise ValueError(
+            "Configuração email_obrigatorio inválida "
+            f"(id_unidade={id_unidade}, valor={email_obrigatorio!r})"
+        )
+
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Etapa 11 sem destino de atendimento definido "
+            f"(id_conversa={id_conversa}, valor={status_dependente!r})"
+        )
+
+    if (
+        not status_dependente
+        and (
+            isinstance(idade_cliente, bool)
+            or not isinstance(idade_cliente, int)
+            or idade_cliente < 18
+            or idade_cliente >= 100
+        )
+    ):
+        raise ValueError(
+            "Etapa 11 de titular sem idade válida persistida "
+            f"(id_conversa={id_conversa}, idade={idade_cliente!r})"
+        )
+
+    logger.debug(
+        "contexto_etapa11_consultado | id_conversa=%s id_unidade=%s "
+        "email_obrigatorio=%s status_dependente=%s "
+        "idade_cliente_definida=%s",
+        id_conversa,
+        id_unidade,
+        email_obrigatorio,
+        status_dependente,
+        idade_cliente is not None,
+    )
+
+    return {
+        "email_obrigatorio_unidade": email_obrigatorio,
+        "status_dependente_contexto_email": status_dependente,
+        "idade_cliente": idade_cliente,
     }
 ````
 
@@ -20583,7 +21222,7 @@ regra de negócio; manter os dois caminhos deixaria um módulo órfão para a et
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `71ce29650f453420ba8c221745d87f2c8a08abe67f42b38bbca68f0976fac1b9`
+SHA-256 do conteúdo UTF-8 normalizado: `13a6cffb60f2b330728423b48c29560af6b0bea94987a8571a0e13c4ede13656`
 
 ````python
 import logging
@@ -20598,6 +21237,7 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         SELECT
             u.numero_comercial,
             u.bpa_ativo,
+            u.suporte_idoso,
             cl.nome,
             d.nome_dependente
         FROM chatbot.unidade u
@@ -20625,25 +21265,34 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
     (
         numero_comercial,
         bpa_ativo,
+        suporte_idoso,
         nome_cliente,
         nome_dependente,
     ) = resultado
 
     logger.debug(
         "contexto_etapa7_consultado | id_conversa=%s id_unidade=%s "
-        "numero_comercial_configurado=%s bpa_ativo=%s "
+        "numero_comercial_configurado=%s bpa_ativo=%s suporte_idoso=%s "
         "cliente_nomeado=%s dependente_nomeado=%s",
         id_conversa,
         id_unidade,
         bool(numero_comercial),
         bool(bpa_ativo),
+        suporte_idoso,
         bool(nome_cliente),
         bool(nome_dependente),
     )
 
+    if not isinstance(suporte_idoso, bool):
+        raise ValueError(
+            "Configuração suporte_idoso inválida "
+            f"(id_unidade={id_unidade}, valor={suporte_idoso!r})"
+        )
+
     return {
         "numero_comercial_unidade": numero_comercial,
         "bpa_ativo_unidade": bool(bpa_ativo),
+        "suporte_idoso_unidade": suporte_idoso,
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
     }
@@ -21398,7 +22047,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `587ae4cbddd20e8857b41e5c83355bc48f211b5f0b294ef2ed4534a742e6afd2`
+SHA-256 do conteúdo UTF-8 normalizado: `f26399f399b823d7a7ff36ab22fc741efae1a1b02f1606eb68a6ff7cc4e0010c`
 
 ````python
 import logging
@@ -21418,7 +22067,8 @@ from workers.worker_flow.response_flow.destinatario_sender import (
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa11 import (
     TIPO_TRATAMENTO_EMAIL_INVALIDO,
-    validar_etapa11,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -21453,9 +22103,7 @@ logger = logging.getLogger("worker.etapa11")
 
 def resolve_etapa11(contexto_historico):
     """
-    Mídia, financeiro e email inválido recebem tratamento sem avançar.
-
-    Um email estruturalmente válido produz email_valido para resolver 10 -> 11.
+    Preserva tratamentos e aplica a política efetiva antes de resolver 11 -> 12.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -21496,10 +22144,17 @@ def resolve_etapa11(contexto_historico):
         )
 
 # CAMPOS QUE VALIDAM O CONTEXTO DE EMAIL NA ETAPA 11
-    # O validador extrai um único email de respostas curtas ou frases.
-    resultado_email = validar_etapa11(texto_cliente)
+    email_obrigatorio_efetivo = calcular_email_obrigatorio_efetivo(
+        contexto_historico.get("email_obrigatorio_unidade"),
+        contexto_historico.get("status_dependente"),
+        contexto_historico.get("idade_cliente"),
+    )
+    resultado_email = classificar_resposta_email(
+        texto_cliente,
+        email_obrigatorio=email_obrigatorio_efetivo,
+    )
 
-    if not resultado_email.valido:
+    if not resultado_email.aceita:
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_EMAIL_INVALIDO,
@@ -21523,11 +22178,14 @@ def resolve_etapa11(contexto_historico):
 
     logger.info(
         "etapa11_email_recebido | acao=enviar_etapa12 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s",
+        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "email_obrigatorio_efetivo=%s resultado_coleta=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
         evento_transicao,
         etapa_destino,
+        email_obrigatorio_efetivo,
+        resultado_email.classificacao,
     )
 
     contexto_envio = enviar_etapa12(
@@ -21535,6 +22193,12 @@ def resolve_etapa11(contexto_historico):
         phone_id_unidade,
     )
     contexto_envio["email_cliente"] = resultado_email.email
+    contexto_envio["resultado_coleta_email"] = (
+        resultado_email.classificacao
+    )
+    contexto_envio["email_obrigatorio_efetivo"] = (
+        email_obrigatorio_efetivo
+    )
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
@@ -24107,7 +24771,7 @@ def _logar_tratamento_texto(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `148e405a06d613795aecbf75645b175f34eca47b9a38725c31460384eb901163`
+SHA-256 do conteúdo UTF-8 normalizado: `777eca4f6b6f6437cfbfc38f8afa0c9d2d48fad5779f3cfaf95d6335ae9c2d27`
 
 ````python
 import logging
@@ -24124,6 +24788,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa7 import (
     enviar_etapa7_dependente_midia,
     enviar_etapa7_dependente_reforco_escolar,
     enviar_etapa7_idade_acima_99,
+    enviar_etapa7_suporte_idoso,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa8 import (
     enviar_etapa8_cliente,
@@ -24163,18 +24828,27 @@ logger = logging.getLogger("worker.etapa7")
 MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
 MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+MOTIVO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 
 
 def resolve_etapa7(contexto_historico):
     """
-    Valida a idade do aluno e decide tratamento, encerramento ou 6 -> 7.
+    Valida a idade do aluno e decide tratamento, encerramento ou 7 -> 8.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    status_dependente = bool(
-        contexto_historico.get("status_dependente")
-    )
+    status_dependente = contexto_historico.get("status_dependente")
+    if not isinstance(status_dependente, bool):
+        raise ValueError(
+            "Destino do atendimento ausente ou inválido na etapa 7"
+        )
+
     bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
+    suporte_idoso = contexto_historico.get("suporte_idoso_unidade")
+    if not isinstance(suporte_idoso, bool):
+        raise ValueError(
+            "Configuração suporte_idoso ausente ou inválida no contexto"
+        )
     nome_dependente = contexto_historico.get("nome_dependente")
     nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
@@ -24248,6 +24922,20 @@ def resolve_etapa7(contexto_historico):
 
     idade = resultado_idade.idade
 
+    # A regra de 100+ já foi resolvida acima. O suporte especializado só
+    # alcança o próprio titular no intervalo aprovado de 60 a 99 anos.
+    if not status_dependente and idade >= 60 and suporte_idoso:
+        contexto_envio = enviar_etapa7_suporte_idoso(
+            cliente_telefone,
+            phone_id_unidade,
+            contexto_historico.get("numero_comercial_unidade"),
+        )
+        return _anexar_encerramento(
+            contexto_envio,
+            idade,
+            MOTIVO_SUPORTE_IDOSO,
+        )
+
     if not status_dependente and idade < 18:
         contexto_envio = enviar_etapa7_cliente_menor_18(
             cliente_telefone,
@@ -24278,7 +24966,7 @@ def resolve_etapa7(contexto_historico):
         )
 
     # VALIDANDO DESTINO(S)
-    # A resposta passou pelos tratamentos; agora o mapa autoriza 6 -> 7.
+    # A resposta passou pelos tratamentos; agora o mapa autoriza 7 -> 8.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_IDADE_VALIDA,
@@ -24909,124 +25597,54 @@ def _normalizar_resposta(texto):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cf4b0c5f5a732421d991cb248bab4aa696ba49f04d55f9da81b9cd77fbd3e06e`
+SHA-256 do conteúdo UTF-8 normalizado: `2ec89f6f0fdec333d9ec13e196d5d36cfc9870c813e67e597539fdfe4df7399b`
 
 ````python
-import re
-from dataclasses import dataclass
+"""Validação e classificação da resposta de e-mail na etapa 11."""
 
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_EMAIL_VALIDO,
+from core.validacoes.email import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    MOTIVO_DOMINIO_INVALIDO,
+    MOTIVO_EMAIL_AUSENTE,
+    MOTIVO_FORMATO_INVALIDO,
+    MOTIVO_MULTIPLOS_EMAILS,
+    ResultadoColetaEmail,
+    ResultadoValidacaoEmail,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
+    classificar_resposta_email_aceita,
+    eh_ausencia_email_explicita,
+    validar_email_estrutural,
 )
 
 
 TIPO_TRATAMENTO_EMAIL_INVALIDO = "email_invalido"
 
-MOTIVO_EMAIL_AUSENTE = "email_ausente"
-MOTIVO_MULTIPLOS_EMAILS = "multiplos_emails"
-MOTIVO_FORMATO_INVALIDO = "formato_invalido"
-MOTIVO_DOMINIO_INVALIDO = "dominio_invalido"
-
-PONTUACAO_FINAL_FRASE = ".,;:!?)]}>\"'”’"
-PONTUACAO_INICIAL_FRASE = "([<{\"'“‘"
-
-PADRAO_CANDIDATO_EMAIL = re.compile(
-    r"[^\s@]+@[^\s@]+",
-    re.UNICODE,
-)
-
-
-@dataclass(frozen=True)
-class ResultadoValidacaoEmail:
-    valido: bool
-    email: str | None = None
-    evento: str | None = None
-    motivo: str | None = None
-
 
 def validar_etapa11(texto):
-    """
-    Extrai um único email usando somente a estrutura mínima da etapa 11.
-
-    O candidato precisa ter conteúdo antes do @ e um ponto no domínio, com
-    conteúdo dos dois lados. Provedor, TLD e existência não são verificados.
-    """
-    texto_original = str(texto or "").strip()
-
-    if not texto_original:
-        return _resultado_invalido(MOTIVO_EMAIL_AUSENTE)
-
-    quantidade_arrobas = texto_original.count("@")
-
-    if quantidade_arrobas == 0:
-        return _resultado_invalido(MOTIVO_EMAIL_AUSENTE)
-
-    if quantidade_arrobas != 1:
-        return _resultado_invalido(MOTIVO_MULTIPLOS_EMAILS)
-
-    candidatos = _extrair_candidatos(texto_original)
-
-    if not candidatos:
-        return _resultado_invalido(MOTIVO_EMAIL_AUSENTE)
-
-    if len(candidatos) != 1:
-        return _resultado_invalido(MOTIVO_MULTIPLOS_EMAILS)
-
-    email = _normalizar_email(candidatos[0])
-    motivo_invalido = _validar_estrutura_email(email)
-
-    if motivo_invalido:
-        return _resultado_invalido(motivo_invalido)
-
-    return ResultadoValidacaoEmail(
-        valido=True,
-        email=email,
-        evento=EVENTO_EMAIL_VALIDO,
-    )
+    """Preserva o contrato histórico da validação estrutural da etapa 11."""
+    return validar_email_estrutural(texto)
 
 
-def _extrair_candidatos(texto):
-    candidatos = []
-
-    for correspondencia in PADRAO_CANDIDATO_EMAIL.finditer(texto):
-        candidato = correspondencia.group(0)
-        candidato = candidato.lstrip(PONTUACAO_INICIAL_FRASE)
-        candidato = candidato.rstrip(PONTUACAO_FINAL_FRASE)
-
-        if candidato:
-            candidatos.append(candidato)
-
-    return candidatos
-
-
-def _normalizar_email(email):
-    parte_local, separador, dominio = email.rpartition("@")
-
-    if not separador:
-        return email
-
-    return f"{parte_local}@{dominio.lower()}"
-
-
-def _validar_estrutura_email(email):
-    parte_local, separador, dominio = email.rpartition("@")
-
-    if not separador or not parte_local or not dominio:
-        return MOTIVO_FORMATO_INVALIDO
-
-    dominio_base, ponto, terminacao = dominio.rpartition(".")
-
-    if not ponto or not dominio_base or not terminacao:
-        return MOTIVO_DOMINIO_INVALIDO
-
-    return None
-
-
-def _resultado_invalido(motivo):
-    return ResultadoValidacaoEmail(
-        valido=False,
-        motivo=motivo,
-    )
+__all__ = [
+    "CLASSIFICACAO_EMAIL_AUSENTE",
+    "CLASSIFICACAO_EMAIL_NAO_INFORMADO",
+    "CLASSIFICACAO_EMAIL_VALIDO",
+    "MOTIVO_DOMINIO_INVALIDO",
+    "MOTIVO_EMAIL_AUSENTE",
+    "MOTIVO_FORMATO_INVALIDO",
+    "MOTIVO_MULTIPLOS_EMAILS",
+    "ResultadoColetaEmail",
+    "ResultadoValidacaoEmail",
+    "TIPO_TRATAMENTO_EMAIL_INVALIDO",
+    "calcular_email_obrigatorio_efetivo",
+    "classificar_resposta_email",
+    "classificar_resposta_email_aceita",
+    "eh_ausencia_email_explicita",
+    "validar_etapa11",
+]
 ````
 
 ## Passo 130 — `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa12.py`
@@ -26260,7 +26878,7 @@ def _resultado_invalido(motivo):
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8a8829d2c65e1a9da59de39cbea0a9426886af68cddea888e50150ed4b67d2a4`
+SHA-256 do conteúdo UTF-8 normalizado: `36e73c601d80ae99d6e4a09b698a5af5e8d1edbf6a0944c4af358dd95912c21c`
 
 ````python
 import re
@@ -26290,6 +26908,25 @@ PADRAO_RESPOSTA_NEGATIVA = re.compile(
     r"\bnao\s+tenho\s+interesse\b|"
     r"\bdispenso\b|"
     r"\brecuso\b"
+    r")"
+)
+
+# Pedidos informativos precisam prevalecer sobre palavras positivas genéricas.
+# Os padrões usam construções completas para não invalidar "quero", "gostaria"
+# e outras confirmações curtas quando elas aparecem sozinhas.
+PADRAO_PEDIDO_INFORMACOES = re.compile(
+    r"(?:"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?"
+    r"(?:\s+(?:receber|ter|obter))?"
+    r"(?:\s+(?:mais|alguma|algumas))?"
+    r"\s+(?:informacoes?|detalhes?|explicacoes?|esclarecimentos?)\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+(?:saber|entender)\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+tirar\s+(?:uma\s+|algumas?\s+)?duvidas?\b|"
+    r"\b(?:quero|queria|gostaria|desejo|preciso)\b"
+    r"(?:\s+de)?\s+(?:fazer\s+(?:uma\s+)?perguntas?|perguntar)\b"
     r")"
 )
 
@@ -26354,6 +26991,11 @@ def validar_etapa8(conteudo_texto):
 
     # A negação prevalece mesmo quando a frase também contém termo positivo.
     if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):
+        return None
+
+    # "Sim" ou "quero" não representam aceite quando compõem um pedido de
+    # informação, como em "sim, quero mais informações".
+    if PADRAO_PEDIDO_INFORMACOES.search(texto_normalizado):
         return None
 
     if texto_normalizado == TEXTO_BOTAO_QUERO_AGENDAR:
@@ -26634,7 +27276,7 @@ EVENTO_COMENTARIO_SATISFACAO_RECEBIDO = "comentario_satisfacao_recebido"
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `eb60b508ddbfa488a04f1808da30c0bb5f3729719169ab8e9302864c7063a465`
+SHA-256 do conteúdo UTF-8 normalizado: `17cf635c6ca9229ec1a27bc080bfc376bdfc6abf400197695994a8827f9eac65`
 
 ````python
 """Monta o payload de oportunidade sem conhecer banco ou transações."""
@@ -26644,6 +27286,12 @@ import re
 from core.triagem.perguntas import (
     montar_pergunta_triagem,
     obter_faixa_etaria_triagem,
+)
+from core.validacoes.email import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    classificar_resposta_email_aceita,
 )
 
 
@@ -26685,7 +27333,11 @@ def montar_payload_oportunidade(dados_lead):
     telefone_funil = _normalizar_telefone_brasileiro(
         dados_lead["telefone_cliente"]
     )
-    observacoes = montar_observacoes_lead(dados_lead)
+    resultado_email = _resolver_resultado_email_conversa(dados_lead)
+    observacoes = montar_observacoes_lead(
+        dados_lead,
+        resultado_email=resultado_email,
+    )
 
     return {
         "oportunidades": [
@@ -26721,7 +27373,9 @@ def montar_payload_oportunidade(dados_lead):
                 },
                 "contato": {
                     "nome": nome_cliente,
-                    "email": dados_lead["email_cliente"].strip(),
+                    # Ausência é representada pelo valor vazio já usado no
+                    # contrato do projeto; placeholders nunca ocupam o campo.
+                    "email": resultado_email.email or "",
                     "telefone1": telefone_funil,
                     "telefone2": "",
                     "cargo": "",
@@ -26733,7 +27387,7 @@ def montar_payload_oportunidade(dados_lead):
     }
 
 
-def montar_observacoes_lead(dados_lead):
+def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     """Produz o resumo humano exibido pela oportunidade no CRM."""
     nome_cliente = dados_lead["nome_cliente"].strip()
     telefone_cliente = dados_lead["telefone_cliente"].strip()
@@ -26744,6 +27398,10 @@ def montar_observacoes_lead(dados_lead):
         f"- Username do cliente: {username}\n" if username else ""
     )
     aviso_telefone = ""
+    resultado_email = resultado_email or _resolver_resultado_email_conversa(
+        dados_lead
+    )
+    email_exibicao = _montar_email_exibicao(resultado_email)
 
     if not _normalizar_telefone_brasileiro(telefone_cliente):
         aviso_telefone = f"\n{AVISO_TELEFONE_INTERNACIONAL}\n"
@@ -26756,7 +27414,7 @@ def montar_observacoes_lead(dados_lead):
         f"- Nome do cliente: {nome_cliente}\n"
         f"- Telefone/WhatsApp do cliente: "
         f"{telefone_cliente}\n"
-        f"- E-mail do cliente: {dados_lead['email_cliente'].strip()}\n"
+        f"- E-mail do cliente: {email_exibicao}\n"
         f"{linha_username}"
     )
 
@@ -26858,7 +27516,6 @@ def _validar_dados_lead(dados_lead):
         "nome_unidade",
         "nome_cliente",
         "telefone_cliente",
-        "email_cliente",
     )
     ausentes = [campo for campo in obrigatorios if not dados_lead.get(campo)]
 
@@ -26877,6 +27534,37 @@ def _validar_dados_lead(dados_lead):
             raise ValueError("Idade do dependente ausente")
     elif dados_lead.get("idade_cliente") is None:
         raise ValueError("Idade do cliente ausente")
+
+
+def _resolver_resultado_email_conversa(dados_lead):
+    resposta_historica = dados_lead.get("resposta_email_conversa")
+
+    if resposta_historica is not None:
+        return classificar_resposta_email_aceita(resposta_historica)
+
+    # Compatibilidade com atendimentos legados que não possuem o vínculo
+    # histórico da resposta de e-mail. Dados novos sempre usam a conversa.
+    email_cadastro = dados_lead.get("email_cliente")
+    if email_cadastro:
+        return classificar_resposta_email_aceita(email_cadastro)
+
+    return classificar_resposta_email_aceita("")
+
+
+def _montar_email_exibicao(resultado_email):
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_VALIDO:
+        return resultado_email.email
+
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_AUSENTE:
+        return "não tem"
+
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_NAO_INFORMADO:
+        return "não informado"
+
+    raise ValueError(
+        "Classificação de e-mail inválida para observações do Funil "
+        f"(classificacao={resultado_email.classificacao!r})"
+    )
 
 
 def _obter_respostas_triagem_validadas(dados_lead):
@@ -26927,7 +27615,7 @@ def _obter_respostas_triagem_validadas(dados_lead):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d75782168092fc91c4e2109cab97c72692862de761165a802288c5475333509c`
+SHA-256 do conteúdo UTF-8 normalizado: `8850185dbd8bb387f50662169e557b3254292a0fa4e4aca5cb6dcbb672af94fc`
 
 ````python
 """Leitura do snapshot completo de uma conversa elegível ao Funil."""
@@ -26953,7 +27641,8 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             c.profissao,
             d.nome_dependente,
             d.idade AS idade_dependente,
-            triagem.respostas
+            triagem.respostas,
+            coleta_email.conteudo_texto AS resposta_email_conversa
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -26979,6 +27668,26 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             WHERE r.id_conversa = c.id_conversa
               AND r.id_etapa BETWEEN 13 AND 18
         ) AS triagem
+        LEFT JOIN LATERAL (
+            SELECT mensagem_cliente.conteudo_texto
+            FROM chatbot.historico_mensagens mensagem_bot
+            JOIN chatbot.historico_mensagens mensagem_cliente
+              ON mensagem_cliente.id_conversa = mensagem_bot.id_conversa
+             AND mensagem_cliente.quem_enviou = 'cliente'
+             AND mensagem_cliente.id_etapa = 11
+             AND mensagem_cliente.id_mensagem_fila
+                 = mensagem_bot.id_mensagem_fila
+             AND mensagem_cliente.id_hash_msg
+                 = mensagem_bot.id_hash_cliente_origem
+            WHERE mensagem_bot.id_conversa = c.id_conversa
+              AND mensagem_bot.quem_enviou = 'bot'
+              AND mensagem_bot.status_envio = 'sent'
+              AND mensagem_bot.id_etapa = 12
+            ORDER BY
+                mensagem_bot.received_data_hora DESC,
+                mensagem_bot.id_mensagem DESC
+            LIMIT 1
+        ) AS coleta_email ON TRUE
         WHERE c.id_conversa = %s
           AND etapa_atual.elegivel_funil = TRUE
           AND c.lead_no_funil IS NOT TRUE
@@ -27005,8 +27714,3852 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         "nome_dependente": resultado[10],
         "idade_dependente": resultado[11],
         "triagem_respostas": resultado[12],
+        "resposta_email_conversa": (
+            resultado[13] if len(resultado) > 13 else None
+        ),
     }
 ````
+
+## Passo 150A — `utilitarios/reports_functions/weekly.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. O contrato
+visual e os relatórios semanal/total permanecem inalterados; somente a coluna
+física futura `cliente.wa_id` é projetada sob o alias interno legado
+`waid_telefone`, evitando uma mudança desnecessária no HTML gerado.
+
+SHA-256 do conteúdo UTF-8 normalizado: `51d97a7c8ee23ef06f1070075b8fab117921b6b1a689957d0eaa3d3be739b697`
+
+````python
+"""Gera dashboards HTML e relatórios PDF semanais por unidade.
+
+O utilitário é deliberadamente import-safe: banco, configuração privada e
+ReportLab só são carregados quando ``main`` é executado.  A visão humana
+agrupa as conversas técnicas por ``(id_unidade, id_cliente)`` sem alterar a
+forma como o chatbot persiste ou processa cada conversa.
+
+Uso padrão (configuração de ``utilitarios/local_settings.py``)::
+
+    python -m utilitarios.reports_functions.weekly
+
+Para consultar uma configuração explícita ou uma unidade específica::
+
+    python -m utilitarios.reports_functions.weekly --env-file .env.prod \
+        --id-unidade 1
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import tempfile
+import unicodedata
+from collections import defaultdict
+from datetime import date, datetime, timedelta, timezone
+from html import escape as html_escape
+from pathlib import Path
+from typing import Any, Iterable, Mapping, Sequence
+from zoneinfo import ZoneInfo
+
+
+RAIZ_PROJETO = Path(__file__).resolve().parents[2]
+SAIDA_PADRAO = RAIZ_PROJETO / "monitoramento"
+FUSO_RELATORIO = ZoneInfo("America/Sao_Paulo")
+DIAS_PADRAO = 7
+MAX_MENSAGENS_PADRAO = 100_000
+
+ROTULOS_TIPO_MENSAGEM = {
+    "audio": "Áudio",
+    "button": "Botão",
+    "contacts": "Contato compartilhado",
+    "document": "Documento",
+    "image": "Imagem",
+    "interactive": "Interação",
+    "location": "Localização",
+    "reaction": "Reação",
+    "sticker": "Figurinha",
+    "text": "Mensagem",
+    "unknown": "Conteúdo não textual",
+    "video": "Vídeo",
+}
+
+
+def criar_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Gera um dashboard HTML e um relatório PDF dos últimos dias "
+            "para cada unidade."
+        )
+    )
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="Arquivo .env explícito; sem ele usa utilitarios/local_settings.py.",
+    )
+    parser.add_argument(
+        "--dias",
+        type=int,
+        default=DIAS_PADRAO,
+        help=f"Tamanho da janela móvel (padrão: {DIAS_PADRAO}).",
+    )
+    parser.add_argument(
+        "--ate",
+        help=(
+            "Fim da janela em ISO-8601. Sem fuso, considera America/Sao_Paulo; "
+            "sem o parâmetro, usa o instante atual."
+        ),
+    )
+    parser.add_argument(
+        "--id-unidade",
+        type=int,
+        action="append",
+        dest="ids_unidade",
+        help="Limita a uma unidade; pode ser repetido.",
+    )
+    parser.add_argument(
+        "--saida",
+        type=Path,
+        default=SAIDA_PADRAO,
+        help="Diretório raiz da saída (padrão: monitoramento).",
+    )
+    parser.add_argument(
+        "--max-mensagens",
+        type=int,
+        default=MAX_MENSAGENS_PADRAO,
+        help="Proteção contra um HTML grande demais.",
+    )
+    parser.add_argument(
+        "--statement-timeout-ms",
+        type=int,
+        default=60_000,
+        help="Timeout das consultas do snapshot (padrão: 60000).",
+    )
+    return parser
+
+
+def resolver_janela(
+    dias: int = DIAS_PADRAO,
+    ate: str | datetime | None = None,
+) -> tuple[datetime, datetime]:
+    """Retorna ``[inicio, fim)`` em UTC para uma janela móvel."""
+    if dias <= 0:
+        raise ValueError("--dias precisa ser maior que zero")
+
+    if ate is None:
+        fim = datetime.now(timezone.utc)
+    elif isinstance(ate, datetime):
+        fim = ate
+    else:
+        valor = ate.strip().replace("Z", "+00:00")
+        fim = datetime.fromisoformat(valor)
+
+    if fim.tzinfo is None:
+        fim = fim.replace(tzinfo=FUSO_RELATORIO)
+    fim = fim.astimezone(timezone.utc)
+    return fim - timedelta(days=dias), fim
+
+
+def sanear_nome_unidade(nome: str, id_unidade: int | None = None) -> str:
+    """Converte o nome de uma unidade em um componente de caminho seguro."""
+    limpo = re.sub(r"^\s*supera(?:\s+|-)+", "", nome or "", flags=re.I)
+    limpo = re.sub(r"[<>:\"/\\|?*\x00-\x1f]", " ", limpo)
+    limpo = re.sub(r"\s+", " ", limpo).strip(" .")
+    chave = "".join(
+        caractere
+        for caractere in unicodedata.normalize("NFKD", limpo)
+        if not unicodedata.combining(caractere)
+    ).casefold()
+    if chave in {"saj", "santo antonio de jesus"}:
+        limpo = "SAJ"
+    if not limpo:
+        limpo = f"Unidade {id_unidade}" if id_unidade is not None else "Unidade"
+    reservados_windows = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{numero}" for numero in range(1, 10)),
+        *(f"LPT{numero}" for numero in range(1, 10)),
+    }
+    if limpo.upper() in reservados_windows:
+        sufixo = f" {id_unidade}" if id_unidade is not None else " unidade"
+        limpo += sufixo
+    return limpo
+
+
+def _texto_mensagem(texto: Any, tipo: Any) -> str:
+    valor = str(texto).strip() if texto is not None else ""
+    if valor:
+        return valor
+    tipo_normalizado = str(tipo or "unknown").strip().lower()
+    return f"[{ROTULOS_TIPO_MENSAGEM.get(tipo_normalizado, tipo_normalizado or 'Conteúdo')}]"
+
+
+def _iso(valor: Any) -> str | None:
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        if valor.tzinfo is None:
+            valor = valor.replace(tzinfo=timezone.utc)
+        return valor.astimezone(timezone.utc).isoformat()
+    return str(valor)
+
+
+def _data_local(valor: Any, formato: str = "%d/%m/%Y %H:%M") -> str:
+    if valor is None:
+        return "—"
+    if isinstance(valor, str):
+        valor = datetime.fromisoformat(valor.replace("Z", "+00:00"))
+    if valor.tzinfo is None:
+        valor = valor.replace(tzinfo=timezone.utc)
+    return valor.astimezone(FUSO_RELATORIO).strftime(formato)
+
+
+def _profissao_atual(linha: Mapping[str, Any]) -> str | None:
+    for chave in ("profissao_cliente", "profissao_conversa_recente"):
+        valor = linha.get(chave)
+        if valor is not None and str(valor).strip():
+            return str(valor).strip()
+    return None
+
+
+def _ordenar_data(valor: Any) -> datetime:
+    if isinstance(valor, datetime):
+        data = valor
+    elif valor:
+        data = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+    else:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    if data.tzinfo is None:
+        data = data.replace(tzinfo=timezone.utc)
+    return data.astimezone(timezone.utc)
+
+
+def montar_snapshot(
+    unidades: Sequence[Mapping[str, Any]],
+    mensagens: Sequence[Mapping[str, Any]],
+    funil: Sequence[Mapping[str, Any]],
+    pesquisas: Sequence[Mapping[str, Any]],
+    inicio: datetime,
+    fim: datetime,
+) -> dict[str, Any]:
+    """Materializa a visão de relatório a partir de linhas do banco.
+
+    A chave visual é sempre ``(id_unidade, id_cliente)``. Os IDs das
+    conversas técnicas permanecem no resultado para auditoria.
+    """
+    unidades_por_id: dict[int, dict[str, Any]] = {}
+    for linha in unidades:
+        id_unidade = int(linha["id_unidade"])
+        unidades_por_id[id_unidade] = {
+            "id_unidade": id_unidade,
+            "nome_unidade": str(linha["nome_unidade"]),
+            "nome_agente": str(linha.get("nome_agente") or "Assistente"),
+            "conversas": [],
+            "pesquisas": [],
+        }
+
+    funil_por_unidade: dict[int, set[int]] = defaultdict(set)
+    for linha in funil:
+        funil_por_unidade[int(linha["id_unidade"])].add(int(linha["id_cliente"]))
+
+    grupos: dict[tuple[int, int], dict[str, Any]] = {}
+    for linha in mensagens:
+        id_unidade = int(linha["id_unidade"])
+        id_cliente = int(linha["id_cliente"])
+        if id_unidade not in unidades_por_id:
+            continue
+        chave = (id_unidade, id_cliente)
+        grupo = grupos.get(chave)
+        if grupo is None:
+            grupo = {
+                "id_cliente": id_cliente,
+                "nome": str(linha.get("nome_cliente") or "Cliente sem nome"),
+                "waid_telefone": str(linha.get("waid_telefone") or ""),
+                "email": str(linha.get("email") or ""),
+                "profissao": _profissao_atual(linha),
+                "ids_conversa": [],
+                "mensagens": [],
+                "primeira_atividade": None,
+                "ultima_atividade": None,
+                "status_ativa": False,
+                "etapa_atual": None,
+                "foi_funil": False,
+            }
+            grupos[chave] = grupo
+
+        id_conversa = int(linha["id_conversa"])
+        if id_conversa not in grupo["ids_conversa"]:
+            grupo["ids_conversa"].append(id_conversa)
+
+        data_mensagem = linha.get("received_data_hora")
+        data_ordenacao = _ordenar_data(data_mensagem)
+        if (
+            grupo["primeira_atividade"] is None
+            or data_ordenacao < _ordenar_data(grupo["primeira_atividade"])
+        ):
+            grupo["primeira_atividade"] = _iso(data_mensagem)
+        if (
+            grupo["ultima_atividade"] is None
+            or data_ordenacao >= _ordenar_data(grupo["ultima_atividade"])
+        ):
+            grupo["ultima_atividade"] = _iso(data_mensagem)
+            grupo["status_ativa"] = bool(linha.get("status_ativa"))
+            grupo["etapa_atual"] = linha.get("id_etapa_atual")
+
+        grupo["mensagens"].append(
+            {
+                "id_mensagem": int(linha["id_mensagem"]),
+                "id_conversa": id_conversa,
+                "data": _iso(data_mensagem),
+                "quem_enviou": str(linha["quem_enviou"]),
+                "tipo": str(linha.get("tipo_mensagem") or "unknown"),
+                "texto": _texto_mensagem(
+                    linha.get("conteudo_texto"), linha.get("tipo_mensagem")
+                ),
+                "id_etapa": linha.get("id_etapa"),
+            }
+        )
+
+    for (id_unidade, id_cliente), grupo in grupos.items():
+        grupo["mensagens"].sort(
+            key=lambda item: (_ordenar_data(item["data"]), item["id_mensagem"])
+        )
+        grupo["foi_funil"] = id_cliente in funil_por_unidade[id_unidade]
+        unidades_por_id[id_unidade]["conversas"].append(grupo)
+
+    for unidade in unidades_por_id.values():
+        unidade["conversas"].sort(
+            key=lambda grupo: _ordenar_data(grupo["ultima_atividade"]), reverse=True
+        )
+
+    for linha in pesquisas:
+        id_unidade = int(linha["id_unidade"])
+        if id_unidade not in unidades_por_id:
+            continue
+        unidades_por_id[id_unidade]["pesquisas"].append(
+            {
+                "id_cliente": int(linha["id_cliente"]),
+                "id_conversa": int(linha["id_conversa"]),
+                "nome": str(linha.get("nome_cliente") or "Cliente sem nome"),
+                "waid_telefone": str(linha.get("waid_telefone") or ""),
+                "profissao": _profissao_atual(linha),
+                "nota": linha.get("nota"),
+                "comentario": (
+                    str(linha["comentario"]).strip()
+                    if linha.get("comentario") is not None
+                    else ""
+                ),
+                "criado_em": _iso(linha.get("criado_em")),
+            }
+        )
+
+    for id_unidade, unidade in unidades_por_id.items():
+        ids_leads_periodo = {
+            int(conversa["id_cliente"]) for conversa in unidade["conversas"]
+        }
+        # O relatório de satisfação responde à pergunta "quantos desses leads".
+        # Portanto, notas e comentários só entram quando o cliente também faz
+        # parte da coorte que enviou mensagem à unidade dentro da janela.
+        unidade["pesquisas"] = [
+            item
+            for item in unidade["pesquisas"]
+            if int(item["id_cliente"]) in ids_leads_periodo
+        ]
+        pesquisas_unidade = unidade["pesquisas"]
+        notas = [int(item["nota"]) for item in pesquisas_unidade if item["nota"] is not None]
+        distribuicao = {str(nota): notas.count(nota) for nota in range(1, 6)}
+        leads_com_nota = {
+            item["id_cliente"] for item in pesquisas_unidade if item["nota"] is not None
+        }
+        ids_funil_periodo = funil_por_unidade[id_unidade] & ids_leads_periodo
+        total_leads = len(ids_leads_periodo)
+        total_funil = len(ids_funil_periodo)
+        unidade["metricas"] = {
+            "leads_contato": total_leads,
+            "leads_funil": total_funil,
+            "taxa_funil": round((total_funil / total_leads * 100), 1)
+            if total_leads
+            else 0.0,
+            "leads_com_nota": len(leads_com_nota),
+            "respostas_satisfacao": len(notas),
+            "media_satisfacao": round(sum(notas) / len(notas), 2) if notas else None,
+            "distribuicao_notas": distribuicao,
+            "comentarios": sum(bool(item["comentario"]) for item in pesquisas_unidade),
+        }
+        pesquisas_unidade.sort(
+            key=lambda item: _ordenar_data(item["criado_em"]), reverse=True
+        )
+
+    return {
+        "periodo": {
+            "tipo": "semanal",
+            "inicio": inicio.astimezone(timezone.utc).isoformat(),
+            "fim": fim.astimezone(timezone.utc).isoformat(),
+            "dias": (fim - inicio).total_seconds() / 86_400,
+            "rotulo": (
+                f"{_data_local(inicio, '%d/%m/%Y %H:%M')} até "
+                f"{_data_local(fim, '%d/%m/%Y %H:%M')}"
+            ),
+        },
+        "gerado_em": datetime.now(timezone.utc).isoformat(),
+        "unidades": sorted(
+            unidades_por_id.values(), key=lambda item: item["nome_unidade"].casefold()
+        ),
+    }
+
+
+def _filtro_unidades(ids_unidade: Sequence[int] | None, alias: str = "u") -> tuple[str, tuple[Any, ...]]:
+    if not ids_unidade:
+        return "", ()
+    ids = sorted(set(int(valor) for valor in ids_unidade))
+    return f" AND {alias}.id_unidade = ANY(%s)", (ids,)
+
+
+def _coluna_existe(cursor: Any, tabela: str, coluna: str) -> bool:
+    cursor.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+              FROM information_schema.columns
+             WHERE table_schema = 'chatbot'
+               AND table_name = %s
+               AND column_name = %s
+        ) AS existe
+        """,
+        (tabela, coluna),
+    )
+    return bool(cursor.fetchone()["existe"])
+
+
+def coletar_snapshot(
+    conn: Any,
+    inicio: datetime,
+    fim: datetime,
+    ids_unidade: Sequence[int] | None = None,
+    max_mensagens: int = MAX_MENSAGENS_PADRAO,
+    statement_timeout_ms: int = 60_000,
+) -> dict[str, Any]:
+    """Consulta um snapshot consistente sem realizar nenhuma mutação."""
+    if max_mensagens <= 0:
+        raise ValueError("--max-mensagens precisa ser maior que zero")
+    if statement_timeout_ms <= 0:
+        raise ValueError("--statement-timeout-ms precisa ser maior que zero")
+
+    from psycopg.rows import dict_row
+
+    cursor = conn.cursor(row_factory=dict_row)
+    try:
+        cursor.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        cursor.execute(
+            "SELECT set_config('statement_timeout', %s, true)",
+            (f"{statement_timeout_ms}ms",),
+        )
+        cursor.execute("SELECT set_config('lock_timeout', '5000ms', true)")
+
+        filtro, params_filtro = _filtro_unidades(ids_unidade)
+        cursor.execute(
+            f"""
+            SELECT u.id_unidade, u.nome_unidade, u.nome_agente
+              FROM chatbot.unidade u
+             WHERE TRUE {filtro}
+             ORDER BY u.nome_unidade, u.id_unidade
+            """,
+            params_filtro,
+        )
+        unidades = cursor.fetchall()
+        if ids_unidade and len(unidades) != len(set(ids_unidade)):
+            encontrados = {int(linha["id_unidade"]) for linha in unidades}
+            ausentes = sorted(set(ids_unidade) - encontrados)
+            raise RuntimeError(f"Unidade(s) não encontrada(s): {ausentes}")
+
+        tem_profissao_cliente = _coluna_existe(cursor, "cliente", "profissao")
+        tem_profissao_conversa = _coluna_existe(cursor, "conversa", "profissao")
+        expr_profissao_cliente = (
+            "cl.profissao" if tem_profissao_cliente else "NULL::text"
+        )
+        if tem_profissao_conversa:
+            expr_profissao_conversa = "cx_prof.profissao"
+            lateral_profissao = """
+               LEFT JOIN LATERAL (
+                    SELECT cx_prof.profissao
+                      FROM chatbot.conversa cx_prof
+                     WHERE cx_prof.id_cliente = c.id_cliente
+                       AND NULLIF(BTRIM(cx_prof.profissao), '') IS NOT NULL
+                     ORDER BY cx_prof.iniciou_em DESC, cx_prof.id_conversa DESC
+                     LIMIT 1
+               ) cx_prof ON TRUE
+            """
+        else:
+            expr_profissao_conversa = "NULL::text"
+            lateral_profissao = ""
+
+        filtro_mensagens, params_mensagens_filtro = _filtro_unidades(ids_unidade)
+        cursor.execute(
+            f"""
+            WITH clientes_janela AS (
+                SELECT DISTINCT c.id_unidade, c.id_cliente
+                  FROM chatbot.historico_mensagens h0
+                  JOIN chatbot.conversa c ON c.id_conversa = h0.id_conversa
+                  JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+                 WHERE h0.quem_enviou = 'cliente'
+                   AND h0.received_data_hora >= %s
+                   AND h0.received_data_hora < %s
+                   {filtro_mensagens}
+            )
+            SELECT
+                u.id_unidade,
+                u.nome_unidade,
+                c.id_cliente,
+                cl.nome AS nome_cliente,
+                cl.wa_id AS waid_telefone,
+                cl.email,
+                {expr_profissao_cliente} AS profissao_cliente,
+                {expr_profissao_conversa} AS profissao_conversa_recente,
+                c.id_conversa,
+                c.status_ativa,
+                c.id_etapa_atual,
+                h.id_mensagem,
+                h.id_etapa,
+                h.received_data_hora,
+                h.quem_enviou,
+                h.tipo_mensagem,
+                h.conteudo_texto
+              FROM clientes_janela cj
+              JOIN chatbot.conversa c
+                ON c.id_unidade = cj.id_unidade
+               AND c.id_cliente = cj.id_cliente
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+              JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
+              {lateral_profissao}
+             WHERE h.received_data_hora >= %s
+               AND h.received_data_hora < %s
+               AND (
+                    h.quem_enviou = 'cliente'
+                    OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent')
+               )
+             ORDER BY u.id_unidade, c.id_cliente,
+                      h.received_data_hora, h.id_mensagem
+             LIMIT %s
+            """,
+            (
+                inicio,
+                fim,
+                *params_mensagens_filtro,
+                inicio,
+                fim,
+                max_mensagens + 1,
+            ),
+        )
+        mensagens = cursor.fetchall()
+        if len(mensagens) > max_mensagens:
+            raise RuntimeError(
+                "O intervalo excedeu o limite de mensagens; reduza a janela ou "
+                "aumente --max-mensagens conscientemente."
+            )
+
+        filtro_funil, params_funil_filtro = _filtro_unidades(ids_unidade)
+        cursor.execute(
+            f"""
+            SELECT DISTINCT u.id_unidade, c.id_cliente
+              FROM chatbot.funil_envios f
+              JOIN chatbot.conversa c ON c.id_conversa = f.id_conversa
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+             WHERE f.status = 'sent'
+               AND f.enviado_em >= %s
+               AND f.enviado_em < %s
+               {filtro_funil}
+            """,
+            (inicio, fim, *params_funil_filtro),
+        )
+        funil = cursor.fetchall()
+
+        filtro_pesquisa, params_pesquisa_filtro = _filtro_unidades(ids_unidade)
+        cursor.execute(
+            f"""
+            SELECT
+                u.id_unidade,
+                c.id_cliente,
+                c.id_conversa,
+                cl.nome AS nome_cliente,
+                cl.wa_id AS waid_telefone,
+                {expr_profissao_cliente} AS profissao_cliente,
+                {expr_profissao_conversa} AS profissao_conversa_recente,
+                p.nota,
+                p.comentario,
+                p.criado_em
+              FROM chatbot.pesquisa_satisfacao p
+              JOIN chatbot.conversa c ON c.id_conversa = p.id_conversa
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+               {lateral_profissao}
+             WHERE p.criado_em >= %s
+               AND p.criado_em < %s
+               {filtro_pesquisa}
+             ORDER BY p.criado_em DESC, p.id_pesquisa_satisfacao DESC
+            """,
+            (inicio, fim, *params_pesquisa_filtro),
+        )
+        pesquisas = cursor.fetchall()
+
+        snapshot = montar_snapshot(
+            unidades=unidades,
+            mensagens=mensagens,
+            funil=funil,
+            pesquisas=pesquisas,
+            inicio=inicio,
+            fim=fim,
+        )
+        conn.rollback()
+        return snapshot
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+
+
+def _json_seguro(valor: Any) -> str:
+    return (
+        json.dumps(valor, ensure_ascii=False, separators=(",", ":"))
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
+def renderizar_html(unidade: Mapping[str, Any], periodo: Mapping[str, Any]) -> str:
+    """Cria um dashboard offline; dados do banco entram apenas como JSON seguro."""
+    payload = {
+        "unidade": {
+            "id_unidade": unidade["id_unidade"],
+            "nome_unidade": unidade["nome_unidade"],
+            "nome_agente": unidade["nome_agente"],
+            "conversas": unidade["conversas"],
+            "pesquisas": unidade["pesquisas"],
+            "metricas": unidade["metricas"],
+        },
+        "periodo": periodo,
+    }
+    nome_titulo = html_escape(str(unidade["nome_unidade"]), quote=True)
+    dados_json = _json_seguro(payload)
+    return f'''<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Conversas — {nome_titulo}</title>
+  <style>
+    :root{{--verde:#00a884;--verde2:#008069;--fundo:#efeae2;--painel:#f7f9fa;
+      --linha:#e5e7eb;--texto:#182229;--muted:#667781;--bot:#d9fdd3;--cliente:#fff;
+      --sombra:0 18px 60px rgba(24,34,41,.16)}}
+    *{{box-sizing:border-box}} html,body{{height:100%;margin:0}}
+    body{{font:14px/1.45 "Segoe UI",Arial,sans-serif;color:var(--texto);
+      background:linear-gradient(180deg,var(--verde2) 0 126px,#e9edef 126px)}}
+    button,input{{font:inherit}} .app{{height:calc(100vh - 34px);min-height:620px;max-width:1500px;
+      margin:17px auto;background:#fff;display:grid;grid-template-columns:390px 1fr;grid-template-rows:minmax(0,1fr);
+      overflow:hidden;box-shadow:var(--sombra);border-radius:5px}}
+    .sidebar{{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border-right:1px solid var(--linha);background:#fff}}
+    .brand{{padding:18px 20px;background:#f0f2f5;border-bottom:1px solid var(--linha)}}
+    .brand h1{{font-size:17px;margin:0 0 3px}} .brand p{{margin:0;color:var(--muted);font-size:12px}}
+    .stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px;border-bottom:1px solid var(--linha)}}
+    .stat{{padding:10px 8px;border:1px solid #e6ecea;border-radius:10px;background:#fbfdfc;text-align:center}}
+    .stat b{{display:block;font-size:18px;color:var(--verde2)}} .stat span{{font-size:10px;color:var(--muted)}}
+    .search{{padding:9px 12px;background:var(--painel)}}
+    .search input{{width:100%;border:0;border-radius:8px;background:#fff;padding:10px 13px;outline:none}}
+    .list{{min-height:0;overflow-y:auto;overscroll-behavior:contain;flex:1}} .empty{{padding:32px;color:var(--muted);text-align:center}}
+    .chat-item{{width:100%;display:grid;grid-template-columns:46px 1fr;gap:11px;text-align:left;
+      padding:12px 14px;border:0;border-bottom:1px solid #edf0f2;background:#fff;cursor:pointer}}
+    .chat-item:hover,.chat-item.active{{background:#f0f2f5}}
+    .avatar{{width:46px;height:46px;border-radius:50%;background:linear-gradient(145deg,#cfd8dc,#90a4ae);
+      color:#fff;display:grid;place-items:center;font-weight:700;font-size:17px}}
+    .item-top{{display:flex;justify-content:space-between;gap:8px}} .item-top strong{{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .item-top time{{font-size:11px;color:var(--muted);white-space:nowrap}}
+    .preview{{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;margin-top:4px}}
+    .main{{min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;background:var(--fundo)}}
+    .topbar{{min-height:74px;padding:11px 18px;background:#f0f2f5;border-bottom:1px solid var(--linha);display:flex;align-items:center;gap:13px}}
+    .identity{{min-width:0;flex:1}} .identity h2{{font-size:16px;margin:0 0 2px}} .identity p{{margin:0;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .tag{{border:1px solid #badfd7;background:#e8f7f3;color:#087966;border-radius:999px;padding:4px 9px;font-size:11px}}
+    .messages{{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:28px clamp(18px,6vw,84px);background-color:var(--fundo);
+      background-image:radial-gradient(rgba(98,114,124,.09) .7px,transparent .7px);background-size:14px 14px}}
+    .intro{{max-width:720px;margin:20vh auto 0;padding:26px;text-align:center;background:rgba(255,255,255,.82);border-radius:14px;color:var(--muted)}}
+    .day,.conversation-cut{{width:max-content;max-width:95%;margin:14px auto;padding:5px 10px;border-radius:7px;background:#fff;color:var(--muted);font-size:11px;box-shadow:0 1px 2px rgba(0,0,0,.08)}}
+    .conversation-cut{{background:#fff6cf;color:#665c25}}
+    .row{{display:flex;margin:3px 0}} .row.bot{{justify-content:flex-end}}
+    .bubble{{position:relative;max-width:min(72%,720px);padding:7px 9px 5px;border-radius:8px;background:var(--cliente);box-shadow:0 1px 1px rgba(0,0,0,.08);white-space:pre-wrap;overflow-wrap:anywhere}}
+    .row.bot .bubble{{background:var(--bot)}} .meta{{display:flex;justify-content:flex-end;gap:7px;margin:4px 0 0 16px;color:var(--muted);font-size:10px}}
+    .details{{padding:9px 18px;background:#f0f2f5;color:var(--muted);font-size:11px;border-top:1px solid var(--linha)}}
+    @media(max-width:820px){{.app{{margin:0;height:100vh;min-height:0;border-radius:0;grid-template-columns:132px 1fr}}.brand p,.stats,.preview,.chat-item .item-top time{{display:none}}.chat-item{{grid-template-columns:40px 1fr;padding:10px 8px}}.avatar{{width:40px;height:40px}}.bubble{{max-width:90%}}}}
+    @media print{{body{{background:#fff}}.app{{height:auto;margin:0;box-shadow:none}}}}
+  </style>
+  <style>
+    :root{{--wa-bg:#0b141a;--wa-panel:#111b21;--wa-panel-2:#202c33;--wa-border:#2a3942;
+      --wa-text:#e9edef;--wa-muted:#8696a0;--wa-green:#00a884;--wa-green-dark:#005c4b;
+      --wa-client:#202c33;--wa-bot:#005c4b;--wa-blue:#53bdeb}}
+    body{{color:var(--wa-text);background:var(--wa-bg)}}
+    .app{{height:100vh;min-height:560px;max-width:none;margin:0;border-radius:0;
+      grid-template-columns:390px minmax(0,1fr);background:var(--wa-bg);box-shadow:none}}
+    .sidebar{{background:var(--wa-panel);border-color:var(--wa-border)}}
+    .brand{{padding:17px 18px;background:var(--wa-panel-2);border-color:var(--wa-border)}}
+    .brand h1{{font-size:18px;color:var(--wa-text)}} .brand p{{color:var(--wa-muted)}}
+    .stats{{grid-template-columns:repeat(4,1fr);gap:6px;padding:10px;background:var(--wa-panel);border-color:var(--wa-border)}}
+    .stat{{padding:9px 4px;border-color:var(--wa-border);border-radius:8px;background:#18252d}}
+    .stat b{{font-size:17px;color:#66d6bc}} .stat span{{font-size:9px;color:var(--wa-muted)}}
+    .search{{padding:8px 12px;background:var(--wa-panel)}}
+    .search input{{color:var(--wa-text);background:var(--wa-panel-2);padding:10px 14px}}
+    .search input::placeholder{{color:var(--wa-muted)}}
+    .filters{{display:flex;gap:6px;padding:0 12px 10px;overflow-x:auto;border-bottom:1px solid var(--wa-border)}}
+    .filter{{border:1px solid var(--wa-border);border-radius:999px;padding:6px 10px;color:var(--wa-muted);
+      background:transparent;cursor:pointer;white-space:nowrap;font-size:11px}}
+    .filter:hover,.filter.active{{color:#d8fff5;background:#123c35;border-color:#1f6c5d}}
+    .list{{background:var(--wa-panel)}} .empty{{color:var(--wa-muted)}}
+    .chat-item{{grid-template-columns:49px 1fr;gap:12px;padding:12px 14px;color:var(--wa-text);
+      border-color:var(--wa-border);background:var(--wa-panel)}}
+    .chat-item:hover,.chat-item.active{{background:var(--wa-panel-2)}}
+    .avatar{{width:49px;height:49px;background:#667781;color:#fff}}
+    .item-top time,.preview{{color:var(--wa-muted)}}
+    .item-bottom{{display:flex;align-items:center;gap:7px;margin-top:4px;min-width:0}}
+    .item-bottom .preview{{flex:1;margin:0}} .count{{min-width:20px;padding:2px 6px;border-radius:999px;
+      background:var(--wa-green);color:#061b16;text-align:center;font-size:10px;font-weight:700}}
+    .flags{{display:flex;gap:4px;margin-top:5px;min-height:17px}}
+    .flag{{padding:2px 6px;border-radius:4px;background:#23343e;color:#aebac1;font-size:9px}}
+    .flag.green{{background:#12493f;color:#8de7d1}} .flag.gold{{background:#4a3e1f;color:#f2d57a}}
+    .main{{position:relative;background-color:var(--wa-bg);
+      background-image:radial-gradient(rgba(255,255,255,.035) .75px,transparent .75px);background-size:13px 13px}}
+    .topbar{{min-height:66px;padding:8px 15px;background:var(--wa-panel-2);border-color:var(--wa-border)}}
+    .identity h2{{color:var(--wa-text)}} .identity p{{color:var(--wa-muted)}}
+    .tag{{border-color:#1e6e5d;background:#123c35;color:#8de7d1}}
+    .icon-button{{border:1px solid var(--wa-border);border-radius:8px;padding:7px 10px;color:var(--wa-muted);
+      background:#18252d;cursor:pointer}} .icon-button:hover,.icon-button[aria-pressed="true"]{{color:#d8fff5;border-color:#1f6c5d}}
+    .back{{display:none;font-size:25px;line-height:1;padding:3px 10px}}
+    .messages{{padding:24px clamp(18px,6vw,82px);background:transparent}}
+    .intro{{margin-top:18vh;background:rgba(32,44,51,.94);color:var(--wa-muted);border:1px solid var(--wa-border)}}
+    .intro h2{{color:var(--wa-text)}}
+    .day,.conversation-cut{{background:#18252d;color:#aebac1;box-shadow:0 1px 1px rgba(0,0,0,.35)}}
+    .conversation-cut{{background:#23343e;color:#aebac1;border:1px solid #304652}}
+    .conversation-cut.continuation{{background:#123c35;color:#8de7d1;border-color:#1f6c5d}}
+    .bubble{{max-width:min(76%,760px);padding:7px 9px 6px;color:var(--wa-text);background:var(--wa-client);
+      box-shadow:0 1px 1px rgba(0,0,0,.28)}} .row.bot .bubble{{background:var(--wa-bot)}}
+    .message-kind{{display:inline-block;margin-bottom:4px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.09);
+      color:#b7c7cf;font-size:9px;text-transform:uppercase;letter-spacing:.04em}}
+    .meta{{color:#aebac1}} .ticks{{color:var(--wa-blue);font-weight:700}}
+    .technical{{display:none;padding-top:4px;color:#8fa2ac;font-size:9px}} body.show-metadata .technical{{display:block}}
+    .details{{padding:8px 18px;color:var(--wa-muted);background:var(--wa-panel-2);border-color:var(--wa-border)}}
+    .scroll-bottom{{position:absolute;right:24px;bottom:50px;width:42px;height:42px;border:1px solid var(--wa-border);
+      border-radius:50%;color:var(--wa-text);background:var(--wa-panel-2);box-shadow:0 4px 16px rgba(0,0,0,.35);
+      cursor:pointer;font-size:22px}}
+    @media(max-width:820px){{
+      .app{{display:block;height:100vh}} .sidebar{{height:100vh}} .main{{display:none;height:100vh}}
+      body.chat-open .sidebar{{display:none}} body.chat-open .main{{display:flex}} .back{{display:inline-block}}
+      .brand p,.preview,.item-top time{{display:block}} .stats{{display:grid}}
+      .chat-item{{grid-template-columns:46px 1fr;padding:11px 13px}} .avatar{{width:46px;height:46px}}
+      .bubble{{max-width:90%}} .messages{{padding:18px 12px}} .tag{{display:none}}
+    }}
+    @media print{{body{{background:#fff;color:#111}}.app{{height:auto}}}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <aside class="sidebar">
+      <header class="brand"><h1 id="unitName"></h1><p id="period"></p></header>
+      <section class="stats" aria-label="Resumo do período">
+        <div class="stat"><b id="leadCount">0</b><span>LEADS</span></div>
+        <div class="stat"><b id="messageCount">0</b><span>MENSAGENS</span></div>
+        <div class="stat"><b id="funnelCount">0</b><span>FUNIL</span></div>
+        <div class="stat"><b id="ratingAverage">—</b><span>NOTA MÉDIA</span></div>
+      </section>
+      <div class="search"><input id="search" type="search" placeholder="Pesquisar lead ou mensagem" aria-label="Pesquisar conversas"></div>
+      <nav class="filters" aria-label="Filtrar conversas">
+        <button type="button" class="filter active" data-filter="all">Todas</button>
+        <button type="button" class="filter" data-filter="continued">Continuações</button>
+        <button type="button" class="filter" data-filter="funnel">Funil</button>
+        <button type="button" class="filter" data-filter="rated">Avaliadas</button>
+      </nav>
+      <div id="chatList" class="list"></div>
+    </aside>
+    <section class="main">
+      <header id="topbar" class="topbar" hidden>
+        <button id="backButton" class="icon-button back" type="button" aria-label="Voltar para conversas">‹</button>
+        <div id="avatarMain" class="avatar"></div>
+        <div class="identity"><h2 id="clientName"></h2><p id="clientDetails"></p></div>
+        <span id="funnelTag" class="tag" hidden>Enviado ao funil</span>
+        <button id="metadataButton" class="icon-button" type="button" aria-pressed="false">Detalhes</button>
+      </header>
+      <div id="messages" class="messages"><div class="intro"><h2>Conversas do período</h2><p>Selecione um lead para visualizar a sequência completa das conversas técnicas no período.</p></div></div>
+      <button id="scrollBottom" class="scroll-bottom" type="button" aria-label="Ir para a mensagem mais recente" hidden>↓</button>
+      <footer id="details" class="details">Relatório privado: contém dados pessoais e deve ser compartilhado somente com a unidade responsável.</footer>
+    </section>
+  </main>
+  <script id="report-data" type="application/json">{dados_json}</script>
+  <script>
+  (() => {{
+    'use strict';
+    const data = JSON.parse(document.getElementById('report-data').textContent);
+    const unit = data.unidade, conversations = unit.conversas || [];
+    const $ = id => document.getElementById(id);
+    const fmt = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{dateStyle:'short',timeStyle:'short',timeZone:'America/Sao_Paulo'}}).format(new Date(iso)) : '—';
+    const fmtDate = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{dateStyle:'short',timeZone:'America/Sao_Paulo'}}).format(new Date(iso)) : '—';
+    const fmtTime = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}}).format(new Date(iso)) : '—';
+    const initials = name => (name || '?').split(/\\s+/).slice(0,2).map(x => x[0] || '').join('').toUpperCase();
+    $('unitName').textContent = unit.nome_unidade;
+    $('period').textContent = data.periodo.rotulo;
+    $('leadCount').textContent = unit.metricas.leads_contato;
+    $('funnelCount').textContent = unit.metricas.leads_funil;
+    $('ratingAverage').textContent = unit.metricas.media_satisfacao ?? '—';
+
+    function addText(parent, tag, className, text) {{
+      const node = document.createElement(tag); node.className = className || ''; node.textContent = text; parent.appendChild(node); return node;
+    }}
+    function showConversation(item) {{
+      document.querySelectorAll('.chat-item').forEach(x => x.classList.toggle('active', x.dataset.client === String(item.id_cliente)));
+      $('topbar').hidden = false; $('clientName').textContent = item.nome; $('avatarMain').textContent = initials(item.nome);
+      const parts = [item.waid_telefone && `WA ID: ${{item.waid_telefone}}`, item.email, item.profissao && `Profissão: ${{item.profissao}}`].filter(Boolean);
+      $('clientDetails').textContent = parts.join(' • ') || `Cliente #${{item.id_cliente}}`;
+      $('funnelTag').hidden = !item.foi_funil;
+      const box = $('messages'); box.replaceChildren(); let lastDay = '', lastConversation = null;
+      item.mensagens.forEach(msg => {{
+        const d = new Date(msg.data); const day = new Intl.DateTimeFormat('pt-BR', {{dateStyle:'long',timeZone:'America/Sao_Paulo'}}).format(d);
+        if (day !== lastDay) {{ addText(box,'div','day',day); lastDay = day; }}
+        if (lastConversation !== null && lastConversation !== msg.id_conversa) addText(box,'div','conversation-cut',`Continuação técnica • conversa #${{msg.id_conversa}}`);
+        lastConversation = msg.id_conversa;
+        const row = document.createElement('div'); row.className = `row ${{msg.quem_enviou === 'bot' ? 'bot' : 'client'}}`;
+        const bubble = document.createElement('div'); bubble.className = 'bubble'; addText(bubble,'div','',msg.texto);
+        const meta = addText(bubble,'div','meta',''); addText(meta,'span','',`etapa ${{msg.id_etapa ?? '—'}}`); addText(meta,'time','',fmtTime(msg.data));
+        row.appendChild(bubble); box.appendChild(row);
+      }});
+      $('details').textContent = `Cliente #${{item.id_cliente}} • conversas técnicas: ${{item.ids_conversa.join(', ')}} • ${{item.mensagens.length}} mensagens visíveis no período`;
+      box.scrollTop = box.scrollHeight;
+    }}
+    function renderList(filter='') {{
+      const needle = filter.trim().toLocaleLowerCase('pt-BR'); const list = $('chatList'); list.replaceChildren();
+      const visible = conversations.filter(item => [item.nome,item.waid_telefone,item.email,item.profissao].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(needle));
+      if (!visible.length) {{ addText(list,'div','empty',conversations.length ? 'Nenhum lead encontrado.' : 'Nenhuma mensagem de cliente no período.'); return; }}
+      visible.forEach(item => {{
+        const button = document.createElement('button'); button.type='button'; button.className='chat-item'; button.dataset.client=String(item.id_cliente);
+        addText(button,'div','avatar',initials(item.nome)); const body=document.createElement('div'); const top=document.createElement('div'); top.className='item-top';
+        addText(top,'strong','',item.nome); addText(top,'time','',fmtDate(item.ultima_atividade)); body.appendChild(top);
+        const last=item.mensagens[item.mensagens.length-1]; addText(body,'div','preview',last ? `${{last.quem_enviou==='bot'?'✓ ':''}}${{last.texto}}` : 'Sem mensagens'); button.appendChild(body);
+        button.addEventListener('click',()=>showConversation(item)); list.appendChild(button);
+      }});
+    }}
+    $('search').addEventListener('input',event=>renderList(event.target.value)); renderList(); if (conversations[0]) showConversation(conversations[0]);
+  }})();
+  </script>
+  <script>
+  (() => {{
+    'use strict';
+    const data = JSON.parse(document.getElementById('report-data').textContent);
+    const unit = data.unidade;
+    const conversations = unit.conversas || [];
+    const surveys = unit.pesquisas || [];
+    const $ = id => document.getElementById(id);
+    const colors = ['#7e57c2','#00897b','#5c6bc0','#d97706','#0288d1','#c44569','#5f7c3a','#8d6e63'];
+    const ratingsByClient = new Map();
+    let activeFilter = 'all';
+    let selectedClient = null;
+
+    surveys.forEach(survey => {{
+      if (survey.nota !== null && survey.nota !== undefined) {{
+        ratingsByClient.set(String(survey.id_cliente), survey.nota);
+      }}
+    }});
+
+    const fmtDate = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{
+      dateStyle:'short', timeZone:'America/Sao_Paulo'
+    }}).format(new Date(iso)) : '—';
+    const fmtTime = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{
+      hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo'
+    }}).format(new Date(iso)) : '—';
+    const fmtDay = iso => iso ? new Intl.DateTimeFormat('pt-BR', {{
+      dateStyle:'long', timeZone:'America/Sao_Paulo'
+    }}).format(new Date(iso)) : '—';
+    const initials = name => (name || '?').split(/\\s+/).slice(0,2)
+      .map(part => part[0] || '').join('').toUpperCase();
+    const avatarColor = id => colors[Math.abs(Number(id) || 0) % colors.length];
+
+    function addText(parent, tag, className, value) {{
+      const node = document.createElement(tag);
+      node.className = className || '';
+      node.textContent = value;
+      parent.appendChild(node);
+      return node;
+    }}
+
+    function preview(message) {{
+      if (!message) return 'Sem mensagens';
+      const content = message.texto || '[' + (message.tipo || 'mensagem') + ']';
+      return (message.quem_enviou === 'bot' ? '✓✓ ' : '') + content;
+    }}
+
+    function matchesFilter(item) {{
+      if (activeFilter === 'continued') return item.ids_conversa.length > 1;
+      if (activeFilter === 'funnel') return Boolean(item.foi_funil);
+      if (activeFilter === 'rated') return ratingsByClient.has(String(item.id_cliente));
+      return true;
+    }}
+
+    function showConversation(item) {{
+      selectedClient = String(item.id_cliente);
+      document.body.classList.add('chat-open');
+      document.querySelectorAll('.chat-item').forEach(button => {{
+        button.classList.toggle('active', button.dataset.client === selectedClient);
+      }});
+      $('topbar').hidden = false;
+      $('clientName').textContent = item.nome;
+      $('avatarMain').textContent = initials(item.nome);
+      $('avatarMain').style.backgroundColor = avatarColor(item.id_cliente);
+      const parts = [
+        item.waid_telefone ? 'WA ID: ' + item.waid_telefone : '',
+        item.email || '',
+        item.profissao ? 'Profissão: ' + item.profissao : ''
+      ].filter(Boolean);
+      $('clientDetails').textContent = parts.join(' • ') || 'Cliente #' + item.id_cliente;
+      $('funnelTag').hidden = !item.foi_funil;
+
+      const box = $('messages');
+      box.replaceChildren();
+      let lastDay = '';
+      let lastConversation = null;
+      item.mensagens.forEach(message => {{
+        const day = fmtDay(message.data);
+        if (day !== lastDay) {{
+          addText(box,'div','day',day);
+          lastDay = day;
+        }}
+        if (lastConversation !== message.id_conversa) {{
+          const first = lastConversation === null;
+          const label = (first ? 'Início técnico' : 'Continuação técnica') +
+            ' • conversa #' + message.id_conversa;
+          const separator = addText(
+            box,'div','conversation-cut' + (first ? '' : ' continuation'),label
+          );
+          separator.title = 'As conversas foram unidas porque pertencem ao mesmo cliente e à mesma unidade.';
+        }}
+        lastConversation = message.id_conversa;
+        const isBot = message.quem_enviou === 'bot';
+        const row = document.createElement('div');
+        row.className = 'row ' + (isBot ? 'bot' : 'client');
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        if (message.tipo && message.tipo !== 'text') {{
+          addText(bubble,'span','message-kind',message.tipo);
+        }}
+        addText(
+          bubble,'div','',
+          message.texto || '[' + (message.tipo || 'mensagem sem texto') + ']'
+        );
+        const technical = addText(
+          bubble,'div','technical',
+          'mensagem #' + message.id_mensagem +
+          ' • conversa #' + message.id_conversa +
+          ' • etapa ' + (message.id_etapa ?? '—') +
+          ' • tipo ' + (message.tipo || '—')
+        );
+        technical.setAttribute('aria-hidden','true');
+        const meta = addText(bubble,'div','meta','');
+        addText(meta,'time','',fmtTime(message.data));
+        if (isBot) addText(meta,'span','ticks','✓✓');
+        row.appendChild(bubble);
+        box.appendChild(row);
+      }});
+
+      const rating = ratingsByClient.get(String(item.id_cliente));
+      $('details').textContent =
+        'Cliente #' + item.id_cliente +
+        ' • conversas técnicas: ' + item.ids_conversa.join(', ') +
+        ' • ' + item.mensagens.length + ' mensagens no período' +
+        (rating === undefined ? '' : ' • satisfação: ' + rating);
+      box.scrollTop = box.scrollHeight;
+      $('scrollBottom').hidden = true;
+    }}
+
+    const oldSearch = $('search');
+    const search = oldSearch.cloneNode(true);
+    oldSearch.replaceWith(search);
+
+    function renderList() {{
+      const needle = search.value.trim().toLocaleLowerCase('pt-BR');
+      const list = $('chatList');
+      list.replaceChildren();
+      const visible = conversations.filter(item => {{
+        const searchable = [item.nome,item.waid_telefone,item.email,item.profissao]
+          .concat(item.mensagens.map(message => message.texto))
+          .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+        return matchesFilter(item) && searchable.includes(needle);
+      }});
+      if (!visible.length) {{
+        addText(
+          list,'div','empty',
+          conversations.length ? 'Nenhum lead encontrado.' : 'Nenhuma mensagem de cliente no período.'
+        );
+        return;
+      }}
+      visible.forEach(item => {{
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'chat-item';
+        button.dataset.client = String(item.id_cliente);
+        if (selectedClient === button.dataset.client) button.classList.add('active');
+        const avatar = addText(button,'div','avatar',initials(item.nome));
+        avatar.style.backgroundColor = avatarColor(item.id_cliente);
+        const body = document.createElement('div');
+        const top = document.createElement('div');
+        top.className = 'item-top';
+        addText(top,'strong','',item.nome);
+        addText(top,'time','',fmtDate(item.ultima_atividade));
+        body.appendChild(top);
+        const bottom = document.createElement('div');
+        bottom.className = 'item-bottom';
+        addText(bottom,'div','preview',preview(item.mensagens[item.mensagens.length - 1]));
+        addText(bottom,'span','count',String(item.mensagens.length));
+        body.appendChild(bottom);
+        const flags = document.createElement('div');
+        flags.className = 'flags';
+        if (item.ids_conversa.length > 1) {{
+          addText(flags,'span','flag',item.ids_conversa.length + ' conversas unidas');
+        }}
+        if (item.foi_funil) addText(flags,'span','flag green','funil');
+        const rating = ratingsByClient.get(String(item.id_cliente));
+        if (rating !== undefined) addText(flags,'span','flag gold','nota ' + rating);
+        body.appendChild(flags);
+        button.appendChild(body);
+        button.addEventListener('click',() => showConversation(item));
+        list.appendChild(button);
+      }});
+    }}
+
+    $('period').textContent =
+      (unit.nome_agente ? 'Agente ' + unit.nome_agente + ' • ' : '') + data.periodo.rotulo;
+    $('messageCount').textContent = conversations.reduce(
+      (total,item) => total + item.mensagens.length, 0
+    );
+    search.addEventListener('input',renderList);
+    document.querySelectorAll('.filter').forEach(button => {{
+      button.addEventListener('click',() => {{
+        activeFilter = button.dataset.filter;
+        document.querySelectorAll('.filter').forEach(candidate => {{
+          candidate.classList.toggle('active',candidate === button);
+        }});
+        renderList();
+      }});
+    }});
+    $('metadataButton').addEventListener('click',() => {{
+      const enabled = document.body.classList.toggle('show-metadata');
+      $('metadataButton').setAttribute('aria-pressed',String(enabled));
+      document.querySelectorAll('.technical').forEach(node => {{
+        node.setAttribute('aria-hidden',String(!enabled));
+      }});
+    }});
+    $('backButton').addEventListener('click',() => {{
+      document.body.classList.remove('chat-open');
+    }});
+    $('messages').addEventListener('scroll',() => {{
+      const box = $('messages');
+      $('scrollBottom').hidden = box.scrollHeight - box.scrollTop - box.clientHeight < 140;
+    }});
+    $('scrollBottom').addEventListener('click',() => {{
+      $('messages').scrollTo({{top:$('messages').scrollHeight,behavior:'smooth'}});
+    }});
+    renderList();
+    if (conversations[0] && window.matchMedia('(min-width:821px)').matches) {{
+      showConversation(conversations[0]);
+    }}
+  }})();
+  </script>
+</body>
+</html>'''
+
+
+def _registrar_fontes_pdf() -> tuple[str, str]:
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    candidatos = [
+        (
+            Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/arial.ttf",
+            Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts/arialbd.ttf",
+        ),
+        (
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        ),
+    ]
+    for regular, bold in candidatos:
+        if regular.is_file() and bold.is_file():
+            try:
+                pdfmetrics.registerFont(TTFont("Monitoramento", str(regular)))
+                pdfmetrics.registerFont(TTFont("Monitoramento-Bold", str(bold)))
+                pdfmetrics.registerFontFamily(
+                    "Monitoramento",
+                    normal="Monitoramento",
+                    bold="Monitoramento-Bold",
+                )
+                return "Monitoramento", "Monitoramento-Bold"
+            except Exception:
+                continue
+    return "Helvetica", "Helvetica-Bold"
+
+
+def renderizar_pdf(
+    unidade: Mapping[str, Any],
+    periodo: Mapping[str, Any],
+    destino: Path,
+) -> None:
+    """Renderiza um PDF vetorial, paginado e adequado para impressão."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import mm
+        from reportlab.platypus import (
+            CondPageBreak,
+            HRFlowable,
+            LongTable,
+            PageBreak,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+    except ImportError as exc:
+        raise RuntimeError(
+            "ReportLab não está instalado. Execute: "
+            "pip install -r utilitarios/requirements-monitoramento.txt"
+        ) from exc
+
+    fonte, fonte_bold = _registrar_fontes_pdf()
+    verde = colors.HexColor("#008069")
+    verde_claro = colors.HexColor("#E8F7F3")
+    cinza = colors.HexColor("#667781")
+    cinza_claro = colors.HexColor("#F4F6F7")
+    amarelo = colors.HexColor("#F4B400")
+    texto = colors.HexColor("#182229")
+
+    estilos_base = getSampleStyleSheet()
+    estilos = {
+        "titulo": ParagraphStyle(
+            "Titulo",
+            parent=estilos_base["Title"],
+            fontName=fonte_bold,
+            fontSize=23,
+            leading=27,
+            textColor=colors.white,
+            alignment=TA_LEFT,
+            spaceAfter=3 * mm,
+        ),
+        "subtitulo_capa": ParagraphStyle(
+            "SubtituloCapa",
+            parent=estilos_base["BodyText"],
+            fontName=fonte,
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#D6F3EC"),
+        ),
+        "secao": ParagraphStyle(
+            "Secao",
+            parent=estilos_base["Heading2"],
+            fontName=fonte_bold,
+            fontSize=15,
+            leading=19,
+            textColor=verde,
+            spaceBefore=4 * mm,
+            spaceAfter=2.5 * mm,
+        ),
+        "corpo": ParagraphStyle(
+            "Corpo",
+            parent=estilos_base["BodyText"],
+            fontName=fonte,
+            fontSize=9,
+            leading=13,
+            textColor=texto,
+        ),
+        "pequeno": ParagraphStyle(
+            "Pequeno",
+            parent=estilos_base["BodyText"],
+            fontName=fonte,
+            fontSize=7.5,
+            leading=10,
+            textColor=cinza,
+        ),
+        "centro": ParagraphStyle(
+            "Centro",
+            parent=estilos_base["BodyText"],
+            fontName=fonte,
+            fontSize=9,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=texto,
+        ),
+        "comentario": ParagraphStyle(
+            "Comentario",
+            parent=estilos_base["BodyText"],
+            fontName=fonte,
+            fontSize=9,
+            leading=14,
+            leftIndent=4 * mm,
+            rightIndent=3 * mm,
+            borderColor=colors.HexColor("#B9E4D9"),
+            borderWidth=0,
+            borderPadding=(2 * mm, 3 * mm, 2 * mm, 3 * mm),
+            backColor=colors.HexColor("#F5FBF9"),
+            textColor=texto,
+            spaceAfter=2 * mm,
+        ),
+    }
+
+    def p(valor: Any, estilo: str = "corpo") -> Any:
+        texto_seguro = html_escape(str(valor if valor not in (None, "") else "—"))
+        return Paragraph(texto_seguro.replace("\n", "<br/>"), estilos[estilo])
+
+    nome_unidade = str(unidade["nome_unidade"])
+    metricas = unidade["metricas"]
+    gerado_em = datetime.now(timezone.utc)
+    dias_periodo = float(periodo.get("dias") or 0)
+    if periodo.get("tipo") == "total":
+        selo_periodo = "HISTÓRICO TOTAL"
+    elif dias_periodo.is_integer():
+        selo_periodo = f"ÚLTIMOS {int(dias_periodo)} DIAS"
+    else:
+        selo_periodo = "JANELA DO RELATÓRIO"
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    documento = SimpleDocTemplate(
+        str(destino),
+        pagesize=A4,
+        rightMargin=16 * mm,
+        leftMargin=16 * mm,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        title=f"Desempenho — {nome_unidade}",
+        author="Monitoramento do chatbot",
+        subject=f"Indicadores de {periodo['rotulo']}",
+    )
+
+    def cabecalho_rodape(canvas: Any, doc: Any) -> None:
+        canvas.saveState()
+        largura, altura = A4
+        canvas.setStrokeColor(colors.HexColor("#DDE4E7"))
+        canvas.line(16 * mm, 13 * mm, largura - 16 * mm, 13 * mm)
+        canvas.setFont(fonte, 7.5)
+        canvas.setFillColor(cinza)
+        canvas.drawString(16 * mm, 8.5 * mm, nome_unidade)
+        canvas.drawRightString(
+            largura - 16 * mm,
+            8.5 * mm,
+            f"Página {doc.page} • gerado {_data_local(gerado_em)}",
+        )
+        canvas.restoreState()
+
+    historia: list[Any] = []
+    capa = Table(
+        [
+            [
+                Paragraph("Relatório de desempenho", estilos["titulo"]),
+                p(selo_periodo, "centro"),
+            ],
+            [
+                Paragraph(
+                    f"<b>{html_escape(nome_unidade)}</b><br/>{html_escape(str(periodo['rotulo']))}",
+                    estilos["subtitulo_capa"],
+                ),
+                "",
+            ],
+        ],
+        colWidths=[135 * mm, 32 * mm],
+    )
+    capa.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), verde),
+                ("SPAN", (0, 1), (1, 1)),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TEXTCOLOR", (1, 0), (1, 0), verde),
+                ("BACKGROUND", (1, 0), (1, 0), colors.white),
+                ("BOX", (1, 0), (1, 0), 0.5, colors.white),
+                ("LEFTPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("ROUNDEDCORNERS", [5]),
+            ]
+        )
+    )
+    historia.extend([capa, Spacer(1, 8 * mm)])
+
+    valores_cards = [
+        (metricas["leads_contato"], "Leads que entraram em contato"),
+        (metricas["leads_funil"], "Leads enviados ao funil"),
+        (metricas["leads_com_nota"], "Leads que deram nota"),
+        (
+            metricas["media_satisfacao"]
+            if metricas["media_satisfacao"] is not None
+            else "—",
+            "Nota média de satisfação",
+        ),
+    ]
+    cards = []
+    for valor, rotulo in valores_cards:
+        cards.append(
+            Table(
+                [
+                    [
+                        Paragraph(
+                            f"<font size='20' color='#008069'><b>{html_escape(str(valor))}</b></font>",
+                            estilos["centro"],
+                        )
+                    ],
+                    [p(rotulo, "centro")],
+                ],
+                colWidths=[76 * mm],
+            )
+        )
+    tabela_cards = Table(
+        [cards[:2], cards[2:]],
+        colWidths=[83.5 * mm, 83.5 * mm],
+        rowHeights=[31 * mm, 31 * mm],
+    )
+    tabela_cards.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), cinza_claro),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#DCE4E7")),
+                ("INNERGRID", (0, 0), (-1, -1), 3, colors.white),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4 * mm),
+            ]
+        )
+    )
+    descricao_intervalo = (
+        "todo o histórico disponível até o instante final do relatório"
+        if periodo.get("tipo") == "total"
+        else "eventos ocorridos dentro da janela móvel"
+    )
+    historia.extend(
+        [
+            Paragraph("Visão geral", estilos["secao"]),
+            p(
+                f"Os indicadores abaixo usam {descricao_intervalo}. "
+                "Conversas técnicas do mesmo cliente foram consolidadas apenas quando "
+                "pertencem à mesma unidade."
+            ),
+            Spacer(1, 3 * mm),
+            tabela_cards,
+            Spacer(1, 5 * mm),
+        ]
+    )
+
+    distribuicao = metricas["distribuicao_notas"]
+    maximo = max([int(valor) for valor in distribuicao.values()] + [1])
+    linhas_notas: list[list[Any]] = [[p("Nota", "pequeno"), p("Distribuição", "pequeno"), p("Respostas", "pequeno")]]
+    for nota in range(5, 0, -1):
+        quantidade = int(distribuicao[str(nota)])
+        largura_barra = max(1, int(34 * quantidade / maximo))
+        barra = Table([[""]], colWidths=[largura_barra * mm], rowHeights=[4 * mm])
+        barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), amarelo)]))
+        linhas_notas.append([p(f"{nota} / 5"), barra, p(quantidade, "centro")])
+    tabela_notas = Table(linhas_notas, colWidths=[23 * mm, 120 * mm, 24 * mm], repeatRows=1)
+    tabela_notas.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), verde_claro),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.3 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.3 * mm),
+            ]
+        )
+    )
+    historia.extend(
+        [
+            Paragraph("Satisfação", estilos["secao"]),
+            p(
+                f"Foram registradas {metricas['respostas_satisfacao']} nota(s) e "
+                f"{metricas['comentarios']} comentário(s) no período."
+            ),
+            Spacer(1, 2 * mm),
+            tabela_notas,
+            PageBreak(),
+            Paragraph("Leads identificados no período", estilos["secao"]),
+        ]
+    )
+
+    cabecalho_leads = [
+        p("Lead", "pequeno"),
+        p("Profissão atual", "pequeno"),
+        p("Conversa(s)", "pequeno"),
+        p("Última atividade", "pequeno"),
+        p("Funil", "pequeno"),
+    ]
+    linhas_leads: list[list[Any]] = [cabecalho_leads]
+    for lead in unidade["conversas"]:
+        identificacao = lead["nome"]
+        if lead.get("waid_telefone"):
+            identificacao += f"\nWA ID: {lead['waid_telefone']}"
+        linhas_leads.append(
+            [
+                p(identificacao, "pequeno"),
+                p(lead.get("profissao"), "pequeno"),
+                p(", ".join(map(str, lead["ids_conversa"])), "pequeno"),
+                p(_data_local(lead["ultima_atividade"]), "pequeno"),
+                p("Sim" if lead["foi_funil"] else "Não", "centro"),
+            ]
+        )
+    if len(linhas_leads) == 1:
+        linhas_leads.append([p("Nenhum lead no período"), "", "", "", ""])
+    tabela_leads = LongTable(
+        linhas_leads,
+        colWidths=[52 * mm, 35 * mm, 26 * mm, 37 * mm, 17 * mm],
+        repeatRows=1,
+    )
+    tabela_leads.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), verde),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, cinza_claro]),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("SPAN", (0, 1), (-1, 1)) if len(unidade["conversas"]) == 0 else ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.white),
+            ]
+        )
+    )
+    historia.extend([tabela_leads, Spacer(1, 7 * mm), Paragraph("Comentários recebidos", estilos["secao"])])
+
+    comentarios = [item for item in unidade["pesquisas"] if item["comentario"]]
+    if not comentarios:
+        historia.append(p("Nenhum comentário foi registrado no período."))
+    else:
+        for indice, item in enumerate(comentarios, 1):
+            historia.append(CondPageBreak(28 * mm))
+            cabecalho = (
+                f"<b>{html_escape(item['nome'])}</b> • nota "
+                f"{html_escape(str(item['nota'] if item['nota'] is not None else 'não informada'))}"
+                f"<br/><font color='#667781'>Profissão: "
+                f"{html_escape(item['profissao'] or 'não informada')} • "
+                f"{html_escape(_data_local(item['criado_em']))} • "
+                f"conversa #{item['id_conversa']}</font>"
+            )
+            historia.append(Paragraph(cabecalho, estilos["corpo"]))
+            historia.append(
+                Paragraph(
+                    "“" + html_escape(item["comentario"]).replace("\n", "<br/>") + "”",
+                    estilos["comentario"],
+                )
+            )
+            if indice != len(comentarios):
+                historia.append(HRFlowable(width="100%", thickness=0.4, color=colors.HexColor("#DCE4E7"), spaceBefore=1 * mm, spaceAfter=2 * mm))
+
+    historia.extend(
+        [
+            Spacer(1, 8 * mm),
+            HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#CAD5D9")),
+            Spacer(1, 2 * mm),
+            p(
+                "Documento privado. Contém dados pessoais dos leads e deve ser "
+                "armazenado e compartilhado somente com pessoas autorizadas da unidade.",
+                "pequeno",
+            ),
+        ]
+    )
+    documento.build(
+        historia,
+        onFirstPage=cabecalho_rodape,
+        onLaterPages=cabecalho_rodape,
+    )
+
+
+def _datas_nome_arquivo(periodo: Mapping[str, Any]) -> str:
+    inicio = _ordenar_data(periodo["inicio"]).astimezone(FUSO_RELATORIO).date()
+    fim = _ordenar_data(periodo["fim"]).astimezone(FUSO_RELATORIO).date()
+    return f"{inicio.isoformat()}_a_{fim.isoformat()}"
+
+
+def _arquivo_temporario(diretorio: Path, sufixo: str) -> Path:
+    diretorio.mkdir(parents=True, exist_ok=True)
+    descritor, caminho = tempfile.mkstemp(prefix=".gerando-", suffix=sufixo, dir=diretorio)
+    os.close(descritor)
+    return Path(caminho)
+
+
+def _publicar_lote_recuperavel(pares: Sequence[tuple[Path, Path]]) -> None:
+    """Publica um lote completo, restaurando os arquivos anteriores em erro.
+
+    Uma troca verdadeiramente atômica de vários arquivos não existe no sistema
+    de arquivos. O protocolo guarda todos os destinos antigos antes de publicar
+    qualquer arquivo. Se uma troca falhar, restaura o lote anterior. Backups que
+    não puderem ser restaurados são preservados para recuperação manual.
+    """
+    backups: dict[Path, Path] = {}
+    publicados: list[Path] = []
+    try:
+        for _, destino in pares:
+            if destino.exists():
+                backup = _arquivo_temporario(
+                    destino.parent, f"{destino.suffix}.backup"
+                )
+                backup.unlink()
+                destino.replace(backup)
+                backups[destino] = backup
+
+        for temporario, destino in pares:
+            temporario.replace(destino)
+            publicados.append(destino)
+    except Exception as erro_publicacao:
+        erros_recuperacao: list[str] = []
+        for destino in reversed(publicados):
+            try:
+                destino.unlink(missing_ok=True)
+            except OSError as exc:
+                erros_recuperacao.append(f"remover {destino}: {exc}")
+        for destino, backup in backups.items():
+            if backup.exists():
+                try:
+                    backup.replace(destino)
+                except OSError as exc:
+                    erros_recuperacao.append(
+                        f"restaurar {destino} a partir de {backup}: {exc}"
+                    )
+        if erros_recuperacao:
+            detalhes = "; ".join(erros_recuperacao)
+            preservados = ", ".join(
+                str(backup) for backup in backups.values() if backup.exists()
+            )
+            raise RuntimeError(
+                "Falha ao publicar e ao restaurar o lote. "
+                f"Backups preservados: {preservados or 'nenhum'}. {detalhes}"
+            ) from erro_publicacao
+        raise
+    else:
+        for backup in backups.values():
+            backup.unlink(missing_ok=True)
+    finally:
+        for temporario, _ in pares:
+            temporario.unlink(missing_ok=True)
+
+
+def resolver_pastas_unidades(
+    unidades: Sequence[Mapping[str, Any]],
+) -> dict[int, str]:
+    """Resolve nomes de pasta estáveis, inclusive quando nomes comerciais colidem."""
+    pastas_usadas: set[str] = set()
+    resultado: dict[int, str] = {}
+    for unidade in unidades:
+        id_unidade = int(unidade["id_unidade"])
+        pasta_base = sanear_nome_unidade(unidade["nome_unidade"], id_unidade)
+        pasta = pasta_base
+        tentativa = 0
+        while pasta.casefold() in pastas_usadas:
+            tentativa += 1
+            sufixo = str(id_unidade) if tentativa == 1 else f"{id_unidade}-{tentativa}"
+            pasta = f"{pasta_base} ({sufixo})"
+        pastas_usadas.add(pasta.casefold())
+        resultado[id_unidade] = pasta
+    return resultado
+
+
+def gerar_artefatos(
+    snapshot: Mapping[str, Any],
+    raiz_saida: Path,
+    nomes_pasta: Mapping[int, str] | None = None,
+) -> list[dict[str, Path]]:
+    """Gera os pares HTML/PDF e restaura o par anterior se a publicação falhar."""
+    raiz_saida = raiz_saida.expanduser().resolve()
+    periodo = snapshot["periodo"]
+    tipo_periodo = str(periodo.get("tipo") or "semanal")
+    if tipo_periodo not in {"semanal", "total"}:
+        raise ValueError(f"Tipo de período inválido: {tipo_periodo!r}")
+    intervalo = _datas_nome_arquivo(periodo)
+    pastas = dict(nomes_pasta or resolver_pastas_unidades(snapshot["unidades"]))
+    gerados: list[dict[str, Path]] = []
+    publicacao: list[tuple[Path, Path]] = []
+
+    try:
+        for unidade in snapshot["unidades"]:
+            id_unidade = int(unidade["id_unidade"])
+            pasta = pastas.get(id_unidade)
+            if not pasta:
+                raise RuntimeError(f"Pasta não resolvida para a unidade {id_unidade}")
+            raiz_unidade = raiz_saida / pasta / tipo_periodo
+            diretorio_html = raiz_unidade / "dashbord"
+            diretorio_pdf = raiz_unidade / "relatorios"
+            destino_html = diretorio_html / f"conversas_{intervalo}.html"
+            destino_pdf = diretorio_pdf / f"desempenho_{intervalo}.pdf"
+            temporario_html = _arquivo_temporario(diretorio_html, ".html")
+            temporario_pdf = _arquivo_temporario(diretorio_pdf, ".pdf")
+            publicacao.extend(
+                ((temporario_html, destino_html), (temporario_pdf, destino_pdf))
+            )
+
+            temporario_html.write_text(
+                renderizar_html(unidade, periodo), encoding="utf-8", newline="\n"
+            )
+            renderizar_pdf(unidade, periodo, temporario_pdf)
+            gerados.append({"html": destino_html, "pdf": destino_pdf})
+
+        _publicar_lote_recuperavel(publicacao)
+    except Exception:
+        for temporario, _ in publicacao:
+            temporario.unlink(missing_ok=True)
+        raise
+    return gerados
+
+
+def executar(args: argparse.Namespace) -> list[dict[str, Path]]:
+    from utilitarios.bootstrap import configurar_ambiente_utilitario
+
+    configurar_ambiente_utilitario(args.env_file)
+    # Import tardio: connection_aws lê o ambiente no momento do import.
+    from core.database.connection_aws import get_conn
+
+    inicio, fim = resolver_janela(args.dias, args.ate)
+    conn = get_conn(application_name="utilitario_monitoramento_semanal")
+    try:
+        snapshot = coletar_snapshot(
+            conn=conn,
+            inicio=inicio,
+            fim=fim,
+            ids_unidade=args.ids_unidade,
+            max_mensagens=args.max_mensagens,
+            statement_timeout_ms=args.statement_timeout_ms,
+        )
+    finally:
+        conn.close()
+    return gerar_artefatos(snapshot, args.saida)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = criar_parser()
+    args = parser.parse_args(argv)
+    try:
+        gerados = executar(args)
+    except Exception as exc:
+        parser.exit(1, f"Falha ao gerar monitoramento: {exc}\n")
+
+    if not gerados:
+        print("Nenhuma unidade encontrada; nenhum arquivo foi gerado.")
+        return 0
+    print(f"Monitoramento concluído para {len(gerados)} unidade(s):")
+    for item in gerados:
+        print(f"- HTML: {item['html']}")
+        print(f"  PDF:  {item['pdf']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+````
+
+
+## Passo 150B — `utilitarios/monitoring/suspicious_conversations.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A heurística
+de monitoramento não muda; a consulta apenas passa a ler `cliente.wa_id` e
+mantém o alias de apresentação já consumido pelo relatório.
+
+SHA-256 do conteúdo UTF-8 normalizado: `5cae448e05f5b5d9ae6b98737f92bb61bf9125c4d9ac0f7f24e49ffbc72aeb58`
+
+````python
+"""Relatório operacional e somente leitura de conversas suspeitas de automação."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import io
+import json
+import re
+import statistics
+import sys
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utilitarios.bootstrap import configurar_ambiente_local
+
+MAX_CONVERSAS = 2000
+MAX_MENSAGENS_POR_CONVERSA = 1000
+MAX_MENSAGENS_TOTAL = 50000
+DEFAULT_LIMITE_CONVERSAS = 200
+DEFAULT_LIMITE_MENSAGENS = 250
+DEFAULT_LIMIAR = 45
+DEFAULT_STATEMENT_TIMEOUT_MS = 15000
+DEFAULT_LOCK_TIMEOUT_MS = 1000
+DEFAULT_IDLE_TIMEOUT_MS = 20000
+
+_EMAIL = re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b")
+_URL = re.compile(r"\b(?:https?://|www\.)\S+", re.IGNORECASE)
+_CPF_CNPJ = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b|\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
+_TELEFONE = re.compile(r"(?<!\d)(?:\+?55\s*)?(?:\(?\d{2}\)?[\s.-]*)?\d{4,5}[\s.-]?\d{4}(?!\d)")
+_NUMERO_LONGO = re.compile(r"\b\d{7,}\b")
+_SEGREDO = re.compile(r"\b[A-Za-z0-9_-]{24,}\b")
+
+
+def parse_instante(valor):
+    texto = str(valor).strip()
+    if texto.endswith("Z"):
+        texto = texto[:-1] + "+00:00"
+    instante = datetime.fromisoformat(texto)
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=timezone.utc)
+    return instante.astimezone(timezone.utc)
+
+
+def mascarar_pii(texto):
+    if texto is None:
+        return None
+    valor = str(texto)
+    valor = _EMAIL.sub("[EMAIL]", valor)
+    valor = _URL.sub("[URL]", valor)
+    valor = _CPF_CNPJ.sub("[DOCUMENTO]", valor)
+    valor = _TELEFONE.sub("[TELEFONE]", valor)
+    valor = _NUMERO_LONGO.sub("[NUMERO]", valor)
+    return _SEGREDO.sub("[CHAVE]", valor)
+
+
+def _iso(valor):
+    if valor is None:
+        return None
+    if isinstance(valor, datetime):
+        return valor.isoformat()
+    return str(valor)
+
+
+def _clamp(valor, minimo, maximo):
+    return max(minimo, min(maximo, valor))
+
+
+def _razao(parte, total):
+    return parte / total if total else 0.0
+
+
+def mascarar_wa_id(valor, *, mostrar=False):
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    if mostrar:
+        return texto
+    if len(texto) <= 4:
+        return "*" * len(texto)
+    return "*" * (len(texto) - 4) + texto[-4:]
+
+
+def mascarar_nome(valor):
+    if not valor:
+        return None
+    partes = str(valor).strip().split()
+    return " ".join(
+        parte[0] + "***" if parte else ""
+        for parte in partes[:3]
+    )
+
+
+def reconstruir_movimentos(mensagens):
+    """Pareia cliente/bot pela fila e classifica a evolução observada."""
+    por_fila = defaultdict(list)
+    for item in mensagens:
+        if item.get("id_mensagem_fila") is not None:
+            por_fila[item["id_mensagem_fila"]].append(item)
+    movimentos = []
+    for cliente in (
+        item for item in mensagens if item["quem_enviou"] == "cliente"
+    ):
+        candidatos = [
+            item
+            for item in por_fila.get(cliente.get("id_mensagem_fila"), [])
+            if item["quem_enviou"] == "bot"
+            and item["instante"] >= cliente["instante"]
+        ]
+        bot = min(
+            candidatos,
+            key=lambda item: (item["instante"], item["id_mensagem"]),
+            default=None,
+        )
+        if bot is None:
+            tipo = "indeterminado"
+        elif cliente["id_etapa"] is None and bot["id_etapa"] is not None:
+            tipo = "inicializacao"
+        elif cliente["id_etapa"] is None or bot["id_etapa"] is None:
+            tipo = "indeterminado"
+        elif cliente["id_etapa"] != bot["id_etapa"]:
+            tipo = "avanco"
+        else:
+            tipo = "sem_avanco"
+        movimentos.append(
+            {
+                "id_mensagem_cliente": cliente["id_mensagem"],
+                "id_mensagem_bot": bot["id_mensagem"] if bot else None,
+                "tipo": tipo,
+                "etapa_cliente": cliente["id_etapa"],
+                "etapa_bot": bot["id_etapa"] if bot else None,
+            }
+        )
+    return movimentos
+
+
+def _maior_sequencia_sem_avanco(movimentos):
+    maior = atual = 0
+    for movimento in movimentos:
+        if movimento["tipo"] == "sem_avanco":
+            atual += 1
+            maior = max(maior, atual)
+        else:
+            atual = 0
+    return maior
+
+
+def _latencias_bot_cliente(mensagens):
+    """Mede somente a resposta externa após a última mensagem do nosso bot."""
+    ultima_bot = None
+    latencias = []
+    for item in mensagens:
+        if item["quem_enviou"] == "bot":
+            ultima_bot = item
+        elif ultima_bot is not None:
+            segundos = (item["instante"] - ultima_bot["instante"]).total_seconds()
+            if segundos >= 0:
+                latencias.append(
+                    {
+                        "segundos": segundos,
+                        "estruturada_curta": (
+                            item["tipo_mensagem"]
+                            in {
+                                "button",
+                                "interactive",
+                                "list",
+                                "quick_reply",
+                            }
+                            and (item.get("tamanho_texto") or 0) <= 40
+                        ),
+                    }
+                )
+            ultima_bot = None
+    return latencias
+
+
+def _contar_ciclos(estados):
+    ciclos = 0
+    for tamanho in (2, 3):
+        for indice in range(tamanho * 2, len(estados) + 1):
+            if estados[indice - tamanho:indice] == estados[indice - tamanho * 2:indice - tamanho]:
+                ciclos += 1
+    return ciclos
+
+
+def pontuar_conversa(conversa, mensagens):
+    mensagens = sorted(
+        mensagens,
+        key=lambda item: (item["instante"], item["id_mensagem"]),
+    )
+    total = len(mensagens)
+    clientes = [item for item in mensagens if item["quem_enviou"] == "cliente"]
+    bots_contexto = [
+        item for item in mensagens if item["quem_enviou"] == "bot"
+    ]
+    movimentos = reconstruir_movimentos(mensagens)
+    chaves_cliente = [
+        (item["id_etapa"], item["fingerprint"])
+        for item in clientes
+        if item.get("fingerprint")
+    ]
+    contagens_cliente = Counter(chaves_cliente)
+    repeticoes_cliente = sum(
+        max(0, quantidade - 1)
+        for quantidade in contagens_cliente.values()
+    )
+    razao_repeticao = _razao(
+        repeticoes_cliente,
+        len(chaves_cliente),
+    )
+    estados = [
+        (item["id_etapa"], item.get("fingerprint"))
+        for item in clientes
+        if item.get("fingerprint")
+    ]
+    ciclos = _contar_ciclos(estados)
+    sequencia_sem_avanco = _maior_sequencia_sem_avanco(movimentos)
+    contagem_movimentos = Counter(
+        movimento["tipo"] for movimento in movimentos
+    )
+
+    razoes_fluxo = []
+    turnos = conversa.get("turnos_sem_avanco")
+    sinal_fluxo = max(turnos or 0, sequencia_sem_avanco)
+    if sinal_fluxo >= 12:
+        pontos_fluxo = 70
+    elif sinal_fluxo >= 9:
+        pontos_fluxo = 50
+    elif sinal_fluxo >= 6:
+        pontos_fluxo = 30
+    elif sinal_fluxo >= 4:
+        pontos_fluxo = 15
+    else:
+        pontos_fluxo = 0
+    if turnos:
+        razoes_fluxo.append(
+            f"contador persistido em {turnos} turno(s) sem avanço"
+        )
+    if sequencia_sem_avanco:
+        razoes_fluxo.append(
+            f"{sequencia_sem_avanco} movimento(s) pareado(s) consecutivo(s) sem avanço"
+        )
+    if pontos_fluxo:
+        razoes_fluxo.append(
+            f"faixa principal de fluxo sem avanço (+{pontos_fluxo})"
+        )
+
+    pontos_repeticao = min(
+        15,
+        round(10 * razao_repeticao) + min(5, ciclos),
+    )
+    razoes_repeticao = []
+    if repeticoes_cliente:
+        razoes_repeticao.append(
+            f"{repeticoes_cliente} resposta(s) do cliente repetida(s) na mesma etapa (+{round(10 * razao_repeticao)})"
+        )
+    if ciclos:
+        razoes_repeticao.append(
+            f"{ciclos} ciclo(s) de 2 ou 3 estados (+{min(5, ciclos)})"
+        )
+
+    latencias = _latencias_bot_cliente(mensagens)
+    latencias_nao_estruturadas = [
+        item["segundos"]
+        for item in latencias
+        if not item["estruturada_curta"]
+    ]
+    rapidas_nao_estruturadas = sum(
+        valor <= 2 for valor in latencias_nao_estruturadas
+    )
+    rapidas_estruturadas = sum(
+        item["segundos"] <= 2 and item["estruturada_curta"]
+        for item in latencias
+    )
+    razao_rapida = _razao(
+        rapidas_nao_estruturadas,
+        len(latencias_nao_estruturadas),
+    )
+    cv = None
+    if len(latencias_nao_estruturadas) >= 3:
+        media = statistics.fmean(latencias_nao_estruturadas)
+        if media > 0:
+            cv = statistics.pstdev(latencias_nao_estruturadas) / media
+    pontos_cadencia = min(
+        20,
+        round(14 * razao_rapida)
+        + min(3, rapidas_estruturadas)
+        + (6 if cv is not None and cv <= 0.12 else 0),
+    )
+    razoes_cadencia = []
+    if rapidas_nao_estruturadas:
+        razoes_cadencia.append(
+            f"{rapidas_nao_estruturadas}/{len(latencias_nao_estruturadas)} latência(s) bot→cliente não estruturadas de até 2 s (+{round(14 * razao_rapida)})"
+        )
+    if rapidas_estruturadas:
+        razoes_cadencia.append(
+            f"{rapidas_estruturadas} resposta(s) estruturada(s) rápida(s), com peso reduzido (+{min(3, rapidas_estruturadas)})"
+        )
+    if cv is not None and cv <= 0.12:
+        razoes_cadencia.append("latência bot→cliente muito regular (+6)")
+
+    tipos_cliente = Counter(
+        item["tipo_mensagem"] for item in clientes
+    )
+    tamanhos_cliente = [
+        item["tamanho_texto"]
+        for item in clientes
+        if item.get("tamanho_texto") is not None
+    ]
+    tamanhos_estaveis = False
+    if (
+        len(tamanhos_cliente) >= 4
+        and statistics.fmean(tamanhos_cliente) > 0
+    ):
+        tamanhos_estaveis = (
+            statistics.pstdev(tamanhos_cliente)
+            / statistics.fmean(tamanhos_cliente)
+            <= 0.10
+        )
+    marcadores_automacao = sum(
+        bool(item.get("tem_marcador_automacao"))
+        or bool(
+            item.get("texto")
+            and re.search(
+                r"\b(?:assistente virtual|mensagem autom[aá]tica|"
+                r"n[aã]o consigo entender|digite uma op[cç][aã]o|"
+                r"escolha uma op[cç][aã]o)\b",
+                item["texto"],
+                re.IGNORECASE,
+            )
+        )
+        for item in clientes
+    )
+    mensagens_com_url = sum(bool(item.get("tem_url")) for item in clientes)
+    somente_estruturadas_curtas = bool(clientes) and all(
+        item["tipo_mensagem"]
+        in {"button", "interactive", "list", "quick_reply"}
+        and (item.get("tamanho_texto") or 0) <= 40
+        for item in clientes
+    )
+    pontos_conteudo = min(
+        15,
+        (0 if somente_estruturadas_curtas else round(6 * razao_repeticao))
+        + min(6, marcadores_automacao * 3)
+        + min(2, mensagens_com_url)
+        + (2 if tamanhos_estaveis and not somente_estruturadas_curtas else 0)
+        + (
+            1
+            if len(tipos_cliente) == 1
+            and len(clientes) >= 5
+            and not somente_estruturadas_curtas
+            else 0
+        ),
+    )
+    razoes_conteudo = []
+    if razao_repeticao and not somente_estruturadas_curtas:
+        razoes_conteudo.append(
+            f"templates idênticos do cliente na mesma etapa em {razao_repeticao:.0%} das respostas (+{round(6 * razao_repeticao)})"
+        )
+    if marcadores_automacao:
+        razoes_conteudo.append(
+            f"{marcadores_automacao} texto(s) do cliente com expressão de automação (+{min(6, marcadores_automacao * 3)})"
+        )
+    if mensagens_com_url:
+        razoes_conteudo.append(
+            f"{mensagens_com_url} mensagem(ns) do cliente com URL (+{min(2, mensagens_com_url)})"
+        )
+    if tamanhos_estaveis and not somente_estruturadas_curtas:
+        razoes_conteudo.append("tamanho das mensagens do cliente muito estável (+2)")
+    if (
+        len(tipos_cliente) == 1
+        and len(clientes) >= 5
+        and not somente_estruturadas_curtas
+    ):
+        razoes_conteudo.append("um único tipo de mensagem do cliente (+1)")
+
+    pontos_conclusao = 0
+    razoes_conclusao = []
+    duracao_segundos = None
+    if conversa.get("finalizou_em") and conversa.get("iniciou_em"):
+        duracao_segundos = max(
+            0,
+            (conversa["finalizou_em"] - conversa["iniciou_em"]).total_seconds(),
+        )
+        if len(clientes) >= 4 and duracao_segundos <= 30:
+            pontos_conclusao = 10
+        elif len(clientes) >= 3 and duracao_segundos <= 60:
+            pontos_conclusao = 7
+        elif len(clientes) >= 2 and duracao_segundos <= 120:
+            pontos_conclusao = 4
+        if pontos_conclusao:
+            razoes_conclusao.append(
+                f"conversa encerrada em {duracao_segundos:.0f} s com {len(clientes)} mensagens do cliente (+{pontos_conclusao})"
+            )
+
+    dimensoes = {
+        "fluxo_sem_avanco": {
+            "pontos": pontos_fluxo,
+            "maximo": 70,
+            "razoes": razoes_fluxo,
+        },
+        "repeticao_ciclos": {
+            "pontos": pontos_repeticao,
+            "maximo": 15,
+            "razoes": razoes_repeticao,
+        },
+        "cadencia": {
+            "pontos": pontos_cadencia,
+            "maximo": 20,
+            "razoes": razoes_cadencia,
+        },
+        "conteudo_automatizado": {
+            "pontos": pontos_conteudo,
+            "maximo": 15,
+            "razoes": razoes_conteudo,
+        },
+        "conclusao_rapida": {
+            "pontos": pontos_conclusao,
+            "maximo": 10,
+            "razoes": razoes_conclusao,
+        },
+    }
+    score = min(100, sum(item["pontos"] for item in dimensoes.values()))
+    return {
+        "score": score,
+        "dimensoes": dimensoes,
+        "metricas": {
+            "total_mensagens_analisadas": total,
+            "mensagens_cliente": len(clientes),
+            "mensagens_bot_contexto": len(bots_contexto),
+            "movimentos": dict(contagem_movimentos),
+            "maior_sequencia_sem_avanco": sequencia_sem_avanco,
+            "respostas_cliente_repetidas_na_mesma_etapa": repeticoes_cliente,
+            "ciclos_cliente_detectados": ciclos,
+            "latencias_bot_cliente": [
+                round(item["segundos"], 3) for item in latencias
+            ],
+            "duracao_segundos": duracao_segundos,
+        },
+    }
+
+
+def _configurar_transacao(cursor, args):
+    cursor.execute(
+        "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+    )
+    cursor.execute(
+        "SELECT set_config('statement_timeout', %s, true)",
+        (f"{args.statement_timeout_ms}ms",),
+    )
+    cursor.execute(
+        "SELECT set_config('lock_timeout', %s, true)",
+        (f"{args.lock_timeout_ms}ms",),
+    )
+    cursor.execute(
+        "SELECT set_config('idle_in_transaction_session_timeout', %s, true)",
+        (f"{args.idle_timeout_ms}ms",),
+    )
+
+
+def _possui_turnos_sem_avanco(cursor):
+    cursor.execute(
+        """
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'chatbot'
+              AND table_name = 'conversa'
+              AND column_name = 'turnos_sem_avanco'
+        )
+        """
+    )
+    return bool(cursor.fetchone()[0])
+
+
+def _buscar_conversas(cursor, args, inicio, fim, possui_turnos):
+    filtros = [
+        "c.iniciou_em <= %s",
+        "COALESCE(c.finalizou_em, c.last_interaction_at, c.iniciou_em) >= %s",
+    ]
+    parametros = [fim, inicio]
+    if args.id_conversa:
+        filtros.append("c.id_conversa = ANY(%s)")
+        parametros.append(args.id_conversa)
+    if args.id_unidade:
+        filtros.append("c.id_unidade = ANY(%s)")
+        parametros.append(args.id_unidade)
+    coluna_turnos = (
+        "c.turnos_sem_avanco"
+        if possui_turnos
+        else "NULL::integer AS turnos_sem_avanco"
+    )
+    parametros.append(args.limite_conversas + 1)
+    cursor.execute(
+        f"""
+        SELECT
+            c.id_conversa,
+            c.id_cliente,
+            cl.nome AS nome_cliente,
+            cl.wa_id AS waid_telefone,
+            c.id_unidade,
+            u.nome_unidade,
+            u.waba_id,
+            u.phone_number_id,
+            c.id_etapa_atual,
+            c.status_ativa,
+            c.iniciou_em,
+            c.finalizou_em,
+            c.motivo_encerramento,
+            {coluna_turnos}
+        FROM chatbot.conversa AS c
+        JOIN chatbot.cliente AS cl
+          ON cl.id_cliente = c.id_cliente
+        JOIN chatbot.unidade AS u
+          ON u.id_unidade = c.id_unidade
+        WHERE {" AND ".join(filtros)}
+        ORDER BY c.iniciou_em DESC, c.id_conversa DESC
+        LIMIT %s
+        """,
+        tuple(parametros),
+    )
+    linhas = cursor.fetchall()
+    if len(linhas) > args.limite_conversas:
+        raise RuntimeError(
+            "limite de conversas atingido; reduza a janela ou refine os filtros"
+        )
+    chaves = (
+        "id_conversa",
+        "id_cliente",
+        "nome_cliente",
+        "waid_telefone",
+        "id_unidade",
+        "nome_unidade",
+        "waba_id",
+        "phone_number_id",
+        "id_etapa_atual",
+        "status_ativa",
+        "iniciou_em",
+        "finalizou_em",
+        "motivo_encerramento",
+        "turnos_sem_avanco",
+    )
+    return [dict(zip(chaves, linha)) for linha in linhas]
+
+
+def _buscar_mensagens(cursor, ids_conversa, args, inicio, fim):
+    if not ids_conversa:
+        return defaultdict(list), {}
+    texto_sql = (
+        "h.conteudo_texto"
+        if args.incluir_textos
+        else "NULL::text AS conteudo_texto"
+    )
+    cursor.execute(
+        f"""
+        WITH ordenadas AS (
+            SELECT
+                h.id_mensagem,
+                h.id_mensagem_fila,
+                h.id_conversa,
+                h.id_etapa,
+                h.received_data_hora,
+                h.tipo_mensagem,
+                h.quem_enviou,
+                CASE
+                    WHEN NULLIF(BTRIM(h.conteudo_texto), '') IS NULL
+                    THEN NULL
+                    ELSE md5(
+                        lower(
+                            regexp_replace(
+                                h.conteudo_texto,
+                                '\\s+',
+                                ' ',
+                                'g'
+                            )
+                        )
+                    )
+                END AS fingerprint,
+                char_length(h.conteudo_texto) AS tamanho_texto,
+                COALESCE(
+                    h.conteudo_texto ~* '(https?://|www\\.)',
+                    FALSE
+                ) AS tem_url,
+                COALESCE(
+                    h.conteudo_texto ~* (
+                        'assistente virtual|mensagem autom[aá]tica|'
+                        'n[aã]o consigo entender|digite uma op[cç][aã]o|'
+                        'escolha uma op[cç][aã]o'
+                    ),
+                    FALSE
+                ) AS tem_marcador_automacao,
+                {texto_sql},
+                row_number() OVER (
+                    PARTITION BY h.id_conversa
+                    ORDER BY h.received_data_hora DESC, h.id_mensagem DESC
+                ) AS ordem,
+                count(*) OVER (
+                    PARTITION BY h.id_conversa
+                ) AS total_conversa
+            FROM chatbot.historico_mensagens AS h
+            WHERE h.id_conversa = ANY(%s)
+              AND h.received_data_hora >= %s
+              AND h.received_data_hora <= %s
+        )
+        SELECT
+            id_mensagem,
+            id_mensagem_fila,
+            id_conversa,
+            id_etapa,
+            received_data_hora,
+            tipo_mensagem,
+            quem_enviou,
+            fingerprint,
+            tamanho_texto,
+            tem_url,
+            tem_marcador_automacao,
+            conteudo_texto,
+            total_conversa
+        FROM ordenadas
+        WHERE ordem <= %s
+        ORDER BY id_conversa, received_data_hora, id_mensagem
+        LIMIT %s
+        """,
+        (
+            ids_conversa,
+            inicio,
+            fim,
+            args.limite_mensagens,
+            args.max_mensagens_total + 1,
+        ),
+    )
+    por_conversa = defaultdict(list)
+    totais = {}
+    for linha in cursor.fetchall():
+        mensagem = {
+            "id_mensagem": linha[0],
+            "id_mensagem_fila": linha[1],
+            "id_conversa": linha[2],
+            "id_etapa": linha[3],
+            "instante": linha[4],
+            "tipo_mensagem": linha[5],
+            "quem_enviou": linha[6],
+            "fingerprint": linha[7],
+            "tamanho_texto": linha[8],
+            "tem_url": bool(linha[9]),
+            "tem_marcador_automacao": bool(linha[10]),
+            "texto": mascarar_pii(linha[11]) if linha[11] is not None else None,
+        }
+        por_conversa[linha[2]].append(mensagem)
+        totais[linha[2]] = linha[12]
+    carregadas = sum(len(itens) for itens in por_conversa.values())
+    if carregadas > args.max_mensagens_total:
+        raise RuntimeError(
+            "limite total de mensagens atingido; reduza a janela ou os limites"
+        )
+    return por_conversa, totais
+
+
+def gerar_relatorio(args, *, connection_factory=None):
+    if connection_factory is None:
+        configurar_ambiente_local()
+        from core.database.connection_aws import get_conn
+
+        connection_factory = get_conn
+
+    inicio, fim = resolver_janela(args)
+    conn = connection_factory(
+        application_name="relatorio_conversas_suspeitas_readonly"
+    )
+    try:
+        cursor = conn.cursor()
+        _configurar_transacao(cursor, args)
+        possui_turnos = _possui_turnos_sem_avanco(cursor)
+        conversas = _buscar_conversas(
+            cursor,
+            args,
+            inicio,
+            fim,
+            possui_turnos,
+        )
+        ids = [item["id_conversa"] for item in conversas]
+        mensagens, totais = _buscar_mensagens(
+            cursor,
+            ids,
+            args,
+            inicio,
+            fim,
+        )
+        resultados = []
+        for conversa in conversas:
+            analise = pontuar_conversa(
+                conversa,
+                mensagens.get(conversa["id_conversa"], []),
+            )
+            if analise["score"] < args.limiar:
+                continue
+            item = {
+                "id_conversa": conversa["id_conversa"],
+                "id_cliente": conversa["id_cliente"],
+                "nome_cliente_mascarado": mascarar_nome(
+                    conversa["nome_cliente"]
+                ),
+                "wa_id_cliente": mascarar_wa_id(
+                    conversa["waid_telefone"],
+                    mostrar=args.mostrar_wa_id,
+                ),
+                "id_unidade": conversa["id_unidade"],
+                "nome_unidade": conversa["nome_unidade"],
+                "waba_id": conversa["waba_id"],
+                "phone_number_id": conversa["phone_number_id"],
+                "score": analise["score"],
+                "status_ativa": conversa["status_ativa"],
+                "id_etapa_atual": conversa["id_etapa_atual"],
+                "iniciou_em": _iso(conversa["iniciou_em"]),
+                "finalizou_em": _iso(conversa["finalizou_em"]),
+                "motivo_encerramento": conversa["motivo_encerramento"],
+                "turnos_sem_avanco": conversa["turnos_sem_avanco"],
+                "historico_truncado": (
+                    totais.get(conversa["id_conversa"], 0)
+                    > args.limite_mensagens
+                ),
+                "metricas_sobre_recorte": (
+                    "mensagens mais recentes da conversa dentro da janela"
+                ),
+                **analise,
+            }
+            if args.incluir_textos:
+                item["amostras_texto_mascarado"] = [
+                    {
+                        "quem_enviou": mensagem["quem_enviou"],
+                        "instante": _iso(mensagem["instante"]),
+                        "texto": mensagem["texto"][: args.max_caracteres_texto],
+                    }
+                    for mensagem in mensagens.get(conversa["id_conversa"], [])
+                    if mensagem.get("texto")
+                ][: args.max_amostras_texto]
+            resultados.append(item)
+        resultados.sort(
+            key=lambda item: (-item["score"], item["id_conversa"])
+        )
+        return {
+            "metadados": {
+                "gerado_em": datetime.now(timezone.utc).isoformat(),
+                "inicio": inicio.isoformat(),
+                "fim": fim.isoformat(),
+                "somente_leitura": True,
+                "isolamento": "REPEATABLE READ",
+                "coluna_turnos_sem_avanco_disponivel": possui_turnos,
+                "conversas_lidas": len(conversas),
+                "conversas_reportadas": len(resultados),
+                "limiar": args.limiar,
+                "textos_incluidos": bool(args.incluir_textos),
+                "wa_id_completo": bool(args.mostrar_wa_id),
+                "recorte_historico": (
+                    "até o limite de mensagens mais recentes por conversa "
+                    "dentro da janela; métricas não representam mensagens "
+                    "anteriores ao recorte"
+                ),
+            },
+            "conversas": resultados,
+        }
+    finally:
+        try:
+            conn.rollback()
+        finally:
+            conn.close()
+
+
+def resolver_janela(args):
+    fim = parse_instante(args.fim) if args.fim else datetime.now(timezone.utc)
+    inicio = (
+        parse_instante(args.inicio)
+        if args.inicio
+        else fim - timedelta(hours=args.ultimas_horas)
+    )
+    if inicio >= fim:
+        raise ValueError("--inicio deve ser anterior a --fim")
+    if fim - inicio > timedelta(days=31):
+        raise ValueError("a janela máxima é de 31 dias")
+    return inicio, fim
+
+
+def _razoes_texto(item):
+    razoes = []
+    for nome, dimensao in item["dimensoes"].items():
+        for razao in dimensao["razoes"]:
+            razoes.append(f"{nome}: {razao}")
+    return razoes
+
+
+def formatar_texto(relatorio):
+    meta = relatorio["metadados"]
+    linhas = [
+        "RELATÓRIO MANUAL DE CONVERSAS SUSPEITAS",
+        (
+            f"janela={meta['inicio']}..{meta['fim']} "
+            f"lidas={meta['conversas_lidas']} "
+            f"reportadas={meta['conversas_reportadas']} "
+            f"limiar={meta['limiar']}"
+        ),
+    ]
+    for item in relatorio["conversas"]:
+        linhas.append(
+            (
+                f"\nconversa={item['id_conversa']} "
+                f"cliente={item['id_cliente']} "
+                f"wa_id={item['wa_id_cliente']} "
+                f"unidade={item['id_unidade']} "
+                f"waba_id={item['waba_id']} "
+                f"phone_number_id={item['phone_number_id']} "
+                f"score={item['score']}/100 "
+                f"ativa={item['status_ativa']}"
+            )
+        )
+        for razao in _razoes_texto(item):
+            linhas.append(f"  - {razao}")
+        if item.get("historico_truncado"):
+            linhas.append("  - aviso: histórico truncado pelo limite de carga")
+        for amostra in item.get("amostras_texto_mascarado", []):
+            linhas.append(
+                f"  - amostra {amostra['quem_enviou']} "
+                f"{amostra['instante']}: {amostra['texto']}"
+            )
+    return "\n".join(linhas) + "\n"
+
+
+def formatar_csv(relatorio):
+    saida = io.StringIO()
+    campos = [
+        "id_conversa",
+        "id_cliente",
+        "nome_cliente_mascarado",
+        "wa_id_cliente",
+        "id_unidade",
+        "nome_unidade",
+        "waba_id",
+        "phone_number_id",
+        "score",
+        "status_ativa",
+        "id_etapa_atual",
+        "iniciou_em",
+        "finalizou_em",
+        "turnos_sem_avanco",
+        "historico_truncado",
+        "razoes",
+    ]
+    writer = csv.DictWriter(saida, fieldnames=campos)
+    writer.writeheader()
+    for item in relatorio["conversas"]:
+        linha = {campo: item.get(campo) for campo in campos}
+        linha["razoes"] = " | ".join(_razoes_texto(item))
+        writer.writerow(linha)
+    return saida.getvalue()
+
+
+def formatar_saida(relatorio, formato):
+    if formato == "json":
+        return json.dumps(
+            relatorio,
+            ensure_ascii=False,
+            indent=2,
+            default=_iso,
+        ) + "\n"
+    if formato == "csv":
+        return formatar_csv(relatorio)
+    return formatar_texto(relatorio)
+
+
+def criar_parser():
+    parser = argparse.ArgumentParser(
+        description="Gera relatório manual, explicável e somente leitura.",
+    )
+    parser.add_argument("--id-conversa", type=int, action="append")
+    parser.add_argument("--id-unidade", type=int, action="append")
+    parser.add_argument("--todas-unidades", action="store_true")
+    parser.add_argument("--inicio")
+    parser.add_argument("--fim")
+    parser.add_argument("--ultimas-horas", type=int, default=24)
+    parser.add_argument(
+        "--limite-conversas",
+        type=int,
+        default=DEFAULT_LIMITE_CONVERSAS,
+    )
+    parser.add_argument(
+        "--limite-mensagens",
+        type=int,
+        default=DEFAULT_LIMITE_MENSAGENS,
+    )
+    parser.add_argument(
+        "--max-mensagens-total",
+        type=int,
+        default=MAX_MENSAGENS_TOTAL,
+    )
+    parser.add_argument("--limiar", type=int, default=DEFAULT_LIMIAR)
+    parser.add_argument(
+        "--formato",
+        choices=("texto", "json", "csv"),
+        default="texto",
+    )
+    parser.add_argument("--saida")
+    parser.add_argument("--incluir-textos", action="store_true")
+    parser.add_argument("--mostrar-wa-id", action="store_true")
+    parser.add_argument("--max-amostras-texto", type=int, default=5)
+    parser.add_argument("--max-caracteres-texto", type=int, default=160)
+    parser.add_argument(
+        "--statement-timeout-ms",
+        type=int,
+        default=DEFAULT_STATEMENT_TIMEOUT_MS,
+    )
+    parser.add_argument(
+        "--lock-timeout-ms",
+        type=int,
+        default=DEFAULT_LOCK_TIMEOUT_MS,
+    )
+    parser.add_argument(
+        "--idle-timeout-ms",
+        type=int,
+        default=DEFAULT_IDLE_TIMEOUT_MS,
+    )
+    return parser
+
+
+def validar_args(parser, args):
+    if not (args.id_conversa or args.id_unidade or args.todas_unidades):
+        parser.error(
+            "informe --id-conversa, --id-unidade ou --todas-unidades"
+        )
+    limites = (
+        ("--limite-conversas", args.limite_conversas, 1, MAX_CONVERSAS),
+        (
+            "--limite-mensagens",
+            args.limite_mensagens,
+            1,
+            MAX_MENSAGENS_POR_CONVERSA,
+        ),
+        (
+            "--max-mensagens-total",
+            args.max_mensagens_total,
+            1,
+            MAX_MENSAGENS_TOTAL,
+        ),
+        ("--limiar", args.limiar, 0, 100),
+        ("--ultimas-horas", args.ultimas_horas, 1, 31 * 24),
+        ("--max-amostras-texto", args.max_amostras_texto, 0, 20),
+        ("--max-caracteres-texto", args.max_caracteres_texto, 20, 500),
+        ("--statement-timeout-ms", args.statement_timeout_ms, 100, 120000),
+        ("--lock-timeout-ms", args.lock_timeout_ms, 50, 10000),
+        ("--idle-timeout-ms", args.idle_timeout_ms, 1000, 120000),
+    )
+    for nome, valor, minimo, maximo in limites:
+        if not minimo <= valor <= maximo:
+            parser.error(f"{nome} deve estar entre {minimo} e {maximo}")
+    if args.inicio and not args.fim:
+        parser.error("--inicio exige --fim")
+    ids = (args.id_conversa or []) + (args.id_unidade or [])
+    if any(valor <= 0 for valor in ids):
+        parser.error("IDs devem ser inteiros positivos")
+    if (
+        args.limite_conversas * args.limite_mensagens
+        > args.max_mensagens_total
+    ):
+        parser.error(
+            "--limite-conversas x --limite-mensagens não pode exceder "
+            "--max-mensagens-total"
+        )
+
+
+def main(argv=None):
+    parser = criar_parser()
+    args = parser.parse_args(argv)
+    validar_args(parser, args)
+    try:
+        relatorio = gerar_relatorio(args)
+        conteudo = formatar_saida(relatorio, args.formato)
+        if args.saida:
+            with open(args.saida, "w", encoding="utf-8", newline="") as arquivo:
+                arquivo.write(conteudo)
+        else:
+            sys.stdout.write(conteudo)
+        return 0
+    except (ValueError, RuntimeError) as exc:
+        parser.exit(2, f"erro: {exc}\n")
+    except Exception as exc:
+        sys.stderr.write(f"erro ao gerar relatório: {type(exc).__name__}: {exc}\n")
+        return 1
+
+
+if __name__ == "__main__":
+    argumentos = sys.argv[1:] or [
+        "--todas-unidades",
+        "--ultimas-horas",
+        "24",
+        "--formato",
+        "texto",
+    ]
+    raise SystemExit(main(argumentos))
+````
+
+
+## Passo 150C — `utilitarios/monitoring/blocked_users.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A consulta
+diagnóstica passa a projetar separadamente todos os aliases `wa_id` e
+`user_id` persistidos em cada linha de bloqueio; assim ela não quebra com a
+renomeação física e também não oculta bloqueios de contas em modo de
+privacidade. A opção CLI `--show-wa-id` é mantida por compatibilidade, embora
+agora exiba qualquer identidade Meta.
+
+SHA-256 do conteúdo UTF-8 normalizado: `72c61ee854a16a4f5a7afcdf492fa8747b02bcd4c85e637b34a28819187db7b7`
+
+````python
+"""Reconciliação somente leitura de bloqueios e registros WhatsApp.
+
+O escopo é deliberadamente limitado às unidades e WABAs cadastradas no
+banco. A ferramenta não altera a Meta nem o PostgreSQL.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from utilitarios.bootstrap import configurar_ambiente_local
+
+
+def carregar_estado_banco(*, connection_factory=None):
+    """Carrega unidades e bloqueios locais em uma única fotografia read-only."""
+    if connection_factory is None:
+        configurar_ambiente_local()
+        from core.database.connection_aws import get_conn
+
+        connection_factory = get_conn
+
+    conn = connection_factory(
+        application_name="utilitarios_blocked_users_readonly",
+    )
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;"
+        )
+        cursor.execute(
+            """
+            SELECT id_unidade, nome_unidade, waba_id, phone_number_id
+            FROM chatbot.unidade
+            WHERE waba_id IS NOT NULL
+              AND BTRIM(waba_id) <> ''
+              AND phone_number_id IS NOT NULL
+              AND BTRIM(phone_number_id) <> ''
+            ORDER BY id_unidade;
+            """
+        )
+        unidades = [
+            {
+                "id_unidade": linha[0],
+                "nome_unidade": linha[1],
+                "waba_id": _normalizar_id(linha[2]),
+                "phone_id_unidade": _normalizar_id(linha[3]),
+            }
+            for linha in cursor.fetchall()
+        ]
+
+        cursor.execute(
+            """
+            SELECT
+                cbm.id_bloqueio,
+                cbm.id_cliente,
+                cbm.nome,
+                identidade.identidade_meta,
+                cbm.id_unidade,
+                cbm.phone_id_unidade,
+                u.nome_unidade,
+                u.waba_id,
+                u.phone_number_id,
+                c.nome
+            FROM chatbot.cliente_bloqueado_meta AS cbm
+            JOIN chatbot.unidade AS u
+              ON u.id_unidade = cbm.id_unidade
+            LEFT JOIN chatbot.cliente AS c
+              ON c.id_cliente = cbm.id_cliente
+            CROSS JOIN LATERAL (
+                SELECT alias.identidade_meta
+                FROM (
+                    VALUES (cbm.wa_id), (cbm.user_id)
+                ) AS alias(identidade_meta)
+                WHERE alias.identidade_meta IS NOT NULL
+                  AND BTRIM(alias.identidade_meta) <> ''
+            ) AS identidade
+            ORDER BY cbm.id_unidade, identidade.identidade_meta;
+            """
+        )
+        bloqueios = [
+            {
+                "id_bloqueio": linha[0],
+                "id_cliente": linha[1],
+                "nome_cliente": linha[2] or linha[9],
+                "identidade_meta": _normalizar_id(linha[3]),
+                "id_unidade": linha[4],
+                "phone_id_registrado": _normalizar_id(linha[5]),
+                "nome_unidade": linha[6],
+                "waba_id": _normalizar_id(linha[7]),
+                "phone_id_unidade": _normalizar_id(linha[8]),
+            }
+            for linha in cursor.fetchall()
+        ]
+        return unidades, bloqueios
+    finally:
+        try:
+            conn.rollback()
+        finally:
+            conn.close()
+
+
+def listar_usuarios_bloqueados_meta(phone_id_unidade):
+    """Lista todos os bloqueados de um phone ID usando paginação do PyWa."""
+    configurar_ambiente_local()
+    from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
+
+    cliente_wa = conta_wa(str(phone_id_unidade))
+    return cliente_wa.get_blocked_users().all(sleep=0.2)
+
+
+def coletar_bloqueios_meta(unidades, *, list_factory=None):
+    """Coleta cada unidade isoladamente; uma falha não apaga as demais."""
+    list_factory = list_factory or listar_usuarios_bloqueados_meta
+    resultado = []
+
+    for unidade in unidades:
+        item = {
+            **unidade,
+            "status_meta": "ok",
+            "erro_meta": None,
+            "identidades_bloqueadas": [],
+        }
+        try:
+            bloqueados = list_factory(unidade["phone_id_unidade"])
+            item["identidades_bloqueadas"] = sorted({
+                wa_id
+                for wa_id in (
+                    _extrair_identidade_bloqueada(usuario)
+                    for usuario in bloqueados
+                )
+                if wa_id
+            })
+        except Exception as exc:
+            item["status_meta"] = "erro"
+            item["erro_meta"] = f"{type(exc).__name__}: {exc}"
+
+        resultado.append(item)
+
+    return resultado
+
+
+def comparar_bloqueios(bloqueios_meta, bloqueios_banco):
+    """Compara bloqueios por WABA, phone ID e identidade Meta."""
+    meta_por_chave = {}
+    banco_por_chave = {}
+    escopos_ok = set()
+    escopos_com_erro = set()
+    falhas_meta = []
+    vinculos_unidade_divergentes = []
+
+    for unidade in bloqueios_meta:
+        escopo = _escopo(unidade)
+        if unidade["status_meta"] != "ok":
+            escopos_com_erro.add(escopo)
+            falhas_meta.append({
+                "id_unidade": unidade["id_unidade"],
+                "nome_unidade": unidade["nome_unidade"],
+                "waba_id": unidade["waba_id"],
+                "phone_id_unidade": unidade["phone_id_unidade"],
+                "erro_meta": unidade["erro_meta"],
+            })
+            continue
+
+        escopos_ok.add(escopo)
+        for identidade_meta in unidade["identidades_bloqueadas"]:
+            chave = (*escopo, _normalizar_id(identidade_meta))
+            meta_por_chave[chave] = {
+                "identidade_meta": chave[2],
+                "id_unidade": unidade["id_unidade"],
+                "nome_unidade": unidade["nome_unidade"],
+                "waba_id": chave[0],
+                "phone_id_unidade": chave[1],
+                "origem": "meta",
+            }
+
+    for bloqueio in bloqueios_banco:
+        phone_atual = _normalizar_id(bloqueio["phone_id_unidade"])
+        phone_registrado = _normalizar_id(
+            bloqueio.get("phone_id_registrado", phone_atual)
+        )
+        if phone_registrado != phone_atual:
+            vinculos_unidade_divergentes.append(dict(bloqueio))
+            continue
+
+        chave = (
+            _normalizar_id(bloqueio["waba_id"]),
+            phone_atual,
+            _normalizar_id(bloqueio["identidade_meta"]),
+        )
+        banco_por_chave[chave] = dict(bloqueio)
+
+    chaves_meta = set(meta_por_chave)
+    chaves_banco = set(banco_por_chave)
+    chaves_sincronizadas = chaves_meta & chaves_banco
+    chaves_somente_meta = chaves_meta - chaves_banco
+    chaves_somente_banco = {
+        chave
+        for chave in chaves_banco - chaves_meta
+        if chave[:2] in escopos_ok
+    }
+    chaves_nao_comparadas = {
+        chave
+        for chave in chaves_banco - chaves_meta
+        if chave[:2] not in escopos_ok
+    }
+
+    sincronizados = [
+        {
+            **banco_por_chave[chave],
+            "origens": ("banco", "meta"),
+        }
+        for chave in _ordenar_chaves(chaves_sincronizadas)
+    ]
+    somente_meta = [
+        meta_por_chave[chave]
+        for chave in _ordenar_chaves(chaves_somente_meta)
+    ]
+    somente_banco = [
+        banco_por_chave[chave]
+        for chave in _ordenar_chaves(chaves_somente_banco)
+    ]
+    nao_comparados_banco = [
+        banco_por_chave[chave]
+        for chave in _ordenar_chaves(chaves_nao_comparadas)
+    ]
+
+    return {
+        "sincronizados": sincronizados,
+        "somente_meta": somente_meta,
+        "somente_banco": somente_banco,
+        "nao_comparados_banco": nao_comparados_banco,
+        "vinculos_unidade_divergentes": sorted(
+            vinculos_unidade_divergentes,
+            key=_ordem_registro,
+        ),
+        "falhas_meta": sorted(falhas_meta, key=_ordem_unidade),
+        "escopos_meta_ok": sorted(escopos_ok),
+        "escopos_meta_com_erro": sorted(escopos_com_erro),
+    }
+
+
+def reconciliar_bloqueios_meta_banco(
+    *,
+    imprimir=True,
+    mostrar_wa_id=False,
+    connection_factory=None,
+    meta_list_factory=None,
+):
+    """Executa e opcionalmente imprime a reconciliação Meta × banco."""
+    unidades, bloqueios_banco = carregar_estado_banco(
+        connection_factory=connection_factory,
+    )
+    bloqueios_meta = coletar_bloqueios_meta(
+        unidades,
+        list_factory=meta_list_factory,
+    )
+    resultado = comparar_bloqueios(bloqueios_meta, bloqueios_banco)
+    resultado["unidades_consultadas"] = bloqueios_meta
+
+    if imprimir:
+        imprimir_reconciliacao_bloqueios(
+            resultado,
+            mostrar_wa_id=mostrar_wa_id,
+        )
+
+    return resultado
+
+
+def listar_bloqueados_de_cada_unidade(
+    *,
+    imprimir=True,
+    mostrar_wa_id=False,
+    connection_factory=None,
+    meta_list_factory=None,
+):
+    """Lista o estado Meta por unidade sem compará-lo ao banco."""
+    unidades, _ = carregar_estado_banco(
+        connection_factory=connection_factory,
+    )
+    resultado = coletar_bloqueios_meta(
+        unidades,
+        list_factory=meta_list_factory,
+    )
+
+    if imprimir:
+        print("===== BLOQUEADOS NA META POR UNIDADE =====")
+        for unidade in resultado:
+            print(_descricao_unidade(unidade))
+            if unidade["status_meta"] != "ok":
+                print(f"   ERRO META: {unidade['erro_meta']}")
+                continue
+            if not unidade["identidades_bloqueadas"]:
+                print("   - nenhuma identidade bloqueada")
+            for wa_id in unidade["identidades_bloqueadas"]:
+                print(
+                    "   - "
+                    + _formatar_wa_id(wa_id, mostrar=mostrar_wa_id)
+                )
+
+    return resultado
+
+
+def imprimir_reconciliacao_bloqueios(resultado, *, mostrar_wa_id=False):
+    print("===== RECONCILIAÇÃO DE BLOQUEIOS META × BANCO =====")
+    print(
+        "Escopo: somente WABAs e unidades atualmente cadastradas no banco."
+    )
+    print(f"sincronizados: {len(resultado['sincronizados'])}")
+    print(f"somente_na_meta: {len(resultado['somente_meta'])}")
+    print(f"somente_no_banco: {len(resultado['somente_banco'])}")
+    print(
+        "não_comparados_por_falha_meta: "
+        f"{len(resultado['nao_comparados_banco'])}"
+    )
+    print(
+        "vínculos_de_unidade_divergentes: "
+        f"{len(resultado['vinculos_unidade_divergentes'])}"
+    )
+    print(f"falhas_meta: {len(resultado['falhas_meta'])}")
+
+    _imprimir_grupo(
+        "SINCRONIZADOS NO BANCO E NA META",
+        resultado["sincronizados"],
+        mostrar_wa_id,
+    )
+    _imprimir_grupo(
+        "SOMENTE NA META",
+        resultado["somente_meta"],
+        mostrar_wa_id,
+    )
+    _imprimir_grupo(
+        "SOMENTE NO BANCO / PENDENTES NA META",
+        resultado["somente_banco"],
+        mostrar_wa_id,
+    )
+    _imprimir_grupo(
+        "NÃO COMPARADOS POR FALHA DA META",
+        resultado["nao_comparados_banco"],
+        mostrar_wa_id,
+    )
+    _imprimir_grupo(
+        "VÍNCULO LOCAL DE UNIDADE DIVERGENTE",
+        resultado["vinculos_unidade_divergentes"],
+        mostrar_wa_id,
+    )
+
+    if resultado["falhas_meta"]:
+        print("\nFALHAS DE COLETA META:")
+        for falha in resultado["falhas_meta"]:
+            print(
+                f"   - {_descricao_unidade(falha)} | "
+                f"erro={falha['erro_meta']}"
+            )
+
+    if _bloqueios_sincronizados(resultado):
+        print("\nOK: banco e Meta estão sincronizados no escopo consultado.")
+
+
+def listar_numeros_waba_meta(waba_id, *, request_get=None):
+    """Lista todos os números de uma WABA conhecida pelo banco."""
+    configurar_ambiente_local()
+    from core.integrations.whatsapp.tools.config import (
+        construir_url_graph_api,
+        get_meta_http_timeout,
+        get_token_usuario_meta,
+    )
+
+    waba_id = _normalizar_id(waba_id)
+    if not waba_id:
+        raise ValueError("waba_id não informado")
+
+    request_get = request_get or requests.get
+    url = construir_url_graph_api(f"{waba_id}/phone_numbers")
+    headers = {"Authorization": f"Bearer {get_token_usuario_meta()}"}
+    params = {
+        "fields": (
+            "id,display_phone_number,verified_name,quality_rating,"
+            "code_verification_status,platform_type,name_status,status"
+        ),
+        "limit": 100,
+    }
+    numeros = []
+
+    while url:
+        response = request_get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=get_meta_http_timeout(),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        for numero in payload.get("data", []):
+            platform_type = numero.get("platform_type")
+            numeros.append({
+                "waba_id": waba_id,
+                "phone_id_unidade": _normalizar_id(numero.get("id")),
+                "display_phone_number": numero.get("display_phone_number"),
+                "verified_name": numero.get("verified_name"),
+                "quality_rating": numero.get("quality_rating"),
+                "code_verification_status": numero.get(
+                    "code_verification_status"
+                ),
+                "platform_type": platform_type,
+                "name_status": numero.get("name_status"),
+                "status": numero.get("status"),
+                "registrado_cloud_api": platform_type == "CLOUD_API",
+            })
+        url = payload.get("paging", {}).get("next")
+        params = None
+
+    return numeros
+
+
+def coletar_registros_meta(unidades, *, list_factory=None):
+    """Consulta isoladamente cada WABA cadastrada no banco."""
+    list_factory = list_factory or listar_numeros_waba_meta
+    numeros = []
+    falhas = []
+
+    for waba_id in sorted({item["waba_id"] for item in unidades}):
+        try:
+            numeros.extend(list_factory(waba_id))
+        except Exception as exc:
+            falhas.append({
+                "waba_id": waba_id,
+                "erro_meta": f"{type(exc).__name__}: {exc}",
+            })
+
+    return numeros, falhas
+
+
+def comparar_registros_waba(unidades, numeros_meta, falhas_meta):
+    """Compara registros usando a chave correta ``(waba_id, phone_id)``."""
+    wabas_com_erro = {item["waba_id"] for item in falhas_meta}
+    banco_por_chave = {
+        _escopo(item): item
+        for item in unidades
+        if item["waba_id"] not in wabas_com_erro
+    }
+    banco_nao_comparado = [
+        item for item in unidades if item["waba_id"] in wabas_com_erro
+    ]
+    meta_cloud = [
+        item
+        for item in numeros_meta
+        if item.get("registrado_cloud_api")
+        and item.get("phone_id_unidade")
+    ]
+    meta_por_chave = {_escopo(item): item for item in meta_cloud}
+
+    banco_por_phone = {
+        item["phone_id_unidade"]: item
+        for item in banco_por_chave.values()
+    }
+    meta_por_phone = {
+        item["phone_id_unidade"]: item
+        for item in meta_por_chave.values()
+    }
+    divergencias_waba = []
+    phones_divergentes = set()
+    for phone_id in set(banco_por_phone) & set(meta_por_phone):
+        banco = banco_por_phone[phone_id]
+        meta = meta_por_phone[phone_id]
+        if banco["waba_id"] != meta["waba_id"]:
+            phones_divergentes.add(phone_id)
+            divergencias_waba.append({
+                "phone_id_unidade": phone_id,
+                "waba_id_banco": banco["waba_id"],
+                "waba_id_meta": meta["waba_id"],
+                "unidade_banco": banco,
+                "numero_meta": meta,
+            })
+
+    chaves_banco = {
+        chave
+        for chave in banco_por_chave
+        if chave[1] not in phones_divergentes
+    }
+    chaves_meta = {
+        chave
+        for chave in meta_por_chave
+        if chave[1] not in phones_divergentes
+    }
+
+    return {
+        "sincronizados": [
+            {
+                "unidade_banco": banco_por_chave[chave],
+                "numero_meta": meta_por_chave[chave],
+            }
+            for chave in sorted(chaves_banco & chaves_meta)
+        ],
+        "somente_meta": [
+            meta_por_chave[chave]
+            for chave in sorted(chaves_meta - chaves_banco)
+        ],
+        "somente_banco": [
+            banco_por_chave[chave]
+            for chave in sorted(chaves_banco - chaves_meta)
+        ],
+        "nao_comparados_banco": sorted(
+            banco_nao_comparado,
+            key=_ordem_unidade,
+        ),
+        "waba_divergente": sorted(
+            divergencias_waba,
+            key=lambda item: item["phone_id_unidade"],
+        ),
+        "falhas_meta": sorted(
+            falhas_meta,
+            key=lambda item: item["waba_id"],
+        ),
+    }
+
+
+def reconciliar_registros_waba_meta(
+    *,
+    imprimir=True,
+    connection_factory=None,
+    meta_list_factory=None,
+):
+    unidades, _ = carregar_estado_banco(
+        connection_factory=connection_factory,
+    )
+    numeros_meta, falhas_meta = coletar_registros_meta(
+        unidades,
+        list_factory=meta_list_factory,
+    )
+    resultado = comparar_registros_waba(
+        unidades,
+        numeros_meta,
+        falhas_meta,
+    )
+    resultado["unidades_banco"] = unidades
+    resultado["numeros_waba_meta"] = numeros_meta
+
+    if imprimir:
+        imprimir_reconciliacao_registros(resultado)
+
+    return resultado
+
+
+def imprimir_reconciliacao_registros(resultado):
+    print("===== RECONCILIAÇÃO DE REGISTROS WABA META × BANCO =====")
+    print(
+        "Escopo: números das WABAs cadastradas no banco; WABAs inteiras "
+        "ausentes do banco não são descobertas por este relatório."
+    )
+    print(f"sincronizados: {len(resultado['sincronizados'])}")
+    print(f"somente_na_meta: {len(resultado['somente_meta'])}")
+    print(f"somente_no_banco: {len(resultado['somente_banco'])}")
+    print(f"waba_divergente: {len(resultado['waba_divergente'])}")
+    print(
+        "não_comparados_por_falha_meta: "
+        f"{len(resultado['nao_comparados_banco'])}"
+    )
+
+    if resultado["sincronizados"]:
+        print("\nSINCRONIZADOS:")
+        for item in resultado["sincronizados"]:
+            unidade = item["unidade_banco"]
+            numero = item["numero_meta"]
+            print(
+                f"   - {_descricao_unidade(unidade)} | "
+                f"status_meta={numero.get('status')}"
+            )
+    if resultado["somente_meta"]:
+        print("\nSOMENTE NA META:")
+        for numero in resultado["somente_meta"]:
+            print(
+                f"   - WABA ({numero['waba_id']}) | phone_id "
+                f"({numero['phone_id_unidade']}) | "
+                f"número={numero.get('display_phone_number')} | "
+                f"nome={numero.get('verified_name')}"
+            )
+    if resultado["somente_banco"]:
+        print("\nSOMENTE NO BANCO:")
+        for unidade in resultado["somente_banco"]:
+            print(f"   - {_descricao_unidade(unidade)}")
+    if resultado["waba_divergente"]:
+        print("\nPHONE ID ASSOCIADO A WABAS DIFERENTES:")
+        for item in resultado["waba_divergente"]:
+            print(
+                f"   - phone_id ({item['phone_id_unidade']}) | "
+                f"WABA banco ({item['waba_id_banco']}) | "
+                f"WABA Meta ({item['waba_id_meta']})"
+            )
+    if resultado["falhas_meta"]:
+        print("\nFALHAS DE COLETA META:")
+        for falha in resultado["falhas_meta"]:
+            print(
+                f"   - WABA ({falha['waba_id']}) | "
+                f"erro={falha['erro_meta']}"
+            )
+
+    if _registros_sincronizados(resultado):
+        print("\nOK: registros WABA e banco estão sincronizados.")
+
+
+def criar_parser():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Monitora bloqueios e registros WhatsApp sem alterar Meta ou banco."
+        ),
+    )
+    subparsers = parser.add_subparsers(dest="comando", required=True)
+    bloqueios = subparsers.add_parser(
+        "blocked-users",
+        help="compara bloqueados na Meta e em cliente_bloqueado_meta",
+    )
+    bloqueios.add_argument(
+        "--show-wa-id",
+        action="store_true",
+        help="exibe o identificador Meta completo; por padrão mostra somente os 4 finais",
+    )
+    subparsers.add_parser(
+        "phone-registrations",
+        help="compara phone IDs Cloud API por WABA",
+    )
+    todos = subparsers.add_parser(
+        "all",
+        help="executa as duas reconciliações",
+    )
+    todos.add_argument("--show-wa-id", action="store_true")
+    return parser
+
+
+def executar_monitoramento_bloqueios():
+    """Atalho local: executar o arquivo no PyCharm já gera o relatório."""
+    configurar_ambiente_local()
+    return reconciliar_bloqueios_meta_banco(
+        imprimir=True,
+        mostrar_wa_id=True,
+    )
+
+
+def main(argv=None):
+    argumentos = sys.argv[1:] if argv is None else list(argv)
+    if not argumentos:
+        argumentos = ["blocked-users", "--show-wa-id"]
+
+    args = criar_parser().parse_args(argumentos)
+    try:
+        resultados = []
+        if args.comando in {"blocked-users", "all"}:
+            resultados.append(
+                reconciliar_bloqueios_meta_banco(
+                    mostrar_wa_id=getattr(args, "show_wa_id", False),
+                )
+            )
+        if args.comando in {"phone-registrations", "all"}:
+            if resultados:
+                print()
+            resultados.append(reconciliar_registros_waba_meta())
+    except Exception as exc:
+        print(
+            f"RECONCILIACAO_FALHOU: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 2
+
+    if any(item.get("falhas_meta") for item in resultados):
+        return 2
+    if any(not _resultado_sem_divergencias(item) for item in resultados):
+        return 1
+    return 0
+
+
+def _resultado_sem_divergencias(resultado):
+    campos = (
+        "somente_meta",
+        "somente_banco",
+        "nao_comparados_banco",
+        "vinculos_unidade_divergentes",
+        "waba_divergente",
+        "falhas_meta",
+    )
+    return not any(resultado.get(campo) for campo in campos)
+
+
+def _bloqueios_sincronizados(resultado):
+    return _resultado_sem_divergencias(resultado)
+
+
+def _registros_sincronizados(resultado):
+    return _resultado_sem_divergencias(resultado)
+
+
+def _imprimir_grupo(titulo, itens, mostrar_wa_id):
+    if not itens:
+        return
+    print(f"\n{titulo}:")
+    for item in itens:
+        wa_id = _formatar_wa_id(
+            item.get("identidade_meta"),
+            mostrar=mostrar_wa_id,
+        )
+        nome = item.get("nome_cliente") or "nome não disponível"
+        print(
+            f"   - identidade_meta={wa_id} | nome={nome} | "
+            f"{_descricao_unidade(item)}"
+        )
+
+
+def _descricao_unidade(item):
+    return (
+        f"unidade {item.get('id_unidade')} "
+        f"{item.get('nome_unidade')} | "
+        f"WABA ({item.get('waba_id')}) | "
+        f"phone_id ({item.get('phone_id_unidade')})"
+    )
+
+
+def _extrair_identidade_bloqueada(usuario):
+    if isinstance(usuario, dict):
+        wa_id = usuario.get("wa_id") or usuario.get("id")
+    else:
+        wa_id = getattr(usuario, "wa_id", usuario)
+    return _normalizar_id(wa_id)
+
+
+def _normalizar_id(valor):
+    if valor is None:
+        return None
+    texto = str(valor).strip()
+    return texto or None
+
+
+def _escopo(item):
+    return (
+        _normalizar_id(item["waba_id"]),
+        _normalizar_id(item["phone_id_unidade"]),
+    )
+
+
+def _ordenar_chaves(chaves):
+    return sorted(chaves, key=lambda item: tuple(valor or "" for valor in item))
+
+
+def _ordem_registro(item):
+    return (
+        item.get("id_unidade") or 0,
+        item.get("identidade_meta") or "",
+    )
+
+
+def _ordem_unidade(item):
+    return (
+        item.get("id_unidade") or 0,
+        item.get("waba_id") or "",
+    )
+
+
+def _formatar_wa_id(valor, *, mostrar):
+    texto = _normalizar_id(valor) or "-"
+    if mostrar or len(texto) <= 4:
+        return texto
+    return "*" * (len(texto) - 4) + texto[-4:]
+
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        executar_monitoramento_bloqueios()
+    else:
+        raise SystemExit(main())
+````
+
+
+## Passo 150D — `utilitarios/cache_consulta.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. O utilitário
+passa a ler o payload tipado do cache futuro (`tipo_identidade` e
+`identidade`) em vez do campo legado `cliente_telefone`.
+
+SHA-256 do conteúdo UTF-8 normalizado: `7f12f276f9b94cb9a89efe91c756c68e40b83395af64edbdf9f02fe6c39e17a3`
+
+````python
+"""Consulta manual dos bloqueios temporários armazenados no Redis."""
+
+import argparse
+from datetime import datetime, timedelta, timezone
+import sys
+from pathlib import Path
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def consultar_bloqueios_cache(redis_client, limite=200):
+    """Retorna no máximo ``limite`` bloqueios sem materializar todo o Redis."""
+    resultados = []
+
+    for chave in redis_client.scan_iter(
+        match="conversa_bloqueada:*",
+        count=100,
+    ):
+        dados = redis_client.hgetall(chave)
+        ttl = redis_client.ttl(chave)
+        expira_em = (
+            datetime.now(timezone.utc) + timedelta(seconds=ttl)
+            if ttl > 0
+            else None
+        )
+        resultados.append(
+            {
+                "chave": chave,
+                "tipo_identidade": dados.get("tipo_identidade"),
+                "identidade": dados.get("identidade"),
+                "phone_number_id": dados.get("id_phone_unidade"),
+                "finalizou_em": dados.get("finalizou_em"),
+                "bloqueio_dias": dados.get("bloqueio_dias"),
+                "ttl": ttl,
+                "expira_em": expira_em,
+            }
+        )
+
+        if len(resultados) >= limite:
+            break
+
+    return resultados
+
+
+def _mascarar(valor, visivel_inicio=4, visivel_fim=3):
+    texto = str(valor or "")
+    if len(texto) <= visivel_inicio + visivel_fim:
+        return "*" * len(texto)
+    return f"{texto[:visivel_inicio]}...{texto[-visivel_fim:]}"
+
+
+def criar_parser():
+    parser = argparse.ArgumentParser(
+        description="Consulta bloqueios temporários no Redis remoto.",
+    )
+    parser.add_argument(
+        "--limite",
+        type=int,
+        default=200,
+        help="quantidade máxima de registros (1 a 2000)",
+    )
+    parser.add_argument(
+        "--mostrar-identificadores",
+        action="store_true",
+        help="exibe chave, identidade Meta e phone ID completos",
+    )
+    parser.add_argument(
+        "--env-file",
+        help=(
+            "usa explicitamente este arquivo de ambiente; sem a opção, "
+            "usa utilitarios/local_settings.py"
+        ),
+    )
+    return parser
+
+
+def main(argv=None):
+    parser = criar_parser()
+    args = parser.parse_args(argv)
+
+    if not 1 <= args.limite <= 2000:
+        parser.error("--limite deve estar entre 1 e 2000")
+
+    try:
+        from utilitarios.bootstrap import configurar_ambiente_utilitario
+
+        configurar_ambiente_utilitario(args.env_file)
+
+        from core.cache.redis_client import (
+            get_redis_safe,
+            validar_redis_remoto,
+        )
+
+        redis_client = get_redis_safe(retries=1, delay=0, validate=True)
+        try:
+            validar_redis_remoto(redis_client)
+            resultados = consultar_bloqueios_cache(
+                redis_client,
+                args.limite,
+            )
+        finally:
+            redis_client.close()
+
+        print(f"Total exibido: {len(resultados)}")
+        for item in resultados:
+            chave = item["chave"]
+            tipo_identidade = item["tipo_identidade"]
+            identidade = item["identidade"]
+            phone_number_id = item["phone_number_id"]
+
+            if not args.mostrar_identificadores:
+                chave = _mascarar(chave)
+                identidade = _mascarar(identidade)
+                phone_number_id = _mascarar(phone_number_id)
+
+            print("\n" + "=" * 70)
+            print("Chave:", chave)
+            print("Tipo de identidade:", tipo_identidade)
+            print("Identidade Meta:", identidade)
+            print("Phone Number ID:", phone_number_id)
+            print("Finalizou em:", item["finalizou_em"])
+            print("Dias de bloqueio:", item["bloqueio_dias"])
+            print("TTL em segundos:", item["ttl"])
+            print("Expira aproximadamente em:", item["expira_em"])
+        return 0
+    except Exception as exc:
+        print(
+            f"CONSULTA_CACHE_FALHOU: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+````
+
+
+## Passo 150E — `utilitarios/montar_lead_teste.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Os dois
+payloads fictícios são preservados e somente as seis respostas da triagem são
+renumeradas de 12..17 para 13..18.
+
+SHA-256 do conteúdo UTF-8 normalizado: `5b2205a2c6229369606ec3716617c4563284fcc5136d9311e65f8706a11291a5`
+
+````python
+"""Fornece snapshots fictícios isolados para as sondas do Funil."""
+
+from datetime import datetime
+
+
+def montar_dados_lead_teste_saj():
+    """Monta um lead fictício identificado com a unidade SAJ."""
+    return _montar_dados_lead_teste(
+        id_unidade=1,
+        nome_unidade="Supera Santo Antônio de Jesus",
+        identificador="SAJ",
+    )
+
+
+def montar_dados_lead_teste_rio_vermelho():
+    """Monta um lead fictício identificado com a unidade Rio Vermelho."""
+    return _montar_dados_lead_teste(
+        id_unidade=2,
+        nome_unidade="Supera Rio Vermelho",
+        identificador="Rio Vermelho",
+    )
+
+
+def _montar_dados_lead_teste(
+    *,
+    id_unidade,
+    nome_unidade,
+    identificador,
+):
+    """Monta a estrutura comum sem consultar banco ou executar requisição."""
+    marcador = identificador.casefold().replace(" ", "-")
+    return {
+        "id_conversa": int(datetime.now().strftime("%m%d%H%M%S")),
+        "id_unidade": id_unidade,
+        "nome_unidade": nome_unidade,
+        "status_dependente": True,
+        "nome_cliente": f"Edcarlos Teste {identificador} - Não contatar",
+        "telefone_cliente": "5571994111866",
+        "email_cliente": f"edcaspfilho+teste-{marcador}@gmail.com",
+        "idade_cliente": None,
+        "profissao": "Engenheiro",
+        "nome_dependente": f"Enzo Teste {identificador}",
+        "idade_dependente": 12,
+        "triagem_respostas": [
+            {"id_etapa": 13, "resposta": "nunca"},
+            {"id_etapa": 14, "resposta": "às vezes"},
+            {"id_etapa": 15, "resposta": "frequentemente"},
+            {"id_etapa": 16, "resposta": "às vezes"},
+            {"id_etapa": 17, "resposta": "nunca"},
+            {"id_etapa": 18, "resposta": "às vezes"},
+        ],
+    }
+````
+
+
+## Passo 150F — `utilitarios/operacoes_rotineiras.sql`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. As operações
+manuais permanecem idênticas; a consulta de histórico usa o nome físico futuro
+`cliente.wa_id`.
+
+SHA-256 do conteúdo UTF-8 normalizado: `8435654e2e6ed15083cd7347d5bf60c105cc26a1039900a7830d64bd1cc15e4e`
+
+````sql
+/*
+===============================================================================
+CONSULTAS ROTINEIRAS DO CHATBOT
+===============================================================================
+
+Arquivo destinado a consultas e operações manuais executadas no DBeaver.
+
+Regras:
+  - Cada consulta deve explicar sua finalidade e o formato do resultado.
+  - Consultas de leitura e operações destrutivas devem permanecer em seções
+    separadas e claramente identificadas.
+  - Operações destrutivas nunca devem ser executadas sem conferir o ambiente,
+    interromper os serviços envolvidos e compreender os dados removidos.
+*/
+
+
+/*
+===============================================================================
+1. HISTÓRICO DE TODAS AS CONVERSAS — UMA LINHA POR MENSAGEM
+===============================================================================
+
+Finalidade:
+  - Monitorar todas as conversas da unidade selecionada.
+  - Exibir uma linha independente para cada mensagem do cliente ou do bot.
+  - Repetir id_cliente, nome_cliente, telefone e id_conversa em todas as linhas.
+  - Manter clientes, conversas e mensagens em ordem cronológica.
+  - Servir como base simples para DBeaver, planilhas, dashboards e interfaces.
+
+Filtro:
+  - Atualmente consulta somente a unidade de id 1.
+  - Para consultar outra unidade, altere apenas o valor do WHERE.
+
+Formato da coluna "mensagem":
+  - Contém somente o conteúdo textual da mensagem.
+  - Quando a mensagem for mídia sem texto, informa seu tipo.
+
+Remetente:
+  - A coluna "quem_enviou" informa separadamente se a mensagem é do cliente
+    ou do bot.
+*/
+
+SELECT
+    cliente.id_cliente,
+    cliente.nome AS nome_cliente,
+    cliente.wa_id AS telefone,
+    conversa.id_conversa,
+    historico.quem_enviou,
+
+    COALESCE(
+        NULLIF(BTRIM(historico.conteudo_texto), ''),
+        FORMAT(
+            '[mensagem sem conteúdo textual: %s]',
+            COALESCE(
+                historico.tipo_mensagem,
+                'tipo desconhecido'
+            )
+        )
+    ) AS mensagem
+
+FROM chatbot.conversa AS conversa
+
+INNER JOIN chatbot.cliente AS cliente
+    ON cliente.id_cliente = conversa.id_cliente
+
+INNER JOIN chatbot.historico_mensagens AS historico
+    ON historico.id_conversa = conversa.id_conversa
+
+WHERE conversa.id_unidade = 1
+
+ORDER BY
+    cliente.id_cliente,
+    conversa.iniciou_em,
+    conversa.id_conversa,
+    historico.received_data_hora,
+    historico.id_mensagem;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+===============================================================================
+2. RESET COMPLETO DAS TABELAS OPERACIONAIS E DE SUAS IDENTIDADES
+===============================================================================
+
+ATENÇÃO — OPERAÇÃO DESTRUTIVA:
+  - Exclui definitivamente todos os registros das tabelas listadas.
+  - Reinicia suas sequências de IDs; os próximos registros começarão em 1.
+  - Não execute este bloco por engano nem junto com a consulta anterior.
+  - Em produção, interrompa previamente webhook, flow_worker e funil_worker.
+  - O COMMIT torna a exclusão definitiva.
+
+Dados preservados:
+  - clientes;
+  - unidades;
+  - integrações do funil;
+  - clientes bloqueados na Meta;
+  - catálogo de etapas e mapa de transições.
+
+Finalidade:
+  - Limpar somente os dados operacionais para iniciar um novo ciclo de testes
+    ou atendimento sem remover cadastros estruturais.
+  - Confirmar, antes do COMMIT, que todas as tabelas afetadas ficaram vazias.
+
+Proteção:
+  - RESTRICT impede que o PostgreSQL apague automaticamente outras tabelas não
+    declaradas por meio de CASCADE.
+  - Qualquer erro anterior ao COMMIT desfaz toda a operação.
+*/
+
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
+TRUNCATE TABLE
+    chatbot.historico_mensagens,
+    chatbot.respostas_desafios,
+    chatbot.pesquisa_satisfacao,
+    chatbot.funil_envios,
+    chatbot.dependente,
+    chatbot.fila_mensagens,
+    chatbot.conversa,
+    chatbot.webhook_flood_evento
+RESTART IDENTITY
+RESTRICT;
+
+SELECT 'conversa' AS tabela, COUNT(*) AS registros
+FROM chatbot.conversa
+
+UNION ALL
+SELECT 'dependente', COUNT(*)
+FROM chatbot.dependente
+
+UNION ALL
+SELECT 'fila_mensagens', COUNT(*)
+FROM chatbot.fila_mensagens
+
+UNION ALL
+SELECT 'historico_mensagens', COUNT(*)
+FROM chatbot.historico_mensagens
+
+UNION ALL
+SELECT 'respostas_desafios', COUNT(*)
+FROM chatbot.respostas_desafios
+
+UNION ALL
+SELECT 'pesquisa_satisfacao', COUNT(*)
+FROM chatbot.pesquisa_satisfacao
+
+UNION ALL
+SELECT 'funil_envios', COUNT(*)
+FROM chatbot.funil_envios
+
+UNION ALL
+SELECT 'webhook_flood_evento', COUNT(*)
+FROM chatbot.webhook_flood_evento;
+
+COMMIT;
+````
+
 
 ## Passo 151 — `PADROES_DE_ARQUITETURA.md`
 
@@ -27932,7 +32485,7 @@ regras de negócio.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5e03340f1b3a5d2edf4c58edcc3630cf103db8ba8a5f22a84d09968730c9b82a`
+SHA-256 do conteúdo UTF-8 normalizado: `428dc6366ac0c7fa68ff4170de701fed141c4cd4ef99deabe1f7d1844ace893c`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -28652,6 +33205,31 @@ Depois de informar que uma resposta não foi compreendida ou aceita, o bot não
 deverá elogiar, confirmar entendimento nem pressupor que a conversa avançou.
 Essa regra vale para tratamentos de mídia, financeiro, contexto e qualquer
 tratamento futuro que reapresente conteúdo da etapa.
+
+### 11.7. Saudação de retorno após inatividade
+
+Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
+na mesma conversa pelo menos três horas após o último envio confirmado do bot
+deverá fazer a resposta começar com `Olá novamente, {nome}!`.
+
+O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
+evento atual do cliente com a última linha `sent` do bot no histórico da mesma
+`id_conversa`. A atividade do mesmo cliente em outra unidade ou conversa não
+participa desse cálculo. A própria mensagem em que o nome é informado na etapa
+1 ainda não recebe a saudação; a regra começa nas mensagens seguintes, quando o
+nome já está validado e persistido.
+
+A saudação é somente um prefixo da resposta que o fluxo já produziria:
+
+- resposta válida: saudação mais a mensagem da etapa resultante;
+- resposta inválida: saudação mais o tratamento e a repetição da etapa atual.
+
+Ela não cria etapa, evento de transição, envio separado nem uma segunda linha de
+histórico. A barreira idempotente continua sendo executada antes dos resolvers:
+se o retry já encontrar a resposta exata do bot persistida para aquela mensagem
+do cliente, nenhum novo envio ou prefixo será produzido. Nome, último envio ou
+timestamps ausentes/incompatíveis apenas desativam a saudação para aquele evento
+e nunca impedem a resposta normal do fluxo.
 
 ## 12. Flood, payload e assinatura
 
@@ -30395,7 +34973,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6dedde62b05f3240cc7a2718a065bed6822bbf6485b66d9ebd8379226e82db79`
+SHA-256 do conteúdo UTF-8 normalizado: `46bfa80ca81c3c7c7d50536431c8698692457051553a5f0a02dd8d0c7b9ce392`
 
 ````python
 import ast
@@ -30456,53 +35034,39 @@ WA_ID = "5575999999999"
 USER_ID = "BR.13491208655302741918"
 
 ALTERACOES_EDITORIAIS_AUTORIZADAS_V107 = {
-    2: (
-        (
-            "Prazer, {nome}! ☺️\n\n"
-            "O Supera é um curso de estimulação cognitiva. "
-            "Aqui nós iremos potencializar as habilidades cognitivas, socioemocionais "
-            "e éticas do aluno, como atenção, concentração e memória.\n\n"
-            "Conta para mim, esse atendimento é para você ou para um dependente?",
-            "Prazer, {nome}! ☺️\n\n"
-            "O Supera é um curso de *estimulação cognitiva* "
-            "que trabalha habilidades cognitivas e socioemocionais por meio de atividades que estimulam "
-            "atenção, concentração, memória, raciocínio e outras funções importantes para o dia a dia.\n\n"
-            "Para eu entender melhor como podemos ajudar, me conta: *esse atendimento é para você ou para um dependente?*",
-        ),
-    ),
-    10: (
-        (
-            "Qual o seu melhor email?",
-            "Para completar seu cadastro, qual é o seu melhor email? ☺️",
-        ),
-    ),
     11: (
         (
-            "Antes de continuarmos o agendamento, vamos realizar uma pequena triagem "
-            "cognitiva com 6 perguntas objetivas de seleção única, ok?",
             "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
             "para conhecer melhor o seu perfil e suas necessidades. "
             "É bem simples e leva poucos minutos. Podemos começar? ☺️",
+            "Certo, antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
+            "para conhecer melhor o seu perfil e suas necessidades. "
+            "É bem simples e leva poucos minutos. Podemos começar? ☺️",
+        ),
+        (
+            "Iniciar triagem",
+            "Começar triagem",
         ),
     ),
-    22: (
+}
+
+ADICOES_EDITORIAIS_AUTORIZADAS_V107 = {
+    6: (
         (
-            "Perfeito! 🥰\n"
-            "Agora é só aguardar o dia da avaliação.\n"
-            "No próximo dia útil, nossa equipe entrará em contato.\n"
-            "Até breve! 👋🏼😉",
-            "Perfeito, foi um prazer falar com você! 🥰\n\n"
-            "Agora é só aguardar o dia da avaliação, esperamos você para viver sua experiência no SUPERA! 🧡\n\n"
-            "No próximo dia útil, nossa equipe entrará em contato.\n"
-            "Até breve! 👋🏼😉",
+            "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
+            "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
+            "nossa equipe comercial.\n\n"
+            "Vou te passar o contato para continuar o atendimento. Basta clicar "
+            "no botão abaixo."
         ),
+        "Falar com Comercial",
     ),
 }
 
 
 def _ler_arquivo_da_v107(caminho):
     processo = subprocess.run(
-        ["git", "show", f"c248155:{caminho}"],
+        ["git", "show", f"2bc4188:{caminho}"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.PIPE,
@@ -30619,7 +35183,7 @@ def contexto_historico_base(
         "mensagem_cliente_atual": {
             "id_mensagem_fila": 20,
             "id_hash_msg": "wamid.cliente",
-            "cliente_telefone": "5571999999999",
+            "wa_id": "5571999999999",
             "id_phone_unidade": "123456",
             "unidade_telefone": "5571000000000",
         },
@@ -30699,17 +35263,18 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             transicoes_v107,
         )
 
-    def test_textos_e_botoes_legados_so_tem_quatro_edicoes_autorizadas(self):
+    def test_textos_e_botoes_legados_so_tem_deltas_autorizados(self):
         self.assertEqual(
             set(ALTERACOES_EDITORIAIS_AUTORIZADAS_V107),
-            {2, 10, 11, 22},
+            {11},
         )
         self.assertTrue(
             all(
-                len(alteracoes) == 1
+                len(alteracoes) == 2
                 for alteracoes in ALTERACOES_EDITORIAIS_AUTORIZADAS_V107.values()
             )
         )
+        self.assertEqual(set(ADICOES_EDITORIAIS_AUTORIZADAS_V107), {6})
 
         for etapa_v107 in range(1, 23):
             etapa_futura = 1 if etapa_v107 == 1 else etapa_v107 + 1
@@ -30740,6 +35305,13 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
                     if not strings_esperadas[texto_v107]:
                         del strings_esperadas[texto_v107]
                     strings_esperadas.update({texto_autorizado: 1})
+
+                strings_esperadas.update(
+                    ADICOES_EDITORIAIS_AUTORIZADAS_V107.get(
+                        etapa_v107,
+                        (),
+                    )
+                )
 
                 self.assertEqual(
                     _strings_executaveis(
@@ -33654,7 +38226,7 @@ literal da proteção pré-`user_id`: muda apenas a numeração atual 4 para a f
 5 e os imports correspondentes, sem ampliar a lista, criar palavras-chave ou
 introduzir regex semântica.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6f9ffc08ca9a03c7809162234412456d2e5d1b617f7db99c6f909bbd548df279`
+SHA-256 do conteúdo UTF-8 normalizado: `e1782be211d3474163ee3705ca1b525ac0447389d125e6f0143811e5fbb889d8`
 
 ````python
 import unittest
@@ -33729,13 +38301,15 @@ class ValidadorProfissaoTests(unittest.TestCase):
     def test_resolver_repete_etapa_sem_transicionar_ou_persistir_profissao(self):
         contexto = {
             "id_conversa": 121,
+            "wa_id": "5571999999999",
+            "user_id": None,
             "id_etapa_cliente": 5,
             "tipo_mensagem_atual": "text",
             "texto_cliente_atual": "Vc ouviu áudio ou ligação",
             "status_dependente": False,
             "mensagem_cliente_atual": {
                 "id_mensagem_fila": 9001,
-                "cliente_telefone": "5571999999999",
+                "wa_id": "5571999999999",
                 "id_phone_unidade": "123456",
             },
         }
@@ -33771,7 +38345,982 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
+## Passo 159A — `tests/unit/test_saudacao_retorno.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A suíte já
+faz parte da baseline atual e prova o limiar temporal,
+o isolamento pela conversa, os dois caminhos de resposta, a barreira de retry e
+os dois métodos de transporte textual usados no estado final.
+
+SHA-256 do conteúdo UTF-8 normalizado: `50e5be683cd370df18587520050d19a61d8a84f5a83bf2653b0faaa890a33556`
+
+````python
+import unittest
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
+
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_saudacao_retorno,
+)
+from core.integrations.whatsapp.pywa_functions import cliente
+from core.repositories.atendimento import historico
+from workers.worker_flow.response_flow import flow_sender
+
+
+SAUDACAO = "Olá novamente, Maria!\n\n"
+
+
+def contexto_sender(*, saudacao=SAUDACAO, resposta_bot=None, etapa=2):
+    return {
+        "id_conversa": 10,
+        "id_etapa_atual": etapa,
+        "id_etapa_origem_transicao": etapa,
+        "retry_count": 1,
+        "saudacao_retorno": saudacao,
+        "status_dependente": False,
+        "mensagem_cliente_atual": {
+            "id_mensagem_fila": 20,
+            "id_hash_msg": "wamid.cliente",
+        },
+        "resposta_bot_para_mensagem_atual": resposta_bot,
+    }
+
+
+def contexto_envio(texto, *, tratamento=False):
+    return {
+        "enviou": True,
+        "resposta_ja_existia": False,
+        "mensagem_bot": texto,
+        "id_hash_msg_bot": "wamid.bot",
+        "id_etapa_resultante": 3 if not tratamento else 2,
+        "tipo_mensagem": "text",
+        "tratamento": tratamento,
+    }
+
+
+class SaudacaoRetornoRegraTests(unittest.TestCase):
+    def test_exatamente_tres_horas_ativa_a_saudacao(self):
+        ultima_bot = datetime(2026, 8, 25, 8, 0, tzinfo=timezone.utc)
+
+        resultado = montar_saudacao_retorno(
+            "  Maria  ",
+            ultima_bot,
+            ultima_bot + timedelta(hours=3),
+            2,
+        )
+
+        self.assertEqual(resultado, SAUDACAO)
+
+    def test_antes_de_tres_horas_preserva_o_texto_da_v1_0_7(self):
+        ultima_bot = datetime(2026, 8, 25, 8, 0)
+
+        resultado = montar_saudacao_retorno(
+            "Maria",
+            ultima_bot,
+            ultima_bot + timedelta(hours=3) - timedelta(seconds=1),
+            2,
+        )
+
+        self.assertIsNone(resultado)
+
+    def test_etapa_um_nome_ausente_e_datas_incompativeis_nao_saudam(self):
+        ultima_bot = datetime(2026, 8, 25, 8, 0)
+        atual = ultima_bot + timedelta(hours=4)
+
+        casos = (
+            ("Maria", ultima_bot, atual, 1),
+            (None, ultima_bot, atual, 2),
+            ("Maria", None, atual, 2),
+            (
+                "Maria",
+                ultima_bot.replace(tzinfo=timezone.utc),
+                atual,
+                2,
+            ),
+        )
+
+        for caso in casos:
+            with self.subTest(caso=caso):
+                self.assertIsNone(montar_saudacao_retorno(*caso))
+
+
+class SaudacaoRetornoRepositorioTests(unittest.TestCase):
+    def test_consulta_usa_apenas_ultimo_bot_sent_da_mesma_conversa(self):
+        cursor = MagicMock()
+        ultima_bot = datetime(2026, 8, 25, 8, 0)
+        cursor.fetchone.return_value = ("Maria", ultima_bot)
+
+        resultado = historico.buscar_contexto_saudacao_retorno(
+            10,
+            5,
+            cursor,
+        )
+
+        consulta, parametros = cursor.execute.call_args.args
+        self.assertIn("hm.id_conversa = cv.id_conversa", consulta)
+        self.assertIn("hm.quem_enviou = 'bot'", consulta)
+        self.assertIn("hm.status_envio = 'sent'", consulta)
+        self.assertIn("hm.received_data_hora DESC", consulta)
+        self.assertEqual(parametros, (10, 5))
+        self.assertEqual(resultado, ("Maria", ultima_bot))
+
+    def test_falha_sql_preserva_rollback_e_retry_do_worker(self):
+        cursor = MagicMock()
+        cursor.execute.side_effect = RuntimeError("banco indisponível")
+
+        with self.assertRaisesRegex(RuntimeError, "banco indisponível"):
+            historico.buscar_contexto_saudacao_retorno(10, 5, cursor)
+
+
+class SaudacaoRetornoSenderTests(unittest.TestCase):
+    def test_resposta_valida_recebe_prefixo_na_mesma_mensagem(self):
+        resolver = MagicMock(
+            return_value=contexto_envio(
+                "Entendi. Vamos para a próxima etapa."
+            )
+        )
+        with patch.object(
+            flow_sender,
+            "_buscar_resolver_etapa",
+            return_value=resolver,
+        ):
+            resultado = flow_sender.flow_sender(contexto_sender())
+
+        self.assertEqual(
+            resultado["mensagem_bot"],
+            f"{SAUDACAO}Entendi. Vamos para a próxima etapa.",
+        )
+        self.assertTrue(resultado["saudacao_retorno_aplicada"])
+        self.assertFalse(resultado["tratamento"])
+
+    def test_resposta_invalida_recebe_prefixo_e_mantem_tratamento(self):
+        resolver = MagicMock(
+            return_value=contexto_envio(
+                "Não entendi. Escolha uma das opções.",
+                tratamento=True,
+            )
+        )
+        with patch.object(
+            flow_sender,
+            "_buscar_resolver_etapa",
+            return_value=resolver,
+        ):
+            resultado = flow_sender.flow_sender(contexto_sender())
+
+        self.assertEqual(
+            resultado["mensagem_bot"],
+            f"{SAUDACAO}Não entendi. Escolha uma das opções.",
+        )
+        self.assertTrue(resultado["tratamento"])
+        self.assertEqual(resultado["id_etapa_resultante"], 2)
+
+    def test_excecao_do_resolver_nao_vaza_prefixo_para_proximo_envio(self):
+        resolver = MagicMock(side_effect=RuntimeError("falha no resolver"))
+        with patch.object(
+            flow_sender,
+            "_buscar_resolver_etapa",
+            return_value=resolver,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "falha no resolver"):
+                flow_sender.flow_sender(contexto_sender())
+
+        self.assertEqual(
+            cliente.aplicar_prefixo_mensagem_bot("Resposta posterior."),
+            "Resposta posterior.",
+        )
+
+    def test_retry_com_resposta_existente_nao_chama_resolver(self):
+        resposta_existente = {
+            "id_mensagem": 30,
+            "id_hash_msg": "wamid.bot.existente",
+            "id_etapa": 2,
+        }
+
+        with patch.object(
+            flow_sender,
+            "_buscar_resolver_etapa",
+            side_effect=AssertionError("resolver não pode rodar no retry"),
+        ):
+            resultado = flow_sender.flow_sender(
+                contexto_sender(resposta_bot=resposta_existente)
+            )
+
+        self.assertFalse(resultado["enviou"])
+        self.assertTrue(resultado["resposta_ja_existia"])
+        self.assertNotIn("saudacao_retorno_aplicada", resultado)
+
+    def test_transporte_e_historico_recebem_o_mesmo_prefixo_uma_vez(self):
+        cliente_pywa = MagicMock()
+        cliente_pywa.send_message.return_value = MagicMock(id="wamid.bot")
+
+        with patch.object(
+            cliente,
+            "WhatsApp",
+            return_value=cliente_pywa,
+        ), patch.object(
+            cliente,
+            "get_meta_graph_api_version",
+            return_value="23.0",
+        ):
+            with cliente.usar_prefixo_mensagem_bot(SAUDACAO):
+                conta = cliente.conta_wa("123456")
+                conta.send_message(
+                    to="5571999999999",
+                    text="Entendi.",
+                )
+
+            cliente.conta_wa("123456").send_message(
+                to="5571999999999",
+                text="Próxima resposta.",
+            )
+
+        chamadas = cliente_pywa.send_message.call_args_list
+        self.assertEqual(chamadas[0].kwargs["text"], f"{SAUDACAO}Entendi.")
+        self.assertEqual(chamadas[1].kwargs["text"], "Próxima resposta.")
+
+    def test_pedido_de_contato_tambem_recebe_prefixo(self):
+        cliente_pywa = MagicMock()
+        cliente_pywa.request_contact_info.return_value = MagicMock(
+            id="wamid.contato"
+        )
+
+        with patch.object(
+            cliente,
+            "WhatsApp",
+            return_value=cliente_pywa,
+        ), patch.object(
+            cliente,
+            "get_meta_graph_api_version",
+            return_value="23.0",
+        ), cliente.usar_prefixo_mensagem_bot(SAUDACAO):
+            cliente.conta_wa("123456").request_contact_info(
+                to="user-id",
+                sender="123456",
+                text="Compartilhe seu contato.",
+                tracker="contato:10:etapa:2",
+            )
+
+        chamada = cliente_pywa.request_contact_info.call_args
+        self.assertEqual(
+            chamada.kwargs["text"],
+            f"{SAUDACAO}Compartilhe seu contato.",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
 # Fase 8 — Validação antes da migração
+## Passo 159B — `tests/unit/test_suporte_idoso_email_obrigatorio.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Esta suíte
+preserva a matriz atual de `suporte_idoso` e `email_obrigatorio`, movendo
+somente os IDs físicos afetados pela nova etapa oficial de contato.
+
+SHA-256 do conteúdo UTF-8 normalizado: `b96c1e43d53151f556711ef5a835591de2a4241e24669ade44057be261dae955`
+
+````python
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from core.integrations.funil.oportunidades import montar_payload_oportunidade
+from core.repositories.funil.leads import buscar_dados_lead_funil
+from core.integrations.whatsapp.messages.etapa7_messages import (
+    montar_mensagem_suporte_idoso_etapa7,
+)
+from core.integrations.whatsapp.numero_comercial import (
+    montar_link_numero_comercial_whatsapp,
+    numero_comercial_whatsapp_valido,
+)
+from core.validacoes.email import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
+    eh_ausencia_email_explicita,
+)
+from workers.worker_flow.response_flow.etapas import (
+    resolver_etapa7,
+    resolver_etapa11,
+)
+from workers.worker_flow.transacoes import (
+    efeitos_transicao,
+    encerramento_atendimento,
+)
+
+
+RAIZ_PROJETO = Path(__file__).resolve().parents[2]
+
+
+def contexto_etapa7(idade, *, dependente=False, suporte=False):
+    return {
+        "id_conversa": 10,
+        "id_cliente": 5,
+        "wa_id": "5571999999999",
+        "user_id": None,
+        "id_etapa_atual": 7,
+        "id_etapa_cliente": 7,
+        "id_etapa_origem_transicao": 7,
+        "transicoes_permitidas": {"idade_valida": 8},
+        "status_dependente": dependente,
+        "bpa_ativo_unidade": False,
+        "suporte_idoso_unidade": suporte,
+        "numero_comercial_unidade": "(71) 99999-9999",
+        "nome_cliente": "Maria",
+        "nome_dependente": "João" if dependente else None,
+        "texto_cliente_atual": str(idade),
+        "tipo_mensagem_atual": "text",
+        "mensagem_cliente_atual": {
+            "id_mensagem_fila": 20,
+            "wa_id": "5571999999999",
+            "id_phone_unidade": "phone-id",
+        },
+    }
+
+
+def contexto_etapa11(
+    texto,
+    *,
+    dependente=False,
+    idade=40,
+    email_obrigatorio=True,
+):
+    return {
+        "id_conversa": 10,
+        "id_cliente": 5,
+        "wa_id": "5571999999999",
+        "user_id": None,
+        "id_etapa_atual": 11,
+        "id_etapa_cliente": 11,
+        "id_etapa_origem_transicao": 11,
+        "transicoes_permitidas": {"email_valido": 12},
+        "status_dependente": dependente,
+        "idade_cliente": idade,
+        "email_obrigatorio_unidade": email_obrigatorio,
+        "texto_cliente_atual": texto,
+        "tipo_mensagem_atual": "text",
+        "mensagem_cliente_atual": {
+            "id_mensagem_fila": 20,
+            "wa_id": "5571999999999",
+            "id_phone_unidade": "phone-id",
+        },
+        "resposta_bot_para_mensagem_atual": None,
+    }
+
+
+def contexto_envio(etapa):
+    return {
+        "enviou": True,
+        "resposta_ja_existia": False,
+        "mensagem_bot": "mensagem",
+        "id_hash_msg_bot": "wamid.bot",
+        "id_etapa_resultante": etapa,
+        "tipo_mensagem": "text",
+    }
+
+
+def dados_lead(*, resposta_email, email_global="novo@example.com"):
+    return {
+        "id_conversa": 122,
+        "id_unidade": 1,
+        "nome_unidade": "Santo Antônio de Jesus",
+        "status_dependente": False,
+        "nome_cliente": "Maria",
+        "telefone_cliente": "5571999999999",
+        "email_cliente": email_global,
+        "resposta_email_conversa": resposta_email,
+        "idade_cliente": 65,
+        "profissao": "Aposentada",
+        "nome_dependente": None,
+        "idade_dependente": None,
+        "triagem_respostas": [
+            {"id_etapa": etapa, "resposta": "nunca"}
+            for etapa in range(13, 19)
+        ],
+    }
+
+
+class PoliticaEmailTests(unittest.TestCase):
+    def test_matriz_da_politica_efetiva(self):
+        casos = (
+            (True, False, 59, True),
+            (False, False, 59, False),
+            (True, False, 60, False),
+            (True, False, 99, False),
+            (True, True, 70, True),
+            (False, True, 70, False),
+        )
+
+        for configuracao, dependente, idade, esperado in casos:
+            with self.subTest(
+                configuracao=configuracao,
+                dependente=dependente,
+                idade=idade,
+            ):
+                self.assertEqual(
+                    calcular_email_obrigatorio_efetivo(
+                        configuracao,
+                        dependente,
+                        idade,
+                    ),
+                    esperado,
+                )
+
+    def test_classificacao_obrigatoria_e_opcional(self):
+        valido = classificar_resposta_email(
+            "Meu e-mail é Maria@EXEMPLO.COM.",
+            email_obrigatorio=True,
+        )
+        self.assertTrue(valido.aceita)
+        self.assertEqual(valido.classificacao, CLASSIFICACAO_EMAIL_VALIDO)
+        self.assertEqual(valido.email, "Maria@exemplo.com")
+
+        recusado = classificar_resposta_email(
+            "Não tenho",
+            email_obrigatorio=True,
+        )
+        self.assertFalse(recusado.aceita)
+
+        ausencia = classificar_resposta_email(
+            "Não tenho e-mail.",
+            email_obrigatorio=False,
+        )
+        self.assertEqual(
+            ausencia.classificacao,
+            CLASSIFICACAO_EMAIL_AUSENTE,
+        )
+        self.assertIsNone(ausencia.email)
+
+        comum = classificar_resposta_email(
+            "prefiro continuar",
+            email_obrigatorio=False,
+        )
+        self.assertEqual(
+            comum.classificacao,
+            CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+        )
+
+    def test_ausencia_explicita_nao_engole_frase_financeira(self):
+        self.assertFalse(eh_ausencia_email_explicita("não tenho dinheiro"))
+        self.assertTrue(eh_ausencia_email_explicita("não possuo e-mail"))
+
+
+class ResolverEtapa11Tests(unittest.TestCase):
+    def test_titular_60_mais_avanca_sem_email_mesmo_com_flag_ativa(self):
+        with patch.object(
+            resolver_etapa11,
+            "enviar_etapa12",
+            return_value=contexto_envio(12),
+        ):
+            resultado = resolver_etapa11.resolve_etapa11(
+                contexto_etapa11(
+                    "Não tenho",
+                    idade=60,
+                    email_obrigatorio=True,
+                )
+            )
+
+        self.assertEqual(resultado["evento_transicao"], "email_valido")
+        self.assertEqual(
+            resultado["resultado_coleta_email"],
+            CLASSIFICACAO_EMAIL_AUSENTE,
+        )
+        self.assertIsNone(resultado["email_cliente"])
+        self.assertFalse(resultado["email_obrigatorio_efetivo"])
+
+    def test_dependente_60_mais_continua_obrigado_pela_unidade(self):
+        tratamento = contexto_envio(11)
+        tratamento["tratamento"] = True
+
+        with patch.object(
+            resolver_etapa11,
+            "enviar_etapa11_contexto_email_invalido",
+            return_value=tratamento,
+        ) as enviar_tratamento:
+            resultado = resolver_etapa11.resolve_etapa11(
+                contexto_etapa11(
+                    "Não tenho",
+                    dependente=True,
+                    idade=70,
+                    email_obrigatorio=True,
+                )
+            )
+
+        enviar_tratamento.assert_called_once()
+        self.assertTrue(resultado["tratamento"])
+        self.assertNotIn("evento_transicao", resultado)
+
+    def test_financeiro_tem_prioridade_sobre_email_opcional(self):
+        tratamento = contexto_envio(11)
+        tratamento["tratamento"] = True
+
+        with patch.object(
+            resolver_etapa11,
+            "validar_pergunta_financeira",
+            return_value=True,
+        ), patch.object(
+            resolver_etapa11,
+            "enviar_etapa11_financeiro",
+            return_value=tratamento,
+        ) as enviar_financeiro, patch.object(
+            resolver_etapa11,
+            "enviar_etapa12",
+        ) as enviar_proxima:
+            resultado = resolver_etapa11.resolve_etapa11(
+                contexto_etapa11(
+                    "não tenho dinheiro",
+                    idade=70,
+                    email_obrigatorio=False,
+                )
+            )
+
+        enviar_financeiro.assert_called_once()
+        enviar_proxima.assert_not_called()
+        self.assertTrue(resultado["tratamento"])
+
+    def test_midia_tem_prioridade_sobre_email_opcional(self):
+        tratamento = contexto_envio(11)
+        tratamento["tratamento"] = True
+        contexto = contexto_etapa11(
+            "qualquer conteúdo",
+            idade=70,
+            email_obrigatorio=False,
+        )
+        contexto["tipo_mensagem_atual"] = "image"
+
+        with patch.object(
+            resolver_etapa11,
+            "validar_midia",
+            return_value=True,
+        ), patch.object(
+            resolver_etapa11,
+            "enviar_etapa11_midia",
+            return_value=tratamento,
+        ) as enviar_midia, patch.object(
+            resolver_etapa11,
+            "enviar_etapa12",
+        ) as enviar_proxima:
+            resultado = resolver_etapa11.resolve_etapa11(contexto)
+
+        enviar_midia.assert_called_once()
+        enviar_proxima.assert_not_called()
+        self.assertTrue(resultado["tratamento"])
+
+    def test_reforco_tem_prioridade_sobre_email_opcional(self):
+        tratamento = contexto_envio(11)
+        tratamento["tratamento"] = True
+
+        with patch.object(
+            resolver_etapa11,
+            "validar_duvida_reforco_escolar",
+            return_value=True,
+        ), patch.object(
+            resolver_etapa11,
+            "enviar_etapa11_reforco_escolar",
+            return_value=tratamento,
+        ) as enviar_reforco, patch.object(
+            resolver_etapa11,
+            "enviar_etapa12",
+        ) as enviar_proxima:
+            resultado = resolver_etapa11.resolve_etapa11(
+                contexto_etapa11(
+                    "vocês trabalham com reforço escolar?",
+                    idade=70,
+                    email_obrigatorio=False,
+                )
+            )
+
+        enviar_reforco.assert_called_once()
+        enviar_proxima.assert_not_called()
+        self.assertTrue(resultado["tratamento"])
+
+    def test_politica_de_email_ausente_falha_fechado(self):
+        contexto = contexto_etapa11(
+            "Não tenho",
+            idade=70,
+            email_obrigatorio=False,
+        )
+        contexto.pop("email_obrigatorio_unidade")
+
+        with self.assertRaises(ValueError):
+            resolver_etapa11.resolve_etapa11(contexto)
+
+
+class SuporteIdosoTests(unittest.TestCase):
+    def test_fronteiras_e_dependente_preservam_a_ordem_aprovada(self):
+        for idade, dependente, suporte, caminho in (
+            (59, False, True, "normal"),
+            (65, False, False, "normal"),
+            (60, False, True, "suporte"),
+            (99, False, True, "suporte"),
+            (100, False, True, "cem_mais"),
+            (70, True, True, "normal_dependente"),
+        ):
+            with self.subTest(
+                idade=idade,
+                dependente=dependente,
+                suporte=suporte,
+            ), patch.object(
+                resolver_etapa7,
+                "enviar_etapa7_suporte_idoso",
+                return_value=contexto_envio(7),
+            ) as enviar_suporte, patch.object(
+                resolver_etapa7,
+                "enviar_etapa7_idade_acima_99",
+                return_value=contexto_envio(7),
+            ) as enviar_cem, patch.object(
+                resolver_etapa7,
+                "enviar_etapa8_cliente",
+                return_value=contexto_envio(8),
+            ) as enviar_cliente, patch.object(
+                resolver_etapa7,
+                "enviar_etapa8_dependente",
+                return_value=contexto_envio(8),
+            ) as enviar_dependente:
+                resultado = resolver_etapa7.resolve_etapa7(
+                    contexto_etapa7(
+                        idade,
+                        dependente=dependente,
+                        suporte=suporte,
+                    )
+                )
+
+            self.assertEqual(enviar_suporte.called, caminho == "suporte")
+            self.assertEqual(enviar_cem.called, caminho == "cem_mais")
+            self.assertEqual(enviar_cliente.called, caminho == "normal")
+            self.assertEqual(
+                enviar_dependente.called,
+                caminho == "normal_dependente",
+            )
+
+            if caminho == "suporte":
+                self.assertTrue(resultado["encerrar_atendimento"])
+                self.assertEqual(
+                    resultado["motivo_encerramento"],
+                    "encaminhado_suporte_idoso",
+                )
+
+    def test_destino_ou_politica_ausente_falha_fechado(self):
+        for campo in ("status_dependente", "suporte_idoso_unidade"):
+            with self.subTest(campo=campo):
+                contexto = contexto_etapa7(65, suporte=True)
+                contexto.pop(campo)
+
+                with self.assertRaises(ValueError):
+                    resolver_etapa7.resolve_etapa7(contexto)
+
+    def test_efeito_terminal_persiste_idade_do_titular(self):
+        cursor = object()
+        contexto = contexto_etapa7(65, suporte=True)
+        envio = contexto_envio(7)
+        envio.update(
+            {
+                "encerrar_atendimento": True,
+                "motivo_encerramento": "encaminhado_suporte_idoso",
+                "idade_aluno": 65,
+            }
+        )
+
+        with patch.object(
+            efeitos_transicao,
+            "atualizar_idade_cliente",
+        ) as atualizar:
+            resultado = (
+                efeitos_transicao.atualizar_banco_conforme_transicao_de_etapa(
+                    contexto,
+                    envio,
+                    cursor,
+                )
+            )
+
+        atualizar.assert_called_once_with(5, 65, cursor)
+        self.assertTrue(resultado["encaminhamento_suporte_idoso"])
+
+    def test_encerramento_e_replay_usam_motivo_novo_sem_bloqueio(self):
+        contexto = contexto_etapa7(65, suporte=True)
+        envio = contexto_envio(7)
+        envio.update(
+            {
+                "encerrar_atendimento": True,
+                "motivo_encerramento": "encaminhado_suporte_idoso",
+            }
+        )
+        primeira = encerramento_atendimento.resolver_intencao_encerramento(
+            contexto,
+            envio,
+            object(),
+        )
+        self.assertEqual(
+            primeira["motivo_encerramento"],
+            "encaminhado_suporte_idoso",
+        )
+        self.assertEqual(primeira["bloqueio_dias"], 0)
+
+        contexto["resposta_bot_para_mensagem_atual"] = {
+            "tipo_mensagem": "interactive_cta_url",
+            "conteudo_texto": (
+                "Que bom te ver aqui novamente, Maria!\n\n"
+                + montar_mensagem_suporte_idoso_etapa7()
+            ),
+        }
+        replay = encerramento_atendimento.resolver_intencao_encerramento(
+            contexto,
+            {
+                "resposta_ja_existia": True,
+                "id_etapa_resultante": 7,
+            },
+            object(),
+        )
+        self.assertEqual(
+            replay["motivo_encerramento"],
+            "encaminhado_suporte_idoso",
+        )
+        self.assertEqual(replay["bloqueio_dias"], 0)
+
+    def test_numero_comercial_compartilha_a_mesma_validacao(self):
+        self.assertTrue(numero_comercial_whatsapp_valido("(71) 99999-9999"))
+        self.assertEqual(
+            montar_link_numero_comercial_whatsapp("(71) 99999-9999"),
+            "https://wa.me/5571999999999",
+        )
+        self.assertFalse(numero_comercial_whatsapp_valido("123"))
+
+
+class PersistenciaEmailEFunilTests(unittest.TestCase):
+    def test_ausencia_limpa_email_anterior_e_retry_reconstroi_sem_flag(self):
+        cursor = object()
+        contexto = contexto_etapa11(
+            "Não tenho",
+            idade=70,
+            email_obrigatorio=False,
+        )
+        contexto["resposta_bot_para_mensagem_atual"] = {
+            "id_etapa": 12,
+        }
+        envio = {
+            "resposta_ja_existia": True,
+            "id_etapa_resultante": 12,
+            "evento_transicao": "email_valido",
+        }
+
+        with patch.object(
+            efeitos_transicao,
+            "atualizar_email_cliente",
+        ) as atualizar:
+            resultado = (
+                efeitos_transicao.atualizar_banco_conforme_transicao_de_etapa(
+                    contexto,
+                    envio,
+                    cursor,
+                )
+            )
+
+        atualizar.assert_called_once_with(5, None, cursor)
+        self.assertEqual(
+            resultado["resultado_coleta_email"],
+            CLASSIFICACAO_EMAIL_AUSENTE,
+        )
+
+    def test_funil_usa_resposta_historica_e_nao_email_global_novo(self):
+        payload = montar_payload_oportunidade(
+            dados_lead(resposta_email="Não tenho")
+        )["oportunidades"][0]
+
+        self.assertEqual(payload["contato"]["email"], "")
+        observacoes = payload["personalizados"][0]["valor"]
+        self.assertIn("E-mail do cliente: não tem", observacoes)
+        self.assertNotIn("novo@example.com", observacoes)
+
+    def test_funil_distingue_nao_informado_e_email_historico(self):
+        comum = montar_payload_oportunidade(
+            dados_lead(resposta_email="prefiro continuar")
+        )["oportunidades"][0]
+        self.assertIn(
+            "E-mail do cliente: não informado",
+            comum["personalizados"][0]["valor"],
+        )
+
+        antigo = montar_payload_oportunidade(
+            dados_lead(resposta_email="antigo@EXEMPLO.COM")
+        )["oportunidades"][0]
+        self.assertEqual(antigo["contato"]["email"], "antigo@exemplo.com")
+
+    def test_repositorio_liga_cliente_11_ao_bot_12_sent(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (
+            122,
+            1,
+            "Santo Antônio de Jesus",
+            False,
+            "Maria",
+            "5571999999999",
+            "maria",
+            "novo@example.com",
+            65,
+            "Aposentada",
+            None,
+            None,
+            [],
+            "Não tenho",
+        )
+
+        resultado = buscar_dados_lead_funil(122, cursor)
+
+        consulta = " ".join(cursor.execute.call_args.args[0].split())
+        self.assertIn("mensagem_cliente.id_etapa = 11", consulta)
+        self.assertIn("mensagem_bot.id_etapa = 12", consulta)
+        self.assertIn("mensagem_bot.status_envio = 'sent'", consulta)
+        self.assertIn(
+            "mensagem_cliente.id_mensagem_fila = "
+            "mensagem_bot.id_mensagem_fila",
+            consulta,
+        )
+        self.assertIn(
+            "mensagem_cliente.id_hash_msg = "
+            "mensagem_bot.id_hash_cliente_origem",
+            consulta,
+        )
+        self.assertEqual(resultado["resposta_email_conversa"], "Não tenho")
+
+    def test_ddl_e_migracao_publicam_o_mesmo_contrato(self):
+        ddl = (
+            RAIZ_PROJETO
+            / "core/database/deploy_database/bank_script.py"
+        ).read_text(encoding="utf-8")
+        migracao = (
+            RAIZ_PROJETO
+            / "deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql"
+        ).read_text(encoding="utf-8")
+        migracao_user_id = (
+            RAIZ_PROJETO
+            / "deploy/migrations/20260813_adicionar_user_id_whatsapp.sql"
+        ).read_text(encoding="utf-8")
+
+        for conteudo in (ddl, migracao):
+            self.assertIn("suporte_idoso", conteudo)
+            self.assertIn("email_obrigatorio", conteudo)
+            self.assertIn("encaminhado_suporte_idoso", conteudo)
+
+        self.assertNotIn("UPDATE chatbot.unidade", migracao)
+        self.assertNotIn("INSERT INTO chatbot.unidade", migracao)
+
+        constraint_motivo = migracao_user_id.split(
+            "ADD CONSTRAINT ck_conversa_motivo_encerramento",
+            1,
+        )[1].split("ALTER TABLE chatbot.cliente", 1)[0]
+        self.assertIn("encaminhado_suporte_idoso", constraint_motivo)
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
+## Passo 159C — `tests/unit/test_valida_etapa7.py`
+
+Remover somente este caminho antigo: o validador da oferta passa da etapa 7
+atual para a etapa 8 futura. A mesma cobertura é recriada integralmente no
+passo 159D; não se apaga nenhum caso de teste.
+
+## Passo 159D — `tests/unit/test_valida_etapa8.py`
+
+Criar o arquivo com o conteúdo completo abaixo. A suíte conserva a proteção
+atual contra o falso positivo “quero mais informações” e muda apenas o módulo e
+o nome público do validador de 7 para 8.
+
+SHA-256 do conteúdo UTF-8 normalizado: `bd295cb7300d855774859cd6475d2e45e932eaa897d56fb4d9fa788bae1051a3`
+
+````python
+from __future__ import annotations
+
+import unittest
+
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa8 import (
+    validar_etapa8,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_OFERTA_ACEITA,
+    EVENTO_OFERTA_ADIADA,
+)
+
+
+class ValidarEtapa8Tests(unittest.TestCase):
+    def test_confirmacoes_curtas_e_acoes_claras_continuam_aceitas(self) -> None:
+        confirmacoes = (
+            "Sim, quero",
+            "quero",
+            "Quero sim",
+            "Sim, gostaria",
+            "quero agendar",
+            "sim, quero agendar",
+            "pode agendar",
+            "vamos agendar",
+            "aceito",
+            "topo",
+            "  SIM,   QUERO! ",
+        )
+
+        for resposta in confirmacoes:
+            with self.subTest(resposta=resposta):
+                self.assertEqual(
+                    validar_etapa8(resposta),
+                    EVENTO_OFERTA_ACEITA,
+                )
+
+    def test_pedidos_de_informacao_nao_sao_confundidos_com_aceite(self) -> None:
+        pedidos = (
+            "quero mais informações",
+            "Quero mais informacoes",
+            "sim, quero mais informações",
+            "gostaria de mais informações",
+            "gostaria de receber mais informações",
+            "quero saber mais",
+            "sim quero saber mais?",
+            "quero saber quais são os horários",
+            "gostaria de saber como funciona",
+            "gostaria de entender melhor",
+            "quero entender como funciona",
+            "quero tirar uma dúvida",
+            "gostaria de tirar uma duvida",
+            "quero fazer uma pergunta",
+            "gostaria de perguntar uma coisa",
+        )
+
+        for resposta in pedidos:
+            with self.subTest(resposta=resposta):
+                self.assertIsNone(validar_etapa8(resposta))
+
+    def test_respostas_negativas_ou_ambiguas_continuam_invalidas(self) -> None:
+        respostas = (
+            "não quero",
+            "não tenho interesse",
+            "quero não",
+            "talvez",
+            "pode me explicar?",
+            "como funciona?",
+            "",
+            None,
+            123,
+        )
+
+        for resposta in respostas:
+            with self.subTest(resposta=resposta):
+                self.assertIsNone(validar_etapa8(resposta))
+
+    def test_botao_de_adiamento_mantem_evento_proprio(self) -> None:
+        self.assertEqual(
+            validar_etapa8("Talvez mais tarde"),
+            EVENTO_OFERTA_ADIADA,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
+
 
 ## Gate integrado de aplicação
 
@@ -33779,7 +39328,7 @@ Depois de materializar todos os arquivos anteriores, executar obrigatoriamente, 
 
 ```powershell
 python -m compileall -q callback core workers tests
-python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_worker_flow_runtime
+python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_valida_etapa8 tests.unit.test_saudacao_retorno tests.unit.test_suporte_idoso_email_obrigatorio tests.unit.test_worker_flow_runtime
 python -m unittest discover -s tests -p "test_*.py" -b
 python -m pip check
 python callback/manage.py check --deploy
@@ -33800,31 +39349,49 @@ Os testes devem provar, no mínimo:
 2. identidade do item congelada, cache/turno tipados e sender usando `user_id` somente nas etapas autorizadas;
 3. promoção e reconciliação provisório/canônico, profissão válida mais recente copiada ao canônico antes da exclusão, conversa antiga encerrada por `ativou_privacidade`, bloqueio herdado encerrando a nova por `bloqueio_reconciliado`, quatro gates de exclusão, rollback e retry idempotente;
 4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória gravada atomicamente em conversa/cliente e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
-5. Funil 19–23 lendo `conversa.profissao`, nunca `cliente.profissao`, username complementar e triagem 13–18 com pergunta/resposta em ordem;
-6. DDL final completo, inclusive `cliente.profissao VARCHAR(100) NULL`, constraints, FKs, índices, ausência de `ALTER TABLE` histórico nos scripts Python declarativos e ausência de novo `ADD COLUMN profissao` na migração de `user_id`;
-7. ausência de nomes físicos legados nos módulos versionados do runtime;
+5. Funil 19–23 lendo `conversa.profissao`, nunca `cliente.profissao`, username complementar, resposta histórica de e-mail da futura etapa 11 ligada à resposta `bot/sent` da etapa 12 e triagem 13–18 com pergunta/resposta em ordem; `NULL` aparece como “não tem” ou “não informado” conforme a classificação da conversa;
+6. DDL final completo, inclusive `cliente.profissao VARCHAR(100) NULL`, `unidade.suporte_idoso`, `unidade.email_obrigatorio`, o motivo `encaminhado_suporte_idoso`, constraints, FKs, índices, ausência de `ALTER TABLE` histórico nos scripts Python declarativos e ausência de novos `ADD COLUMN` dessas três funcionalidades na migração de `user_id`;
+7. ausência de nomes físicos legados nos módulos versionados do runtime e nos utilitários que consultam PostgreSQL ou o payload de bloqueio do Redis;
 8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.7.
-9. prova diferencial da V1.0.7: depois de normalizar a renumeração `1 -> 1` e
+9. prova diferencial da baseline `2bc4188` somada aos deltas aprovados: depois de normalizar a renumeração `1 -> 1` e
    `2..22 -> 3..23`, catálogo/mapa e botões das 22 etapas legadas permanecem
-   idênticos; as únicas diferenças textuais autorizadas são as mensagens iniciais
-   das etapas legadas 2, 10, 11 e 22, mapeadas respectivamente para as etapas
-   futuras 3, 11, 12 e 23 e comparadas por substituições literais fechadas no
-   teste. Todo outro texto legado e o payload do Funil WA-only sem username
+   idênticos; as diferenças textuais posteriores à referência Git ficam fechadas
+   no teste: o CTA de suporte do idoso é uma adição da etapa atual 6/futura 7,
+   e o prefixo “Certo” e o botão “Começar triagem” são duas substituições da
+   etapa atual 11/futura 12. Todo outro texto legado e o payload do Funil WA-only sem username
    permanecem idênticos; a prova fixa explicitamente o caminho da profissão
    atual 4 para a futura 5 e confirma que o Funil continua projetando o snapshot
    de `conversa.profissao`. Os testes funcionais existentes continuam provando
    as duas escritas de profissão com o mesmo cursor, destinatário WA,
    persistência, retry e turno.
+   A prova continua comparando os textos estáticos do catálogo. A saudação de
+   retorno é um prefixo dinâmico de runtime e só constitui diferença autorizada
+   quando todos os seus gates forem verdadeiros; fora desse cenário, o texto
+   enviado permanece byte a byte igual ao legado. A suíte dedicada do passo
+   159A prova e isola essa exceção sem afrouxar a comparação diferencial.
 10. proteção mínima da profissão: somente as oito respostas completas observadas
     são recusadas por igualdade após normalização e recebem
     `profissao_fora_contexto`; os oito controles legítimos permanecem válidos;
     a recusa repete a etapa 5 sem evento, consulta ao mapa ou profissão no
     contexto que alimenta a persistência.
+11. saudação de retorno: limiar inclusivo de três horas calculado pelo horário do
+    evento atual contra a última mensagem `bot/sent` da mesma conversa; etapa 1,
+    nome ausente, intervalo menor e timestamps incompatíveis não ativam o
+    prefixo; avanço válido, tratamento inválido e `request_contact_info` usam a
+    mesma saudação; retry com resposta exata já persistida não chama resolver nem
+    sender; cada resposta continua gerando apenas um envio e um histórico.
+12. suporte/e-mail/oferta: titular de 60–99 anos só é encaminhado quando
+    `suporte_idoso=TRUE`, com persistência da idade, encerramento sem bloqueio e
+    retry idempotente; dependente nunca entra nessa exceção; idade 100+ mantém
+    precedência; a matriz de e-mail obrigatório/opcional, a limpeza para `NULL`,
+    os tratamentos universais prioritários e o falso positivo “quero mais
+    informações” permanecem cobertos após a renumeração.
 
 Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL
-descartável que reflita exatamente a baseline V1.0.7 `c248155`, aplicar nele o
-delta `20260823_adicionar_profissao_cliente.sql` e só então executar o SQL
-integral de `user_id` deste documento. Comparar catálogo, colunas, constraints,
+descartável que reflita exatamente a baseline V1.0.7 atualizada `2bc4188`,
+materializar nele a migração de profissão já versionada na baseline e o delta
+`20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, e só então executar o
+SQL integral de `user_id` deste documento. Comparar catálogo, colunas, constraints,
 FKs, índices e dados com o DDL final. Testes estáticos de strings complementam
 essa prova, mas não substituem a execução real da sequência em clone descartável.
 
@@ -33841,7 +39408,13 @@ SELECT EXISTS (
       AND column_name = 'id_portfolio'
 ) AS id_portfolio_ja_existe;
 
-SELECT id_unidade, nome_unidade, waba_id, phone_number_id
+SELECT
+    id_unidade,
+    nome_unidade,
+    waba_id,
+    phone_number_id,
+    suporte_idoso,
+    email_obrigatorio
 FROM chatbot.unidade
 ORDER BY id_unidade;
 
@@ -33851,17 +39424,22 @@ FROM information_schema.columns
 WHERE table_schema = 'chatbot'
   AND (table_name, column_name) IN (
       ('cliente', 'profissao'),
-      ('conversa', 'profissao')
+      ('conversa', 'profissao'),
+      ('unidade', 'suporte_idoso'),
+      ('unidade', 'email_obrigatorio')
   )
 ORDER BY table_name;
 ```
 
 - Se `id_portfolio_ja_existe = false`, confirmar manualmente todos os pares usados no mapa do SQL final. O mapa preparado contém a unidade conhecida na baseline, mas deverá coincidir com a lista real no momento do deploy.
 - Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome_unidade, nome_agente, genero, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
-- Se a consulta das profissões não devolver exatamente duas linhas
+- Se as duas linhas de profissão da consulta não forem exatamente
   `VARCHAR(100)`, anuláveis e sem default, parar: o banco não corresponde à
-  baseline somada ao delta funcional exigido, e a migração de `user_id` não
+  baseline materializada exigida, e a migração de `user_id` não
   pode criar a coluna faltante.
+- Se os dois flags da unidade não aparecerem como `BOOLEAN NOT NULL` com
+  defaults `FALSE`/`TRUE`, parar; a migração de `user_id` não tem autorização
+  para criar ou corrigir o delta de 20260829.
 
 Antes de abrir a transação de produção, confirmar os três serviços `inactive`, snapshot `Disponível`, ausência de itens `processing` e ausência de envio do Funil em curso. Depois do `COMMIT`, publicar exatamente o código validado, executar smokes de webhook/worker/Funil e inspecionar logs e `NRestarts` antes de encerrar o deploy.
 
@@ -33876,8 +39454,10 @@ O único risco conhecido aceito por este plano continua sendo a janela rara Meta
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
 O preflight bancário aceita exclusivamente o estado pré-`user_id` composto pelo
-schema da baseline V1.0.7 `c248155` mais o delta funcional de profissão
-`20260823_adicionar_profissao_cliente.sql`, ainda com 22 etapas/25 transições. A
+schema da baseline V1.0.7 atualizada `2bc4188`, com sua migração de profissão já
+materializada, mais o delta
+`20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, ainda com 22
+etapas/25 transições. A
 pós-validação exige exatamente 23 etapas/27 transições. Toda a
 migração ocorre em uma única transação: qualquer erro desfaz inclusive o
 remapeamento de etapas. Depois de um `COMMIT` bem-sucedido, uma reexecução
@@ -33887,18 +39467,28 @@ baseline; ela nunca tenta aplicar parcialmente a promoção uma segunda vez.
 `deploy/migrations/20260812_personalizar_agente_unidade.sql` já pertence à
 baseline e não é incorporada nem reexecutada aqui. O SQL abaixo apenas exige e
 preserva `nome_unidade`, `nome_agente`, `genero` e suas quatro constraints.
-Separadamente, `deploy/migrations/20260823_adicionar_profissao_cliente.sql` é
-pré-requisito funcional sobre a baseline: o preflight de `user_id` exige
+Embora já pertença ao commit-base,
+`deploy/migrations/20260823_adicionar_profissao_cliente.sql` é pré-requisito
+materializado no banco: o preflight de `user_id` exige
 `cliente.profissao` e `conversa.profissao`, o corpo não contém novo
 `ADD COLUMN profissao` e o pós-flight prova que seus valores permaneceram
 idênticos.
 
+Da mesma forma,
+`deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql` é
+pré-requisito e não é reexecutada: o preflight exige os dois booleanos com seus
+defaults e o motivo `encaminhado_suporte_idoso`; o snapshot e o pós-flight
+provam que os valores configurados por unidade não mudaram.
+
 Pré-condições obrigatórias:
 
 - concluir todos os gates offline e a execução bem-sucedida em PostgreSQL descartável/clone da baseline;
-- aplicar e validar primeiro
-  `deploy/migrations/20260823_adicionar_profissao_cliente.sql`; sem esse delta,
+- aplicar e validar primeiro, caso ainda não esteja materializada no banco,
+  `deploy/migrations/20260823_adicionar_profissao_cliente.sql`; sem esse estado,
   o preflight de `user_id` deve abortar;
+- aplicar e validar também
+  `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
+  sem os flags e o novo motivo de encerramento, o preflight deve abortar;
 - parar webhook, worker-flow e worker-funil e confirmar os três como `inactive`;
 - criar snapshot do RDS após a parada e aguardar `Disponível`;
 - confirmar servidor, database e usuário corretos no DBeaver;
@@ -33909,7 +39499,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `bdd3efcbf572e0df6f7f0dd6af2cb2a0988b3c0efdff1888276b4ebbdd435bce`
+SHA-256 do SQL UTF-8 normalizado: `2294a71be5b1946d8a8f2979d75392791c49e340e6e725244f20be97621cc69e`
 
 ````sql
 BEGIN;
@@ -33993,11 +39583,40 @@ BEGIN
           AND column_name = 'nome'
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
+            'Migração recusada: colunas de apresentação da unidade não correspondem à baseline 2bc4188.';
     END IF;
 
-    -- conversa.profissao vem da V1.0.7; cliente.profissao vem do delta funcional
-    -- obrigatório anterior. A feature de user_id não possui autorização para
+    -- Os dois flags vieram do delta 20260829 e são parte obrigatória da
+    -- baseline pré-user_id. A migração só pode preservá-los, nunca recriá-los.
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            VALUES
+                ('suporte_idoso', 'false'),
+                ('email_obrigatorio', 'true')
+        ) AS esperado(column_name, valor_default)
+        LEFT JOIN information_schema.columns AS coluna
+          ON coluna.table_schema = 'chatbot'
+         AND coluna.table_name = 'unidade'
+         AND coluna.column_name = esperado.column_name
+        WHERE coluna.column_name IS NULL
+           OR coluna.data_type <> 'boolean'
+           OR coluna.is_nullable <> 'NO'
+           OR LOWER(
+                REGEXP_REPLACE(
+                    COALESCE(coluna.column_default, ''),
+                    '(::boolean)|[()[:space:]]',
+                    '',
+                    'g'
+                )
+              ) <> esperado.valor_default
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: suporte_idoso/email_obrigatorio divergem do delta 20260829.';
+    END IF;
+
+    -- As duas colunas de profissão já pertencem à baseline V1.0.7 e precisam
+    -- estar materializadas no banco. A feature de user_id não possui autorização para
     -- criar, tipar, preencher ou apagar nenhuma delas.
     IF EXISTS (
         SELECT 1
@@ -34017,7 +39636,7 @@ BEGIN
            OR coluna.column_default IS NOT NULL
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: profissões de cliente/conversa não correspondem ao estado pré-user_id (V1.0.7 c248155 + delta 20260823).';
+            'Migração recusada: profissões de cliente/conversa não correspondem à baseline 2bc4188 materializada.';
     END IF;
 
     IF EXISTS (
@@ -34028,7 +39647,7 @@ BEGIN
            OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a V1.0.7 c248155.';
+            'Migração recusada: dados de apresentação da unidade violam a baseline 2bc4188.';
     END IF;
 
     IF EXISTS (
@@ -34112,7 +39731,7 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.7 c248155.';
+            'Migração recusada: constraints de apresentação da unidade divergem da baseline 2bc4188.';
     END IF;
 
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
@@ -34227,7 +39846,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.7 c248155 (etapas=%/%; transições=%/%).',
+            'à baseline 2bc4188 e seus deltas aprovados (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -34244,7 +39863,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.7 c248155.';
+            'Migração recusada: etapa final atual não corresponde à baseline 2bc4188.';
     END IF;
 
     IF EXISTS (
@@ -34253,7 +39872,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.7 c248155.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da baseline 2bc4188.';
     END IF;
 
     IF NOT EXISTS (
@@ -34332,6 +39951,7 @@ BEGIN
     IF definicao_motivo IS NULL
        OR POSITION('MOTIVO_ENCERRAMENTO IS NULL' IN UPPER(definicao_motivo)) = 0
        OR motivos_atuais IS DISTINCT FROM ARRAY[
+            'encaminhado_suporte_idoso',
             'foi_agendado',
             'idade_invalida'
        ]::TEXT[]
@@ -34459,7 +40079,13 @@ $preflight$;
 CREATE TEMP TABLE migracao_apresentacao_unidade_antes
 ON COMMIT DROP
 AS
-SELECT id_unidade, nome_unidade, nome_agente, genero
+SELECT
+    id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+    suporte_idoso,
+    email_obrigatorio
 FROM chatbot.unidade;
 
 -- A migração não sincroniza profissão: ela prova diferencialmente que o valor
@@ -34666,7 +40292,8 @@ ALTER TABLE chatbot.conversa
                 'idade_invalida',
                 'foi_agendado',
                 'ativou_privacidade',
-                'bloqueio_reconciliado'
+                'bloqueio_reconciliado',
+                'encaminhado_suporte_idoso'
             )
         );
 
@@ -35148,6 +40775,33 @@ BEGIN
         SELECT 1
         FROM (
             VALUES
+                ('suporte_idoso', 'false'),
+                ('email_obrigatorio', 'true')
+        ) AS esperado(column_name, valor_default)
+        LEFT JOIN information_schema.columns AS coluna
+          ON coluna.table_schema = 'chatbot'
+         AND coluna.table_name = 'unidade'
+         AND coluna.column_name = esperado.column_name
+        WHERE coluna.column_name IS NULL
+           OR coluna.data_type <> 'boolean'
+           OR coluna.is_nullable <> 'NO'
+           OR LOWER(
+                REGEXP_REPLACE(
+                    COALESCE(coluna.column_default, ''),
+                    '(::boolean)|[()[:space:]]',
+                    '',
+                    'g'
+                )
+              ) <> esperado.valor_default
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: flags de suporte/e-mail foram alterados.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM (
+            VALUES
                 ('unidade',               'nome'),
                 ('cliente',                'waid_telefone'),
                 ('fila_mensagens',         'cliente_telefone'),
@@ -35214,6 +40868,8 @@ BEGIN
            OR depois.nome_unidade IS DISTINCT FROM antes.nome_unidade
            OR depois.nome_agente IS DISTINCT FROM antes.nome_agente
            OR depois.genero IS DISTINCT FROM antes.genero
+           OR depois.suporte_idoso IS DISTINCT FROM antes.suporte_idoso
+           OR depois.email_obrigatorio IS DISTINCT FROM antes.email_obrigatorio
     ) THEN
         RAISE EXCEPTION
             'Pós-validação falhou: apresentação da unidade mudou durante a migração de user_id.';
@@ -35407,6 +41063,7 @@ BEGIN
        OR motivos_finais IS DISTINCT FROM ARRAY[
            'ativou_privacidade',
            'bloqueio_reconciliado',
+           'encaminhado_suporte_idoso',
            'foi_agendado',
            'idade_invalida'
        ]::TEXT[]

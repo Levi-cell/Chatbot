@@ -75,6 +75,10 @@ class Conversa(models.Model):
         choices=[
             ("idade_invalida", "Idade inválida"),
             ("foi_agendado", "Foi agendado"),
+            (
+                "encaminhado_suporte_idoso",
+                "Encaminhado ao suporte ao idoso",
+            ),
         ],
     )
 
@@ -267,6 +271,21 @@ class Unidade(models.Model):
         max_length=30,
         blank=True,
         null=True,
+    )
+    suporte_idoso = models.BooleanField(
+        "suporte ao idoso",
+        default=False,
+        help_text=(
+            "Encaminha titulares de 60 a 99 anos ao contato comercial e "
+            "encerra o atendimento sem bloqueio."
+        ),
+    )
+    email_obrigatorio = models.BooleanField(
+        "e-mail obrigatório",
+        default=True,
+        help_text=(
+            "Exige um e-mail válido, exceto do titular com 60 anos ou mais."
+        ),
     )
     waba_id = models.CharField(
         unique=True,

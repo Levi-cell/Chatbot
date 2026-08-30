@@ -21,6 +21,10 @@ depender de `utilitarios`.
 utilitarios/
 ├── bootstrap.py
 ├── local_settings.py       configuração privada local, ignorada pelo Git
+├── reports_functions/
+│   ├── weekly.py            dashboards e PDFs dos últimos 7 dias
+│   └── total.py             dashboards e PDFs desde o primeiro atendimento
+├── requirements-monitoramento.txt
 ├── montar_lead_teste.py
 ├── cache_consulta.py
 ├── utlitys.py
@@ -34,7 +38,8 @@ utilitarios/
 │   ├── cache_reset.py
 │   └── message_partitions.py
 └── integrations/
-    └── funil_probe.py
+    ├── funil_saj.py
+    └── funi_rio_teste.py
 ```
 
 As ferramentas foram preparadas para execução local no PyCharm. Nesse modo, o
@@ -71,6 +76,83 @@ No Windows, os módulos também podem ser executados diretamente pelo botão
 **Run** do PyCharm. O caminho Linux configurado em `DB_SSLROOTCERT` é
 automaticamente resolvido para o bundle público do RDS incluído em
 `deploy/certificates`, mantendo `verify-full`.
+
+## Monitoramento semanal e total por unidade
+
+Os geradores de monitoramento criam, para cada unidade consultada, um dashboard
+HTML de conversas e um relatório PDF de desempenho. O semanal cobre por padrão
+os últimos 7 dias. O total cobre, de forma independente para cada unidade, o
+intervalo entre a primeira mensagem recebida de cliente e o instante congelado
+no começo da execução. Ambos usam exatamente a mesma estrutura visual, regras
+de consolidação e métricas. Instale a dependência adicional uma vez:
+
+```bash
+python -m pip install -r utilitarios/requirements-monitoramento.txt
+```
+
+Depois execute:
+
+```bash
+python -m utilitarios.reports_functions.weekly
+python -m utilitarios.reports_functions.total
+```
+
+Na VM, informe explicitamente o ambiente de produção:
+
+```bash
+python -m utilitarios.reports_functions.weekly \
+  --env-file /etc/chatbot/chatbot.env
+python -m utilitarios.reports_functions.total \
+  --env-file /etc/chatbot/chatbot.env
+```
+
+As duas visões ficam isoladas dentro da pasta da unidade:
+
+```text
+monitoramento/
+└── <unidade>/
+    ├── semanal/
+    │   ├── dashbord/
+    │   │   └── conversas_<intervalo>.html
+    │   └── relatorios/
+    │       └── desempenho_<intervalo>.pdf
+    └── total/
+        ├── dashbord/
+        │   └── conversas_<intervalo>.html
+        └── relatorios/
+            └── desempenho_<intervalo>.pdf
+```
+
+O nome comercial `Santo Antônio de Jesus` é publicado na pasta curta `SAJ`;
+os demais nomes de unidade são preservados após a remoção do prefixo `Supera`.
+
+A pasta `/monitoramento/` inteira é ignorada pelo Git. Os arquivos gerados
+contêm dados pessoais e devem ser entregues somente aos responsáveis pela
+respectiva unidade, sem publicação ou compartilhamento indiscriminado.
+
+O dashboard apresenta como uma sequência as conversas técnicas pertencentes
+exatamente ao mesmo par `(id_unidade, id_cliente)`. Conversas de unidades ou
+clientes diferentes nunca são unificadas. O utilitário opera em modo somente
+leitura: consulta o PostgreSQL e grava apenas os artefatos locais de saída, sem
+alterar o banco, o Redis ou enviar mensagens e integrações externas.
+
+O instante final do relatório total é resolvido uma única vez e compartilhado
+por todas as unidades da execução. Cada unidade, porém, conserva seu próprio
+início. Se uma unidade ainda não tiver mensagem recebida de cliente, ela também
+recebe um relatório vazio, sem buscar ou misturar dados de outra unidade.
+
+Flags principais:
+
+- `--dias N`: altera a janela semanal, cujo padrão é 7 dias (somente `weekly`);
+- `--ate ISO-8601`: fixa o fim da janela;
+- `--id-unidade ID`: limita a uma unidade e pode ser repetida;
+- `--saida CAMINHO`: troca a raiz `monitoramento`;
+- `--max-mensagens N`: limita o volume consultado;
+- `--statement-timeout-ms N`: ajusta o timeout das consultas;
+- `--env-file CAMINHO`: escolhe explicitamente o arquivo de ambiente.
+
+O PDF depende do ReportLab; o HTML é autocontido e pode ser aberto offline no
+navegador.
 
 ## Consultas e alteração manual do PIN Meta
 
@@ -177,14 +259,25 @@ partição não puder ser criada.
 
 ## Sondas do Funil
 
+SAJ:
+
 ```bash
-python -m utilitarios.integrations.funil_probe catalog
-python -m utilitarios.integrations.funil_probe payload
-python -m utilitarios.integrations.funil_probe send-test --confirm-real-send
+python -m utilitarios.integrations.funil_saj catalog
+python -m utilitarios.integrations.funil_saj payload
+python -m utilitarios.integrations.funil_saj send-test --confirm-real-send
 ```
 
-Somente o último comando envia uma oportunidade real, e isso exige a flag de
-confirmação. Importar o módulo nunca realiza uma requisição externa.
+Rio Vermelho:
+
+```bash
+python -m utilitarios.integrations.funi_rio_teste payload
+python -m utilitarios.integrations.funi_rio_teste \
+  send-test --confirm-real-send
+```
+
+Em cada bloco, somente `send-test` envia uma oportunidade real, e isso exige a
+flag de confirmação. Cada sonda usa um lead fictício identificado para sua
+própria unidade. Importar os módulos nunca realiza uma requisição externa.
 
 ## Ideia futura: rotação automática do PIN
 

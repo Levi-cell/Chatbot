@@ -46,6 +46,12 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4
     validar_profissao_etapa4,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa10 import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
+    classificar_resposta_email_aceita,
     validar_etapa10,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -101,6 +107,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 
 logger = logging.getLogger("worker.support")
 
+MOTIVO_ENCAMINHAMENTO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
+
 
 def atualizar_banco_conforme_transicao_de_etapa(
     contexto_historico,
@@ -118,6 +126,18 @@ def atualizar_banco_conforme_transicao_de_etapa(
     )
     evento = contexto_envio.get("evento_transicao")
     etapa_destino = contexto_envio.get("id_etapa_resultante")
+
+    if (
+        etapa_origem == ETAPA_6_IDADE_ALUNO
+        and contexto_envio.get("encerrar_atendimento")
+        and contexto_envio.get("motivo_encerramento")
+        == MOTIVO_ENCAMINHAMENTO_SUPORTE_IDOSO
+    ):
+        return _persistir_idade_encaminhamento_suporte_idoso(
+            contexto_historico,
+            contexto_envio,
+            cursor,
+        )
 
     # Sem evento não existe transição nem efeito específico de etapa.
     if not evento:
@@ -311,7 +331,8 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 10
     if etapa_origem == ETAPA_10_EMAIL:
-        # 10 -> 11: o cliente informou um email estruturalmente válido.
+        # 10 -> 11: a coleta foi aceita. A aresta técnica legada é única;
+        # o resultado semântico distingue endereço, ausência e não informado.
         if evento == EVENTO_EMAIL_VALIDO:
             _exigir_destino(
                 etapa_origem,
@@ -911,6 +932,53 @@ def _persistir_idade_capturada_na_etapa6(
     }
 
 
+def _persistir_idade_encaminhamento_suporte_idoso(
+    contexto_historico,
+    contexto_envio,
+    cursor,
+):
+    if contexto_historico.get("status_dependente"):
+        raise ValueError(
+            "Encaminhamento de suporte ao idoso não aceita dependente"
+        )
+
+    idade = contexto_envio.get("idade_aluno")
+    if idade is None:
+        resultado = validar_idade(
+            contexto_historico.get("texto_cliente_atual") or ""
+        )
+        idade = resultado.idade if resultado.valida else None
+
+    if (
+        isinstance(idade, bool)
+        or not isinstance(idade, int)
+        or not 60 <= idade <= 99
+    ):
+        raise ValueError(
+            "Idade inválida no encaminhamento de suporte ao idoso "
+            f"(idade={idade!r})"
+        )
+
+    atualizar_idade_cliente(
+        contexto_historico["id_cliente"],
+        idade,
+        cursor,
+    )
+
+    logger.info(
+        "idade_titular_persistida | acao=encaminhar_suporte_idoso "
+        "id_conversa=%s id_cliente=%s faixa=60_99",
+        contexto_historico["id_conversa"],
+        contexto_historico["id_cliente"],
+    )
+    return {
+        "idade_aluno_atualizada": True,
+        "idade_aluno": idade,
+        "destino_dado": "cliente",
+        "encaminhamento_suporte_idoso": True,
+    }
+
+
 def _confirmar_decisao_oferta_da_etapa7(
     contexto_historico,
     evento,
@@ -994,27 +1062,60 @@ def _persistir_email_capturado_na_etapa10(
     contexto_envio,
     cursor,
 ):
-    """
-    Persiste somente o email extraído e validado na etapa 10.
-
-    Em reaplicação idempotente, o contexto de envio não carrega o email.
-    Nesse caso, o dado é revalidado na mensagem original do cliente.
-    """
+    """Persiste de forma absoluta o resultado aceito na conversa atual."""
+    classificacao = contexto_envio.get("resultado_coleta_email")
     email = contexto_envio.get("email_cliente")
 
-    if email is None:
-        resultado_email = validar_etapa10(
-            contexto_historico.get("texto_cliente_atual") or ""
-        )
+    if classificacao is None and email:
+        classificacao = CLASSIFICACAO_EMAIL_VALIDO
+        email = validar_etapa10(email).email
 
-        if not resultado_email.valido:
-            raise ValueError(
-                "Email nao reconstruido na transicao 10 -> 11"
+    if classificacao is None:
+        texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
+
+        if contexto_envio.get("resposta_ja_existia"):
+            resultado_email = classificar_resposta_email_aceita(
+                texto_cliente
+            )
+        else:
+            email_obrigatorio = calcular_email_obrigatorio_efetivo(
+                contexto_historico.get("email_obrigatorio_unidade"),
+                contexto_historico.get("status_dependente"),
+                contexto_historico.get("idade_cliente"),
+            )
+            resultado_email = classificar_resposta_email(
+                texto_cliente,
+                email_obrigatorio=email_obrigatorio,
             )
 
+        if not resultado_email.aceita:
+            raise ValueError(
+                "Resultado de email nao reconstruido na transicao 10 -> 11"
+            )
+
+        classificacao = resultado_email.classificacao
         email = resultado_email.email
 
-    email = str(email).strip()
+    classificacoes_validas = {
+        CLASSIFICACAO_EMAIL_VALIDO,
+        CLASSIFICACAO_EMAIL_AUSENTE,
+        CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    }
+    if classificacao not in classificacoes_validas:
+        raise ValueError(
+            "Classificacao de email invalida na transicao 10 -> 11 "
+            f"(classificacao={classificacao!r})"
+        )
+
+    if classificacao == CLASSIFICACAO_EMAIL_VALIDO:
+        resultado_estrutural = validar_etapa10(email)
+        if not resultado_estrutural.valido:
+            raise ValueError(
+                "Email valido sem endereco reconstruivel na transicao 10 -> 11"
+            )
+        email = resultado_estrutural.email
+    else:
+        email = None
 
     atualizar_email_cliente(
         contexto_historico["id_cliente"],
@@ -1025,18 +1126,21 @@ def _persistir_email_capturado_na_etapa10(
     logger.info(
         "cliente_email_persistido | acao=salvar_efeito_transicao "
         "evento=%s etapa_origem=%s etapa_resultante=%s "
-        "id_conversa=%s id_cliente=%s email_preenchido=%s",
+        "id_conversa=%s id_cliente=%s email_preenchido=%s "
+        "resultado_coleta=%s",
         EVENTO_EMAIL_VALIDO,
         contexto_historico["id_etapa_origem_transicao"],
         contexto_envio["id_etapa_resultante"],
         contexto_historico["id_conversa"],
         contexto_historico["id_cliente"],
         bool(email),
+        classificacao,
     )
 
     return {
         "cliente_email_atualizado": True,
         "email_preenchido": bool(email),
+        "resultado_coleta_email": classificacao,
     }
 
 

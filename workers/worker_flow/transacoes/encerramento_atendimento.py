@@ -1,5 +1,8 @@
 import logging
 
+from core.integrations.whatsapp.messages.etapa6_messages import (
+    montar_mensagem_suporte_idoso_etapa6,
+)
 from core.repositories.atendimento.conversas import encerrar_conversa
 from core.repositories.atendimento.dependentes import (
     excluir_dependente_da_conversa,
@@ -19,10 +22,12 @@ logger = logging.getLogger("worker.support")
 MOTIVO_CLIENTE_MENOR_18 = "cliente_menor_18"
 MOTIVO_DEPENDENTE_MENOR_5 = "dependente_menor_5"
 MOTIVO_IDADE_ACIMA_99 = "idade_acima_99"
+MOTIVO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 MOTIVO_ETAPA_FINAL = "etapa_final"
 
 MOTIVO_ENCERRAMENTO_IDADE_INVALIDA = "idade_invalida"
 MOTIVO_ENCERRAMENTO_FOI_AGENDADO = "foi_agendado"
+MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO = "encaminhado_suporte_idoso"
 
 
 def resolver_intencao_encerramento(
@@ -31,9 +36,15 @@ def resolver_intencao_encerramento(
     cursor,
 ):
     if contexto_envio.get("encerrar_atendimento"):
+        motivo = contexto_envio["motivo_encerramento"]
+        motivo_banco = (
+            MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO
+            if motivo == MOTIVO_SUPORTE_IDOSO
+            else MOTIVO_ENCERRAMENTO_IDADE_INVALIDA
+        )
         return {
-            "motivo": contexto_envio["motivo_encerramento"],
-            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
+            "motivo": motivo,
+            "motivo_encerramento": motivo_banco,
             "excluir_dependente": bool(
                 contexto_envio.get("excluir_dependente")
             ),
@@ -91,6 +102,20 @@ def _reconstruir_encerramento_etapa6(contexto_historico):
     if not resultado.valida:
         return None
 
+    if (
+        not contexto_historico.get("status_dependente")
+        and 60 <= resultado.idade <= 99
+        and _resposta_bot_e_encaminhamento_suporte_idoso(
+            contexto_historico
+        )
+    ):
+        return {
+            "motivo": MOTIVO_SUPORTE_IDOSO,
+            "motivo_encerramento": MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO,
+            "excluir_dependente": False,
+            "bloqueio_dias": 0,
+        }
+
     if contexto_historico.get("status_dependente"):
         idade_minima = obter_idade_minima_dependente(
             contexto_historico.get("bpa_ativo_unidade")
@@ -114,6 +139,18 @@ def _reconstruir_encerramento_etapa6(contexto_historico):
         }
 
     return None
+
+
+def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
+    resposta_bot = (
+        contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
+    )
+    if resposta_bot.get("tipo_mensagem") != "interactive_cta_url":
+        return False
+
+    conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
+    mensagem_esperada = montar_mensagem_suporte_idoso_etapa6().strip()
+    return conteudo.endswith(mensagem_esperada)
 
 
 def aplicar_encerramento_se_necessario(

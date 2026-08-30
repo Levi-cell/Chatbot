@@ -12,7 +12,8 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa11 import (
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa10 import (
     TIPO_TRATAMENTO_EMAIL_INVALIDO,
-    validar_etapa10,
+    calcular_email_obrigatorio_efetivo,
+    classificar_resposta_email,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
@@ -47,9 +48,7 @@ logger = logging.getLogger("worker.etapa10")
 
 def resolve_etapa10(contexto_historico):
     """
-    Mídia, financeiro e email inválido recebem tratamento sem avançar.
-
-    Um email estruturalmente válido produz email_valido para resolver 10 -> 11.
+    Preserva tratamentos e aplica a política efetiva antes de resolver 10 -> 11.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -90,10 +89,17 @@ def resolve_etapa10(contexto_historico):
         )
 
 # CAMPOS QUE VALIDAM O CONTEXTO DE EMAIL NA ETAPA 10
-    # O validador extrai um único email de respostas curtas ou frases.
-    resultado_email = validar_etapa10(texto_cliente)
+    email_obrigatorio_efetivo = calcular_email_obrigatorio_efetivo(
+        contexto_historico.get("email_obrigatorio_unidade", True),
+        contexto_historico.get("status_dependente"),
+        contexto_historico.get("idade_cliente"),
+    )
+    resultado_email = classificar_resposta_email(
+        texto_cliente,
+        email_obrigatorio=email_obrigatorio_efetivo,
+    )
 
-    if not resultado_email.valido:
+    if not resultado_email.aceita:
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_EMAIL_INVALIDO,
@@ -117,11 +123,14 @@ def resolve_etapa10(contexto_historico):
 
     logger.info(
         "etapa10_email_recebido | acao=enviar_etapa11 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s",
+        "id_conversa=%s id_mensagem_fila=%s evento=%s etapa_destino=%s "
+        "email_obrigatorio_efetivo=%s resultado_coleta=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
         evento_transicao,
         etapa_destino,
+        email_obrigatorio_efetivo,
+        resultado_email.classificacao,
     )
 
     contexto_envio = enviar_etapa11(
@@ -129,6 +138,12 @@ def resolve_etapa10(contexto_historico):
         phone_id_unidade,
     )
     contexto_envio["email_cliente"] = resultado_email.email
+    contexto_envio["resultado_coleta_email"] = (
+        resultado_email.classificacao
+    )
+    contexto_envio["email_obrigatorio_efetivo"] = (
+        email_obrigatorio_efetivo
+    )
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,

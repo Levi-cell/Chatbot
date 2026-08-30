@@ -1,5 +1,9 @@
 import logging
 
+from core.integrations.whatsapp.pywa_functions.cliente import (
+    aplicar_prefixo_mensagem_bot,
+    usar_prefixo_mensagem_bot,
+)
 from workers.worker_flow.response_flow.etapas.resolver_etapa1 import (
     resolve_etapa1,
 )
@@ -157,64 +161,124 @@ def flow_sender(contexto_historico):
         return resolve_etapa1(contexto_historico)
 
     if id_etapa_atual == 2:
-        return resolve_etapa2(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa2,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 3:
-        return resolve_etapa3(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa3,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 4:
-        return resolve_etapa4(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa4,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 5:
-        return resolve_etapa5(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa5,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 6:
-        return resolve_etapa6(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa6,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 7:
-        return resolve_etapa7(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa7,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 8:
-        return resolve_etapa8(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa8,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 9:
-        return resolve_etapa9(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa9,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 10:
-        return resolve_etapa10(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa10,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 11:
-        return resolve_etapa11(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa11,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 12:
-        return resolve_etapa12(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa12,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 13:
-        return resolve_etapa13(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa13,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 14:
-        return resolve_etapa14(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa14,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 15:
-        return resolve_etapa15(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa15,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 16:
-        return resolve_etapa16(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa16,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 17:
-        return resolve_etapa17(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa17,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 18:
-        return resolve_etapa18(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa18,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 19:
-        return resolve_etapa19(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa19,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 20:
-        return resolve_etapa20(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa20,
+            contexto_historico,
+        )
 
     if id_etapa_atual == 21:
-        return resolve_etapa21(contexto_historico)
+        return _resolver_com_saudacao(
+            resolve_etapa21,
+            contexto_historico,
+        )
 
     # A etapa 22 é terminal e não possui resolver. Conversas encerradas são
     # barradas pelo cache/webhook e pelo fallback transacional do worker.
@@ -227,3 +291,21 @@ def flow_sender(contexto_historico):
     raise NotImplementedError(
         f"Sender da etapa atual {id_etapa_atual} ainda nao implementado"
     )
+
+
+def _resolver_com_saudacao(resolver, contexto_historico):
+    """Aplica a saudação sem alterar o despacho legado das etapas."""
+    saudacao_retorno = contexto_historico.get("saudacao_retorno")
+
+    with usar_prefixo_mensagem_bot(saudacao_retorno):
+        contexto_envio = resolver(contexto_historico)
+
+    if saudacao_retorno and contexto_envio.get("mensagem_bot"):
+        contexto_envio = dict(contexto_envio)
+        contexto_envio["mensagem_bot"] = aplicar_prefixo_mensagem_bot(
+            contexto_envio["mensagem_bot"],
+            saudacao_retorno,
+        )
+        contexto_envio["saudacao_retorno_aplicada"] = True
+
+    return contexto_envio

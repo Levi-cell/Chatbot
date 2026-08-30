@@ -8,6 +8,7 @@ ETAPA_INICIAL = 1
 MOTIVOS_ENCERRAMENTO_VALIDOS = {
     "idade_invalida",
     "foi_agendado",
+    "encaminhado_suporte_idoso",
 }
 
 

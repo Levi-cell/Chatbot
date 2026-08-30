@@ -1,4 +1,4 @@
-"""Sondas manuais para validar a integração do Funil sem usar o chatbot."""
+"""Sondas manuais do Funil de SAJ sem usar o chatbot."""
 
 import argparse
 import json
@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.integrations.funil.cliente import enviar_oportunidade
 from core.integrations.funil.oportunidades import montar_payload_oportunidade
-from utilitarios.montar_lead_teste import montar_dados_lead_teste
+from utilitarios.montar_lead_teste import montar_dados_lead_teste_saj
 
 
 URL_CONSULTA_INTEGRACOES = (
@@ -64,8 +64,8 @@ def consultar_integracao_unidade(widget=WIDGET_UNIDADE_SAJ):
 
 
 def montar_payload_oportunidade_teste():
-    """Monta o lead fictício completo sem executar qualquer POST."""
-    return montar_payload_oportunidade(montar_dados_lead_teste())
+    """Monta o lead fictício de SAJ sem executar qualquer POST."""
+    return montar_payload_oportunidade(montar_dados_lead_teste_saj())
 
 
 def criar_oportunidade_teste(*, confirmar_envio_real=False):
@@ -161,7 +161,7 @@ def _imprimir_resultado(resultado):
 
 def criar_parser():
     parser = argparse.ArgumentParser(
-        description="Consulta e testa a integração externa do Funil.",
+        description="Consulta e testa a integração externa do Funil de SAJ.",
     )
     subparsers = parser.add_subparsers(dest="comando", required=True)
     catalogo = subparsers.add_parser(
@@ -209,7 +209,7 @@ def main(argv=None):
         return 0
     except (requests.RequestException, RuntimeError, ValueError) as exc:
         print(
-            f"FUNIL_PROBE_FALHOU: {type(exc).__name__}: {exc}",
+            f"FUNIL_SAJ_FALHOU: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 1

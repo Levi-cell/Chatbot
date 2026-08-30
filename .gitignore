@@ -9,3 +9,4 @@ callback/staticfiles/
 .env.*
 utilitarios/local_settings.py
 
+/monitoramento/

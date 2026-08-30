@@ -21,6 +21,9 @@ from core.integrations.whatsapp.tools.usuarios import (
 from core.integrations.whatsapp.tools.validando_phone_waba import (
     validar_phone_number_id_da_waba,
 )
+from core.integrations.whatsapp.numero_comercial import (
+    numero_comercial_whatsapp_valido,
+)
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
     incrementar_versao_cache_unidades,
@@ -138,6 +141,8 @@ class UnidadeAdmin(admin.ModelAdmin):
         "cnpj",
         "telefone",
         "numero_comercial",
+        "suporte_idoso",
+        "email_obrigatorio",
         "email_responsavel",
         "waba_id",
         "phone_number_id",
@@ -160,7 +165,13 @@ class UnidadeAdmin(admin.ModelAdmin):
         "link_instagram",
     )
 
-    list_filter = ("genero", "bpa_ativo", "status_pagamento")
+    list_filter = (
+        "genero",
+        "bpa_ativo",
+        "suporte_idoso",
+        "email_obrigatorio",
+        "status_pagamento",
+    )
     ordering = ("nome_unidade",)
 
     list_per_page = 50
@@ -216,6 +227,18 @@ class UnidadeAdmin(admin.ModelAdmin):
         class UnidadeAdminForm(base_form):
             def _post_clean(self):
                 super()._post_clean()
+
+                if (
+                    self.cleaned_data.get("suporte_idoso")
+                    and not numero_comercial_whatsapp_valido(
+                        self.cleaned_data.get("numero_comercial")
+                    )
+                ):
+                    self.add_error(
+                        "numero_comercial",
+                        "Informe um número comercial brasileiro válido "
+                        "antes de ativar o suporte ao idoso.",
+                    )
 
                 if change or self.errors:
                     if change and not self.errors:

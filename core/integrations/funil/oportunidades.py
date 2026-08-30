@@ -6,6 +6,12 @@ from core.triagem.perguntas import (
     montar_pergunta_triagem,
     obter_faixa_etaria_triagem,
 )
+from core.validacoes.email import (
+    CLASSIFICACAO_EMAIL_AUSENTE,
+    CLASSIFICACAO_EMAIL_NAO_INFORMADO,
+    CLASSIFICACAO_EMAIL_VALIDO,
+    classificar_resposta_email_aceita,
+)
 
 
 ORIGEM_LEAD_CHATBOT = "Meta Chatbot"
@@ -46,7 +52,11 @@ def montar_payload_oportunidade(dados_lead):
     telefone_funil = _normalizar_telefone_brasileiro(
         dados_lead["telefone_cliente"]
     )
-    observacoes = montar_observacoes_lead(dados_lead)
+    resultado_email = _resolver_resultado_email_conversa(dados_lead)
+    observacoes = montar_observacoes_lead(
+        dados_lead,
+        resultado_email=resultado_email,
+    )
 
     return {
         "oportunidades": [
@@ -82,7 +92,9 @@ def montar_payload_oportunidade(dados_lead):
                 },
                 "contato": {
                     "nome": nome_cliente,
-                    "email": dados_lead["email_cliente"].strip(),
+                    # Ausência é representada pelo valor vazio já usado no
+                    # contrato do projeto; placeholders nunca ocupam o campo.
+                    "email": resultado_email.email or "",
                     "telefone1": telefone_funil,
                     "telefone2": "",
                     "cargo": "",
@@ -94,13 +106,17 @@ def montar_payload_oportunidade(dados_lead):
     }
 
 
-def montar_observacoes_lead(dados_lead):
+def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     """Produz o resumo humano exibido pela oportunidade no CRM."""
     nome_cliente = dados_lead["nome_cliente"].strip()
     telefone_cliente = dados_lead["telefone_cliente"].strip()
     profissao = str(dados_lead.get("profissao") or "").strip()
     profissao = profissao or "Não informada"
     aviso_telefone = ""
+    resultado_email = resultado_email or _resolver_resultado_email_conversa(
+        dados_lead
+    )
+    email_exibicao = _montar_email_exibicao(resultado_email)
 
     if not _normalizar_telefone_brasileiro(telefone_cliente):
         aviso_telefone = f"\n{AVISO_TELEFONE_INTERNACIONAL}\n"
@@ -113,7 +129,7 @@ def montar_observacoes_lead(dados_lead):
         f"- Nome do cliente: {nome_cliente}\n"
         f"- Telefone/WhatsApp do cliente: "
         f"{telefone_cliente}\n"
-        f"- E-mail do cliente: {dados_lead['email_cliente'].strip()}\n"
+        f"- E-mail do cliente: {email_exibicao}\n"
     )
 
     if dados_lead["status_dependente"]:
@@ -208,7 +224,6 @@ def _validar_dados_lead(dados_lead):
         "nome_unidade",
         "nome_cliente",
         "telefone_cliente",
-        "email_cliente",
     )
     ausentes = [campo for campo in obrigatorios if not dados_lead.get(campo)]
 
@@ -227,6 +242,37 @@ def _validar_dados_lead(dados_lead):
             raise ValueError("Idade do dependente ausente")
     elif dados_lead.get("idade_cliente") is None:
         raise ValueError("Idade do cliente ausente")
+
+
+def _resolver_resultado_email_conversa(dados_lead):
+    resposta_historica = dados_lead.get("resposta_email_conversa")
+
+    if resposta_historica is not None:
+        return classificar_resposta_email_aceita(resposta_historica)
+
+    # Compatibilidade com atendimentos legados que não possuem o vínculo
+    # histórico da resposta de e-mail. Dados novos sempre usam a conversa.
+    email_cadastro = dados_lead.get("email_cliente")
+    if email_cadastro:
+        return classificar_resposta_email_aceita(email_cadastro)
+
+    return classificar_resposta_email_aceita("")
+
+
+def _montar_email_exibicao(resultado_email):
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_VALIDO:
+        return resultado_email.email
+
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_AUSENTE:
+        return "não tem"
+
+    if resultado_email.classificacao == CLASSIFICACAO_EMAIL_NAO_INFORMADO:
+        return "não informado"
+
+    raise ValueError(
+        "Classificação de e-mail inválida para observações do Funil "
+        f"(classificacao={resultado_email.classificacao!r})"
+    )
 
 
 def _obter_respostas_triagem_validadas(dados_lead):

@@ -1,11 +1,15 @@
 import logging
 
 from core.logging_config import short_value
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_saudacao_retorno,
+)
 from core.repositories.atendimento.conversas import (
     atualizar_conversa_mensagem_cliente,
     atualizar_conversa_resposta_bot_sem_avancar,
 )
 from core.repositories.atendimento.historico import (
+    buscar_contexto_saudacao_retorno,
     buscar_resposta_bot_por_mensagem_cliente,
     inserir_historico_mensagem_cliente,
 )
@@ -13,6 +17,7 @@ from core.repositories.fluxo.contextos.etapa1 import buscar_contexto_etapa1
 from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
 from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
 from core.repositories.fluxo.contextos.etapa9 import buscar_contexto_etapa9
+from core.repositories.fluxo.contextos.etapa10 import buscar_contexto_etapa10
 from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
 from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
 from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
@@ -25,6 +30,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_7_OFERTA_AULA,
     ETAPA_8_OFERTA_ADIADA,
     ETAPA_9_RETORNO_OFERTA,
+    ETAPA_10_EMAIL,
     ETAPA_11_INTRODUCAO_TRIAGEM,
     ETAPA_12_TRIAGEM_PERGUNTA_1,
     ETAPA_13_TRIAGEM_PERGUNTA_2,
@@ -95,6 +101,37 @@ def valida_historico(mensagem, contexto_banco, cursor):
             cursor=cursor,
         )
     )
+
+    saudacao_retorno = None
+    if (
+        not resposta_bot_para_mensagem_atual
+        and contexto_conversa.get("id_etapa_atual") not in {None, 1}
+    ):
+        nome_cliente, ultima_mensagem_bot_em = (
+            buscar_contexto_saudacao_retorno(
+                id_conversa,
+                contexto_banco["id_cliente"],
+                cursor,
+            )
+        )
+        saudacao_retorno = montar_saudacao_retorno(
+            nome_cliente,
+            ultima_mensagem_bot_em,
+            data_historico_cliente,
+            contexto_conversa.get("id_etapa_atual"),
+        )
+
+        if saudacao_retorno:
+            logger.info(
+                "saudacao_retorno_ativada | acao=prefixar_resposta "
+                "id_conversa=%s id_cliente=%s etapa=%s "
+                "ultima_mensagem_bot_em=%s mensagem_cliente_em=%s",
+                id_conversa,
+                contexto_banco["id_cliente"],
+                contexto_conversa.get("id_etapa_atual"),
+                ultima_mensagem_bot_em,
+                data_historico_cliente,
+            )
 
     transicoes_permitidas = listar_transicoes_permitidas(
         id_etapa_cliente,
@@ -181,6 +218,26 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 "Retorno de dependente sem nome persistido "
                 f"(etapa={id_etapa_cliente})"
             )
+
+    if id_etapa_cliente == ETAPA_10_EMAIL:
+        contexto_email = buscar_contexto_etapa10(
+            id_conversa,
+            contexto_banco["id_unidade"],
+            cursor,
+        )
+        status_dependente_email = contexto_email.pop(
+            "status_dependente_contexto_email"
+        )
+
+        if status_dependente_email != contexto_conversa.get(
+            "status_dependente"
+        ):
+            raise ValueError(
+                "Etapa 10 com destino de atendimento inconsistente "
+                f"(id_conversa={id_conversa})"
+            )
+
+        contexto_especifico_etapa.update(contexto_email)
 
     # As etapas 11-17 relêem do banco a pessoa atendida em cada ciclo. Assim,
     # retries reconstroem a mesma variante etária sem depender de memória.
@@ -333,6 +390,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         "retry_count": mensagem["retry_count"],
         "precisa_tratamento_erro": False,
         "motivo_tratamento_erro": None,
+        "saudacao_retorno": saudacao_retorno,
     }
     contexto_historico.update(contexto_especifico_etapa)
     return contexto_historico

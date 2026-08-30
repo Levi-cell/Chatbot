@@ -24,17 +24,35 @@ JSON response = success
 A API pode devolver HTTP 200 com `response = failure`; esse caso não confirma
 `lead_no_funil`.
 
+## E-mail no snapshot da conversa
+
+O e-mail enviado ao Funil é reconstruído a partir da resposta da etapa 10 da
+própria conversa, vinculada à resposta do bot na etapa 11. O valor atual de
+`cliente.email` serve apenas como compatibilidade para atendimentos legados e
+não pode substituir o resultado histórico de uma conversa nova.
+
+Quando a política de e-mail permitiu avançar sem endereço, `contato.email` é
+enviado vazio e as observações distinguem `não tem` (ausência declarada) de
+`não informado` (outra resposta aceita). Nunca é enviado um texto fictício no
+campo técnico de e-mail.
+
 ## Teste manual
 
-O teste completo usa dados fictícios e só envia com confirmação explícita:
+Os testes usam dados fictícios específicos por unidade e só enviam com
+confirmação explícita:
 
 ```bash
-python -m utilitarios.integrations.funil_probe payload
-python -m utilitarios.integrations.funil_probe send-test --confirm-real-send
+python -m utilitarios.integrations.funil_saj payload
+python -m utilitarios.integrations.funil_saj \
+  send-test --confirm-real-send
+python -m utilitarios.integrations.funi_rio_teste payload
+python -m utilitarios.integrations.funi_rio_teste \
+  send-test --confirm-real-send
 ```
 
-Ele cria uma oportunidade claramente marcada como teste. Antes de ativar o
-worker, confira no CRM pessoa, telefone, e-mail, título, observações e origem.
+Cada sonda cria uma oportunidade claramente marcada com sua unidade. Antes de
+ativar o worker, confira no CRM pessoa, telefone, e-mail, título, observações e
+origem.
 Os dois últimos são enviados pelo mecanismo `personalizados` com os títulos
 exatos `Observações` e `Origem do lead`; a unidade precisa possuir campos
 compatíveis no ApiCarrossel.

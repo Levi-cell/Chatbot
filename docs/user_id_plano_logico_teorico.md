@@ -1,6 +1,6 @@
 # Plano autoritativo — `user_id`, WA ID e PyWa 4.x
 
-> **Baseline autoritativa — V1.0.7 (`c248155`):** o estado inicial deste plano
+> **Baseline autoritativa — V1.0.7 (`2bc41888db4987e957c5653825acf4a55e9d611d`):** o estado inicial deste plano
 > já possui `unidade.nome_unidade`, `unidade.nome_agente` e `unidade.genero`,
 > com gênero restrito a `masculino` ou `feminino`. Esses campos configuram
 > somente as apresentações iniciais padrão, de mídia, financeira e de
@@ -17,30 +17,56 @@ Ele ainda **não foi aplicado ao runtime**. Nesta revisão, os dois planos
 Markdown são sincronizados com a baseline; todos os caminhos de código, banco,
 testes e deploy citados abaixo continuam descrevendo impacto futuro.
 
-A baseline operacional usada nesta revisão é a V1.0.7, commit `c248155`, com 22
-etapas e 25 transições. Ela já inclui a profissão obrigatória para titular e
-dependente, a confirmação do destino, os tratamentos atuais, a triagem por faixa
-etária, o detalhamento das perguntas no Funil e a apresentação inicial
-configurável por unidade. A futura implementação deste plano acrescentará
-somente a etapa de compartilhamento oficial do contato após o nome; por isso o
-estado final terá 23 etapas e 27 transições.
+A baseline versionada usada nesta revisão é a V1.0.7, commit completo
+`2bc41888db4987e957c5653825acf4a55e9d611d`, com 22 etapas e 25 transições.
+Sobre ela, o estado pré-`user_id` auditado em 29/08/2026 contém os deltas
+aprovados e ainda não necessariamente consolidados em um único commit descritos
+nesta seção. A futura implementação deste plano acrescentará somente a etapa de
+compartilhamento oficial do contato após o nome; por isso o estado final terá 23
+etapas e 27 transições. Nenhum dos deltas pré-existentes abaixo cria etapa ou
+aresta adicional.
 
-Há quatro deltas editoriais aprovados posteriores à V1.0.7 `c248155`: as
-mensagens iniciais das etapas atuais 2, 10, 11 e 22, que na numeração futura
-correspondem às etapas 3, 11, 12 e 23. Essas alterações são exclusivamente de
-texto; todos os botões, inclusive os dessas quatro etapas, e todos os demais
-textos permanecem diferencialmente idênticos à baseline.
-
-Há também dois deltas funcionais aprovados anteriores à feature de `user_id`.
-O primeiro é `cliente.profissao VARCHAR(100) NULL`: sua migração própria
-adiciona a coluna, preenche apenas clientes ainda sem profissão usando o
-snapshot não vazio da conversa mais recente e não altera
-`conversa.profissao`. Depois de aplicada no ambiente de desenvolvimento, essa
-coluna passa a ser pré-condição deste plano; a migração de `user_id` deve apenas
-validá-la, sem recriá-la ou refazer seu backfill. O segundo é uma proteção
-aditiva no validador da profissão atual: somente oito respostas completas já
-observadas como fora de contexto são recusadas e fazem a própria etapa repetir,
+O commit-base já contém as mensagens editoriais das etapas atuais 2, 10 e 22
+(que continuam sendo 3, 11 e 23 após a renumeração), o snapshot de profissão em
+`conversa.profissao`, a coluna `cliente.profissao`, sua migração e a proteção
+aditiva do validador de profissão. Esses itens não são deltas posteriores ao
+commit: o plano apenas os preserva nos blocos renumerados e exige que o estado
+do banco já esteja materializado. A proteção continua recusando somente as oito
+respostas completas observadas como fora de contexto, repetindo a própria etapa
 sem criar nova etapa, evento ou persistência.
+
+O estado de trabalho auditado depois do commit acrescenta somente os deltas que
+precisam atravessar explicitamente a renumeração: o prefixo atual da mensagem da
+etapa 11 e o botão `Começar triagem` (futura etapa 12), a saudação de retorno, a
+proteção contextual da oferta e a política de suporte ao idoso/e-mail. O texto
+original da etapa 11 permanece como parte da baseline; o prefixo e o botão são
+os únicos ajustes editoriais dessa mensagem a preservar.
+
+A saudação de retorno `Olá novamente, {nome}!` ocorre quando o cliente
+responde na mesma conversa e unidade depois de pelo menos três horas desde a
+última mensagem efetivamente enviada pelo bot. Ela é apenas um prefixo da
+resposta normal já escolhida, tanto em avanço válido quanto em tratamento
+inválido. Não cria etapa, evento, transição, envio ou linha de histórico
+adicional e não altera turno, retry, lock, identidade ou persistência. Seu
+contrato completo está na seção 10.2.
+
+Outro delta funcional é a proteção contextual da oferta: pedidos de informação como
+`quero mais informações` não são confirmação positiva, enquanto respostas
+curtas como `quero`, `sim, quero`, `quero sim` e `sim, gostaria` continuam
+válidas. Essa regra está na etapa atual 7 e passa à futura etapa 8 sem criar
+evento ou aresta.
+
+O último grupo é a política de suporte ao idoso e obrigatoriedade de e-mail,
+materializada pela migração prévia
+`deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`.
+Ela adiciona `unidade.suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
+`unidade.email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE` e o motivo de
+encerramento `encaminhado_suporte_idoso`. As unidades existentes preservam a
+configuração geral anterior pelos defaults, ressalvada a exceção universal
+aprovada de e-mail opcional para titular de 60 a 99 anos. Essa migração é
+pré-requisito do plano
+de `user_id`: o SQL futuro apenas prova e preserva seu estado, sem recriar as
+colunas, reexecutar backfill ou alterar seus valores.
 
 Os contratos de payload usados como referência são:
 
@@ -173,13 +199,23 @@ Dentro de `entry[].changes[].value`:
 - `id_portfolio`: não vem no webhook; será lido do cadastro da unidade;
 - `nome_unidade`, `nome_agente` e `genero`: não vêm no webhook; são lidos da
   unidade localizada por `metadata.phone_number_id` somente para montar a
-  apresentação inicial da etapa 1.
+  apresentação inicial da etapa 1;
+- `suporte_idoso` e `email_obrigatorio`: não vêm no webhook; são políticas
+  booleanas lidas da mesma unidade em snapshots específicos das etapas de idade
+  e e-mail. Elas não participam da identidade nem podem ser inferidas pelo
+  conteúdo da mensagem.
 
 `nome_unidade` é o nome institucional exibido, `nome_agente` é o nome editorial
 do atendente virtual e `genero` aceita somente `masculino` ou `feminino`, para
 selecionar o artigo da apresentação. Nenhum desses campos identifica o cliente,
 escolhe destinatário ou participa de turno, lock, fila, cache de identidade,
 anti-flood ou reconciliação.
+
+`numero_comercial` também permanece dado cadastral da unidade. O módulo
+compartilhado `core/integrations/whatsapp/numero_comercial.py` é a única fonte
+para normalizar, validar e montar o link `wa.me`; tanto o Admin quanto o sender
+usam esse mesmo contrato. Ativar `suporte_idoso` exige um número comercial
+brasileiro válido.
 
 Sem `metadata.phone_number_id`, o evento estruturalmente inválido recebe HTTP 200
 e não entra na fila: a Meta reenviaria o mesmo envelope, não um envelope
@@ -371,8 +407,9 @@ mutável de username é `cliente.username`, sempre pelo último valor não vazio
 
 ### 4.3.1 Profissão canônica e snapshot da conversa
 
-`cliente.profissao` pertence ao delta funcional aprovado sobre a baseline e
-guarda a profissão válida mais recente do cliente global.
+`cliente.profissao` já pertence ao commit-base e guarda a profissão válida mais
+recente do cliente global. Sua migração própria também está versionada nessa
+baseline e precisa estar materializada no banco antes da migração de `user_id`.
 `conversa.profissao` continua sendo o snapshot da
 conversa em que aquela profissão foi aceita e nunca é reescrita por uma conversa
 posterior.
@@ -401,6 +438,66 @@ O Funil continua lendo exclusivamente `conversa.profissao`. No handoff de um
 cliente provisório para um cliente canônico, uma profissão válida já capturada na
 conversa/cliente provisório é copiada para `cliente.profissao` do canônico antes
 da exclusão do provisório; o snapshot da conversa reatribuída permanece intacto.
+
+### 4.3.2 Suporte ao idoso e política de e-mail preservados
+
+Essas regras são ortogonais à identidade e já pertencem ao estado
+pré-`user_id`. A renumeração muda apenas os IDs técnicos: a etapa atual de idade
+6 passa a 7; a coleta atual de e-mail 10 passa a 11; a resposta do bot que hoje
+entra na etapa 11 passa a 12.
+
+Na etapa futura 7, a ordem é invariável:
+
+1. mídia, reforço escolar e financeiro continuam sendo tratamentos sem avanço;
+2. uma idade inválida continua repetindo a etapa;
+3. idade maior que 99 conserva o encerramento histórico e sua precedência;
+4. somente titular — nunca dependente — entre 60 e 99 anos, inclusive, com
+   `unidade.suporte_idoso = TRUE`, recebe a mensagem de encaminhamento e o botão
+   `Falar com Comercial`;
+5. o encaminhamento persiste a idade, encerra com
+   `motivo_encerramento='encaminhado_suporte_idoso'`, usa `bloqueio_dias=0`, não
+   produz evento/transição e não gera lead no Funil;
+6. com a flag desativada, ou para dependente, o fluxo etário anterior continua
+   normalmente.
+
+No retry, o encerramento especializado é reconstruído pela resposta do bot já
+persistida para a mensagem original. A configuração atual do Admin não é
+reavaliada para reinterpretar uma decisão histórica. O helper compartilhado de
+número comercial é reutilizado pelo sender; não se cria normalizador local.
+
+Na futura etapa 11, a precedência também permanece:
+
+```text
+mídia/tipo não suportado -> reforço escolar -> financeiro -> política de e-mail
+```
+
+A política efetiva é calculada pelo snapshot da conversa/unidade:
+
+- titular de 60 a 99 anos: e-mail sempre opcional, mesmo com a flag ativa;
+- titular abaixo de 60: segue `unidade.email_obrigatorio`;
+- dependente de qualquer idade elegível: segue `unidade.email_obrigatorio`;
+- `email_obrigatorio = FALSE`: e-mail opcional para todos que chegaram à etapa.
+
+`core/validacoes/email.py` é o classificador puro e autoritativo. Ele distingue
+`email_valido`, `email_ausente` e `email_nao_informado`. Em modo obrigatório,
+somente um endereço estruturalmente válido avança; em modo opcional, endereço,
+ausência explícita (`não tenho`, por exemplo) ou outra resposta ordinária
+avançam. As três possibilidades reutilizam a única aresta técnica
+`email_valido` da futura etapa 11 para a 12; não se criam eventos nem transições
+paralelas para resultados sem endereço.
+
+O efeito é absoluto e idempotente: endereço válido substitui `cliente.email`;
+ausência ou resposta comum aceita grava `NULL`, inclusive se existia e-mail de
+uma conversa anterior. Tratamentos de mídia, reforço e financeiro e respostas
+rejeitadas no modo obrigatório não alteram o cadastro. No retry, uma resposta
+que comprovadamente já recebeu a mensagem da futura etapa 12 é reclassificada
+pela própria mensagem histórica, sem consultar a flag mutável do Admin.
+
+O contexto da coleta de e-mail deve existir no arquivo futuro
+`core/repositories/fluxo/contextos/etapa11.py`. O caminho atual
+`contextos/etapa10.py` não pode ser perdido quando a etapa atual 9 for
+renumerada para 10: o plano prático primeiro materializa o novo contexto 11 e
+depois substitui o contexto 10 pelo conteúdo correspondente à etapa renumerada.
 
 ### 4.4 Handoff seguro de user ID para WA ID
 
@@ -601,6 +698,8 @@ Estado final:
 nome_unidade VARCHAR(300) NOT NULL
 nome_agente VARCHAR(100) NOT NULL
 genero VARCHAR(9) NOT NULL
+suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE
+email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE
 id_portfolio VARCHAR(100) NOT NULL
 
 CONSTRAINT uq_unidade_nome_unidade
@@ -613,10 +712,11 @@ CONSTRAINT ck_unidade_genero
     CHECK (genero IN ('masculino', 'feminino'))
 ```
 
-As três primeiras colunas e suas quatro constraints já pertencem à baseline
-V1.0.7 e são preservadas sem nova migração ou backfill por este plano.
+As três primeiras colunas e suas quatro constraints pertencem à baseline
+versionada. As duas flags pertencem ao delta pré-`user_id` de 29/08/2026 e são
+preservadas sem nova migração ou alteração de dados por este plano.
 `id_portfolio` é a única ampliação futura da unidade pertencente à feature de
-`user_id`.
+`user_id`; isso não significa que seja a única evolução já existente na tabela.
 
 `chatbot.cliente`:
 
@@ -697,6 +797,7 @@ chatbot.conversa.motivo_encerramento
     IN (
         'idade_invalida',
         'foi_agendado',
+        'encaminhado_suporte_idoso',
         'ativou_privacidade',
         'bloqueio_reconciliado'
     )
@@ -749,6 +850,8 @@ Também são exceções à nulabilidade:
 - `unidade.nome_unidade` e `unidade.nome_agente` são obrigatórios, não vazios e
   `nome_unidade` permanece único;
 - `unidade.genero` é obrigatório e aceita somente `masculino` ou `feminino`;
+- `unidade.suporte_idoso` e `unidade.email_obrigatorio` são booleanos
+  obrigatórios, com defaults `FALSE` e `TRUE`, respectivamente;
 - `unidade.id_portfolio` é obrigatório e não vazio;
 - `user_id_cliente.id_cliente`, `user_id` e `id_unidade` são obrigatórios;
 - `user_id_cliente.user_id` não aceita string vazia.
@@ -802,6 +905,10 @@ sem transformar os valores em uma concatenação:
 - histórico mantém apenas seus índices cronológicos atuais; não será criado
   índice por identidade sem consulta operacional concreta que o justifique.
 
+A saudação de retorno da seção 10.2 consulta o último histórico do bot pela
+`id_conversa` exata e reutiliza o índice cronológico já existente. Ela não
+autoriza índice, coluna, migração ou DDL adicional.
+
 A fila continua usando `id_phone_unidade`. Não será adicionada uma coluna
 redundante `id_unidade`. Toda consulta de turno/bloqueio exige
 `id_phone_unidade`; `unidade_telefone`/`display_phone_number` não participa da
@@ -815,21 +922,26 @@ haverá `ALTER TABLE` em Python.
 O último passo do plano conterá um único SQL puro, transacional, para produção,
 com:
 
-1. preflight exato do estado pré-`user_id` — baseline V1.0.7 mais o delta de
-   profissão —, inclusive `cliente.profissao VARCHAR(100) NULL` sem default,
-   as três colunas de apresentação da unidade, suas quatro constraints e a
+1. preflight exato do estado bancário pré-`user_id` — baseline V1.0.7 com a
+   migração de profissão já materializada, mais o delta de suporte ao idoso e
+   política de e-mail —, complementado pelo manifesto de código que preserva a
+   proteção contextual da oferta, inclusive `cliente.profissao VARCHAR(100) NULL`
+   sem default, as três colunas
+   de apresentação, `suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
+   `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`, suas constraints e a
    ausência de `unidade.nome`;
 2. serviços parados e filas operacionais vazias;
 3. renome das cinco colunas existentes de WA ID;
-4. preservação, sem renome, recriação ou novo `ADD COLUMN`, de
-   `cliente.profissao`, `nome_unidade`, `nome_agente` e
-   `genero`;
+4. preservação, sem renome, recriação, backfill ou novo `ADD COLUMN`, de
+   `cliente.profissao`, `nome_unidade`, `nome_agente`, `genero`,
+   `suporte_idoso` e `email_obrigatorio`;
 5. criação das colunas novas e de `user_id_cliente`;
 6. preenchimento explícito de `id_portfolio` para todas as unidades e aplicação
    de `NOT NULL`;
 7. remoção de `NOT NULL` dos WA IDs de snapshot;
-8. inclusão de `ativou_privacidade` e `bloqueio_reconciliado` no CHECK de
-   encerramento;
+8. ampliação do CHECK já composto por `idade_invalida`, `foi_agendado` e
+   `encaminhado_suporte_idoso` para incluir `ativou_privacidade` e
+   `bloqueio_reconciliado`;
 9. constraints, FKs e índices finais;
 10. atualização preservada do catálogo/mapa de etapas;
 11. recriação controlada de `chatbot.dequeue_message()` e preservação semântica
@@ -1152,6 +1264,10 @@ grava, no próprio `INSERT`, os valores canônicos então presentes no contexto;
 nenhum dos dois é atualizado depois. Essa política garante que um retry
 reconstrua o mesmo item mesmo após a associação dos aliases.
 
+Quando houver saudação de retorno, o histórico do bot continua recebendo uma
+única linha com o texto final já prefixado. Não existe linha separada para a
+saudação, e o histórico anterior nunca é reescrito para produzi-la.
+
 ## 7. `flow_worker`: núcleo congelado e reconciliação delimitada
 
 ### 7.1 Sequência congelada
@@ -1171,6 +1287,13 @@ A sequência abaixo permanece exatamente no mesmo lugar no caminho normal:
 11. `atualizar_banco_com_contexto_final()` e commit atual;
 12. marcação `sent` no ponto atual;
 13. mesmos rollbacks, retries e autocura.
+
+A saudação da seção 10.2 não insere passo transacional nessa sequência. No
+caminho ainda sem resposta registrada para a mensagem atual, sua consulta
+auxiliar ocorre depois da barreira idempotente do passo 9 e antes da única
+chamada de sender do passo 10. Se o passo 9 encontrar resposta existente, o
+ciclo sai pelo comportamento atual sem consultar, compor ou reenviar a
+saudação.
 
 No passo 2, encontrar predecessor sempre interrompe o ciclo atual. O retorno de
 `reagendar_mensagem_sem_erro()` diferente de uma linha continua gerando o alerta
@@ -1275,6 +1398,14 @@ Esses valores são lidos pelo `id_unidade`, validados de forma fechada e usados
 apenas pelo resolver/sender para a apresentação inicial. Eles não são snapshots
 de identidade, não entram em `estado_ciclo`, não alteram a projeção bancária
 final e não são usados para escolher `wa_id` ou `user_id`.
+
+Outros contextos pré-existentes também permanecem separados da identidade. A
+futura etapa 7 relê `suporte_idoso`, número comercial e destino do atendimento;
+a futura etapa 11 relê `email_obrigatorio`, destino e idade do titular. Essas
+leituras acontecem no mesmo cursor do ciclo, são validadas de forma fechada e
+não entram no `estado_ciclo`, no resolvedor de aliases nem na escolha do
+destinatário. A saudação de retorno continua sendo calculada por conversa antes
+do resolver, sem substituir esses snapshots de política.
 
 ```python
 identidades_banco = buscar_identidades_para_contexto(
@@ -1529,6 +1660,11 @@ atuais:
 - `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapaN.py`
   classifica o contexto normalizado e devolve resultado/valor. Não envia, não
   consulta banco e não escolhe destino;
+- `core/validacoes/email.py` concentra a gramática pura reutilizada pela futura
+  etapa 11, pelo replay e pelo Funil; o wrapper contextual conserva a API da
+  etapa, sem duplicar regex ou expressões de ausência;
+- `core/integrations/whatsapp/numero_comercial.py` concentra a normalização e o
+  link do contato comercial usados pelo Admin e pelo sender da futura etapa 7;
 - `resolver_etapaN.py` mantém a prioridade dos validadores, produz no máximo um
   evento, chama `resolver_destino_transicao()`, resolve o destinatário por meio
   do helper puro, chama o sender adequado e usa
@@ -1548,7 +1684,9 @@ atuais:
 - `transicoes/eventos.py` e `chatbot.etapa_transicao` definem nomes e arestas,
   sem conter efeitos de dados;
 - `persistencia_resposta.py` e `efeitos_transicao.py` continuam sendo os donos
-  dos efeitos finais de negócio na transação já existente.
+  dos efeitos finais de negócio na transação já existente. O encaminhamento de
+  suporte persiste a idade antes do encerramento terminal, e a coleta de e-mail
+  grava endereço ou `NULL` segundo a classificação transportada/reconstruída.
 
 O resolver, por conhecer a etapa e o evento que está sendo tratado, é o chamador
 de `resolver_destinatario_sender()`. Ele passa somente o escalar retornado ao
@@ -1864,6 +2002,10 @@ O catálogo canônico compartilhado por WhatsApp e Funil continua em
 - dependente adulto usa as seis perguntas adultas com o nome;
 - a elegibilidade mínima de 4 anos em unidade com BPA ou 5 anos sem BPA
   continua pertencendo à validação de idade anterior à triagem;
+- a regra histórica de idade acima de 99 continua sendo avaliada antes do
+  suporte ao idoso; na futura etapa 7, titular de 60 a 99 anos só é encaminhado
+  quando `suporte_idoso` estiver ativo, enquanto dependente nunca entra nesse
+  ramo;
 - status de dependente, nome e idade são relidos do banco em cada ciclo; dados
   ausentes ou inconsistentes falham de forma fechada;
 - as respostas continuam restritas a `Nunca`, `Às vezes` e `Frequentemente`;
@@ -1874,7 +2016,9 @@ O contexto de agendamento que hoje é carregado nos ciclos 17/18 passa aos ciclo
 18/19: a resposta da sexta pergunta precisa do link para enviar a etapa 19 e os
 tratamentos da própria etapa 19 precisam repetir a mesma mensagem.
 
-Confirmação, tratamentos e triagem por idade não exigem coluna nova. Suas
+Confirmação, tratamentos e triagem por idade não exigem coluna nova da feature
+de `user_id`. As flags de unidade e o novo motivo terminal já pertencem ao
+estado prévio validado. Suas
 mudanças futuras são de numeração, catálogo, validadores, mensagens e projeções
 já previstas; o desenho físico de identidade da seção 5 permanece intacto.
 
@@ -1991,6 +2135,79 @@ expressões que pressupõem avanço ou resposta válida, como `Entendi`, `Certo`
 preservam os componentes, botões, rodapés e variantes titular/dependente da
 etapa, mas usam uma retomada semanticamente coerente.
 
+O validador da oferta atual 7, futuro 8, conserva a ordem
+`negativo -> pedido de informação -> positivo`. Assim, `quero mais
+informações`, `quero saber`, `quero entender` e `quero tirar uma dúvida` repetem
+a etapa como pedido informativo, mas `quero`, `sim, quero`, `quero sim` e
+`sim, gostaria` continuam confirmando. A renumeração não pode restaurar um
+classificador que aceite a palavra `quero` dentro de qualquer frase.
+
+A futura etapa 11 aplica a política de e-mail da seção 4.3.2 somente depois dos
+três tratamentos prioritários. Resposta opcional aceita continua usando o evento
+técnico `email_valido`; a classificação semântica viaja separadamente no
+`contexto_envio` para o efeito transacional. A introdução da triagem resultante,
+na futura etapa 12, preserva o texto atual iniciado por `Certo, antes...` e o
+botão `Começar triagem`.
+
+### 10.2 Saudação de retorno após três horas
+
+Como delta estritamente aditivo da V1.0.7, uma resposta pode receber o prefixo
+`Olá novamente, {nome}!` quando todas as condições abaixo forem verdadeiras:
+
+1. o atendimento continua na mesma `id_conversa`, que já determina o mesmo
+   cliente e a mesma unidade; não se procura a mensagem anterior por WA ID,
+   user ID ou `id_cliente` global;
+2. a etapa 1 já estava concluída antes do evento atual e o nome válido já estava
+   persistido no cliente;
+3. existe histórico anterior do bot nessa `id_conversa` com
+   `quem_enviou='bot'` e `status_envio='sent'`;
+4. a diferença entre o timestamp do evento atual e o timestamp desse último
+   histórico `sent` do bot é maior ou igual a três horas.
+
+A fonte temporal autoritativa é a última linha elegível de
+`historico_mensagens`, ordenada por `received_data_hora DESC, id_mensagem DESC`,
+comparada a `mensagem_cliente_atual.received_data_hora`. É proibido usar
+`NOW()`, o horário em que o worker processou o item ou
+`conversa.last_interaction_at`: atraso de fila e retry não podem fabricar uma
+inatividade que não existiu no evento, e a interação da conversa já pode ter
+sido atualizada com a própria mensagem atual do cliente.
+
+O limiar é inclusivo: exatamente três horas saúdam; qualquer diferença menor
+não saúda. Timestamp ausente, inválido ou sem ordenação temporal coerente resulta
+apenas na omissão do prefixo. Já uma falha SQL segue o rollback e o retry normais
+do worker: a feature não pode engolir erro bancário nem tentar continuar uma
+transação abortada. Em nenhum desses casos a apresentação muda evento,
+transição ou regra de negócio.
+
+O gate de nome e etapa é avaliado sobre o estado anterior ao evento atual. Por
+isso a própria mensagem válida que informa o nome na etapa 1 nunca recebe
+`Olá novamente`, mesmo que o último envio do bot tenha ocorrido há três horas
+ou mais. A saudação só se torna elegível em uma mensagem posterior, depois de o
+nome estar persistido e a etapa 1 já ter sido concluída.
+
+Depois de o resolver produzir a resposta normal, a composição faz, quando
+elegível:
+
+```text
+Olá novamente, {nome}!
+
+{mesma resposta normal já produzida}
+```
+
+O corpo normal não é reclassificado nem reconstruído. Em resposta válida, o
+prefixo acompanha a mesma mensagem que encaminha à etapa de destino; em entrada
+inválida, acompanha o mesmo tratamento que repete a etapa. Em ambos os casos
+permanecem exatamente um `contexto_envio`, uma chamada Meta e uma linha de
+histórico do bot, com os mesmos botões, mídia, evento, destino e metadados que a
+resposta teria sem a saudação.
+
+A barreira idempotente já existente continua anterior à composição:
+`bot_resposta_atual()`/`resposta_bot_para_mensagem_atual` deve encerrar o caminho
+já respondido antes de consultar ou aplicar a saudação. Um retry que encontra a
+resposta do bot apenas marca/reconstrói o resultado atual, sem novo prefixo,
+novo sender ou novo histórico. A feature não acrescenta etapa, evento,
+transição, commit, rollback, retry, lock, envio, registro ou contador.
+
 ## 11. Funil
 
 WA ID continua obrigatório para o comercial e para materializar o lead. A
@@ -2018,6 +2235,22 @@ No contrato futuro do repositório, `buscar_dados_lead_funil()` seleciona
 do atendimento, devolve ambos no dicionário do snapshot e filtra
 `respostas_desafios.id_etapa BETWEEN 13 AND 18`. Não usa
 `cliente.username` como atalho e não projeta `user_id` para a integração.
+
+O e-mail também é histórico da conversa, não uma leitura tardia cega de
+`cliente.email`. O repositório localiza a mensagem exata do cliente na futura
+etapa 11 ligada à resposta `sent` do bot na futura etapa 12 pelos campos
+`id_mensagem_fila` e `id_hash_cliente_origem`. Essa resposta é reclassificada
+pelo classificador puro como endereço válido, ausência explícita ou não
+informado. O payload usa o endereço quando existir e valor vazio quando não
+existir; nunca grava placeholders no campo técnico. Nas observações, mostra
+respectivamente o endereço, `não tem` ou `não informado`.
+
+Atendimentos legados sem vínculo histórico podem usar `cliente.email` apenas
+como fallback de compatibilidade. Dados novos não podem ser contaminados por
+uma conversa posterior que tenha atualizado ou limpado o e-mail global do mesmo
+cliente. `montar_payload_oportunidade()` e `montar_observacoes_lead()` recebem a
+mesma classificação já resolvida para não divergirem entre campo técnico e
+texto humano.
 
 O detalhamento preservado na V1.0.7 também é obrigatório:
 
@@ -2123,8 +2356,12 @@ unitários.
 Admin:
 
 - Unidade exige, exibe e edita `nome_unidade`, `nome_agente`, `genero` e
-  `id_portfolio`; pesquisa por nome da unidade/agente, filtra por gênero e ordena
-  por `nome_unidade`;
+  `id_portfolio`; também exibe/edita/filtra `suporte_idoso` e
+  `email_obrigatorio`, pesquisa por nome da unidade/agente, filtra por gênero e
+  ordena por `nome_unidade`;
+- o formulário de Unidade só aceita `suporte_idoso=TRUE` quando
+  `numero_comercial` passa pelo validador compartilhado. Alterar as flags afeta
+  ciclos futuros; retry de resposta já persistida conserva a decisão histórica;
 - Cliente exibe WA ID anulável e username opcional;
 - Fila, histórico, conversa, bloqueio e flood exibem os três snapshots;
 - `user_id_cliente` é consultável, pesquisável por cliente/unidade/user ID e
@@ -2180,17 +2417,19 @@ Atualizar, com arquivo completo:
 - `callback/webhook/admin.py`.
 
 Ao mesclar o estado final, `bank_script.py`, models e Admin devem partir do
-contrato já implantado na V1.0.7: `nome_unidade`, `nome_agente`, `genero`, suas
-quatro constraints e todos os caminhos ORM com `nome_unidade` são preservados.
-Este passo acrescenta `id_portfolio` e o contrato de identidade sem restaurar
-`unidade.nome` nem reaplicar a migração de apresentação.
+contrato pré-`user_id` auditado: `nome_unidade`, `nome_agente`, `genero`,
+`suporte_idoso`, `email_obrigatorio`, suas constraints/defaults e todos os
+caminhos ORM com `nome_unidade` são preservados. Este passo acrescenta
+`id_portfolio` e o contrato de identidade sem restaurar `unidade.nome` nem
+reaplicar as migrações de apresentação, profissão ou políticas de unidade.
 
 O DDL cria `chatbot.user_id_cliente`; o model correspondente usa
 `id_user_id_cliente = models.BigAutoField(primary_key=True)`, `models.PROTECT` na
 FK de cliente e `models.CASCADE` na FK de unidade, em correspondência a
 `ON DELETE RESTRICT`/`ON DELETE CASCADE` do PostgreSQL. Ele será registrado no
 Admin em modo somente leitura. O mesmo passo inclui `ativou_privacidade` e
-`bloqueio_reconciliado` no CHECK/choices de conversa: o primeiro encerra outra
+`bloqueio_reconciliado` no CHECK/choices de conversa, preservando também
+`encaminhado_suporte_idoso`: o primeiro encerra outra
 conversa canônica ativa durante o merge; o segundo encerra a conversa nova ao
 herdar um bloqueio canônico ainda vigente, sem alterar a data-base do prazo.
 
@@ -2269,6 +2508,15 @@ segundos e `continue`, antes de qualquer mutação; bloqueio reconciliado usa o
 commit pós-validação já existente e então faz `continue`, depois de confirmar o
 cache e antes de histórico, lock normal ou sender.
 
+Na mesma fronteira, o repositório de histórico expõe uma consulta auxiliar para
+o último envio do bot com `status_envio='sent'` pela `id_conversa` exata. O
+worker só a chama no caminho ainda não respondido, depois da barreira
+idempotente, compara o resultado ao timestamp do evento atual e transporta no
+contexto apenas o prefixo opcional já decidido. Resolver e sender não executam
+SQL. Ausência ou inconsistência temporal deixa o prefixo vazio e não impede a
+resposta normal; falha SQL conserva o rollback e o retry transacionais já
+existentes.
+
 `montar_mensagem_fila()` calcula a identidade tipada/congelada e sua única
 referência de cache; `atualizar_estado_com_mensagem()` registra ambas antes da
 validação. Depois, o estado recebe o candidato compartilhado e o WA ID canônico
@@ -2318,8 +2566,9 @@ repete SQL de identidade.
 Renumerar mecanicamente todos os arquivos atuais 2..22 para 3..23, incluindo
 mensagens, senders, validadores, resolvers, constantes, imports, IDs usados nos
 efeitos, testes, catálogo e mapa. A regra das etapas atuais não muda; o conteúdo
-muda somente nas quatro mensagens iniciais editoriais aprovadas das etapas
-atuais 2, 10, 11 e 22. A etapa terminal 23 não ganha resolver.
+preserva as quatro mensagens iniciais editoriais aprovadas das etapas atuais 2,
+10, 11 e 22, o botão `Começar triagem`, a proteção da oferta e as políticas de
+suporte/e-mail. A etapa terminal 23 não ganha resolver.
 
 Nos caminhos físicos, a movimentação ocorre em ordem decrescente — 22 -> 23 até
 2 -> 3 — ou por nomes temporários equivalentes. Só depois é criado o novo
@@ -2342,6 +2591,13 @@ A renumeração inclui explicitamente:
   permanece obrigatória nos dois fluxos e somente ela bifurca dependente para 6
   ou titular para 7;
 - a introdução à triagem atual 11 -> futura 12;
+- o fluxo de idade atual 6 -> futuro 7, incluindo `suporte_idoso`, CTA,
+  persistência de idade, encerramento sem bloqueio e replay histórico;
+- a oferta atual 7 -> futura 8, incluindo a precedência de pedidos de
+  informação antes das confirmações positivas;
+- a coleta de e-mail atual 10 -> futura 11, incluindo o novo contexto de
+  política, classificador compartilhado, gravação absoluta de `cliente.email`
+  e replay sem reavaliar a flag;
 - `core/triagem/perguntas.py`, cujas chaves atuais 12..17 passam a 13..18;
 - `valida_historico.ETAPAS_TRIAGEM`, que passa de 11..17 para 12..18;
 - `core/repositories/fluxo/contextos/triagem.py`, os módulos numerados de
@@ -2349,13 +2605,37 @@ A renumeração inclui explicitamente:
   passa a representar o agendamento na etapa 19; a carga desse contexto muda
   dos ciclos 17/18 para 18/19;
 - `core/repositories/funil/leads.py`, com filtro das respostas 13..18;
-- `core/integrations/funil/oportunidades.py`, com conjunto esperado 13..18;
+- `core/integrations/funil/oportunidades.py`, com conjunto esperado 13..18 e
+  representação histórica de e-mail válido/ausente/não informado;
 - `core/integrations/whatsapp/messages/triagem_componentes.py`;
 - `REGRAS_DE_NEGOCIO.md`, `PADROES_DE_ARQUITETURA.md`,
   `ROTINA_IMPLEMENTACAO_ETAPAS.md` e `tests/README.md`, para que a documentação
   aplicada não mantenha IDs anteriores;
 - testes de confirmação, triagem etária, Funil, tratamentos, efeitos,
   transições, deploy, roteamento e terminalidade.
+
+A varredura de 29/08/2026 também identificou consumidores executáveis fora do
+runtime dos serviços. Eles não mudam a regra de negócio, mas precisam acompanhar
+os nomes finais do schema e a numeração para continuarem utilizáveis:
+
+- `utilitarios/reports_functions/weekly.py` e, por reutilização, `total.py`:
+  consultar `cliente.wa_id` em vez de `waid_telefone`;
+- `utilitarios/monitoring/suspicious_conversations.py`: usar `cliente.wa_id`;
+- `utilitarios/monitoring/blocked_users.py`: projetar cada alias persistido por
+  uma lateral de `wa_id` e `user_id`, para comparar ambos sem ocultar bloqueios
+  privados nem reduzir uma linha enriquecida a apenas um identificador;
+- `utilitarios/montar_lead_teste.py`: usar as futuras etapas de triagem 13..18;
+- `utilitarios/cache_consulta.py`: revisar o contrato de exibição legado
+`cliente_telefone` para `tipo_identidade`/`identidade`, sem tratá-lo como nome
+físico de coluna;
+- `utilitarios/operacoes_rotineiras.sql`: consultar `cliente.wa_id`;
+- `tests/unit/test_valida_etapa7.py`: mover integralmente para a futura etapa 8;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`: conservar a matriz e
+  renumerar somente idade 6→7, e-mail 10→11 e triagem 12..17→13..18.
+
+O plano prático deve trazer o conteúdo integral de cada utilitário realmente
+alterado. Arquivos de relatório/monitoramento gerados e dependências exclusivas
+desses utilitários continuam fora do deploy dos três serviços.
 
 ### Passo 6 — Senders e Meta
 
@@ -2377,6 +2657,14 @@ nos quatro senders iniciais. Esses argumentos são de apresentação e não entr
 no helper de destinatário; o destinatário continua sendo um único escalar
 resolvido antes da chamada.
 
+Também transportar o prefixo opcional de retorno já calculado pelo worker. A
+composição acontece antes da única chamada Meta e envolve o mesmo corpo normal
+que o resolver já escolheu, inclusive tratamentos que repetem a etapa. Não se
+cria sender separado nem uma segunda chamada; botões, mídia, evento, destino e
+persistência continuam pertencendo à resposta original. A própria mensagem de
+nome da etapa 1 permanece inelegível, e o retorno idempotente ocorre antes dessa
+composição.
+
 ### Passo 7 — Funil, bloqueio e Admin
 
 No Funil, manter WA ID obrigatório e acrescentar username somente como
@@ -2390,14 +2678,18 @@ prova, exige ao menos um alias, grava ambos quando conhecidos e somente enriquec
 campos `NULL`; linhas equivalentes são consolidadas e unidades distintas
 continuam isoladas. Bloqueio e desbloqueio chamam todos os aliases conhecidos,
 e o Admin só exclui a linha local depois do desbloqueio Meta integral.
-Na implementação futura, atualizar as choices e
+O snapshot do Funil deve ligar a resposta do cliente na futura etapa 11 à
+resposta do bot na etapa 12, sem usar um e-mail global posterior como se fosse
+histórico. Na implementação futura, atualizar as choices e
 `MOTIVOS_ENCERRAMENTO_VALIDOS` com `ativou_privacidade` e
-`bloqueio_reconciliado`, mantendo os usos distintos definidos na seção 4.5.
+`bloqueio_reconciliado`, mantendo também `encaminhado_suporte_idoso` e os usos
+distintos definidos nas seções 4.3.2 e 4.5.
 
 No Admin de unidade, preservar ainda os campos V1.0.7 `nome_unidade`,
 `nome_agente` e `genero`, incluindo pesquisa, filtro, ordenação e referências
-ORM por `id_unidade__nome_unidade`; acrescentar `id_portfolio` sem reduzir esse
-contrato.
+ORM por `id_unidade__nome_unidade`; preservar as flags de suporte/e-mail e a
+validação compartilhada do número comercial; acrescentar `id_portfolio` sem
+reduzir esse contrato.
 
 ### Passo 8 — PyWa
 
@@ -2406,1934 +2698,19 @@ smokes reais antes de produção.
 
 ### Passo 9 — SQL manual final
 
-O SQL abaixo é a migração-base completa para o schema da V1.0.7, commit
-`c248155`. Ele deverá ser revalidado contra o commit definitivo antes da
+O SQL normativo é a migração-base completa para o schema derivado da V1.0.7,
+commit `2bc41888db4987e957c5653825acf4a55e9d611d`, acrescido dos deltas
+pré-`user_id` aprovados. Ele deverá ser revalidado contra o commit definitivo antes da
 execução, porque os serviços e o banco ainda não receberam a feature de
-`user_id`. A personalização da unidade já é pré-condição e não é reaplicada por
-este SQL.
-
-```sql
-BEGIN;
-
-SET LOCAL lock_timeout = '15s';
-SET LOCAL statement_timeout = '0';
-
-LOCK TABLE
-    chatbot.unidade,
-    chatbot.cliente,
-    chatbot.etapa,
-    chatbot.etapa_transicao,
-    chatbot.conversa,
-    chatbot.dependente,
-    chatbot.fila_mensagens,
-    chatbot.historico_mensagens,
-    chatbot.respostas_desafios,
-    chatbot.cliente_bloqueado_meta,
-    chatbot.webhook_flood_evento,
-    chatbot.funil_envios
-IN ACCESS EXCLUSIVE MODE;
-
--- Contrato canônico já implantado pela V1.0.7. A tabela temporária permite
--- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
--- formatação textual manual e sem alterar chatbot.unidade.
-CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
-    nome_unidade VARCHAR(300),
-    nome_agente VARCHAR(100),
-    genero VARCHAR(9),
-
-    CONSTRAINT uq_unidade_nome_unidade
-        UNIQUE (nome_unidade),
-
-    CONSTRAINT ck_unidade_nome_unidade_nao_vazio
-        CHECK (nome_unidade ~ '[^[:space:]]'),
-
-    CONSTRAINT ck_unidade_nome_agente_nao_vazio
-        CHECK (nome_agente ~ '[^[:space:]]'),
-
-    CONSTRAINT ck_unidade_genero
-        CHECK (genero IN ('masculino', 'feminino'))
-) ON COMMIT DROP;
-
-DO $preflight$
-DECLARE
-    etapas_atuais INTEGER;
-    etapas_atuais_corretas INTEGER;
-    transicoes_atuais INTEGER;
-    transicoes_atuais_corretas INTEGER;
-    filas_abertas INTEGER;
-    conversas_processando INTEGER;
-    funil_aberto INTEGER;
-    definicao_motivo TEXT;
-    motivos_atuais TEXT[];
-    corpo_dequeue_atual TEXT;
-    corpo_lock_atual TEXT;
-    corpo_unlock_atual TEXT;
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM (
-            VALUES
-                ('nome_unidade', 'character varying', 300),
-                ('nome_agente',   'character varying', 100),
-                ('genero',        'character varying',   9)
-        ) AS esperado(column_name, data_type, max_length)
-        LEFT JOIN information_schema.columns AS coluna
-          ON coluna.table_schema = 'chatbot'
-         AND coluna.table_name = 'unidade'
-         AND coluna.column_name = esperado.column_name
-        WHERE coluna.column_name IS NULL
-           OR coluna.data_type <> esperado.data_type
-           OR coluna.character_maximum_length IS DISTINCT FROM esperado.max_length
-           OR coluna.is_nullable <> 'NO'
-           OR coluna.column_default IS NOT NULL
-    ) OR EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'unidade'
-          AND column_name = 'nome'
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à V1.0.7 c248155.';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'cliente'
-          AND column_name = 'profissao'
-          AND data_type = 'character varying'
-          AND character_maximum_length = 100
-          AND is_nullable = 'YES'
-          AND column_default IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: cliente.profissao VARCHAR(100) NULL não corresponde ao estado pré-user_id.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.unidade
-        WHERE nome_unidade !~ '[^[:space:]]'
-           OR nome_agente !~ '[^[:space:]]'
-           OR genero NOT IN ('masculino', 'feminino')
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a V1.0.7 c248155.';
-    END IF;
-
-    IF EXISTS (
-        SELECT
-            esperado.conname,
-            esperado.contype,
-            PG_GET_CONSTRAINTDEF(esperado.oid)
-        FROM pg_constraint AS esperado
-        WHERE esperado.conrelid =
-              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
-          AND esperado.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-        EXCEPT
-        SELECT
-            atual.conname,
-            atual.contype,
-            PG_GET_CONSTRAINTDEF(atual.oid)
-        FROM pg_constraint AS atual
-        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
-          AND atual.convalidated IS TRUE
-          AND atual.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-    ) OR EXISTS (
-        SELECT
-            atual.conname,
-            atual.contype,
-            PG_GET_CONSTRAINTDEF(atual.oid)
-        FROM pg_constraint AS atual
-        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
-          AND atual.convalidated IS TRUE
-          AND atual.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-        EXCEPT
-        SELECT
-            esperado.conname,
-            esperado.contype,
-            PG_GET_CONSTRAINTDEF(esperado.oid)
-        FROM pg_constraint AS esperado
-        WHERE esperado.conrelid =
-              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
-          AND esperado.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_constraint AS extra
-        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
-          AND extra.contype <> 'n'
-          AND extra.conname NOT IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-          AND EXISTS (
-              SELECT 1
-              FROM UNNEST(extra.conkey) AS chave(attnum)
-              JOIN pg_attribute AS coluna
-                ON coluna.attrelid = extra.conrelid
-               AND coluna.attnum = chave.attnum
-              WHERE coluna.attname IN (
-                  'nome_unidade',
-                  'nome_agente',
-                  'genero'
-              )
-          )
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da V1.0.7 c248155.';
-    END IF;
-
-    SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
-    SELECT COUNT(*) INTO transicoes_atuais FROM chatbot.etapa_transicao;
-
-    SELECT COUNT(*)
-    INTO etapas_atuais_corretas
-    FROM chatbot.etapa AS etapa
-    JOIN (
-        VALUES
-            (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
-            (2,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-            (3,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
-            (4,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-            (5,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-            (6,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-            (7,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-            (8,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-            (9,  'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-            (10, 'Email',                                              FALSE, 0,  FALSE),
-            (11, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-            (12, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-            (13, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-            (14, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-            (15, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-            (16, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-            (17, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-            (18, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-            (19, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-            (20, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-            (21, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-            (22, 'Finalização do atendimento',                         TRUE,  30, TRUE)
-    ) AS esperado(
-        id_etapa,
-        nome_etapa,
-        encerra_automaticamente,
-        bloqueio_dias,
-        elegivel_funil
-    )
-      ON etapa.id_etapa = esperado.id_etapa
-     AND etapa.nome_etapa = esperado.nome_etapa
-     AND etapa.encerra_automaticamente = esperado.encerra_automaticamente
-     AND etapa.bloqueio_dias = esperado.bloqueio_dias
-     AND etapa.elegivel_funil = esperado.elegivel_funil;
-
-    SELECT COUNT(*)
-    INTO transicoes_atuais_corretas
-    FROM chatbot.etapa_transicao AS transicao
-    JOIN (
-        VALUES
-            (1,  'nome_cliente_valido',                    2),
-            (2,  'destino_atendimento_definido',           3),
-            (3,  'destino_atendimento_confirmado',          4),
-            (4,  'profissao_dependente_valida',            5),
-            (4,  'profissao_titular_valida',               6),
-            (5,  'nome_dependente_valido',                 6),
-            (6,  'idade_valida',                           7),
-            (7,  'oferta_aceita',                         10),
-            (7,  'oferta_adiada',                          8),
-            (8,  'cliente_retornou',                       9),
-            (9,  'retorno_confirmado',                    10),
-            (9,  'retorno_adiado',                         8),
-            (10, 'email_valido',                          11),
-            (11, 'triagem_iniciada',                      12),
-            (12, 'triagem_pergunta_1_respondida',         13),
-            (13, 'triagem_pergunta_2_respondida',         14),
-            (14, 'triagem_pergunta_3_respondida',         15),
-            (15, 'triagem_pergunta_4_respondida',         16),
-            (16, 'triagem_pergunta_5_respondida',         17),
-            (17, 'triagem_pergunta_6_respondida',         18),
-            (18, 'agendamento_confirmado',                19),
-            (19, 'satisfacao_avaliada',                   20),
-            (20, 'comentario_satisfacao_aceito',          21),
-            (20, 'comentario_satisfacao_recusado',        22),
-            (21, 'comentario_satisfacao_recebido',        22)
-    ) AS esperado(id_etapa_origem, evento, id_etapa_destino)
-      ON transicao.id_etapa_origem = esperado.id_etapa_origem
-     AND transicao.evento = esperado.evento
-     AND transicao.id_etapa_destino = esperado.id_etapa_destino;
-
-    SELECT COUNT(*)
-    INTO filas_abertas
-    FROM chatbot.fila_mensagens
-    WHERE status IN ('pending', 'processing');
-
-    SELECT COUNT(*)
-    INTO conversas_processando
-    FROM chatbot.conversa
-    WHERE processing IS TRUE;
-
-    SELECT COUNT(*)
-    INTO funil_aberto
-    FROM chatbot.funil_envios
-    WHERE status IN ('pending', 'processing');
-
-    IF filas_abertas <> 0
-       OR conversas_processando <> 0
-       OR funil_aberto <> 0
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: trabalho operacional aberto '
-            '(fila=%, conversa=%, funil=%).',
-            filas_abertas,
-            conversas_processando,
-            funil_aberto;
-    END IF;
-
-    IF etapas_atuais <> 22
-       OR etapas_atuais_corretas <> 22
-       OR transicoes_atuais <> 25
-       OR transicoes_atuais_corretas <> 25
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à V1.0.7 c248155 (etapas=%/%; transições=%/%).',
-            etapas_atuais,
-            etapas_atuais_corretas,
-            transicoes_atuais,
-            transicoes_atuais_corretas;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM chatbot.etapa
-        WHERE id_etapa = 22
-          AND nome_etapa = 'Finalização do atendimento'
-          AND encerra_automaticamente IS TRUE
-          AND bloqueio_dias = 30
-          AND elegivel_funil IS TRUE
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à V1.0.7 c248155.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.respostas_desafios
-        WHERE id_etapa NOT BETWEEN 12 AND 17
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da V1.0.7 c248155.';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'cliente'
-          AND column_name = 'waid_telefone'
-    ) OR NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'fila_mensagens'
-          AND column_name = 'cliente_telefone'
-    ) OR NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'historico_mensagens'
-          AND column_name = 'cliente_telefone'
-    ) OR NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'cliente_bloqueado_meta'
-          AND column_name = 'wa_id_cliente'
-    ) OR NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND table_name = 'webhook_flood_evento'
-          AND column_name = 'wa_id_cliente'
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: colunas legadas esperadas não foram encontradas.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_schema = 'chatbot'
-          AND column_name IN ('user_id', 'username', 'id_portfolio')
-          AND table_name IN (
-              'unidade',
-              'cliente',
-              'fila_mensagens',
-              'historico_mensagens',
-              'conversa',
-              'cliente_bloqueado_meta',
-              'webhook_flood_evento'
-          )
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: schema aparenta estar parcial ou já migrado.';
-    END IF;
-
-    IF TO_REGCLASS('chatbot.user_id_cliente') IS NOT NULL THEN
-        RAISE EXCEPTION
-            'Migração recusada: tabela user_id_cliente já existe.';
-    END IF;
-
-    SELECT pg_get_constraintdef(oid)
-    INTO definicao_motivo
-    FROM pg_constraint
-    WHERE conrelid = 'chatbot.conversa'::REGCLASS
-      AND conname = 'ck_conversa_motivo_encerramento'
-      AND contype = 'c'
-      AND convalidated IS TRUE;
-
-    SELECT ARRAY(
-        SELECT DISTINCT ocorrencia[1]
-        FROM regexp_matches(
-            definicao_motivo,
-            $regex$'([^']+)'$regex$,
-            'g'
-        ) AS ocorrencia
-        ORDER BY ocorrencia[1]
-    )
-    INTO motivos_atuais;
-
-    IF definicao_motivo IS NULL
-       OR POSITION('MOTIVO_ENCERRAMENTO IS NULL' IN UPPER(definicao_motivo)) = 0
-       OR motivos_atuais IS DISTINCT FROM ARRAY[
-            'foi_agendado',
-            'idade_invalida'
-       ]::TEXT[]
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: CHECK atual de motivo não corresponde exatamente à base esperada.';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'chatbot.cliente'::REGCLASS
-          AND conname = 'cliente_waid_telefone_key'
-          AND contype = 'u'
-          AND convalidated IS TRUE
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: UNIQUE global do WA ID legado não encontrada.';
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'chatbot.cliente_bloqueado_meta'::REGCLASS
-          AND conname = 'uq_cliente_bloqueado_meta_wa_unidade'
-          AND contype = 'u'
-          AND convalidated IS TRUE
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: UNIQUE de bloqueio WA/unidade não encontrada.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_dequeue_atual
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.dequeue_message()')
-      AND p.prokind = 'f'
-      AND p.pronargs = 0
-      AND p.proretset IS TRUE
-      AND p.prorettype = 'record'::REGTYPE
-      AND p.proargnames = ARRAY[
-          'id_mensagem',
-          'cliente_telefone',
-          'conteudo_texto',
-          'tipo_mensagem',
-          'id_phone_unidade',
-          'unidade_telefone',
-          'received_data_hora',
-          'id_hash_msg',
-          'retry_count'
-      ]::TEXT[]
-      AND p.proargmodes = ARRAY[
-          't', 't', 't', 't', 't', 't', 't', 't', 't'
-      ]::"char"[]
-      AND p.proallargtypes = ARRAY[
-          'int4'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'text'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'timestamptz'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'int4'::REGTYPE::OID
-      ]::OID[];
-
-    IF corpo_dequeue_atual IS NULL
-       OR POSITION('WITH NEXT_JOB AS' IN UPPER(corpo_dequeue_atual)) = 0
-       OR POSITION('FOR UPDATE SKIP LOCKED' IN UPPER(corpo_dequeue_atual)) = 0
-       OR POSITION('RETRY_COUNT = F.RETRY_COUNT + 1' IN UPPER(corpo_dequeue_atual)) = 0
-       OR POSITION('INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_atual)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: assinatura ou algoritmo atual de dequeue_message diverge da base esperada.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_lock_atual
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
-      AND p.prokind = 'f';
-
-    IF corpo_lock_atual IS NULL
-       OR POSITION('PROCESSING = TRUE' IN UPPER(corpo_lock_atual)) = 0
-       OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_lock_atual)) = 0
-       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_atual)) = 0
-       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_atual)) = 0
-       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_atual)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: lock_conversa atual diverge do contrato de versão de posse.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_unlock_atual
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
-      AND p.prokind = 'f';
-
-    IF corpo_unlock_atual IS NULL
-       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_atual)) = 0
-       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_atual)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Migração recusada: unlock_conversa atual diverge do contrato de versão de posse.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.fila_mensagens
-        WHERE LENGTH(cliente_telefone) > 50
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.historico_mensagens
-        WHERE LENGTH(cliente_telefone) > 50
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: WA ID legado excede VARCHAR(50).';
-    END IF;
-END
-$preflight$;
-
--- O snapshot vem depois do gate das colunas para que uma baseline incompatível
--- seja recusada pela mensagem controlada, em vez de falhar com undefined_column.
-CREATE TEMP TABLE migracao_apresentacao_unidade_antes
-ON COMMIT DROP
-AS
-SELECT id_unidade, nome_unidade, nome_agente, genero
-FROM chatbot.unidade;
-
--- Mapa explícito do estado atual. Antes do deploy, revisar este bloco e incluir
--- exatamente uma linha para cada unidade existente. Não inferir pelo WABA.
-CREATE TEMP TABLE migracao_portfolios (
-    id_unidade INTEGER PRIMARY KEY,
-    id_portfolio VARCHAR(100) NOT NULL,
-    CONSTRAINT ck_migracao_portfolio_nao_vazio
-        CHECK (BTRIM(id_portfolio) <> '')
-) ON COMMIT DROP;
-
-INSERT INTO pg_temp.migracao_portfolios (id_unidade, id_portfolio)
-VALUES
-    (1, '1227425428614580');
-
-DO $validar_mapa_portfolios$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.unidade AS unidade
-        FULL JOIN pg_temp.migracao_portfolios AS mapa
-          ON mapa.id_unidade = unidade.id_unidade
-        WHERE unidade.id_unidade IS NULL
-           OR mapa.id_unidade IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: mapa de id_portfolio não cobre exatamente todas as unidades.';
-    END IF;
-END
-$validar_mapa_portfolios$;
-
-CREATE TEMP TABLE migracao_user_id_contagens
-ON COMMIT DROP
-AS
-SELECT 'cliente' AS tabela, COUNT(*)::BIGINT AS registros
-FROM chatbot.cliente
-UNION ALL
-SELECT 'conversa', COUNT(*) FROM chatbot.conversa
-UNION ALL
-SELECT 'dependente', COUNT(*) FROM chatbot.dependente
-UNION ALL
-SELECT 'fila_mensagens', COUNT(*) FROM chatbot.fila_mensagens
-UNION ALL
-SELECT 'historico_mensagens', COUNT(*) FROM chatbot.historico_mensagens
-UNION ALL
-SELECT 'respostas_desafios', COUNT(*) FROM chatbot.respostas_desafios
-UNION ALL
-SELECT 'cliente_bloqueado_meta', COUNT(*)
-FROM chatbot.cliente_bloqueado_meta
-UNION ALL
-SELECT 'webhook_flood_evento', COUNT(*)
-FROM chatbot.webhook_flood_evento
-UNION ALL
-SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios;
-
-CREATE TEMP TABLE migracao_respostas_etapas (
-    id_resposta_desafio INTEGER PRIMARY KEY,
-    id_etapa INTEGER NOT NULL
-) ON COMMIT DROP;
-
-INSERT INTO pg_temp.migracao_respostas_etapas (
-    id_resposta_desafio,
-    id_etapa
-)
-SELECT
-    id_resposta_desafio,
-    id_etapa
-FROM chatbot.respostas_desafios;
-
-DROP FUNCTION chatbot.dequeue_message();
-
-ALTER TABLE chatbot.cliente
-    RENAME COLUMN waid_telefone TO wa_id;
-
-ALTER TABLE chatbot.fila_mensagens
-    RENAME COLUMN cliente_telefone TO wa_id;
-
-ALTER TABLE chatbot.historico_mensagens
-    RENAME COLUMN cliente_telefone TO wa_id;
-
-ALTER TABLE chatbot.cliente_bloqueado_meta
-    RENAME COLUMN wa_id_cliente TO wa_id;
-
-ALTER TABLE chatbot.webhook_flood_evento
-    RENAME COLUMN wa_id_cliente TO wa_id;
-
-ALTER TABLE chatbot.cliente
-    RENAME CONSTRAINT cliente_waid_telefone_key
-    TO cliente_wa_id_key;
-
-ALTER TABLE chatbot.cliente_bloqueado_meta
-    RENAME CONSTRAINT uq_cliente_bloqueado_meta_wa_unidade
-    TO uq_cliente_bloqueado_meta_wa_id_unidade;
-
-ALTER TABLE chatbot.unidade
-    ADD COLUMN id_portfolio VARCHAR(100) NULL;
-
-UPDATE chatbot.unidade AS unidade
-SET id_portfolio = mapa.id_portfolio
-FROM pg_temp.migracao_portfolios AS mapa
-WHERE mapa.id_unidade = unidade.id_unidade;
-
-ALTER TABLE chatbot.unidade
-    ALTER COLUMN id_portfolio SET NOT NULL;
-
-ALTER TABLE chatbot.cliente
-    ADD COLUMN username VARCHAR(255) NULL,
-    ALTER COLUMN wa_id DROP NOT NULL;
-
-ALTER TABLE chatbot.fila_mensagens
-    ADD COLUMN user_id VARCHAR(255) NULL,
-    ADD COLUMN username VARCHAR(255) NULL,
-    ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL,
-    ALTER COLUMN unidade_telefone DROP NOT NULL;
-
-ALTER TABLE chatbot.historico_mensagens
-    ADD COLUMN user_id VARCHAR(255) NULL,
-    ADD COLUMN username VARCHAR(255) NULL,
-    ALTER COLUMN wa_id TYPE VARCHAR(50),
-    ALTER COLUMN wa_id DROP NOT NULL,
-    ALTER COLUMN unidade_telefone DROP NOT NULL;
-
-ALTER TABLE chatbot.conversa
-    ADD COLUMN wa_id VARCHAR(50) NULL,
-    ADD COLUMN user_id VARCHAR(255) NULL,
-    ADD COLUMN username VARCHAR(255) NULL;
-
-ALTER TABLE chatbot.cliente_bloqueado_meta
-    ADD COLUMN user_id VARCHAR(255) NULL,
-    ADD COLUMN username VARCHAR(255) NULL,
-    ALTER COLUMN wa_id DROP NOT NULL;
-
-ALTER TABLE chatbot.webhook_flood_evento
-    ADD COLUMN user_id VARCHAR(255) NULL,
-    ADD COLUMN username VARCHAR(255) NULL,
-    ALTER COLUMN wa_id DROP NOT NULL;
-
-CREATE TABLE chatbot.user_id_cliente (
-    id_user_id_cliente BIGSERIAL PRIMARY KEY,
-    id_cliente INTEGER NOT NULL,
-    user_id VARCHAR(255) NOT NULL,
-    id_unidade INTEGER NOT NULL,
-
-    CONSTRAINT ck_user_id_cliente_user_id_nao_vazio
-        CHECK (BTRIM(user_id) <> ''),
-
-    CONSTRAINT fk_user_id_cliente_cliente
-        FOREIGN KEY (id_cliente)
-        REFERENCES chatbot.cliente(id_cliente)
-        ON DELETE RESTRICT,
-
-    CONSTRAINT fk_user_id_cliente_unidade
-        FOREIGN KEY (id_unidade)
-        REFERENCES chatbot.unidade(id_unidade)
-        ON DELETE CASCADE,
-
-    CONSTRAINT uq_user_id_cliente_user_unidade
-        UNIQUE (user_id, id_unidade),
-
-    CONSTRAINT uq_user_id_cliente_cliente_unidade
-        UNIQUE (id_cliente, id_unidade)
-);
-
-CREATE INDEX idx_user_id_cliente_id_unidade
-ON chatbot.user_id_cliente (id_unidade, id_cliente);
-
--- Conversas existentes herdam o WA ID global sem alterar o cliente.
-UPDATE chatbot.conversa AS conversa
-SET wa_id = cliente.wa_id
-FROM chatbot.cliente AS cliente
-WHERE cliente.id_cliente = conversa.id_cliente
-  AND conversa.wa_id IS NULL;
-
-ALTER TABLE chatbot.unidade
-    ADD CONSTRAINT ck_unidade_id_portfolio_nao_vazio
-    CHECK (BTRIM(id_portfolio) <> '');
-
-ALTER TABLE chatbot.conversa
-    DROP CONSTRAINT ck_conversa_motivo_encerramento,
-    ADD CONSTRAINT ck_conversa_motivo_encerramento
-        CHECK (
-            motivo_encerramento IS NULL
-            OR motivo_encerramento IN (
-                'idade_invalida',
-                'foi_agendado',
-                'ativou_privacidade',
-                'bloqueio_reconciliado'
-            )
-        );
-
-ALTER TABLE chatbot.cliente
-    ADD CONSTRAINT ck_cliente_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_cliente_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-ALTER TABLE chatbot.fila_mensagens
-    ADD CONSTRAINT ck_fila_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_fila_user_id_nao_vazio
-        CHECK (user_id IS NULL OR BTRIM(user_id) <> ''),
-    ADD CONSTRAINT ck_fila_identidade_meta
-        CHECK (
-            NULLIF(BTRIM(wa_id), '') IS NOT NULL
-            OR NULLIF(BTRIM(user_id), '') IS NOT NULL
-        ),
-    ADD CONSTRAINT ck_fila_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-ALTER TABLE chatbot.historico_mensagens
-    ADD CONSTRAINT ck_historico_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_historico_user_id_nao_vazio
-        CHECK (user_id IS NULL OR BTRIM(user_id) <> ''),
-    ADD CONSTRAINT ck_historico_identidade_meta
-        CHECK (
-            NULLIF(BTRIM(wa_id), '') IS NOT NULL
-            OR NULLIF(BTRIM(user_id), '') IS NOT NULL
-        ),
-    ADD CONSTRAINT ck_historico_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-ALTER TABLE chatbot.conversa
-    ADD CONSTRAINT ck_conversa_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_conversa_user_id_nao_vazio
-        CHECK (user_id IS NULL OR BTRIM(user_id) <> ''),
-    ADD CONSTRAINT ck_conversa_identidade_meta
-        CHECK (
-            NULLIF(BTRIM(wa_id), '') IS NOT NULL
-            OR NULLIF(BTRIM(user_id), '') IS NOT NULL
-        ),
-    ADD CONSTRAINT ck_conversa_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-ALTER TABLE chatbot.cliente_bloqueado_meta
-    ADD CONSTRAINT ck_bloqueio_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_bloqueio_user_id_nao_vazio
-        CHECK (user_id IS NULL OR BTRIM(user_id) <> ''),
-    ADD CONSTRAINT ck_bloqueio_identidade_meta
-        CHECK (
-            NULLIF(BTRIM(wa_id), '') IS NOT NULL
-            OR NULLIF(BTRIM(user_id), '') IS NOT NULL
-        ),
-    ADD CONSTRAINT ck_bloqueio_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-ALTER TABLE chatbot.webhook_flood_evento
-    ADD CONSTRAINT ck_flood_wa_id_nao_vazio
-        CHECK (wa_id IS NULL OR BTRIM(wa_id) <> ''),
-    ADD CONSTRAINT ck_flood_user_id_nao_vazio
-        CHECK (user_id IS NULL OR BTRIM(user_id) <> ''),
-    ADD CONSTRAINT ck_flood_identidade_meta
-        CHECK (
-            NULLIF(BTRIM(wa_id), '') IS NOT NULL
-            OR NULLIF(BTRIM(user_id), '') IS NOT NULL
-        ),
-    ADD CONSTRAINT ck_flood_username_nao_vazio
-        CHECK (username IS NULL OR BTRIM(username) <> '');
-
-CREATE INDEX idx_unidade_id_portfolio
-ON chatbot.unidade (id_portfolio);
-
-ALTER INDEX chatbot.idx_fila_cliente_unidade_aberta
-    RENAME TO idx_fila_wa_unidade_aberta;
-
-ALTER INDEX chatbot.idx_fila_cliente_unidade_conversa_aberta
-    RENAME TO idx_fila_wa_unidade_conversa_aberta;
-
-CREATE INDEX idx_fila_user_unidade_aberta
-ON chatbot.fila_mensagens (
-    user_id,
-    id_phone_unidade,
-    status,
-    received_data_hora,
-    id_mensagem
-)
-WHERE user_id IS NOT NULL
-  AND status IN ('pending', 'processing');
-
-CREATE INDEX idx_fila_user_unidade_conversa_aberta
-ON chatbot.fila_mensagens (
-    user_id,
-    id_phone_unidade,
-    id_conversa,
-    id_hash_msg,
-    id_mensagem
-)
-WHERE user_id IS NOT NULL
-  AND status IN ('pending', 'processing');
-
-CREATE INDEX idx_conversa_wa_unidade
-ON chatbot.conversa (wa_id, id_unidade, finalizou_em DESC)
-WHERE wa_id IS NOT NULL;
-
-CREATE INDEX idx_conversa_user_unidade
-ON chatbot.conversa (user_id, id_unidade, finalizou_em DESC)
-WHERE user_id IS NOT NULL;
-
-CREATE UNIQUE INDEX uq_cliente_bloqueado_meta_user_id_unidade
-ON chatbot.cliente_bloqueado_meta (user_id, id_unidade)
-WHERE user_id IS NOT NULL;
-
-CREATE UNIQUE INDEX uq_cliente_bloqueado_meta_cliente_unidade
-ON chatbot.cliente_bloqueado_meta (id_cliente, id_unidade)
-WHERE id_cliente IS NOT NULL;
-
-CREATE INDEX idx_webhook_flood_evento_user_janela
-ON chatbot.webhook_flood_evento (
-    user_id,
-    phone_id_unidade,
-    received_at DESC
-)
-WHERE user_id IS NOT NULL;
-
--- O mapa é declarativo e será recriado depois do deslocamento 2..22 -> 3..23.
-TRUNCATE TABLE chatbot.etapa_transicao RESTART IDENTITY;
-
-INSERT INTO chatbot.etapa (
-    id_etapa,
-    nome_etapa,
-    encerra_automaticamente,
-    bloqueio_dias,
-    elegivel_funil
-)
-VALUES (
-    23,
-    '__migracao_user_id_etapa_23__',
-    FALSE,
-    0,
-    FALSE
-);
-
-DO $remapear_referencias$
-DECLARE
-    etapa_antiga INTEGER;
-BEGIN
-    -- A ordem decrescente evita colisão na UNIQUE
-    -- respostas_desafios(id_conversa, id_etapa), inclusive em 12..17 -> 13..18.
-    FOR etapa_antiga IN REVERSE 22..2 LOOP
-        UPDATE chatbot.conversa
-        SET id_etapa_atual = etapa_antiga + 1
-        WHERE id_etapa_atual = etapa_antiga;
-
-        UPDATE chatbot.historico_mensagens
-        SET id_etapa = etapa_antiga + 1
-        WHERE id_etapa = etapa_antiga;
-
-        UPDATE chatbot.respostas_desafios
-        SET id_etapa = etapa_antiga + 1
-        WHERE id_etapa = etapa_antiga;
-    END LOOP;
-END
-$remapear_referencias$;
-
-UPDATE chatbot.etapa
-SET nome_etapa = FORMAT('__migracao_user_id_%s__', id_etapa)
-WHERE id_etapa BETWEEN 2 AND 23;
-
-INSERT INTO chatbot.etapa (
-    id_etapa,
-    nome_etapa,
-    encerra_automaticamente,
-    bloqueio_dias,
-    elegivel_funil
-)
-VALUES
-    (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
-    (2,  'Compartilhamento oficial do contato',                FALSE, 0,  FALSE),
-    (3,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-    (4,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
-    (5,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-    (6,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-    (7,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-    (8,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-    (9,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-    (10, 'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-    (11, 'Email',                                              FALSE, 0,  FALSE),
-    (12, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-    (13, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-    (14, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-    (15, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-    (16, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-    (17, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-    (18, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-    (19, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-    (20, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-    (21, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-    (22, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-    (23, 'Finalização do atendimento',                         TRUE,  30, TRUE)
-ON CONFLICT (id_etapa)
-DO UPDATE SET
-    nome_etapa = EXCLUDED.nome_etapa,
-    encerra_automaticamente = EXCLUDED.encerra_automaticamente,
-    bloqueio_dias = EXCLUDED.bloqueio_dias,
-    elegivel_funil = EXCLUDED.elegivel_funil;
-
-INSERT INTO chatbot.etapa_transicao (
-    id_etapa_origem,
-    evento,
-    id_etapa_destino
-)
-VALUES
-    (1,  'nome_cliente_valido_com_wa_id',          3),
-    (1,  'nome_cliente_valido_sem_wa_id',          2),
-    (2,  'contato_oficial_compartilhado',          3),
-    (3,  'destino_atendimento_definido',           4),
-    (4,  'destino_atendimento_confirmado',          5),
-    (5,  'profissao_dependente_valida',            6),
-    (5,  'profissao_titular_valida',               7),
-    (6,  'nome_dependente_valido',                 7),
-    (7,  'idade_valida',                           8),
-    (8,  'oferta_aceita',                         11),
-    (8,  'oferta_adiada',                          9),
-    (9,  'cliente_retornou',                      10),
-    (10, 'retorno_confirmado',                    11),
-    (10, 'retorno_adiado',                         9),
-    (11, 'email_valido',                          12),
-    (12, 'triagem_iniciada',                      13),
-    (13, 'triagem_pergunta_1_respondida',         14),
-    (14, 'triagem_pergunta_2_respondida',         15),
-    (15, 'triagem_pergunta_3_respondida',         16),
-    (16, 'triagem_pergunta_4_respondida',         17),
-    (17, 'triagem_pergunta_5_respondida',         18),
-    (18, 'triagem_pergunta_6_respondida',         19),
-    (19, 'agendamento_confirmado',                20),
-    (20, 'satisfacao_avaliada',                   21),
-    (21, 'comentario_satisfacao_aceito',          22),
-    (21, 'comentario_satisfacao_recusado',        23),
-    (22, 'comentario_satisfacao_recebido',        23);
-
-SELECT setval(
-    pg_get_serial_sequence('chatbot.etapa', 'id_etapa'),
-    23,
-    TRUE
-);
-
-SELECT setval(
-    pg_get_serial_sequence('chatbot.etapa_transicao', 'id_transicao'),
-    27,
-    TRUE
-);
-
-CREATE OR REPLACE FUNCTION chatbot.lock_conversa(p_id_conversa INT)
-RETURNS TABLE (
-    lock_ok BOOLEAN,
-    lock_version_atual INT
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_lock_version INT;
-BEGIN
-    UPDATE chatbot.conversa AS conversa
-    SET
-        processing = TRUE,
-        processing_started_at = NOW(),
-        lock_version = COALESCE(conversa.lock_version, 0) + 1
-    WHERE conversa.id_conversa = p_id_conversa
-      AND conversa.status_ativa IS TRUE
-      AND (
-          COALESCE(conversa.processing, FALSE) IS FALSE
-          OR (
-              conversa.processing IS TRUE
-              AND conversa.processing_started_at IS NOT NULL
-              AND conversa.processing_started_at
-                  < NOW() - INTERVAL '110.0 seconds'
-          )
-      )
-    RETURNING conversa.lock_version INTO v_lock_version;
-
-    IF v_lock_version IS NULL THEN
-        RETURN QUERY SELECT FALSE, NULL::INT;
-        RETURN;
-    END IF;
-
-    RETURN QUERY SELECT TRUE, v_lock_version;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION chatbot.unlock_conversa(
-    p_id_conversa INT,
-    p_lock_version INT
-)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    updated_rows INTEGER;
-BEGIN
-    UPDATE chatbot.conversa
-    SET
-        processing = FALSE,
-        processing_started_at = NULL
-    WHERE id_conversa = p_id_conversa
-      AND processing IS TRUE
-      AND lock_version = p_lock_version;
-
-    GET DIAGNOSTICS updated_rows = ROW_COUNT;
-    RETURN updated_rows = 1;
-END;
-$$;
-
-CREATE FUNCTION chatbot.dequeue_message()
-RETURNS TABLE (
-    id_mensagem INT,
-    wa_id VARCHAR,
-    user_id VARCHAR,
-    username VARCHAR,
-    conteudo_texto TEXT,
-    tipo_mensagem VARCHAR,
-    id_phone_unidade VARCHAR,
-    unidade_telefone VARCHAR,
-    received_data_hora TIMESTAMPTZ,
-    id_hash_msg VARCHAR,
-    retry_count INT
-)
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN QUERY
-    WITH next_job AS (
-        SELECT f.id_mensagem
-        FROM chatbot.fila_mensagens AS f
-        WHERE
-            (
-                f.status = 'pending'
-                AND f.next_attempt_at <= NOW()
-            )
-            OR
-            (
-                f.status = 'processing'
-                AND f.processing_started_at
-                    < NOW() - INTERVAL '2 minutes'
-            )
-        ORDER BY
-            CASE
-                WHEN f.status = 'pending' THEN f.next_attempt_at
-                WHEN f.status = 'processing' THEN f.processing_started_at
-            END NULLS FIRST,
-            f.id_mensagem
-        FOR UPDATE SKIP LOCKED
-        LIMIT 1
-    )
-    UPDATE chatbot.fila_mensagens AS f
-    SET
-        status = 'processing',
-        retry_count = f.retry_count + 1,
-        processing_started_at = NOW()
-    FROM next_job
-    WHERE f.id_mensagem = next_job.id_mensagem
-    RETURNING
-        f.id_mensagem,
-        f.wa_id,
-        f.user_id,
-        f.username,
-        f.conteudo_texto,
-        f.tipo_mensagem,
-        f.id_phone_unidade,
-        f.unidade_telefone,
-        f.received_data_hora,
-        f.id_hash_msg,
-        f.retry_count;
-END;
-$$;
-
-DO $pos_validacao$
-DECLARE
-    colunas_invalidas INTEGER;
-    colunas_obrigatorias_invalidas INTEGER;
-    constraints_obrigatorias INTEGER;
-    indices_obrigatorios INTEGER;
-    etapas_finais_corretas INTEGER;
-    transicoes_finais_corretas INTEGER;
-    referencias_invalidas RECORD;
-    corpo_dequeue_final TEXT;
-    corpo_lock_final TEXT;
-    corpo_unlock_final TEXT;
-    definicao_motivo_final TEXT;
-    motivos_finais TEXT[];
-BEGIN
-    SELECT COUNT(*)
-    INTO colunas_invalidas
-    FROM (
-        VALUES
-            ('cliente',                 'wa_id',         50),
-            ('cliente',                 'username',     255),
-            ('fila_mensagens',          'wa_id',         50),
-            ('fila_mensagens',          'user_id',      255),
-            ('fila_mensagens',          'username',     255),
-            ('fila_mensagens',          'unidade_telefone', 100),
-            ('historico_mensagens',     'wa_id',         50),
-            ('historico_mensagens',     'user_id',      255),
-            ('historico_mensagens',     'username',     255),
-            ('historico_mensagens',     'unidade_telefone', 100),
-            ('conversa',                'wa_id',         50),
-            ('conversa',                'user_id',      255),
-            ('conversa',                'username',     255),
-            ('cliente_bloqueado_meta',  'wa_id',         50),
-            ('cliente_bloqueado_meta',  'user_id',      255),
-            ('cliente_bloqueado_meta',  'username',     255),
-            ('webhook_flood_evento',    'wa_id',         50),
-            ('webhook_flood_evento',    'user_id',      255),
-            ('webhook_flood_evento',    'username',     255)
-    ) AS esperado(table_name, column_name, max_length)
-    LEFT JOIN information_schema.columns AS coluna
-      ON coluna.table_schema = 'chatbot'
-     AND coluna.table_name = esperado.table_name
-     AND coluna.column_name = esperado.column_name
-    WHERE coluna.column_name IS NULL
-       OR coluna.data_type <> 'character varying'
-       OR coluna.character_maximum_length IS DISTINCT FROM esperado.max_length
-       OR coluna.is_nullable <> 'YES'
-       OR coluna.column_default IS NOT NULL;
-
-    IF colunas_invalidas <> 0 THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: % coluna(s) ausente(s) ou incompatível(is).',
-            colunas_invalidas;
-    END IF;
-
-    SELECT COUNT(*)
-    INTO colunas_obrigatorias_invalidas
-    FROM (
-        VALUES
-            ('unidade',          'nome_unidade',      'character varying', 300),
-            ('unidade',          'nome_agente',       'character varying', 100),
-            ('unidade',          'genero',            'character varying',   9),
-            ('unidade',          'id_portfolio',       'character varying', 100),
-            ('user_id_cliente',  'id_user_id_cliente', 'bigint',            NULL),
-            ('user_id_cliente',  'id_cliente',         'integer',           NULL),
-            ('user_id_cliente',  'user_id',            'character varying', 255),
-            ('user_id_cliente',  'id_unidade',         'integer',           NULL)
-    ) AS esperado(table_name, column_name, data_type, max_length)
-    LEFT JOIN information_schema.columns AS coluna
-      ON coluna.table_schema = 'chatbot'
-     AND coluna.table_name = esperado.table_name
-     AND coluna.column_name = esperado.column_name
-    WHERE coluna.column_name IS NULL
-       OR coluna.data_type <> esperado.data_type
-       OR coluna.character_maximum_length
-            IS DISTINCT FROM esperado.max_length
-       OR coluna.is_nullable <> 'NO'
-       OR (
-           esperado.column_name = 'id_user_id_cliente'
-           AND (
-               coluna.column_default IS NULL
-               OR coluna.column_default NOT LIKE 'nextval(%'
-           )
-       )
-       OR (
-           esperado.column_name <> 'id_user_id_cliente'
-           AND coluna.column_default IS NOT NULL
-       );
-
-    IF colunas_obrigatorias_invalidas <> 0 THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: % coluna(s) obrigatória(s) incompatível(is).',
-            colunas_obrigatorias_invalidas;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM (
-            VALUES
-                ('unidade',               'nome'),
-                ('cliente',                'waid_telefone'),
-                ('fila_mensagens',         'cliente_telefone'),
-                ('historico_mensagens',    'cliente_telefone'),
-                ('cliente_bloqueado_meta', 'wa_id_cliente'),
-                ('webhook_flood_evento',   'wa_id_cliente')
-        ) AS legado(table_name, column_name)
-        JOIN information_schema.columns AS coluna
-          ON coluna.table_schema = 'chatbot'
-         AND coluna.table_name = legado.table_name
-         AND coluna.column_name = legado.column_name
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: coluna legada de identidade ou apresentação permaneceu.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_inherits AS heranca
-        CROSS JOIN (
-            VALUES ('wa_id'), ('user_id'), ('username')
-        ) AS esperado(attname)
-        JOIN pg_attribute AS coluna_pai
-          ON coluna_pai.attrelid = heranca.inhparent
-         AND coluna_pai.attname = esperado.attname
-         AND coluna_pai.attnum > 0
-         AND coluna_pai.attisdropped IS FALSE
-        LEFT JOIN pg_attribute AS coluna_filha
-          ON coluna_filha.attrelid = heranca.inhrelid
-         AND coluna_filha.attname = esperado.attname
-         AND coluna_filha.attnum > 0
-         AND coluna_filha.attisdropped IS FALSE
-        WHERE heranca.inhparent = 'chatbot.historico_mensagens'::REGCLASS
-          AND (
-              coluna_filha.attname IS NULL
-              OR coluna_filha.atttypid <> coluna_pai.atttypid
-              OR coluna_filha.atttypmod <> coluna_pai.atttypmod
-              OR coluna_filha.attnotnull <> coluna_pai.attnotnull
-          )
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: partição de histórico divergente do pai.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.unidade
-        WHERE NULLIF(BTRIM(id_portfolio), '') IS NULL
-           OR nome_unidade !~ '[^[:space:]]'
-           OR nome_agente !~ '[^[:space:]]'
-           OR genero NOT IN ('masculino', 'feminino')
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: cadastro ou apresentação da unidade inválido.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_temp.migracao_apresentacao_unidade_antes AS antes
-        FULL JOIN chatbot.unidade AS depois
-          ON depois.id_unidade = antes.id_unidade
-        WHERE antes.id_unidade IS NULL
-           OR depois.id_unidade IS NULL
-           OR depois.nome_unidade IS DISTINCT FROM antes.nome_unidade
-           OR depois.nome_agente IS DISTINCT FROM antes.nome_agente
-           OR depois.genero IS DISTINCT FROM antes.genero
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: apresentação da unidade mudou durante a migração de user_id.';
-    END IF;
-
-    IF EXISTS (
-        SELECT
-            esperado.conname,
-            esperado.contype,
-            PG_GET_CONSTRAINTDEF(esperado.oid)
-        FROM pg_constraint AS esperado
-        WHERE esperado.conrelid =
-              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
-          AND esperado.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-        EXCEPT
-        SELECT
-            atual.conname,
-            atual.contype,
-            PG_GET_CONSTRAINTDEF(atual.oid)
-        FROM pg_constraint AS atual
-        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
-          AND atual.convalidated IS TRUE
-          AND atual.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-    ) OR EXISTS (
-        SELECT
-            atual.conname,
-            atual.contype,
-            PG_GET_CONSTRAINTDEF(atual.oid)
-        FROM pg_constraint AS atual
-        WHERE atual.conrelid = 'chatbot.unidade'::REGCLASS
-          AND atual.convalidated IS TRUE
-          AND atual.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-        EXCEPT
-        SELECT
-            esperado.conname,
-            esperado.contype,
-            PG_GET_CONSTRAINTDEF(esperado.oid)
-        FROM pg_constraint AS esperado
-        WHERE esperado.conrelid =
-              'pg_temp.contrato_apresentacao_unidade_esperado'::REGCLASS
-          AND esperado.conname IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero'
-          )
-    ) OR EXISTS (
-        SELECT 1
-        FROM pg_constraint AS extra
-        WHERE extra.conrelid = 'chatbot.unidade'::REGCLASS
-          AND extra.contype <> 'n'
-          AND extra.conname NOT IN (
-              'uq_unidade_nome_unidade',
-              'ck_unidade_nome_unidade_nao_vazio',
-              'ck_unidade_nome_agente_nao_vazio',
-              'ck_unidade_genero',
-              'ck_unidade_id_portfolio_nao_vazio'
-          )
-          AND EXISTS (
-              SELECT 1
-              FROM UNNEST(extra.conkey) AS chave(attnum)
-              JOIN pg_attribute AS coluna
-                ON coluna.attrelid = extra.conrelid
-               AND coluna.attnum = chave.attnum
-              WHERE coluna.attname IN (
-                  'nome_unidade',
-                  'nome_agente',
-                  'genero'
-              )
-          )
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: constraints de apresentação da unidade divergentes.';
-    END IF;
-
-    SELECT COUNT(*)
-    INTO constraints_obrigatorias
-    FROM (
-        VALUES
-            ('unidade',                 'uq_unidade_nome_unidade',                    'u'),
-            ('unidade',                 'ck_unidade_nome_unidade_nao_vazio',          'c'),
-            ('unidade',                 'ck_unidade_nome_agente_nao_vazio',           'c'),
-            ('unidade',                 'ck_unidade_genero',                          'c'),
-            ('unidade',                 'ck_unidade_id_portfolio_nao_vazio',         'c'),
-            ('cliente',                 'cliente_wa_id_key',                         'u'),
-            ('cliente',                 'ck_cliente_wa_id_nao_vazio',                'c'),
-            ('cliente',                 'ck_cliente_username_nao_vazio',             'c'),
-            ('fila_mensagens',          'ck_fila_wa_id_nao_vazio',                   'c'),
-            ('fila_mensagens',          'ck_fila_user_id_nao_vazio',                 'c'),
-            ('fila_mensagens',          'ck_fila_identidade_meta',                   'c'),
-            ('fila_mensagens',          'ck_fila_username_nao_vazio',                'c'),
-            ('historico_mensagens',     'ck_historico_wa_id_nao_vazio',              'c'),
-            ('historico_mensagens',     'ck_historico_user_id_nao_vazio',            'c'),
-            ('historico_mensagens',     'ck_historico_identidade_meta',              'c'),
-            ('historico_mensagens',     'ck_historico_username_nao_vazio',           'c'),
-            ('conversa',                'ck_conversa_wa_id_nao_vazio',               'c'),
-            ('conversa',                'ck_conversa_user_id_nao_vazio',             'c'),
-            ('conversa',                'ck_conversa_identidade_meta',               'c'),
-            ('conversa',                'ck_conversa_username_nao_vazio',            'c'),
-            ('conversa',                'ck_conversa_motivo_encerramento',            'c'),
-            ('cliente_bloqueado_meta',  'uq_cliente_bloqueado_meta_wa_id_unidade',   'u'),
-            ('cliente_bloqueado_meta',  'ck_bloqueio_wa_id_nao_vazio',               'c'),
-            ('cliente_bloqueado_meta',  'ck_bloqueio_user_id_nao_vazio',             'c'),
-            ('cliente_bloqueado_meta',  'ck_bloqueio_identidade_meta',               'c'),
-            ('cliente_bloqueado_meta',  'ck_bloqueio_username_nao_vazio',            'c'),
-            ('webhook_flood_evento',    'ck_flood_wa_id_nao_vazio',                  'c'),
-            ('webhook_flood_evento',    'ck_flood_user_id_nao_vazio',                'c'),
-            ('webhook_flood_evento',    'ck_flood_identidade_meta',                  'c'),
-            ('webhook_flood_evento',    'ck_flood_username_nao_vazio',               'c'),
-            ('user_id_cliente',         'user_id_cliente_pkey',                      'p'),
-            ('user_id_cliente',         'ck_user_id_cliente_user_id_nao_vazio',      'c'),
-            ('user_id_cliente',         'fk_user_id_cliente_cliente',                'f'),
-            ('user_id_cliente',         'fk_user_id_cliente_unidade',                'f'),
-            ('user_id_cliente',         'uq_user_id_cliente_user_unidade',           'u'),
-            ('user_id_cliente',         'uq_user_id_cliente_cliente_unidade',        'u')
-    ) AS esperado(table_name, constraint_name, constraint_type)
-    JOIN pg_constraint AS constraint_atual
-      ON constraint_atual.conrelid = TO_REGCLASS(
-          FORMAT('chatbot.%I', esperado.table_name)
-      )
-     AND constraint_atual.conname = esperado.constraint_name
-     AND constraint_atual.contype::TEXT = esperado.constraint_type
-     AND constraint_atual.convalidated IS TRUE;
-
-    IF constraints_obrigatorias <> 36 THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: esperado 36 constraints do contrato; obtido %.',
-            constraints_obrigatorias;
-    END IF;
-
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'chatbot.user_id_cliente'::REGCLASS
-          AND conname = 'fk_user_id_cliente_cliente'
-          AND contype = 'f'
-          AND confdeltype = 'r'
-          AND convalidated IS TRUE
-    ) OR NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = 'chatbot.user_id_cliente'::REGCLASS
-          AND conname = 'fk_user_id_cliente_unidade'
-          AND contype = 'f'
-          AND confdeltype = 'c'
-          AND convalidated IS TRUE
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: ações das FKs de user_id_cliente divergentes.';
-    END IF;
-
-    SELECT PG_GET_CONSTRAINTDEF(oid)
-    INTO definicao_motivo_final
-    FROM pg_constraint
-    WHERE conrelid = 'chatbot.conversa'::REGCLASS
-      AND conname = 'ck_conversa_motivo_encerramento'
-      AND contype = 'c'
-      AND convalidated IS TRUE;
-
-    SELECT ARRAY(
-        SELECT DISTINCT ocorrencia[1]
-        FROM regexp_matches(
-            definicao_motivo_final,
-            $regex$'([^']+)'$regex$,
-            'g'
-        ) AS ocorrencia
-        ORDER BY ocorrencia[1]
-    )
-    INTO motivos_finais;
-
-    IF definicao_motivo_final IS NULL
-       OR POSITION(
-           'MOTIVO_ENCERRAMENTO IS NULL'
-           IN UPPER(definicao_motivo_final)
-       ) = 0
-       OR motivos_finais IS DISTINCT FROM ARRAY[
-           'ativou_privacidade',
-           'bloqueio_reconciliado',
-           'foi_agendado',
-           'idade_invalida'
-       ]::TEXT[]
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: CHECK final de motivo divergente.';
-    END IF;
-
-    SELECT COUNT(*)
-    INTO indices_obrigatorios
-    FROM pg_indexes
-    WHERE schemaname = 'chatbot'
-      AND indexname IN (
-          'idx_unidade_id_portfolio',
-          'idx_fila_wa_unidade_aberta',
-          'idx_fila_wa_unidade_conversa_aberta',
-          'idx_fila_user_unidade_aberta',
-          'idx_fila_user_unidade_conversa_aberta',
-          'idx_conversa_wa_unidade',
-          'idx_conversa_user_unidade',
-          'uq_cliente_bloqueado_meta_wa_id_unidade',
-          'uq_cliente_bloqueado_meta_user_id_unidade',
-          'uq_cliente_bloqueado_meta_cliente_unidade',
-          'idx_webhook_flood_evento_janela',
-          'idx_webhook_flood_evento_user_janela',
-          'uq_user_id_cliente_user_unidade',
-          'uq_user_id_cliente_cliente_unidade',
-          'idx_user_id_cliente_id_unidade'
-      );
-
-    IF indices_obrigatorios <> 15 THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: esperado 15 índices do contrato; obtido %.',
-            indices_obrigatorios;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM (
-            VALUES
-                ('idx_unidade_id_portfolio'),
-                ('idx_fila_wa_unidade_aberta'),
-                ('idx_fila_wa_unidade_conversa_aberta'),
-                ('idx_fila_user_unidade_aberta'),
-                ('idx_fila_user_unidade_conversa_aberta'),
-                ('idx_conversa_wa_unidade'),
-                ('idx_conversa_user_unidade'),
-                ('uq_cliente_bloqueado_meta_wa_id_unidade'),
-                ('uq_cliente_bloqueado_meta_user_id_unidade'),
-                ('uq_cliente_bloqueado_meta_cliente_unidade'),
-                ('idx_webhook_flood_evento_janela'),
-                ('idx_webhook_flood_evento_user_janela'),
-                ('uq_user_id_cliente_user_unidade'),
-                ('uq_user_id_cliente_cliente_unidade'),
-                ('idx_user_id_cliente_id_unidade')
-        ) AS esperado(indexname)
-        LEFT JOIN LATERAL (
-            SELECT
-                indice_estado.indexrelid,
-                indice_estado.indisvalid,
-                indice_estado.indisready
-            FROM pg_class AS indice
-            JOIN pg_namespace AS namespace
-              ON namespace.oid = indice.relnamespace
-             AND namespace.nspname = 'chatbot'
-            JOIN pg_index AS indice_estado
-              ON indice_estado.indexrelid = indice.oid
-            WHERE indice.relname = esperado.indexname
-        ) AS estado ON TRUE
-        WHERE estado.indexrelid IS NULL
-           OR estado.indisvalid IS FALSE
-           OR estado.indisready IS FALSE
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: índice obrigatório ausente ou inválido.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM (
-            VALUES
-                ('idx_unidade_id_portfolio',
-                 '(ID_PORTFOLIO)', '', FALSE),
-                ('idx_fila_wa_unidade_aberta',
-                 '(WA_ID, ID_PHONE_UNIDADE, STATUS, RECEIVED_DATA_HORA, ID_MENSAGEM)',
-                 'STATUS', FALSE),
-                ('idx_fila_wa_unidade_conversa_aberta',
-                 '(WA_ID, ID_PHONE_UNIDADE, ID_CONVERSA, ID_HASH_MSG, ID_MENSAGEM)',
-                 'STATUS', FALSE),
-                ('idx_fila_user_unidade_aberta',
-                 '(USER_ID, ID_PHONE_UNIDADE, STATUS, RECEIVED_DATA_HORA, ID_MENSAGEM)',
-                 'USER_ID IS NOT NULL', FALSE),
-                ('idx_fila_user_unidade_conversa_aberta',
-                 '(USER_ID, ID_PHONE_UNIDADE, ID_CONVERSA, ID_HASH_MSG, ID_MENSAGEM)',
-                 'USER_ID IS NOT NULL', FALSE),
-                ('idx_conversa_wa_unidade',
-                 '(WA_ID, ID_UNIDADE, FINALIZOU_EM DESC)',
-                 'WA_ID IS NOT NULL', FALSE),
-                ('idx_conversa_user_unidade',
-                 '(USER_ID, ID_UNIDADE, FINALIZOU_EM DESC)',
-                 'USER_ID IS NOT NULL', FALSE),
-                ('uq_cliente_bloqueado_meta_wa_id_unidade',
-                 '(WA_ID, ID_UNIDADE)', '', TRUE),
-                ('uq_cliente_bloqueado_meta_user_id_unidade',
-                 '(USER_ID, ID_UNIDADE)', 'USER_ID IS NOT NULL', TRUE),
-                ('uq_cliente_bloqueado_meta_cliente_unidade',
-                 '(ID_CLIENTE, ID_UNIDADE)', 'ID_CLIENTE IS NOT NULL', TRUE),
-                ('idx_webhook_flood_evento_janela',
-                 '(WA_ID, PHONE_ID_UNIDADE, RECEIVED_AT DESC)', '', FALSE),
-                ('idx_webhook_flood_evento_user_janela',
-                 '(USER_ID, PHONE_ID_UNIDADE, RECEIVED_AT DESC)',
-                 'USER_ID IS NOT NULL', FALSE),
-                ('uq_user_id_cliente_user_unidade',
-                 '(USER_ID, ID_UNIDADE)', '', TRUE),
-                ('uq_user_id_cliente_cliente_unidade',
-                 '(ID_CLIENTE, ID_UNIDADE)', '', TRUE),
-                ('idx_user_id_cliente_id_unidade',
-                 '(ID_UNIDADE, ID_CLIENTE)', '', FALSE)
-        ) AS esperado(
-            indexname,
-            chave_esperada,
-            predicado_esperado,
-            unique_obrigatorio
-        )
-        LEFT JOIN pg_indexes AS indice
-          ON indice.schemaname = 'chatbot'
-         AND indice.indexname = esperado.indexname
-        WHERE indice.indexname IS NULL
-           OR POSITION(
-               esperado.chave_esperada IN UPPER(indice.indexdef)
-           ) = 0
-           OR (
-               esperado.predicado_esperado <> ''
-               AND POSITION(
-                   esperado.predicado_esperado IN UPPER(indice.indexdef)
-               ) = 0
-           )
-           OR (
-               esperado.unique_obrigatorio
-               AND POSITION('CREATE UNIQUE INDEX' IN UPPER(indice.indexdef)) <> 1
-           )
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: definição ou predicado de índice divergente.';
-    END IF;
-
-    IF (SELECT COUNT(*) FROM chatbot.user_id_cliente) <> 0 THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: user_id_cliente deveria nascer vazia.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.fila_mensagens
-        WHERE NULLIF(BTRIM(wa_id), '') IS NULL
-          AND NULLIF(BTRIM(user_id), '') IS NULL
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.historico_mensagens
-        WHERE NULLIF(BTRIM(wa_id), '') IS NULL
-          AND NULLIF(BTRIM(user_id), '') IS NULL
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.conversa
-        WHERE NULLIF(BTRIM(wa_id), '') IS NULL
-          AND NULLIF(BTRIM(user_id), '') IS NULL
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.cliente_bloqueado_meta
-        WHERE NULLIF(BTRIM(wa_id), '') IS NULL
-          AND NULLIF(BTRIM(user_id), '') IS NULL
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.webhook_flood_evento
-        WHERE NULLIF(BTRIM(wa_id), '') IS NULL
-          AND NULLIF(BTRIM(user_id), '') IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: registro operacional sem identidade.';
-    END IF;
-
-    IF EXISTS (
-        WITH atual AS (
-            SELECT 'cliente' AS tabela, COUNT(*)::BIGINT AS registros
-            FROM chatbot.cliente
-            UNION ALL
-            SELECT 'conversa', COUNT(*) FROM chatbot.conversa
-            UNION ALL
-            SELECT 'dependente', COUNT(*) FROM chatbot.dependente
-            UNION ALL
-            SELECT 'fila_mensagens', COUNT(*) FROM chatbot.fila_mensagens
-            UNION ALL
-            SELECT 'historico_mensagens', COUNT(*)
-            FROM chatbot.historico_mensagens
-            UNION ALL
-            SELECT 'respostas_desafios', COUNT(*)
-            FROM chatbot.respostas_desafios
-            UNION ALL
-            SELECT 'cliente_bloqueado_meta', COUNT(*)
-            FROM chatbot.cliente_bloqueado_meta
-            UNION ALL
-            SELECT 'webhook_flood_evento', COUNT(*)
-            FROM chatbot.webhook_flood_evento
-            UNION ALL
-            SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios
-        )
-        SELECT 1
-        FROM pg_temp.migracao_user_id_contagens AS antes
-        FULL JOIN atual AS depois USING (tabela)
-        WHERE antes.registros IS DISTINCT FROM depois.registros
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: contagem operacional mudou durante a migração.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM pg_temp.migracao_respostas_etapas AS antes
-        FULL JOIN chatbot.respostas_desafios AS depois
-          ON depois.id_resposta_desafio = antes.id_resposta_desafio
-        WHERE antes.id_resposta_desafio IS NULL
-           OR depois.id_resposta_desafio IS NULL
-           OR depois.id_etapa IS DISTINCT FROM antes.id_etapa + 1
-    ) OR EXISTS (
-        SELECT 1
-        FROM chatbot.respostas_desafios
-        WHERE id_etapa NOT BETWEEN 13 AND 18
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: respostas da triagem não foram remapeadas exatamente de 12..17 para 13..18.';
-    END IF;
-
-    SELECT COUNT(*)
-    INTO etapas_finais_corretas
-    FROM chatbot.etapa AS etapa
-    JOIN (
-        VALUES
-            (1,  'Saudação e nome do cliente',                         FALSE, 0,  FALSE),
-            (2,  'Compartilhamento oficial do contato',                FALSE, 0,  FALSE),
-            (3,  'Destino do atendimento',                             FALSE, 0,  FALSE),
-            (4,  'Confirmação do destino do atendimento',              FALSE, 0,  FALSE),
-            (5,  'Profissão do cliente',                               FALSE, 0,  FALSE),
-            (6,  'Nome do dependente',                                 FALSE, 0,  FALSE),
-            (7,  'Idade do aluno',                                     FALSE, 0,  FALSE),
-            (8,  'Oferta de aula experimental e avaliação cognitiva', FALSE, 0,  FALSE),
-            (9,  'Oferta adiada e Instagram',                          FALSE, 0,  FALSE),
-            (10, 'Confirmação de retorno ao atendimento',              FALSE, 0,  FALSE),
-            (11, 'Email',                                              FALSE, 0,  FALSE),
-            (12, 'Introdução à triagem cognitiva',                     FALSE, 0,  FALSE),
-            (13, 'Triagem cognitiva - pergunta 1',                     FALSE, 0,  FALSE),
-            (14, 'Triagem cognitiva - pergunta 2',                     FALSE, 0,  FALSE),
-            (15, 'Triagem cognitiva - pergunta 3',                     FALSE, 0,  FALSE),
-            (16, 'Triagem cognitiva - pergunta 4',                     FALSE, 0,  FALSE),
-            (17, 'Triagem cognitiva - pergunta 5',                     FALSE, 0,  FALSE),
-            (18, 'Triagem cognitiva - pergunta 6',                     FALSE, 0,  FALSE),
-            (19, 'Agendamento após a triagem cognitiva',               FALSE, 0,  TRUE),
-            (20, 'Pesquisa de satisfação - nota',                      FALSE, 0,  TRUE),
-            (21, 'Pesquisa de satisfação - opção de comentário',       FALSE, 0,  TRUE),
-            (22, 'Pesquisa de satisfação - comentário',                FALSE, 0,  TRUE),
-            (23, 'Finalização do atendimento',                         TRUE,  30, TRUE)
-    ) AS esperado(
-        id_etapa,
-        nome_etapa,
-        encerra_automaticamente,
-        bloqueio_dias,
-        elegivel_funil
-    )
-      ON etapa.id_etapa = esperado.id_etapa
-     AND etapa.nome_etapa = esperado.nome_etapa
-     AND etapa.encerra_automaticamente = esperado.encerra_automaticamente
-     AND etapa.bloqueio_dias = esperado.bloqueio_dias
-     AND etapa.elegivel_funil = esperado.elegivel_funil;
-
-    SELECT COUNT(*)
-    INTO transicoes_finais_corretas
-    FROM chatbot.etapa_transicao AS transicao
-    JOIN (
-        VALUES
-            (1,  'nome_cliente_valido_com_wa_id',          3),
-            (1,  'nome_cliente_valido_sem_wa_id',          2),
-            (2,  'contato_oficial_compartilhado',          3),
-            (3,  'destino_atendimento_definido',           4),
-            (4,  'destino_atendimento_confirmado',          5),
-            (5,  'profissao_dependente_valida',            6),
-            (5,  'profissao_titular_valida',               7),
-            (6,  'nome_dependente_valido',                 7),
-            (7,  'idade_valida',                           8),
-            (8,  'oferta_aceita',                         11),
-            (8,  'oferta_adiada',                          9),
-            (9,  'cliente_retornou',                      10),
-            (10, 'retorno_confirmado',                    11),
-            (10, 'retorno_adiado',                         9),
-            (11, 'email_valido',                          12),
-            (12, 'triagem_iniciada',                      13),
-            (13, 'triagem_pergunta_1_respondida',         14),
-            (14, 'triagem_pergunta_2_respondida',         15),
-            (15, 'triagem_pergunta_3_respondida',         16),
-            (16, 'triagem_pergunta_4_respondida',         17),
-            (17, 'triagem_pergunta_5_respondida',         18),
-            (18, 'triagem_pergunta_6_respondida',         19),
-            (19, 'agendamento_confirmado',                20),
-            (20, 'satisfacao_avaliada',                   21),
-            (21, 'comentario_satisfacao_aceito',          22),
-            (21, 'comentario_satisfacao_recusado',        23),
-            (22, 'comentario_satisfacao_recebido',        23)
-    ) AS esperado(id_etapa_origem, evento, id_etapa_destino)
-      ON transicao.id_etapa_origem = esperado.id_etapa_origem
-     AND transicao.evento = esperado.evento
-     AND transicao.id_etapa_destino = esperado.id_etapa_destino;
-
-    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 23
-       OR etapas_finais_corretas <> 23
-       OR (SELECT MIN(id_etapa) FROM chatbot.etapa) <> 1
-       OR (SELECT MAX(id_etapa) FROM chatbot.etapa) <> 23
-       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao) <> 27
-       OR transicoes_finais_corretas <> 27
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: conteúdo exato do catálogo/mapa divergente.';
-    END IF;
-
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.etapa
-        WHERE nome_etapa LIKE '__migracao_user_id_%'
-    ) THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: nome temporário permaneceu.';
-    END IF;
-
-    SELECT
-        (
-            SELECT COUNT(*)
-            FROM chatbot.conversa AS c
-            LEFT JOIN chatbot.etapa AS e
-              ON e.id_etapa = c.id_etapa_atual
-            WHERE c.id_etapa_atual IS NOT NULL
-              AND e.id_etapa IS NULL
-        ) AS conversa,
-        (
-            SELECT COUNT(*)
-            FROM chatbot.historico_mensagens AS h
-            LEFT JOIN chatbot.etapa AS e
-              ON e.id_etapa = h.id_etapa
-            WHERE h.id_etapa IS NOT NULL
-              AND e.id_etapa IS NULL
-        ) AS historico,
-        (
-            SELECT COUNT(*)
-            FROM chatbot.respostas_desafios AS r
-            LEFT JOIN chatbot.etapa AS e
-              ON e.id_etapa = r.id_etapa
-            WHERE e.id_etapa IS NULL
-        ) AS respostas
-    INTO referencias_invalidas;
-
-    IF referencias_invalidas.conversa <> 0
-       OR referencias_invalidas.historico <> 0
-       OR referencias_invalidas.respostas <> 0
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: referências de etapa inválidas.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_dequeue_final
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.dequeue_message()')
-      AND p.prokind = 'f'
-      AND p.pronargs = 0
-      AND p.proretset IS TRUE
-      AND p.prorettype = 'record'::REGTYPE
-      AND p.proargnames = ARRAY[
-          'id_mensagem',
-          'wa_id',
-          'user_id',
-          'username',
-          'conteudo_texto',
-          'tipo_mensagem',
-          'id_phone_unidade',
-          'unidade_telefone',
-          'received_data_hora',
-          'id_hash_msg',
-          'retry_count'
-      ]::TEXT[]
-      AND p.proargmodes = ARRAY[
-          't', 't', 't', 't', 't', 't', 't', 't', 't', 't', 't'
-      ]::"char"[]
-      AND p.proallargtypes = ARRAY[
-          'int4'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'text'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'timestamptz'::REGTYPE::OID,
-          'varchar'::REGTYPE::OID,
-          'int4'::REGTYPE::OID
-      ]::OID[];
-
-    IF corpo_dequeue_final IS NULL
-       OR POSITION('WITH NEXT_JOB AS' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('F.STATUS = ''PENDING''' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('F.NEXT_ATTEMPT_AT <= NOW()' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('F.STATUS = ''PROCESSING''' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('FOR UPDATE SKIP LOCKED' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('LIMIT 1' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('RETRY_COUNT = F.RETRY_COUNT + 1' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('PROCESSING_STARTED_AT = NOW()' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('< NOW() - INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
-       OR POSITION('INTERVAL ''2 MINUTES''' IN UPPER(corpo_dequeue_final)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: assinatura ou invariantes da dequeue divergentes.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_lock_final
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.lock_conversa(integer)')
-      AND p.prokind = 'f';
-
-    IF corpo_lock_final IS NULL
-       OR POSITION('STATUS_ATIVA IS TRUE' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('COALESCE(CONVERSA.PROCESSING, FALSE) IS FALSE' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('PROCESSING_STARTED_AT IS NOT NULL' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('< NOW() - INTERVAL ''110.0 SECONDS''' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('LOCK_VERSION = COALESCE' IN UPPER(corpo_lock_final)) = 0
-       OR POSITION('RETURN QUERY SELECT TRUE' IN UPPER(corpo_lock_final)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: lock_conversa não preserva o limiar de 110 segundos e a versão de posse.';
-    END IF;
-
-    SELECT p.prosrc
-    INTO corpo_unlock_final
-    FROM pg_proc AS p
-    WHERE p.oid = TO_REGPROCEDURE('chatbot.unlock_conversa(integer,integer)')
-      AND p.prokind = 'f';
-
-    IF corpo_unlock_final IS NULL
-       OR POSITION('PROCESSING IS TRUE' IN UPPER(corpo_unlock_final)) = 0
-       OR POSITION('LOCK_VERSION = P_LOCK_VERSION' IN UPPER(corpo_unlock_final)) = 0
-       OR POSITION('RETURN UPDATED_ROWS = 1' IN UPPER(corpo_unlock_final)) = 0
-    THEN
-        RAISE EXCEPTION
-            'Pós-validação falhou: unlock_conversa não protege a posse por lock_version.';
-    END IF;
-END
-$pos_validacao$;
-
-COMMIT;
-```
+`user_id`. As migrações de apresentação, profissão e
+`20260829_adicionar_suporte_idoso_email_obrigatorio.sql` são pré-condições e não
+são reaplicadas por este SQL.
+
+O comando normativo e integral está mantido em um único lugar: o **Passo 160
+(final)** de `docs/user_id_plano_logico_pratico.md`. Esta seção teórica define
+o contrato e os cuidados; o plano prático contém o SQL executável, seu SHA-256,
+preflight, snapshots, pós-validações e instruções operacionais. Essa fonte única
+evita que duas cópias extensas do mesmo artefato divirjam silenciosamente.
 
 Esse comando **não deve ser executado agora**. Antes da futura execução será
 comparado ao DDL efetivamente implementado e aplicado integralmente em um
@@ -4354,16 +2731,17 @@ isolado por linha. A implementação deve agrupá-los em poucas suítes
 parametrizadas: preservar A/B/C, acrescentar somente cenários controlados de
 identidade/handoff, bloqueio e dois workers, e evitar multiplicação combinatória
 de testes que repitam a mesma regra. O plano prático consolida essa cobertura nos
-cinco arquivos essenciais já definidos, com 68 métodos no total; esta lista não
-autoriza ampliar esse número automaticamente.
+suítes integrais enumeradas no plano prático; esta lista não autoriza criar
+variações redundantes da mesma regra.
 
-Três desses métodos formam uma prova diferencial explícita da V1.0.7: depois de
+Três desses métodos formam uma prova diferencial explícita da baseline: depois de
 normalizar a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles comparam o
 catálogo e o mapa legados, os textos e botões das 22 etapas existentes e o
 payload do Funil no caminho WA-only sem username. A comparação textual aceita
-exclusivamente os quatro deltas editoriais aprovados nas mensagens iniciais das
-etapas atuais 2, 10, 11 e 22, futuras 3, 11, 12 e 23; todos os botões e todos os
-demais textos devem permanecer idênticos à V1.0.7 `c248155`. Essa prova
+exclusivamente os deltas posteriores ao commit `2bc4188`: a mensagem e o CTA de
+suporte na etapa atual 6/futura 7, além do prefixo “Certo” e do botão “Começar
+triagem” na etapa atual 11/futura 12. Todos os demais textos e botões devem
+permanecer idênticos. Essa prova
 complementa os testes funcionais de destinatário, persistência, retry e turno;
 ela não autoriza copiar a implementação antiga nem enfraquecer os testes
 aditivos de `user_id`.
@@ -4627,6 +3005,16 @@ aditivos de `user_id`.
 - a pergunta reconstruída no retry é a mesma variante etária, relida do banco;
 - a migração preserva as seis respostas existentes e desloca seus IDs atuais
   12..17 para 13..18 sem colisão.
+- a futura etapa 7 preserva a precedência idade 100+ e só encaminha titular de
+  60–99 quando `suporte_idoso=TRUE`; dependente nunca entra nessa exceção;
+- o encaminhamento persiste a idade, encerra com
+  `encaminhado_suporte_idoso`, não bloqueia por 30 dias, não envia ao Funil e o
+  retry reconstrói a decisão pela resposta persistida;
+- a futura etapa 8 continua aceitando “quero” e variações curtas, mas rejeita
+  pedidos informativos como “quero mais informações” antes do padrão positivo;
+- a futura etapa 11 aplica a matriz de e-mail efetivamente obrigatório, mantém
+  mídia/reforço/financeiro prioritários, grava e-mail válido ou `NULL` de forma
+  absoluta e não reavalia a configuração da unidade no retry.
 
 ### 15.6 Arquitetura
 
@@ -4670,6 +3058,10 @@ aditivos de `user_id`.
 - os 12 textos canônicos de pergunta permanecem intactos; somente suas chaves
   mudam de 12..17 para 13..18;
 - o resumo quantitativo antigo por quantidade de alternativas não reaparece;
+- o e-mail do lead vem da resposta histórica da futura etapa 11 vinculada à
+  resposta `bot/sent` da etapa 12; e-mail válido preenche contato/observações,
+  ausência explícita vira “não tem” e outra resposta opcional vira “não
+  informado”, sem usar um cadastro global mais novo;
 - reconciliação não move nem altera `funil_envios` e não cria regra concorrente
   nova no `worker_funil`;
 - denylist, bloqueio temporário, bloqueio por dias e bloqueio Meta reconhecem
@@ -4696,13 +3088,45 @@ aditivos de `user_id`.
   prova WA/user coerente para `user_id_cliente` quando existir cliente canônico;
   falha parcial ou conflito preserva a linha;
 - models/Admin não quebram com WA ID nulo;
-- unidade exige e exibe `nome_unidade`, `nome_agente`, `genero` e `id_portfolio`,
-  usa `id_unidade__nome_unidade` nas relações e oferece filtro por gênero;
+- unidade exige e exibe `nome_unidade`, `nome_agente`, `genero`, `id_portfolio`,
+  `suporte_idoso` e `email_obrigatorio`, usa `id_unidade__nome_unidade` nas
+  relações, oferece os filtros aprovados e valida o número comercial pelo helper
+  compartilhado quando o suporte é ativado;
 - Admin de `user_id_cliente` é somente leitura.
+
+### 15.8 Saudação de retorno
+
+- exatamente três horas entre o último histórico `sent` do bot e o timestamp do
+  evento atual habilitam `Olá novamente, {nome}!`; duas horas, 59 minutos e 59
+  segundos não habilitam;
+- uma resposta válida depois do limiar mantém o mesmo evento, destino,
+  componentes e uma única chamada Meta, apenas com o prefixo no corpo normal;
+- uma entrada inválida depois do limiar mantém o mesmo tratamento e repete a
+  mesma etapa, também em uma única chamada e uma única linha de histórico;
+- etapa 1 ainda não concluída, nome ausente ou a própria mensagem que informa o
+  nome nunca recebem a saudação;
+- a fonte é o último histórico do bot com `status_envio='sent'` na mesma
+  `id_conversa`; mensagem do cliente, envio do bot não `sent` e conversa do
+  mesmo cliente em outra unidade não contaminam o cálculo;
+- o teste usa o timestamp do evento, não `NOW()` nem o momento do processamento,
+  e cobre item enfileirado com atraso superior a três horas sem falso positivo;
+- retry que já encontra resposta do bot sai antes da consulta/composição e não
+  chama sender nem cria novo histórico;
+- ausência de histórico elegível ou timestamp ausente/inválido/invertido
+  conserva integralmente a resposta sem prefixo; falha SQL propaga para o
+  rollback e o retry normais do worker;
+- quando elegível, transporte e histórico recebem o mesmo prefixo uma única
+  vez, preservando o corpo canônico que cada sender já enviava/persistia; não
+  há linha de histórico própria para a saudação;
+- a cobertura confirma que nenhum DDL, índice, etapa, evento, transição, commit,
+  rollback, retry, lock ou contador novo foi introduzido.
 
 ## 16. Sequência de deploy futura
 
-1. congelar e commitar a baseline definitiva derivada da V1.0.7 `c248155`;
+1. congelar e commitar a baseline definitiva derivada da V1.0.7 atualizada
+   `2bc4188`, preservando profissão, suporte/e-mail, saudação de retorno de três
+   horas, proteção contextual da oferta e o texto/CTA atual da introdução da
+   triagem;
 2. regenerar o apêndice de código completo deste plano;
 3. implementar em branch separada;
 4. executar testes unitários e de integração;
@@ -4727,9 +3151,12 @@ O plano só poderá ser aplicado se:
 - os nomes das colunas forem exatamente os da seção 5;
 - não existir `unidade.nome`, e `nome_unidade`, `nome_agente` e `genero`
   corresponderem exatamente aos tipos, à nulabilidade, aos dados e às quatro
-  constraints da V1.0.7 `c248155`;
+  constraints da baseline V1.0.7 atualizada `2bc4188`;
 - `id_portfolio` estiver escrito corretamente, obrigatório e preenchido em toda
   unidade;
+- `suporte_idoso` e `email_obrigatorio` permanecerem `BOOLEAN NOT NULL` com
+  defaults `FALSE` e `TRUE`, respectivamente, sem alteração dos valores por
+  unidade durante a migração;
 - `user_id_cliente` possuir PK técnica, duas unicidades, FKs e CHECK definidos
   neste plano;
 - WA ID explícito nunca sofrer alteração de dígitos;
@@ -4747,7 +3174,8 @@ O plano só poderá ser aplicado se:
 - WA ID for obrigatório para chegar ao funil;
 - somente a etapa especial 2 for adicionada sobre a baseline V1.0.7;
 - catálogo tiver 23 etapas e mapa 27 transições;
-- somente etapa 23 encerrar e bloquear por 30 dias;
+- somente etapa 23 encerrar e bloquear por 30 dias; o encerramento especial
+  `encaminhado_suporte_idoso` na futura etapa 7 permanece sem bloqueio;
 - etapa 23 não tiver resolver;
 - a confirmação futura 4 continuar aceitando exclusivamente `Sim`/`Não` e
   persistir o valor final absoluto de forma idempotente, sempre avançar para a
@@ -4757,6 +3185,13 @@ O plano só poderá ser aplicado se:
   as oito respostas completas fora de contexto após normalização, sem filtro
   por palavra isolada, e ser a única etapa que bifurca dependente para 6 ou
   titular para 7;
+- titular de 60–99 anos na futura etapa 7 respeitar `suporte_idoso`, idade 100+
+  manter precedência, dependente permanecer fora da exceção e o CTA terminal
+  persistir idade sem Funil ou bloqueio;
+- a oferta futura 8 preservar o aceite curto sem confundir pedidos de
+  informação com confirmação;
+- a coleta futura 11 preservar a matriz de e-mail opcional/obrigatório, a
+  prioridade dos tratamentos e a escrita absoluta de `cliente.email`;
 - contato oficial válido ser reconhecido antes dos tratamentos da etapa 2 e,
   nas entradas comuns, a prioridade permanecer mídia -> reforço -> financeiro
   -> contexto;
@@ -4765,7 +3200,8 @@ O plano só poderá ser aplicado se:
 - o catálogo compartilhado de triagem usar 13..18 e manter as variantes por
   idade e pessoa atendida;
 - o Funil exibir as seis perguntas/respostas ordenadas, nunca o resumo por
-  quantidade, e acrescentar username apenas quando existir;
+  quantidade, acrescentar username apenas quando existir e representar o e-mail
+  histórico da conversa sem consultar um valor global posterior;
 - nenhum sender usar username;
 - nenhum sender usar user ID quando WA ID lido do banco existir;
 - somente os resolvers dos envios da etapa 1 e do pedido/repetição de
@@ -4850,8 +3286,20 @@ O plano só poderá ser aplicado se:
 - mensagens, senders, validadores, resolvers e `flow_sender()` respeitarem as
   fronteiras da seção 7.5, sem SQL/commit fora das camadas transacionais;
 - `bot_resposta_atual()` e reagendamentos permanecerem intocados;
+- a saudação de retorno consultar somente o último histórico `sent` do bot na
+  mesma `id_conversa`, comparar com o timestamp do evento atual e usar limiar
+  inclusivo de três horas;
+- a própria mensagem que persiste o nome permanecer inelegível, e ausência de
+  nome ou etapa 1 ainda não concluída apenas omitirem o prefixo sem bloquear a
+  resposta, enquanto falha SQL conserva rollback e retry normais;
+- avanço válido e tratamento inválido conservarem uma única resposta, chamada
+  Meta e linha de histórico, com o retorno idempotente encerrado antes da
+  consulta/composição da saudação;
+- a saudação não exigir coluna, índice, migração, etapa, transição ou fronteira
+  transacional nova;
 - a espera de fila vazia permanecer em 1,5 segundo;
-- testes com os quatro fixtures e payloads reais passarem;
+- testes com os quatro fixtures e payloads reais, a matriz de suporte/e-mail e
+  a proteção da oferta passarem;
 - SQL de migração não apagar clientes, conversas, fila ou histórico;
 - em runtime, somente cliente estritamente provisório e sem referências ser
   excluído depois da reatribuição canônica comprovada.
@@ -4925,14 +3373,23 @@ a mesma pessoa depois da prova oficial. O handoff user ID -> WA ID, a conversa
 canônica anterior, o transporte pelos contextos e o fallback limitado do sender
 exigem os testes integrados listados antes de qualquer deploy.
 
+A saudação de retorno também permanece aditiva: depois de três horas ou mais
+desde o último envio `sent` do bot na mesma conversa, ela prefixa a resposta
+normal usando o nome já persistido, sem criar segunda mensagem ou alterar o
+fluxo. O timestamp do evento preserva a semântica diante de filas e retries; a
+barreira idempotente continua anterior à feature, dados opcionais ausentes
+apenas removem o prefixo e erros SQL mantêm o rollback/retry já existente.
+
 O único risco funcional conhecido e deliberadamente aceito continua sendo a
 janela rara entre o envio confirmado pela Meta e sua persistência final no banco,
 na qual um retry pode duplicar a resposta externa. A continuidade anti-flood não
 acrescenta um segundo risco aceito e elimina o reset de janela que a versão
 anterior deste plano tolerava.
 
-Sobre essa identidade nova, o comportamento funcional da V1.0.7 permanece
+Sobre essa identidade nova, o comportamento funcional da baseline atual permanece
 reconhecível: a apresentação inicial dinâmica por unidade é preservada nos
 quatro ramos, enquanto confirmação binária, tratamentos atuais, triagem por
 faixa etária, perguntas e respostas detalhadas no Funil e terminalidade de 30
-dias são apenas renumerados, nunca redesenhados.
+dias são apenas renumerados, nunca redesenhados. As políticas já aprovadas de
+suporte ao idoso, e-mail opcional/obrigatório, proteção da oferta, botão “Começar
+triagem”, profissão e saudação de retorno atravessam a aplicação sem regressão.

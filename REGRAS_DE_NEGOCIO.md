@@ -315,6 +315,29 @@ Implementação principal:
   ou mais usa a versão adulta com o nome persistido. O limite de entrada de 4
   anos em unidade com BPA e de 5 anos sem BPA continua pertencendo à validação
   de idade anterior à triagem.
+- Cada unidade possui as políticas `suporte_idoso`, desativada por padrão, e
+  `email_obrigatorio`, ativada por padrão. Esses defaults preservam o
+  comportamento das unidades existentes.
+- Na etapa 6, mídia, reforço escolar e financeiro continuam precedendo a
+  validação de idade. Idades a partir de 100 anos preservam o encerramento
+  existente. Depois dessas decisões, um titular de 60 a 99 anos em unidade com
+  `suporte_idoso = TRUE` recebe o contato comercial e tem a conversa encerrada
+  com `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio de 30
+  dias e sem envio ao Funil. A idade informada é persistida. Dependentes nunca
+  entram nessa exceção.
+- O Admin só permite ativar `suporte_idoso` quando `numero_comercial` puder ser
+  normalizado para um link brasileiro válido do WhatsApp.
+- Na etapa 10, mídia, reforço escolar e financeiro continuam precedendo a
+  coleta de e-mail. A exigência efetiva é a configuração da unidade, exceto
+  para o titular de 60 a 99 anos, cujo e-mail é universalmente opcional quando
+  o atendimento não tiver sido encerrado pelo suporte ao idoso. Dependentes
+  seguem exclusivamente a configuração da unidade.
+- Quando o e-mail é obrigatório, somente um endereço estruturalmente válido
+  avança. Quando é opcional, um endereço válido é salvo; ausência declarada ou
+  qualquer outra resposta comum aceita limpa `cliente.email` para `NULL` e
+  avança sem tratamento de e-mail. A classificação da resposta permanece
+  vinculada à conversa para que o Funil exiba `não tem` ou `não informado` sem
+  inventar um endereço.
 - A etapa 19 registra uma nota de satisfação de 1 a 5. Na etapa 20, o cliente
   escolhe se deseja comentar: a aceitação segue para a etapa 21 e a recusa
   salta diretamente para a etapa 22. A etapa 21 coleta o comentário. Nota e
@@ -343,11 +366,17 @@ Implementação principal:
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
-- O snapshot exige nome, telefone, e-mail, idade da pessoa atendida e as seis
-  respostas canônicas da triagem. A profissão da conversa é exibida nas
-  observações; o Funil não usa `cliente.profissao`, pois ela pode ter sido
-  atualizada por outro atendimento. Conversas legadas podem apresentar a
-  profissão como não informada.
+- O snapshot exige nome, telefone, idade da pessoa atendida e as seis respostas
+  canônicas da triagem. O e-mail pode estar ausente quando a política efetiva
+  da conversa o tornou opcional; nesse caso, o contato é enviado sem endereço
+  e as observações exibem `não tem` ou `não informado`, conforme a resposta.
+- O resultado de e-mail pertence à conversa que chegou ao Funil. Ele é
+  reconstruído pela mensagem do cliente na etapa 10 vinculada à resposta do
+  bot na etapa 11; uma conversa posterior não pode alterar esse snapshot por
+  meio do valor global de `cliente.email`.
+- A profissão da conversa é exibida nas observações; o Funil não usa
+  `cliente.profissao`, pois ela pode ter sido atualizada por outro atendimento.
+  Conversas legadas podem apresentar a profissão como não informada.
 - As observações apresentam as seis perguntas e suas respostas na ordem das
   etapas 12 a 17. O Funil usa o mesmo catálogo de perguntas do WhatsApp e não
   envia mais o resumo por quantidade de `Nunca`, `Às vezes` e
@@ -666,6 +695,31 @@ Depois de informar que uma resposta não foi compreendida ou aceita, o bot não
 deverá elogiar, confirmar entendimento nem pressupor que a conversa avançou.
 Essa regra vale para tratamentos de mídia, financeiro, contexto e qualquer
 tratamento futuro que reapresente conteúdo da etapa.
+
+### 11.7. Saudação de retorno após inatividade
+
+Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
+na mesma conversa pelo menos três horas após o último envio confirmado do bot
+deverá fazer a resposta começar com `Olá novamente, {nome}!`.
+
+O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
+evento atual do cliente com a última linha `sent` do bot no histórico da mesma
+`id_conversa`. A atividade do mesmo cliente em outra unidade ou conversa não
+participa desse cálculo. A própria mensagem em que o nome é informado na etapa
+1 ainda não recebe a saudação; a regra começa nas mensagens seguintes, quando o
+nome já está validado e persistido.
+
+A saudação é somente um prefixo da resposta que o fluxo já produziria:
+
+- resposta válida: saudação mais a mensagem da etapa resultante;
+- resposta inválida: saudação mais o tratamento e a repetição da etapa atual.
+
+Ela não cria etapa, evento de transição, envio separado nem uma segunda linha de
+histórico. A barreira idempotente continua sendo executada antes dos resolvers:
+se o retry já encontrar a resposta exata do bot persistida para aquela mensagem
+do cliente, nenhum novo envio ou prefixo será produzido. Nome, último envio ou
+timestamps ausentes/incompatíveis apenas desativam a saudação para aquele evento
+e nunca impedem a resposta normal do fluxo.
 
 ## 12. Flood, payload e assinatura
 
