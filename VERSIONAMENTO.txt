@@ -28,6 +28,9 @@ Commit: e052625d7707627a8c28945003ed2506c34e02d3
 V1.0.7 - Organização operacional e limpeza estrutural
 Commit: 2bc41888db4987e957c5653825acf4a55e9d611d
 
+V1.0.8 - Suporte idoso e e-mail configurável
+Commit: 62dca9a8c616f4682308c75600ab53a32d70c2db
+
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================
 

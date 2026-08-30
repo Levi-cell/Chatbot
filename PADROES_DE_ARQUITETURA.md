@@ -30,9 +30,9 @@ documentada antes da implementação.
 
 ## Modelo de execução da V1 e evolução para a V2
 
-Na V1, a implantação deverá manter uma única instância ativa do worker. Essa
-escolha atende ao volume inicial esperado, simplifica a operação e reduz o custo
-de infraestrutura enquanto o sistema atende poucas unidades.
+Na V1, a implantação mantém uma instância do `worker_flow` e uma instância
+independente do `worker_funil`, além do webhook. Cada serviço possui seu próprio
+ciclo de vida. Não se trata de um único processo que executa os dois workers.
 
 "Uma única instância ativa na V1" não deve ser confundida com a regra "um worker
 por conversa". A primeira é uma decisão operacional desta versão; a segunda é
@@ -86,6 +86,8 @@ core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
 core/cache        -> Redis, fallback e autocura detectável
 core/integrations -> comunicação com serviços externos
+core/triagem      -> catálogo puro compartilhado de perguntas
+core/validacoes   -> validação pura compartilhada de e-mail
 utilitarios       -> diagnóstico, monitoramento e manutenção manuais
 tests             -> testes, mocks, fakes e contratos
 ```
@@ -117,8 +119,13 @@ explica somente a responsabilidade e os contratos da sua camada:
 - [`core/integrations/README.md`](core/integrations/README.md): integrações externas;
 - [`core/integrations/whatsapp/README.md`](core/integrations/whatsapp/README.md):
   organização da integração Meta/PyWa.
-- [`_V2/desafios_v2.md`](_V2/desafios_v2.md): evolução de capacidade e desafios
-  técnicos previstos para a V2.
+- [`core/integrations/funil/README.md`](core/integrations/funil/README.md):
+  envio de oportunidades e contrato do lead;
+- [`utilitarios/README.md`](utilitarios/README.md): relatórios e comandos manuais;
+- [`deploy/README.md`](deploy/README.md): arquivos dos serviços e migrações.
+
+Os planos de evolução ficam separados em `docs/` e não descrevem, por si só,
+funcionalidades implementadas.
 
 READMEs locais não devem copiar regras completas. Eles apontam para
 `REGRAS_DE_NEGOCIO.md` quando uma decisão de produto precisa ser interpretada e
@@ -136,6 +143,7 @@ Responsabilidades permitidas:
 - funções SQL de repositório;
 - cache e fallback;
 - integrações externas;
+- validações puras reutilizadas e catálogos neutros de domínio;
 - configuração por ambiente;
 - configuração de logging;
 - exceções compartilhadas.
@@ -167,7 +175,12 @@ Não agrupe operações apenas pelo verbo SQL. Uma mesma entidade pode concentra
 consultas, inserções, atualizações e exclusões relacionadas ao seu contrato.
 
 DDL, criação de funções PostgreSQL e preparação de ambiente pertencem a
-`core/database/deploy_database/`, não aos repositórios de runtime.
+`core/database/deploy_database/`; migrações incrementais versionadas ficam em
+`deploy/migrations/`. Nenhuma das duas áreas é repositório de runtime.
+
+Os relatórios manuais em `utilitarios/reports_functions/` possuem consultas
+analíticas próprias, somente leitura. Essa fronteira não autoriza mover SQL de
+persistência do chatbot para os utilitários nem importá-los nos serviços.
 
 ### Contrato das funções SQL
 
@@ -217,10 +230,11 @@ A transação de enfileiramento pertence a:
 callback/webhook/services/post_flow.py
 ```
 
-As transações independentes do anti-flood pertencem a:
+As transações independentes dos controles de abuso pertencem aos serviços:
 
 ```text
 callback/webhook/services/flood_guard.py
+callback/webhook/services/bloqueio_meta_guard.py
 ```
 
 O módulo `populating_fila_mensagens.py` prepara, valida e insere usando o cursor
@@ -289,8 +303,9 @@ Responsabilidades:
 - confirmar `lead_no_funil` e `funil_envios = sent` no mesmo commit local;
 - recuperar reservas abandonadas por lease.
 
-`funil_worker.py` é o processo duradouro: executa ciclos isolados, agenda uma
-hora entre ciclos bem-sucedidos e recupera indisponibilidade operacional do
+`funil_worker.py` é o processo duradouro: executa ciclos isolados, aguarda o
+intervalo `FUNIL_INTERVALO_SEGUNDOS` (padrão: 1.800 segundos, ou 30 minutos)
+entre ciclos bem-sucedidos e recupera indisponibilidade operacional do
 banco com espera linear de 5 em 5 segundos, limitada a 60. O arquivo
 `iniciar_worker_funil.py` forma o laço supervisor externo; somente uma falha
 crítica que escape do worker chega nele, provocando a recriação do worker após
@@ -325,9 +340,10 @@ Contém orquestração de respostas:
   origem e destinos permitidos no contexto histórico;
 - `transicoes/resolver_transicao.py`: resolução de
   `origem + evento -> destino`;
-- `transacoes/movimento_conversa.py`: inicialização, transição ou permanência;
-- `transacoes/efeitos_transicao.py`: efeitos de banco específicos de cada
-  aresta autorizada.
+
+Na pasta irmã `workers/worker_flow/transacoes/` ficam
+`movimento_conversa.py` (inicialização, transição ou permanência) e
+`efeitos_transicao.py` (efeitos de banco de cada aresta autorizada).
 
 Esses arquivos podem escolher qual integração chamar, mas não devem criar cliente
 PyWa, montar `Button` ou manter textos de saída.
@@ -337,6 +353,15 @@ as transições permitidas para a origem e transporta a decisão no contexto. A
 persistência final revalida a mesma aresta no PostgreSQL antes do commit.
 
 Tratamentos não produzem evento de transição e permanecem na etapa atual.
+
+Contextos específicos de idade e e-mail são carregados pelos repositórios. Os
+resolvers aplicam as políticas da unidade, e os efeitos transacionais persistem
+a decisão. A validação de formato de e-mail é pura e compartilhada em
+`core/validacoes/email.py`; não depende de um resolver ou do Funil.
+
+O prefixo de retorno após três horas é preparado com o histórico persistido e
+aplicado pelo `flow_sender` somente depois da barreira de idempotência, no escopo
+do resolver corrente. Não muda o destino nem autoriza um novo envio no replay.
 
 ### Escolha entre validador universal e contextual
 
@@ -477,11 +502,8 @@ solicitada, mas não escolhem a política de retry.
 
 Toda integração externa compartilhada pertence a `core/integrations/<serviço>/`.
 
-Exemplos de serviços:
-
-- `whatsapp`;
-- `google`;
-- `funil`.
+As integrações implementadas são `whatsapp` e `funil`. A pasta `google/` não
+possui integração de runtime implementada.
 
 Uma integração deve:
 
@@ -522,8 +544,8 @@ Não pode conter:
 - decisão de retry, lock ou etapa persistida.
 
 Novos textos não devem ser escritos diretamente no worker ou em
-`pywa_functions`. Organize-os por responsabilidade, como `etapas.py` e
-`tratamentos.py`.
+`pywa_functions`. Organize-os por responsabilidade, como
+`etapa<n>_messages.py` e `tratamentos_universais.py`.
 
 Componentes compartilhados por um grupo de etapas podem possuir um helper
 próprio. `triagem_componentes.py`, por exemplo, atende exclusivamente às etapas
@@ -543,8 +565,10 @@ não pertencem a esse módulo.
 
 Componentes visuais usados por diferentes etapas pertencem a
 `componentes_compartilhados.py`. Esse helper pode armazenar textos comuns e
-funções puras de composição, mas não pode conhecer cliente, conversa, evento ou
-destino.
+funções puras de composição. A saudação de retorno recebe nome, etapa e horários
+já carregados pelo chamador; não consulta histórico, não altera conversa e não
+escolhe evento ou destino. Usar esses valores para formatar o texto não transfere
+ao helper a decisão de fluxo.
 
 Na PyWa utilizada pelo projeto, `header` e `footer` só são enviados quando a
 mensagem possui botões e se torna interativa. Em mensagens de texto simples,
@@ -565,14 +589,15 @@ Meta nesses casos.
 
 ### `pywa_functions`
 
-É o único local permitido para chamadas diretas à biblioteca PyWa.
+Concentra a criação do cliente PyWa e o transporte de mensagens do atendimento.
+As operações compartilhadas de bloqueio/desbloqueio atualmente ficam em
+`tools/usuarios.py` e reutilizam a mesma fábrica de cliente.
 
 Responsabilidades:
 
 - criar o cliente `WhatsApp`;
 - criar tipos PyWa, como `Button`;
 - chamar `send_message`;
-- bloquear, desbloquear e consultar usuários na Meta via PyWa;
 - extrair IDs retornados;
 - produzir o contexto de envio esperado pelo worker;
 - converter falhas de envio para `ErroEnvioMeta` quando aplicável.
@@ -592,17 +617,16 @@ mensagem e produz o contexto de envio. Os senders públicos de cada etapa
 continuam responsáveis pelo conteúdo e o helper-base não pode validar respostas,
 produzir eventos ou escolher destinos.
 
-Separação interna recomendada:
+Separação interna atual:
 
 - `cliente.py`: criação e normalização do cliente;
-- `envios.py`: primitivas genéricas de envio;
-- `etapas.py`: envios específicos de etapas;
-- `tratamentos_type.py`: envios de tratamento para mídia ou tipo não suportado;
-- `tratamentos_context.py`: envios de tratamento para resposta fora do contexto
-  da etapa;
-- `tratamentos_financeiros.py`: envios de tratamento para dúvidas sobre valor,
-  custo ou investimento;
-- `usuarios.py`: bloqueio, desbloqueio e consulta de usuários.
+- `resposta_envio.py`: normalização da confirmação e do ID de envio;
+- `saudacao.py`: saudação inicial;
+- `pywa_senders/etapa<n>.py`: envios normais e tratamentos da respectiva etapa;
+- `pywa_senders/triagem_base.py`: transporte comum das seis perguntas.
+
+`cliente.py` também mantém o escopo temporário do prefixo de retorno, restaurado
+mesmo sob exceção. O texto enviado e o texto persistido devem permanecer iguais.
 
 ### `tools`
 
@@ -610,9 +634,10 @@ Dentro de uma integração, contém operações administrativas que pertencem ao
 domínio daquela integração e são reutilizadas pelo Django Admin, como ativação
 de número e inscrição do WABA.
 
-Um `tool` não deve se tornar dependência do webhook ou dos workers. Quando uma
-operação é reutilizada por esses runtimes, mova a implementação para a camada
-apropriada e faça o `tool` e os orquestradores chamarem essa primitiva.
+Na estrutura atual há também primitivas compartilhadas: `usuarios.py` é usado
+pelo webhook e Admin, e `config.py` pela fábrica de cliente. Portanto, essa pasta
+não é exclusivamente administrativa. Essas primitivas não decidem retry,
+admissão, persistência ou transações; tais decisões continuam nos chamadores.
 
 Comandos iniciados conscientemente por uma pessoa apenas para diagnóstico,
 monitoramento, manutenção ou probe pertencem à pasta `utilitarios`, não a
@@ -681,8 +706,9 @@ desenvolvimento já delimitadas.
 - documentar apenas os nomes das variáveis, nunca seus valores secretos;
 - manter `.env` fora do Git;
 - IDs públicos e limites podem ser constantes quando não forem segredos;
-- mudanças de configuração não devem alterar fluxo, fila, histórico ou regra de
-  negócio;
+- configurações de infraestrutura não devem alterar silenciosamente regras de
+  negócio; políticas explícitas da unidade, como `suporte_idoso` e
+  `email_obrigatorio`, são lidas e aplicadas pelos contextos e resolvers próprios;
 - testes devem usar valores fictícios e nunca credenciais reais.
 
 ## Testes
@@ -694,7 +720,6 @@ Estrutura atual:
 ```text
 tests/
 ├── helpers.py
-├── payloads.py
 └── unit/
     └── test_*.py
 ```
@@ -713,7 +738,7 @@ Regras:
 Comando padrão:
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -p "test_*.py" -v
 ```
 
 Fluxos críticos que não podem perder cobertura:
@@ -727,7 +752,8 @@ Fluxos críticos que não podem perder cobertura:
 - `last_message_from` semântico;
 - fallback e autocura de cache;
 - transações de worker e webhook;
-- bloqueio/desbloqueio Meta-first.
+- intenção local antes dos bloqueios automáticos e desbloqueio administrativo
+  Meta-first.
 
 ## Nomes e organização de arquivos
 
@@ -776,7 +802,8 @@ Use esta sequência:
 2. Abre ou prepara infraestrutura de banco? `core/database`.
 3. Gerencia cache ou fallback de cache? `core/cache`.
 4. Chama serviço externo compartilhado? `core/integrations/<serviço>`.
-5. Chama diretamente PyWa? `core/integrations/whatsapp/pywa_functions`.
+5. Envia mensagens com PyWa? `core/integrations/whatsapp/pywa_functions`;
+   bloqueio/desbloqueio reutiliza `core/integrations/whatsapp/tools/usuarios.py`.
 6. Define texto ou callback do WhatsApp? `messages`.
 7. Trata entrada HTTP? `callback/webhook`.
 8. Decide processamento assíncrono ou etapa? `workers`.
@@ -806,7 +833,7 @@ Durante a implementação:
 Depois da implementação:
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -p "test_*.py" -v
 python -m compileall core workers callback tests
 python callback/manage.py check
 git diff --check
@@ -815,7 +842,7 @@ git diff --check
 Também confira:
 
 - imports antigos removidos;
-- chamadas PyWa apenas em `pywa_functions`;
+- envios PyWa em `pywa_functions` e operações de usuários na primitiva compartilhada;
 - textos de WhatsApp apenas em `messages`;
 - SQL e transações nas camadas corretas;
 - nenhum segredo novo no diff;

@@ -154,6 +154,39 @@ Flags principais:
 O PDF depende do ReportLab; o HTML é autocontido e pode ser aberto offline no
 navegador.
 
+### Perfis de atendimento nos PDFs
+
+Os PDFs semanal e total compartilham os mesmos indicadores por perfil:
+
+- dependentes de 4 a 17 anos com BPA ativo, ou de 5 a 17 sem BPA;
+- dependentes de 18 a 59 anos e dependentes com 60 anos ou mais;
+- titulares de 18 a 59 anos e titulares com 60 anos ou mais.
+
+Cada faixa mostra clientes únicos, conversas, leads enviados ao funil e taxa de
+envio. A idade usada é a da pessoa atendida: `cliente.idade` no atendimento
+próprio; `dependente.idade` ligado à mesma conversa e cliente no atendimento
+para dependente. Dados ausentes, inválidos ou fora dessas faixas ficam em
+contadores explícitos de não classificados. Não há dupla contagem aos 18/60
+anos. Um cliente pode representar pessoas de perfis diferentes; por isso, não
+se somam as linhas para obter o total geral de leads.
+
+O funil usa somente `funil_envios.status = 'sent'`, com `enviado_em` no período,
+para clientes que entraram em contato na janela, atribuindo cada envio à sua
+própria conversa. Um retry confirmado de conversa sem mensagens na janela
+também entra nos perfis, mas não acrescenta mensagens antigas ao HTML. O envio
+não equivale a agendamento, venda ou posição atual no CRM.
+
+Com `suporte_idoso` ativo, a linha de titulares 60+ exibe “Não se aplica” e
+explica o encaminhamento ao comercial (zero envios esperado pela política
+atual). Eventuais envios reais permanecem no total geral e são sinalizados
+separadamente: ativar a política hoje não apaga fatos anteriores. As idades e
+configurações são as disponíveis na extração; o relatório não inventa um
+histórico de alterações de idade ou de BPA/suporte ao idoso.
+
+O PDF inclui cobertura de classificação, participação na satisfação,
+distribuição das notas, comentários com profissão e relação nominal dos leads.
+Os HTMLs de conversas continuam separados e com a mesma finalidade anterior.
+
 ## Consultas e alteração manual do PIN Meta
 
 Os três comandos abaixo usam `utilitarios/local_settings.py` no Windows. Na VM,

@@ -139,9 +139,12 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 - Na baseline V1.0.7 derivada de
   `2bc41888db4987e957c5653825acf4a55e9d611d`,
   `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna
-  `VARCHAR(100) NOT NULL` de `unidade`.
-- O “mapa de `id_portfolio`” não é outra tabela: é somente a lista de pares `(id_unidade, id_portfolio)` usada para preencher cada unidade que já existe antes de aplicar `NOT NULL`.
-- O valor de portfolio de cada unidade precisa ser conferido com a Meta. O gate detecta unidade ausente ou valor vazio, mas não consegue provar que um número não vazio pertence semanticamente à unidade correta.
+  `VARCHAR(100) NULL` opcional de `unidade`, destinada somente a consultas de
+  monitoramento e auditoria.
+- Não existe mapa nem backfill obrigatório de `id_portfolio`: unidades já
+  existentes recebem `NULL`, que significa “não cadastrado”. Quando houver um
+  valor, ele deve ser conferido com a Meta e não pode ser vazio ou composto
+  apenas por espaços; o sistema nunca o infere pelo WABA ou phone ID.
 - Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
 - Novas colunas opcionais de `user_id` e `username` começam `NULL` nos registros antigos. Colunas de WA ID apenas renomeadas preservam seus dados.
 - `conversa.profissao VARCHAR(100) NULL`, `cliente.profissao VARCHAR(100) NULL`
@@ -149,7 +152,10 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
   V1.0.7. Depois de confirmar esse pré-requisito no banco, a migração de `user_id`
   fotografa os dois conjuntos de valores e prova no pós-flight que nenhum
   cadastro ou snapshot foi alterado; não existe `ADD COLUMN profissao` nesse SQL.
-- Há duas exceções deliberadas ao “tudo novo fica NULL”: `unidade.id_portfolio` é preenchida e torna-se obrigatória; `conversa.wa_id` é preenchida a partir do WA canônico do cliente para que conversas antigas continuem enviando com identidade canônica.
+- A exceção deliberada ao “tudo novo fica NULL” é `conversa.wa_id`, preenchida a
+  partir do WA canônico do cliente para que conversas antigas continuem
+  enviando com identidade canônica. `unidade.id_portfolio` permanece `NULL` até
+  ser cadastrado para fins de consulta ou auditoria.
 - `chatbot.user_id_cliente` nasce vazia: não existe `user_id` histórico confiável para inventar ou retropreencher.
 - `suporte_idoso`, `email_obrigatorio` e seus valores atuais são fotografados no
   preflight e provados no pós-flight; a migração de `user_id` não os recria,
@@ -1723,7 +1729,7 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `c28622e3c85ee8ef98d46fadc1f41f79acf9cfdf14ba2913cdc228b351a866c7`
+SHA-256 do conteúdo UTF-8 normalizado: `f39bd673ec263abd3d96920de1b9f3078a3827f6240bf21a1cfae85c7f02b02f`
 
 ````python
 from django.db import models
@@ -2041,7 +2047,11 @@ class Unidade(models.Model):
         blank=True,
         null=True,
     )
-    id_portfolio = models.CharField(max_length=100)
+    id_portfolio = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+    )
     bpa_ativo = models.BooleanField(default=False)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
 
@@ -2239,7 +2249,7 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d8c391dc930b10cef50c78a815234819028a0b62f632dd429f76a81908524c58`
+SHA-256 do conteúdo UTF-8 normalizado: `4138325cfab7831cfe573c317e833f213154fe0054869b1575d89439e4ddfabf`
 
 ````python
 import logging
@@ -2437,7 +2447,7 @@ def criar_tabelas():
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE NOT NULL,
             link_instagram VARCHAR(400),
-            id_portfolio VARCHAR(100) NOT NULL,
+            id_portfolio VARCHAR(100) NULL,
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
 
@@ -2454,7 +2464,10 @@ def criar_tabelas():
                 CHECK (genero IN ('masculino', 'feminino')),
 
             CONSTRAINT ck_unidade_id_portfolio_nao_vazio
-                CHECK (BTRIM(id_portfolio) <> '')
+                CHECK (
+                    id_portfolio IS NULL
+                    OR BTRIM(id_portfolio) <> ''
+                )
         );
 
         CREATE INDEX IF NOT EXISTS idx_unidade_id_portfolio
@@ -21791,7 +21804,7 @@ def _logar_tratamento_texto(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `fc61e46a74100ed14fa9d5e74053bb9bfe710acbd9b7a5d1ed2b268b2840a012`
+SHA-256 do conteúdo UTF-8 normalizado: `cb436c5885644473ee5b9796c9747b5a533f071c97763b226991632ad2e56a07`
 
 ````python
 import logging
@@ -21858,10 +21871,10 @@ def resolve_etapa10(contexto_historico):
     """
     Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
 
-    retorno_confirmado resolve 9 -> 10.
-    retorno_adiado resolve 9 -> 8.
+    retorno_confirmado resolve 10 -> 11.
+    retorno_adiado resolve 10 -> 9.
 
-    As etapas 8 e 10 possuem senders reais.
+    As etapas 9 e 11 possuem senders reais.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -22250,7 +22263,7 @@ def _logar_tratamento_texto(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `2bd36afb670c950ce12ad55af394d0741f2366f7ed2064e46bbce075c8e1d83e`
+SHA-256 do conteúdo UTF-8 normalizado: `256d7c2eef958e81b36e86127d585f149cb696432fd643150117646079f86a3f`
 
 ````python
 import logging
@@ -22310,7 +22323,7 @@ def resolve_etapa12(contexto_historico):
     """Valida a confirmação antes de iniciar a triagem cognitiva.
 
     Mídia, financeiro e confirmação inválida recebem tratamento sem avançar.
-    Somente uma confirmação reconhecida produz a transição 11 -> 12.
+    Somente uma confirmação reconhecida produz a transição 12 -> 13.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -24572,7 +24585,7 @@ def _logar_tratamento(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d32cbad26df605437b853966d3eb5c08a7a065e26fbc3d6e9a817b5f8110727f`
+SHA-256 do conteúdo UTF-8 normalizado: `3be5a8f8685c095c16a08d736c0564d6e6faa7e90c95069482f8fa8ba686c952`
 
 ````python
 import logging
@@ -24630,7 +24643,7 @@ def resolve_etapa6(contexto_historico):
     """
     Mídia, financeiro e nome inválido recebem tratamento sem avançar.
 
-    Nome válido resolve 5 -> 6, envia a etapa 7 e carrega o primeiro nome do
+    Nome válido resolve 6 -> 7, envia a etapa 7 e carrega o primeiro nome do
     dependente para a persistência transacional.
     """
     id_conversa = contexto_historico["id_conversa"]
@@ -25128,7 +25141,7 @@ def _logar_tratamento(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `004fbd706fca51bbbfb2edf338c413aa0fccdf157ee8674d1fc1ec2197da2885`
+SHA-256 do conteúdo UTF-8 normalizado: `25d07ee52ae87874218d6275dcfafbf2d6e46ed20be1df29bc104c68d6a168d0`
 
 ````python
 import logging
@@ -25195,10 +25208,10 @@ def resolve_etapa8(contexto_historico):
     """
     Mídia, financeiro e contexto inválido recebem tratamento sem avançar.
 
-    oferta_aceita resolve 7 -> 10.
-    oferta_adiada resolve 7 -> 8.
+    oferta_aceita resolve 8 -> 11.
+    oferta_adiada resolve 8 -> 9.
 
-    As etapas 8 e 10 possuem senders reais.
+    As etapas 9 e 11 possuem senders reais.
     """
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
@@ -39431,7 +39444,9 @@ WHERE table_schema = 'chatbot'
 ORDER BY table_name;
 ```
 
-- Se `id_portfolio_ja_existe = false`, confirmar manualmente todos os pares usados no mapa do SQL final. O mapa preparado contém a unidade conhecida na baseline, mas deverá coincidir com a lista real no momento do deploy.
+- Se `id_portfolio_ja_existe = false`, seguir normalmente: a migração criará a
+  coluna anulável e as unidades existentes permanecerão com `NULL`, sem mapa ou
+  backfill obrigatório.
 - Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome_unidade, nome_agente, genero, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
 - Se as duas linhas de profissão da consulta não forem exatamente
   `VARCHAR(100)`, anuláveis e sem default, parar: o banco não corresponde à
@@ -39492,14 +39507,15 @@ Pré-condições obrigatórias:
 - parar webhook, worker-flow e worker-funil e confirmar os três como `inactive`;
 - criar snapshot do RDS após a parada e aguardar `Disponível`;
 - confirmar servidor, database e usuário corretos no DBeaver;
-- confirmar novamente o mapa integral de `id_portfolio` para as unidades reais;
+- confirmar que `id_portfolio` ainda não existe; nenhum valor precisa ser
+  levantado ou preenchido para executar a migração;
 - executar em UTF-8, como script integral, preservando `BEGIN`/`COMMIT`;
 - não religar serviços até publicar exatamente o código deste plano prático;
 - considerar sucesso somente sem `ERROR`, com `COMMIT` e todas as validações finais aprovadas.
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `2294a71be5b1946d8a8f2979d75392791c49e340e6e725244f20be97621cc69e`
+SHA-256 do SQL UTF-8 normalizado: `3f6c3c8f2d301a1fd350850d60387f50728220225948cd225a1506f3b9bcffa3`
 
 ````sql
 BEGIN;
@@ -40105,35 +40121,6 @@ SELECT
     profissao
 FROM chatbot.conversa;
 
--- Mapa explícito do estado atual. Antes do deploy, revisar este bloco e incluir
--- exatamente uma linha para cada unidade existente. Não inferir pelo WABA.
-CREATE TEMP TABLE migracao_portfolios (
-    id_unidade INTEGER PRIMARY KEY,
-    id_portfolio VARCHAR(100) NOT NULL,
-    CONSTRAINT ck_migracao_portfolio_nao_vazio
-        CHECK (BTRIM(id_portfolio) <> '')
-) ON COMMIT DROP;
-
-INSERT INTO pg_temp.migracao_portfolios (id_unidade, id_portfolio)
-VALUES
-    (1, '1227425428614580');
-
-DO $validar_mapa_portfolios$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM chatbot.unidade AS unidade
-        FULL JOIN pg_temp.migracao_portfolios AS mapa
-          ON mapa.id_unidade = unidade.id_unidade
-        WHERE unidade.id_unidade IS NULL
-           OR mapa.id_unidade IS NULL
-    ) THEN
-        RAISE EXCEPTION
-            'Migração recusada: mapa de id_portfolio não cobre exatamente todas as unidades.';
-    END IF;
-END
-$validar_mapa_portfolios$;
-
 CREATE TEMP TABLE migracao_user_id_contagens
 ON COMMIT DROP
 AS
@@ -40197,16 +40184,10 @@ ALTER TABLE chatbot.cliente_bloqueado_meta
     RENAME CONSTRAINT uq_cliente_bloqueado_meta_wa_unidade
     TO uq_cliente_bloqueado_meta_wa_id_unidade;
 
+-- Campo opcional de monitoramento e auditoria; registros existentes nascem
+-- NULL e seu preenchimento não participa da identidade nem do fluxo online.
 ALTER TABLE chatbot.unidade
     ADD COLUMN id_portfolio VARCHAR(100) NULL;
-
-UPDATE chatbot.unidade AS unidade
-SET id_portfolio = mapa.id_portfolio
-FROM pg_temp.migracao_portfolios AS mapa
-WHERE mapa.id_unidade = unidade.id_unidade;
-
-ALTER TABLE chatbot.unidade
-    ALTER COLUMN id_portfolio SET NOT NULL;
 
 -- cliente.profissao já foi exigida pelo preflight e é preservada sem ADD ou
 -- backfill; somente username e a nulabilidade do WA ID pertencem a este delta.
@@ -40281,7 +40262,10 @@ WHERE cliente.id_cliente = conversa.id_cliente
 
 ALTER TABLE chatbot.unidade
     ADD CONSTRAINT ck_unidade_id_portfolio_nao_vazio
-    CHECK (BTRIM(id_portfolio) <> '');
+    CHECK (
+        id_portfolio IS NULL
+        OR BTRIM(id_portfolio) <> ''
+    );
 
 ALTER TABLE chatbot.conversa
     DROP CONSTRAINT ck_conversa_motivo_encerramento,
@@ -40696,6 +40680,7 @@ BEGIN
             ('cliente',                 'wa_id',         50),
             ('cliente',                 'username',     255),
             ('cliente',                 'profissao',    100),
+            ('unidade',                 'id_portfolio', 100),
             ('fila_mensagens',          'wa_id',         50),
             ('fila_mensagens',          'user_id',      255),
             ('fila_mensagens',          'username',     255),
@@ -40738,7 +40723,6 @@ BEGIN
             ('unidade',          'nome_unidade',      'character varying', 300),
             ('unidade',          'nome_agente',       'character varying', 100),
             ('unidade',          'genero',            'character varying',   9),
-            ('unidade',          'id_portfolio',       'character varying', 100),
             ('user_id_cliente',  'id_user_id_cliente', 'bigint',            NULL),
             ('user_id_cliente',  'id_cliente',         'integer',           NULL),
             ('user_id_cliente',  'user_id',            'character varying', 255),
@@ -40849,7 +40833,10 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM chatbot.unidade
-        WHERE NULLIF(BTRIM(id_portfolio), '') IS NULL
+        WHERE (
+                  id_portfolio IS NOT NULL
+                  AND BTRIM(id_portfolio) = ''
+              )
            OR nome_unidade !~ '[^[:space:]]'
            OR nome_agente !~ '[^[:space:]]'
            OR genero NOT IN ('masculino', 'feminino')

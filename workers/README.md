@@ -29,6 +29,7 @@ workers/
 │   │       └── resolver_transicao.py
 │   ├── transacoes/
 │   │   ├── efeitos_transicao.py
+│   │   ├── encerramento_atendimento.py
 │   │   ├── persistencia_resposta.py
 │   │   ├── movimento_conversa.py
 │   │   ├── finalizacao_fila.py
@@ -43,12 +44,8 @@ workers/
 │   ├── funil_worker.py
 │   ├── processamento.py
 │   └── exceptions.py
-├── tratamento_erros_externos/
-└── challenge_template.py
+└── tratamento_erros_externos/
 ```
-
-`challenge_template.py` é apoio operacional e não participa do ciclo principal
-do worker.
 
 ## Ciclo principal
 
@@ -160,6 +157,46 @@ escolhem entre arestas diferentes. Quando uma resposta pode gerar destinos
 distintos, o validador é contextual e devolve diretamente o evento daquela
 origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
 
+### Regras atuais das etapas
+
+- Etapa 4: profissão válida é persistida em `conversa.profissao` e atualiza
+  também `cliente.profissao`. O snapshot da conversa preserva o atendimento
+  anterior quando o cadastro do cliente muda.
+- Etapa 6: `suporte_idoso=True` encaminha somente o próprio titular entre 60 e
+  99 anos ao número comercial da unidade. O worker persiste a idade e encerra
+  na própria etapa 6 com `encaminhado_suporte_idoso`, sem bloqueio de dias.
+  Dependentes não entram nessa regra; idade de 100 anos ou mais conserva o
+  encerramento próprio por idade inválida. Com suporte desativado, o titular
+  de 60 a 99 anos segue para a oferta.
+- Etapa 7: confirmações de aceite geram `oferta_aceita` (`7 -> 10`);
+  `Talvez mais tarde` gera `oferta_adiada` (`7 -> 8`). Pedidos como
+  `quero mais informações` ou `quero saber mais` não são aceite; assim como
+  negativas livres, recebem tratamento sem avançar.
+- Etapa 10: a política parte de `email_obrigatorio` da unidade, mas o próprio
+  titular de 60 a 99 anos fica dispensado quando chega a essa etapa. A exceção
+  não se aplica ao dependente nem à idade do responsável. Mídia, reforço e
+  financeiro são tratados antes da coleta. Com e-mail opcional, a resposta
+  pode avançar como endereço válido, ausência declarada ou não informado;
+  os três casos usam `email_valido` (`10 -> 11`). Sem endereço, o efeito grava
+  `cliente.email = NULL`, sem manter um e-mail de atendimento anterior.
+
+No retry já respondido, o resultado aceito do e-mail e o encaminhamento de
+suporte são reconstruídos pelo histórico original, sem nova chamada à Meta
+nem reavaliação da decisão pela configuração atual da unidade.
+
+### Saudação de retorno
+
+Após a etapa 1, `valida_historico.py` compara o horário da mensagem atual do
+cliente com o último envio do bot confirmado como `sent` na mesma conversa.
+Com intervalo de pelo menos três horas e nome disponível, `flow_sender.py`
+prefixa a resposta com `Olá novamente, <nome>!`, inclusive quando ela é um
+tratamento. O texto enviado e o histórico recebem o mesmo prefixo uma vez.
+
+Essa saudação não é follow-up nem disparo por inatividade: depende de uma nova
+mensagem do cliente, não cria mensagem separada e não altera a transição. A
+etapa 1, dados de nome/data ausentes ou incompatíveis e retries com resposta
+persistida não geram uma nova saudação.
+
 ## Persistência de transições
 
 As responsabilidades estão divididas assim:
@@ -168,7 +205,9 @@ As responsabilidades estão divididas assim:
 - `transacoes/movimento_conversa.py`: classifica e persiste inicialização,
   transição ou permanência;
 - `transacoes/efeitos_transicao.py`: exibe cada ponte como
-  `origem + evento -> destino` e grava seus efeitos específicos.
+  `origem + evento -> destino` e grava seus efeitos específicos;
+- `transacoes/encerramento_atendimento.py`: resolve e aplica encerramentos,
+  inclusive a reconstrução do encaminhamento ao suporte no retry.
 
 Fluxo:
 
@@ -187,7 +226,8 @@ cursor e não controlam a transação.
 `fila_mensagens`, não envia WhatsApp e não altera o mapa de transições.
 
 `funil_worker.py` possui o laço operacional interno: executa um ciclo completo,
-aguarda uma hora depois do sucesso e recupera indisponibilidade esperada do
+aguarda `FUNIL_INTERVALO_SEGUNDOS` depois do sucesso (padrão: 1.800 segundos,
+30 minutos) e recupera indisponibilidade esperada do
 banco com espera linear de 5 em 5 segundos, limitada a 60. O arquivo
 `iniciar_worker_funil.py` possui o laço supervisor externo. Se uma falha crítica
 escapar do worker, ele aguarda 5 segundos fixos e cria o worker novamente.
@@ -201,7 +241,7 @@ materializar conversas em etapas elegíveis
 -> criar uma oportunidade na ApiCarrossel
 -> marcar lead_no_funil e funil_envios=sent no mesmo commit local
 -> repetir até o limite do lote
--> aguardar uma hora
+-> aguardar FUNIL_INTERVALO_SEGUNDOS
 ```
 
 Cada lead é isolado. Falha de payload ou API volta o item para `pending`, agenda
@@ -215,18 +255,27 @@ protege múltiplas instâncias com `SKIP LOCKED`.
 
 Não existe transação distribuída entre PostgreSQL e Funil. Se o CRM confirmar e
 o banco cair antes do commit local, o item permanece `processing` e poderá ser
-reenviado após o lease. O título `Chatbot Lead [C<id_conversa>]` permite
-reconciliação manual; consulta automática é evolução futura.
+reenviado após o lease. O título atual é `Chatbot Lead <nome_unidade>` e não
+contém o ID da conversa; ele não identifica sozinho um envio nem impede
+duplicidade externa. Não há reconciliação automática com o CRM.
 
 O processo nasce desativado. `FUNIL_WORKER_ENABLED=True` deve ser configurado
-somente depois do teste manual da unidade. Quando ativo, `main.py` abre um
-terceiro terminal exclusivamente para ele.
+somente depois do teste manual da unidade. O ponto de entrada é
+`python -m workers.worker_funil.iniciar_worker_funil`; o serviço de produção
+está em
+[`deploy/systemd/chatbot-worker-funil.service`](../deploy/systemd/chatbot-worker-funil.service).
 
 ## Testes relacionados
 
 - `tests/unit/test_worker_flow_runtime.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_fluxo_turno_abc.py`.
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_saudacao_retorno.py`;
+- `tests/unit/test_validador_profissao.py`;
+- `tests/unit/test_valida_etapa7.py`;
+- `tests/unit/test_sondas_funil.py`.
 
-A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
+O núcleo transacional e os testes específicos estão descritos em
+[`tests/README.md`](../tests/README.md).

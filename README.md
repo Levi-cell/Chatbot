@@ -7,6 +7,9 @@ periódico de oportunidades ao Funil de Vendas.
 Este README é o portal do projeto. Regras detalhadas vivem nos documentos
 centrais e os mapas técnicos vivem nos READMEs de cada camada.
 
+Os documentos técnicos abaixo descrevem o código atual. Os planos em `docs/`
+são propostas separadas: sua existência não significa que já foram aplicados.
+
 ## Comece por aqui
 
 Para desenvolver novas etapas, siga a
@@ -16,7 +19,6 @@ Para desenvolver novas etapas, siga a
 |---|---|
 | [Regras de negócio](REGRAS_DE_NEGOCIO.md) | Fonte de verdade sobre turno, fila, etapas, retries, bloqueios e comportamentos esperados. |
 | [Padrões de arquitetura](PADROES_DE_ARQUITETURA.md) | Fronteiras, dependências permitidas e local correto para novas funções. |
-| [LGPD mínima da V1](LGPD_V1.md) | Registro prático dos dados tratados, finalidades e limites de LGPD para a primeira produção. |
 | [Webhook](callback/README.md) | Entrada HTTP, validações, anti-flood e persistência na fila. |
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
@@ -24,7 +26,7 @@ Para desenvolver novas etapas, siga a
 | [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
 | [Rotina de deploy](regras_deploy/rotina_deploy.md) | Publicação da `prod`, atualização da Lightsail e ciclo dos serviços. |
 | [Ambiente e banco em produção](regras_deploy/modificando_env_e_banco_em_prod.md) | Troca segura do `.env` e evolução controlada do schema no RDS. |
-| [Evolução para a V2](_V2/desafios_v2.md) | Escala, múltiplos workers e desafios técnicos futuros. |
+| [Arquivos de deploy](deploy/README.md) | Serviços systemd, Nginx e migrações versionadas. |
 
 ## Documentação técnica
 
@@ -36,10 +38,15 @@ Para desenvolver novas etapas, siga a
 | Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
 | WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
 | Funil de Vendas | [core/integrations/funil/README.md](core/integrations/funil/README.md) |
-| Segurança avançada futura | [_V2/seguranca-avancada.md](_V2/seguranca-avancada.md) |
-| Infraestrutura futura | [_V2/infraestrutura.md](_V2/infraestrutura.md) |
-| Concorrência futura | [_V2/concorrencia-workers.md](_V2/concorrencia-workers.md) |
-| Monitoramento futuro de tratamentos | [_V2/monitoramento-tratamentos.md](_V2/monitoramento-tratamentos.md) |
+
+### Planejamento separado do runtime
+
+As propostas de [evolução para a V2](docs/_V2/desafios_v2.md),
+[segurança avançada](docs/_V2/seguranca-avancada.md),
+[infraestrutura](docs/_V2/infraestrutura.md),
+[concorrência](docs/_V2/concorrencia-workers.md) e
+[monitoramento de tratamentos](docs/_V2/monitoramento-tratamentos.md) permanecem
+em `docs/`. Não substituem as instruções operacionais dos READMEs.
 
 ## Visão geral
 
@@ -66,6 +73,8 @@ core/repositories SQL de runtime
 core/database     conexão, DDL e setup
 core/cache        Redis, fallback e autocura
 core/integrations serviços externos
+core/triagem      catálogo compartilhado das seis perguntas
+core/validacoes   validação pura de e-mail reutilizada pelo fluxo e Funil
 utilitarios       relatórios e comandos manuais; nunca orquestradores
 tests             testes, fakes, mocks e contratos
 ```
@@ -144,9 +153,12 @@ O setup é executado a partir da raiz:
 python -m core.database.deploy_database.setup_database
 ```
 
-Os scripts são organizados por responsabilidade e podem ser executados novamente
-para completar um setup interrompido. Consulte [Banco e deploy](core/database/README.md)
-antes de alterar DDL ou funções PostgreSQL.
+O setup prepara um banco de desenvolvimento autorizado. Ele não substitui a
+migração de um banco existente: `CREATE TABLE IF NOT EXISTS` não atualiza colunas
+de tabelas já criadas. As migrações incrementais ficam em
+[`deploy/migrations/`](deploy/migrations/). Consulte
+[Banco e deploy](core/database/README.md) antes de executar o setup ou alterar
+DDL e funções PostgreSQL.
 
 ## Execução em desenvolvimento
 
@@ -175,7 +187,7 @@ A rota não possui barra final.
 ## Testes
 
 ```powershell
-python -m unittest discover -s tests -p "test_*.py"
+python -m unittest discover -s tests -t . -p "test_*.py"
 ```
 
 Validações adicionais:
@@ -189,6 +201,19 @@ git diff --check
 Consulte [tests/README.md](tests/README.md) para os contratos críticos e a
 política de mocks.
 
+## Monitoramento manual
+
+[`weekly.py`](utilitarios/reports_functions/weekly.py) gera o recorte semanal e
+[`total.py`](utilitarios/reports_functions/total.py) cobre o histórico de cada
+unidade. Os HTMLs de conversas unificam os atendimentos do mesmo cliente na mesma
+unidade; os PDFs apresentam indicadores, perfis de público, encaminhamentos ao
+Funil e satisfação. São materiais distintos, salvos em `monitoramento/`, pasta
+ignorada pelo Git e que contém dados pessoais.
+
+Esses utilitários não fazem parte dos serviços. Para comandos, dependências
+opcionais do PDF e interpretação das métricas, consulte
+[`utilitarios/README.md`](utilitarios/README.md).
+
 ## Princípios operacionais
 
 - PostgreSQL é a fonte persistida da verdade;
@@ -197,8 +222,8 @@ política de mocks.
 - o worker é dono do fluxo da conversa e das transações do ciclo;
 - o worker do Funil é independente, processa uma oportunidade por vez e nasce
   desativado até a validação manual da integração;
-- a V1 opera com uma única instância de worker, já protegida por contratos que
-  deverão sustentar múltiplas instâncias na V2;
+- a V1 utiliza uma instância do worker de atendimento e uma instância independente
+  do worker do Funil; os contratos de lock e ordenação continuam necessários;
 - chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;
 - falha ao persistir uma mensagem válida na fila retorna HTTP 503;
 - falha ao validar unidade por indisponibilidade de Redis e banco retorna HTTP

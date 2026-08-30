@@ -12,22 +12,28 @@ Comunicação com a Meta WhatsApp Cloud API por meio da biblioteca PyWa.
 ```text
 core/integrations/whatsapp/
 ├── exceptions.py
+├── numero_comercial.py
 ├── messages/
-│   ├── etapa1_messages.py
-│   └── etapa2_messages.py
+│   ├── etapa1_messages.py ... etapa22_messages.py
+│   ├── componentes_compartilhados.py
+│   ├── tratamentos_universais.py
+│   └── triagem_componentes.py
 ├── pywa_functions/
 │   ├── cliente.py
 │   ├── saudacao.py
+│   ├── resposta_envio.py
 │   ├── ferramentas.md
 │   └── pywa_senders/
-│       ├── etapa1.py
-│       └── etapa2.py
+│       ├── etapa1.py ... etapa22.py
+│       └── triagem_base.py
 └── tools/
     ├── ativando_numero.py
     ├── ativando_waba_id.py
     ├── config.py
     ├── desativando_numero.py
-    └── usuarios.py
+    ├── desativa_waba_id.py
+    ├── usuarios.py
+    └── validando_phone_waba.py
 ```
 
 ## Direção das dependências
@@ -53,27 +59,44 @@ Catálogo de conteúdo enviado:
 Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
 mensagem não deve mover a responsabilidade de envio para `messages`.
 
-Cada etapa mantém seu próprio arquivo, como
-`etapa1_messages.py` e `etapa2_messages.py`.
+Cada etapa de 1 a 22 mantém seu próprio arquivo `etapaN_messages.py`.
 
 As apresentações inicial padrão, de mídia, financeira e de tratamento de
 reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
 argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
 formata o texto; não consulta o banco nem conhece a conversa.
 
+`componentes_compartilhados.py` também monta `Olá novamente, <nome>!` quando
+o cliente retorna pelo menos três horas após o último envio confirmado do bot
+na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
+incompatíveis não interrompem o atendimento e não produzem prefixo.
+
+O worker fornece o contexto histórico e aplica a saudação à resposta corrente,
+inclusive tratamentos, sem mudar o destino. Não é follow-up, mensagem separada
+ou disparo automático após três horas de inatividade. No retry com resposta
+persistida, não há novo envio.
+
 ## PyWa functions
 
 Único local permitido para importação e chamada direta da PyWa.
 
-- `cliente.py`: normaliza `phone_id` e cria `WhatsApp`;
+- `cliente.py`: normaliza `phone_id`, cria `WhatsApp` e aplica o prefixo de
+  retorno somente no escopo do envio corrente;
 - `saudacao.py`: seleção de bom dia, boa tarde ou boa noite pelo horário do
-  atendimento;
+  atendimento inicial, distinta da saudação de retorno;
+- `resposta_envio.py`: extrai o ID confirmado pela Meta e falha se ele faltar;
 - `pywa_senders/etapaN.py`: mensagens normais e tratamentos específicos da
   etapa N.
 
 Cada sender escolhe conteúdo, legenda e lista de botões, realiza a chamada PyWa
 e devolve um contexto técnico com o ID da Meta e a etapa da mensagem enviada.
 O sender não escolhe origem, evento ou destino da transição.
+
+O encaminhamento de suporte ao idoso é um sender da etapa 6 com botão para o
+número comercial, normalizado por `numero_comercial.py`. A decisão de usar
+`suporte_idoso`, validar a faixa de 60 a 99 anos e encerrar o atendimento é do
+worker. Da mesma forma, a política `email_obrigatorio` e a distinção entre
+aceite da oferta e pedido de informações não pertencem aos senders.
 
 Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
 futuro capaz de persistir vários IDs e tratar sucesso parcial.
@@ -130,6 +153,9 @@ Esta integração não deve:
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_worker_flow_runtime.py`.
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_saudacao_retorno.py`.
 
-A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
+O núcleo transacional e os testes específicos estão descritos em
+[`tests/README.md`](../../../tests/README.md).

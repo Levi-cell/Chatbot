@@ -196,7 +196,8 @@ Dentro de `entry[].changes[].value`:
 - `metadata.display_phone_number`: texto público opcional, apenas para
   observabilidade/apresentação;
 - `entry[].id`: WABA ID;
-- `id_portfolio`: não vem no webhook; será lido do cadastro da unidade;
+- `id_portfolio`: não vem no webhook; quando preenchido, será lido do
+  cadastro da unidade para consulta e auditoria; pode ser `NULL`;
 - `nome_unidade`, `nome_agente` e `genero`: não vêm no webhook; são lidos da
   unidade localizada por `metadata.phone_number_id` somente para montar a
   apresentação inicial da etapa 1;
@@ -333,7 +334,7 @@ alias de entrada, enquanto o WA ID do mesmo evento permanece o candidato oficial
 O `user_id` não é global como o WA ID. O vínculo canônico será:
 
 ```text
-cliente 1 --- N user_id_cliente N --- 1 unidade --- id_portfolio
+cliente 1 --- N user_id_cliente N --- 1 unidade
 ```
 
 Cada linha de `chatbot.user_id_cliente` liga exatamente um `id_cliente` a um
@@ -345,8 +346,8 @@ Cada linha de `chatbot.user_id_cliente` liga exatamente um `id_cliente` a um
   outro cliente provisório;
 - um payload que já contenha WA ID + user ID registra ou atualiza o vínculo no
   primeiro processamento, sem esperar a etapa especial;
-- `id_portfolio` permanece na unidade para consultas de monitoramento e não
-  entra no caminho transacional online.
+- `id_portfolio` permanece como atributo opcional da unidade para consultas de
+  monitoramento e auditoria e não entra no caminho transacional online.
 
 O sujeito lógico da unidade é `(id_cliente, id_unidade)`. Seus aliases
 comprovados são o conjunto:
@@ -376,7 +377,8 @@ do conjunto. Não se cria uma string `wa_id+user_id`, não se exige user ID de d
 legados e não se executam duas decisões independentes para a mesma mensagem.
 
 `id_portfolio` não será colocado na fila, nas chaves de turno nem nos locks. Ele
-servirá a consultas futuras de monitoramento.
+servirá a consultas futuras de monitoramento, que devem tolerar `NULL` como
+"não cadastrado" e nunca inferir o valor por WABA ou `phone_number_id`.
 
 ### 4.3 Username não é identidade
 
@@ -700,7 +702,7 @@ nome_agente VARCHAR(100) NOT NULL
 genero VARCHAR(9) NOT NULL
 suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE
 email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE
-id_portfolio VARCHAR(100) NOT NULL
+id_portfolio VARCHAR(100) NULL
 
 CONSTRAINT uq_unidade_nome_unidade
     UNIQUE (nome_unidade)
@@ -710,13 +712,19 @@ CONSTRAINT ck_unidade_nome_agente_nao_vazio
     CHECK (nome_agente ~ '[^[:space:]]')
 CONSTRAINT ck_unidade_genero
     CHECK (genero IN ('masculino', 'feminino'))
+CONSTRAINT ck_unidade_id_portfolio_nao_vazio
+    CHECK (
+        id_portfolio IS NULL
+        OR BTRIM(id_portfolio) <> ''
+    )
 ```
 
 As três primeiras colunas e suas quatro constraints pertencem à baseline
 versionada. As duas flags pertencem ao delta pré-`user_id` de 29/08/2026 e são
 preservadas sem nova migração ou alteração de dados por este plano.
-`id_portfolio` é a única ampliação futura da unidade pertencente à feature de
-`user_id`; isso não significa que seja a única evolução já existente na tabela.
+`id_portfolio` é a única ampliação futura e opcional da unidade pertencente à
+feature de `user_id`; isso não significa que seja a única evolução já existente
+na tabela.
 
 `chatbot.cliente`:
 
@@ -852,14 +860,15 @@ Também são exceções à nulabilidade:
 - `unidade.genero` é obrigatório e aceita somente `masculino` ou `feminino`;
 - `unidade.suporte_idoso` e `unidade.email_obrigatorio` são booleanos
   obrigatórios, com defaults `FALSE` e `TRUE`, respectivamente;
-- `unidade.id_portfolio` é obrigatório e não vazio;
+- `unidade.id_portfolio` é opcional; aceita `NULL` e, quando informado, não
+  aceita valor vazio ou composto somente por espaços;
 - `user_id_cliente.id_cliente`, `user_id` e `id_unidade` são obrigatórios;
 - `user_id_cliente.user_id` não aceita string vazia.
 
 `id_portfolio` recebe índice normal, não `UNIQUE`, pois o mesmo portfólio pode
-administrar mais de uma unidade. O SQL de produção adiciona a coluna
-temporariamente anulável, preenche um mapa explícito e validado de todas as
-unidades e somente então aplica `NOT NULL`; nunca infere portfólio pelo WABA.
+administrar mais de uma unidade. O SQL de produção adiciona a coluna diretamente
+como anulável, sem mapa, backfill ou `UPDATE` obrigatório. Unidades existentes
+nascem com `NULL`, e o valor nunca é inferido pelo WABA ou `phone_number_id`.
 
 A tabela de vínculo impõe:
 
@@ -936,8 +945,8 @@ com:
    `cliente.profissao`, `nome_unidade`, `nome_agente`, `genero`,
    `suporte_idoso` e `email_obrigatorio`;
 5. criação das colunas novas e de `user_id_cliente`;
-6. preenchimento explícito de `id_portfolio` para todas as unidades e aplicação
-   de `NOT NULL`;
+6. criação anulável de `id_portfolio`, sem backfill obrigatório e com CHECK
+   apenas para rejeitar texto vazio quando houver valor;
 7. remoção de `NOT NULL` dos WA IDs de snapshot;
 8. ampliação do CHECK já composto por `idade_invalida`, `foi_agendado` e
    `encaminhado_suporte_idoso` para incluir `ativou_privacidade` e
@@ -2355,10 +2364,10 @@ unitários.
 
 Admin:
 
-- Unidade exige, exibe e edita `nome_unidade`, `nome_agente`, `genero` e
-  `id_portfolio`; também exibe/edita/filtra `suporte_idoso` e
-  `email_obrigatorio`, pesquisa por nome da unidade/agente, filtra por gênero e
-  ordena por `nome_unidade`;
+- Unidade exige `nome_unidade`, `nome_agente` e `genero`; exibe e permite editar
+  `id_portfolio` como campo opcional, persistindo ausência como `NULL`; também
+  exibe/edita/filtra `suporte_idoso` e `email_obrigatorio`, pesquisa por nome da
+  unidade/agente, filtra por gênero e ordena por `nome_unidade`;
 - o formulário de Unidade só aceita `suporte_idoso=TRUE` quando
   `numero_comercial` passa pelo validador compartilhado. Alterar as flags afeta
   ciclos futuros; retry de resposta já persistida conserva a decisão histórica;
@@ -2420,7 +2429,7 @@ Ao mesclar o estado final, `bank_script.py`, models e Admin devem partir do
 contrato pré-`user_id` auditado: `nome_unidade`, `nome_agente`, `genero`,
 `suporte_idoso`, `email_obrigatorio`, suas constraints/defaults e todos os
 caminhos ORM com `nome_unidade` são preservados. Este passo acrescenta
-`id_portfolio` e o contrato de identidade sem restaurar `unidade.nome` nem
+`id_portfolio` opcional e o contrato de identidade sem restaurar `unidade.nome` nem
 reaplicar as migrações de apresentação, profissão ou políticas de unidade.
 
 O DDL cria `chatbot.user_id_cliente`; o model correspondente usa
@@ -2688,8 +2697,8 @@ distintos definidos nas seções 4.3.2 e 4.5.
 No Admin de unidade, preservar ainda os campos V1.0.7 `nome_unidade`,
 `nome_agente` e `genero`, incluindo pesquisa, filtro, ordenação e referências
 ORM por `id_unidade__nome_unidade`; preservar as flags de suporte/e-mail e a
-validação compartilhada do número comercial; acrescentar `id_portfolio` sem
-reduzir esse contrato.
+validação compartilhada do número comercial; acrescentar `id_portfolio`
+opcional sem reduzir esse contrato.
 
 ### Passo 8 — PyWa
 
@@ -2815,8 +2824,9 @@ aditivos de `user_id`.
 - a migração de `user_id` preserva os valores de apresentação existentes e não
   tenta recriar, renomear ou repovoar essas três colunas;
 - colunas individuais de snapshot aceitam `NULL`;
-- `unidade.id_portfolio` e as três colunas de negócio de `user_id_cliente`
-  rejeitam `NULL`; `id_portfolio` e `user_id` também rejeitam vazio;
+- `unidade.id_portfolio` aceita `NULL` e rejeita vazio somente quando informado;
+  as três colunas de negócio de `user_id_cliente` rejeitam `NULL`, e `user_id`
+  também rejeita vazio;
 - `user_id_cliente` possui exatamente duas FKs, com `PROTECT/RESTRICT` para
   cliente e `CASCADE` para unidade;
 - `user_id_cliente` rejeita dois clientes para `(user_id, unidade)` e rejeita
@@ -3088,10 +3098,11 @@ aditivos de `user_id`.
   prova WA/user coerente para `user_id_cliente` quando existir cliente canônico;
   falha parcial ou conflito preserva a linha;
 - models/Admin não quebram com WA ID nulo;
-- unidade exige e exibe `nome_unidade`, `nome_agente`, `genero`, `id_portfolio`,
-  `suporte_idoso` e `email_obrigatorio`, usa `id_unidade__nome_unidade` nas
-  relações, oferece os filtros aprovados e valida o número comercial pelo helper
-  compartilhado quando o suporte é ativado;
+- unidade exige e exibe `nome_unidade`, `nome_agente`, `genero`,
+  `suporte_idoso` e `email_obrigatorio`, exibe e permite editar o
+  `id_portfolio` opcional, usa `id_unidade__nome_unidade` nas relações, oferece
+  os filtros aprovados e valida o número comercial pelo helper compartilhado
+  quando o suporte é ativado;
 - Admin de `user_id_cliente` é somente leitura.
 
 ### 15.8 Saudação de retorno
@@ -3152,8 +3163,8 @@ O plano só poderá ser aplicado se:
 - não existir `unidade.nome`, e `nome_unidade`, `nome_agente` e `genero`
   corresponderem exatamente aos tipos, à nulabilidade, aos dados e às quatro
   constraints da baseline V1.0.7 atualizada `2bc4188`;
-- `id_portfolio` estiver escrito corretamente, obrigatório e preenchido em toda
-  unidade;
+- `id_portfolio` estiver escrito corretamente como `VARCHAR(100) NULL`, sem
+  default, aceitando ausência e rejeitando texto vazio quando houver valor;
 - `suporte_idoso` e `email_obrigatorio` permanecerem `BOOLEAN NOT NULL` com
   defaults `FALSE` e `TRUE`, respectivamente, sem alteração dos valores por
   unidade durante a migração;

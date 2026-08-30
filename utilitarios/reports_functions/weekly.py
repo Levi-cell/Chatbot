@@ -36,6 +36,18 @@ SAIDA_PADRAO = RAIZ_PROJETO / "monitoramento"
 FUSO_RELATORIO = ZoneInfo("America/Sao_Paulo")
 DIAS_PADRAO = 7
 MAX_MENSAGENS_PADRAO = 100_000
+IDADE_ADULTA_MINIMA = 18
+IDADE_IDOSA_MINIMA = 60
+IDADE_MINIMA_DEPENDENTE_PADRAO = 5
+IDADE_MINIMA_DEPENDENTE_BPA = 4
+
+PERFIS_ATENDIMENTO = (
+    "dependente_infantil",
+    "dependente_adulto",
+    "dependente_idoso",
+    "titular_adulto",
+    "titular_idoso",
+)
 
 ROTULOS_TIPO_MENSAGEM = {
     "audio": "Áudio",
@@ -192,6 +204,188 @@ def _profissao_atual(linha: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _idade_inteira(valor: Any) -> int | None:
+    """Valida 1–99 anos sem converter booleanos ou truncar idades fracionárias."""
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        return None
+    return valor if 0 < valor < 100 else None
+
+
+def _classificar_perfil_atendimento(
+    *,
+    status_dependente: Any,
+    idade_titular: Any,
+    idade_dependente: Any,
+    idade_minima_dependente: int,
+) -> str | None:
+    """Classifica a pessoa atendida, mantendo ``NULL`` e legado como desconhecidos."""
+    if status_dependente is True:
+        idade = _idade_inteira(idade_dependente)
+        if idade is None or idade < idade_minima_dependente:
+            return None
+        if idade < IDADE_ADULTA_MINIMA:
+            return "dependente_infantil"
+        if idade < IDADE_IDOSA_MINIMA:
+            return "dependente_adulto"
+        return "dependente_idoso"
+
+    if status_dependente is False:
+        idade = _idade_inteira(idade_titular)
+        if idade is None or idade < IDADE_ADULTA_MINIMA:
+            return None
+        if idade < IDADE_IDOSA_MINIMA:
+            return "titular_adulto"
+        return "titular_idoso"
+
+    return None
+
+
+def _rotulos_perfis(idade_minima_dependente: int) -> dict[str, str]:
+    return {
+        "dependente_infantil": (
+            f"Dependentes de {idade_minima_dependente} a 17 anos"
+        ),
+        "dependente_adulto": "Dependentes de 18 a 59 anos",
+        "dependente_idoso": "Dependentes com 60 anos ou mais",
+        "titular_adulto": "Titulares de 18 a 59 anos",
+        "titular_idoso": "Titulares com 60 anos ou mais",
+    }
+
+
+def _montar_segmentacao_perfis(
+    perfis_conversa: Sequence[Mapping[str, Any]],
+    ids_conversas_funil: set[int],
+    *,
+    suporte_idoso: bool,
+    bpa_ativo: bool,
+) -> dict[str, Any]:
+    """Agrega perfis por conversa sem confundi-los com o lead consolidado.
+
+    Um cliente conta uma vez em cada segmento no qual apareceu. A quantidade
+    de conversas permanece disponível porque um mesmo contato pode iniciar
+    atendimentos para pessoas diferentes durante o período.
+    """
+    idade_minima_dependente = (
+        IDADE_MINIMA_DEPENDENTE_BPA
+        if bpa_ativo
+        else IDADE_MINIMA_DEPENDENTE_PADRAO
+    )
+    rotulos = _rotulos_perfis(idade_minima_dependente)
+    acumuladores = {
+        chave: {
+            "ids_clientes": set(),
+            "ids_conversas": set(),
+            "ids_clientes_funil": set(),
+            "ids_conversas_funil": set(),
+        }
+        for chave in PERFIS_ATENDIMENTO
+    }
+    todos_clientes: set[int] = set()
+    clientes_classificados: set[int] = set()
+    clientes_por_perfil: dict[int, set[str]] = defaultdict(set)
+    conversas_classificadas: set[int] = set()
+    conversas_sem_classificacao: set[int] = set()
+    clientes_funil_sem_classificacao: set[int] = set()
+    clientes_funil_classificados: set[int] = set()
+
+    for perfil in perfis_conversa:
+        id_cliente = int(perfil["id_cliente"])
+        id_conversa = int(perfil["id_conversa"])
+        todos_clientes.add(id_cliente)
+        chave = _classificar_perfil_atendimento(
+            status_dependente=perfil.get("status_dependente"),
+            idade_titular=perfil.get("idade_titular"),
+            idade_dependente=perfil.get("idade_dependente"),
+            idade_minima_dependente=idade_minima_dependente,
+        )
+        if chave is None:
+            conversas_sem_classificacao.add(id_conversa)
+            if id_conversa in ids_conversas_funil:
+                clientes_funil_sem_classificacao.add(id_cliente)
+            continue
+
+        acumulador = acumuladores[chave]
+        acumulador["ids_clientes"].add(id_cliente)
+        acumulador["ids_conversas"].add(id_conversa)
+        clientes_classificados.add(id_cliente)
+        clientes_por_perfil[id_cliente].add(chave)
+        conversas_classificadas.add(id_conversa)
+        if id_conversa in ids_conversas_funil:
+            acumulador["ids_clientes_funil"].add(id_cliente)
+            acumulador["ids_conversas_funil"].add(id_conversa)
+            clientes_funil_classificados.add(id_cliente)
+
+    linhas: list[dict[str, Any]] = []
+    for chave in PERFIS_ATENDIMENTO:
+        acumulador = acumuladores[chave]
+        total_leads = len(acumulador["ids_clientes"])
+        total_conversas = len(acumulador["ids_conversas"])
+        funil_observado = len(acumulador["ids_clientes_funil"])
+        politica_nao_aplicavel = chave == "titular_idoso" and suporte_idoso
+        total_funil = 0 if politica_nao_aplicavel else funil_observado
+        linhas.append(
+            {
+                "chave": chave,
+                "rotulo": rotulos[chave],
+                "leads": total_leads,
+                "conversas": total_conversas,
+                "leads_funil": total_funil,
+                "leads_funil_observados": funil_observado,
+                "conversas_funil": (
+                    0
+                    if politica_nao_aplicavel
+                    else len(acumulador["ids_conversas_funil"])
+                ),
+                "conversas_funil_observadas": len(
+                    acumulador["ids_conversas_funil"]
+                ),
+                "taxa_funil": (
+                    None
+                    if politica_nao_aplicavel
+                    else round(total_funil / total_leads * 100, 1)
+                    if total_leads
+                    else 0.0
+                ),
+                "funil_nao_aplicavel": politica_nao_aplicavel,
+            }
+        )
+
+    total_conversas = len(perfis_conversa)
+    maior_volume = max(item["leads"] for item in linhas)
+    perfis_predominantes = [
+        item["rotulo"] for item in linhas
+        if maior_volume and item["leads"] == maior_volume
+    ]
+
+    return {
+        "linhas": linhas,
+        "idade_minima_dependente": idade_minima_dependente,
+        "leads_classificados": len(clientes_classificados),
+        "leads_sem_classificacao": len(todos_clientes - clientes_classificados),
+        "leads_multiperfil": sum(
+            len(perfis) > 1 for perfis in clientes_por_perfil.values()
+        ),
+        "conversas_classificadas": len(conversas_classificadas),
+        "conversas_sem_classificacao": len(conversas_sem_classificacao),
+        "conversas_funil_sem_classificacao": len(
+            conversas_sem_classificacao & ids_conversas_funil
+        ),
+        "leads_funil_apenas_sem_classificacao": len(
+            clientes_funil_sem_classificacao - clientes_funil_classificados
+        ),
+        "conversas_apenas_envio_funil": sum(
+            bool(perfil.get("apenas_envio_funil")) for perfil in perfis_conversa
+        ),
+        "cobertura_conversas": round(
+            len(conversas_classificadas) / total_conversas * 100, 1
+        )
+        if total_conversas
+        else 0.0,
+        "perfis_predominantes": perfis_predominantes,
+        "suporte_idoso": suporte_idoso,
+    }
+
+
 def _ordenar_data(valor: Any) -> datetime:
     if isinstance(valor, datetime):
         data = valor
@@ -224,15 +418,24 @@ def montar_snapshot(
             "id_unidade": id_unidade,
             "nome_unidade": str(linha["nome_unidade"]),
             "nome_agente": str(linha.get("nome_agente") or "Assistente"),
+            "suporte_idoso": bool(linha.get("suporte_idoso", False)),
+            "bpa_ativo": bool(linha.get("bpa_ativo", False)),
             "conversas": [],
             "pesquisas": [],
         }
 
     funil_por_unidade: dict[int, set[int]] = defaultdict(set)
+    conversas_funil_por_unidade: dict[int, set[int]] = defaultdict(set)
     for linha in funil:
-        funil_por_unidade[int(linha["id_unidade"])].add(int(linha["id_cliente"]))
+        id_unidade = int(linha["id_unidade"])
+        funil_por_unidade[id_unidade].add(int(linha["id_cliente"]))
+        if linha.get("id_conversa") is not None:
+            conversas_funil_por_unidade[id_unidade].add(
+                int(linha["id_conversa"])
+            )
 
     grupos: dict[tuple[int, int], dict[str, Any]] = {}
+    perfis_conversa: dict[tuple[int, int, int], dict[str, Any]] = {}
     for linha in mensagens:
         id_unidade = int(linha["id_unidade"])
         id_cliente = int(linha["id_cliente"])
@@ -260,6 +463,19 @@ def montar_snapshot(
         id_conversa = int(linha["id_conversa"])
         if id_conversa not in grupo["ids_conversa"]:
             grupo["ids_conversa"].append(id_conversa)
+        perfis_conversa.setdefault(
+            (id_unidade, id_cliente, id_conversa),
+            {
+                "id_unidade": id_unidade,
+                "id_cliente": id_cliente,
+                "id_conversa": id_conversa,
+                "status_dependente": linha.get("status_dependente"),
+                "idade_titular": linha.get("idade_titular"),
+                "idade_dependente": linha.get("idade_dependente"),
+                "nome_dependente": linha.get("nome_dependente"),
+                "apenas_envio_funil": False,
+            },
+        )
 
         data_mensagem = linha.get("received_data_hora")
         data_ordenacao = _ordenar_data(data_mensagem)
@@ -301,6 +517,35 @@ def montar_snapshot(
         unidade["conversas"].sort(
             key=lambda grupo: _ordenar_data(grupo["ultima_atividade"]), reverse=True
         )
+
+    # Um retry pode confirmar o envio de uma conversa antiga enquanto o mesmo
+    # contato interage em outra. Preservamos o perfil do envio, sem acrescentar
+    # suas mensagens fora da janela ao dashboard de conversas.
+    for linha in funil:
+        id_unidade = int(linha["id_unidade"])
+        id_cliente = int(linha["id_cliente"])
+        if (id_unidade, id_cliente) not in grupos or linha.get("id_conversa") is None:
+            continue
+        id_conversa = int(linha["id_conversa"])
+        perfis_conversa.setdefault(
+            (id_unidade, id_cliente, id_conversa),
+            {
+                "id_unidade": id_unidade,
+                "id_cliente": id_cliente,
+                "id_conversa": id_conversa,
+                "status_dependente": linha.get("status_dependente"),
+                "idade_titular": linha.get("idade_titular"),
+                "idade_dependente": linha.get("idade_dependente"),
+                "nome_dependente": linha.get("nome_dependente"),
+                "apenas_envio_funil": True,
+            },
+        )
+
+    perfis_por_unidade: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for perfil in perfis_conversa.values():
+        perfis_por_unidade[int(perfil["id_unidade"])].append(perfil)
+    for id_unidade, unidade in unidades_por_id.items():
+        unidade["perfis_atendimento"] = perfis_por_unidade[id_unidade]
 
     for linha in pesquisas:
         id_unidade = int(linha["id_unidade"])
@@ -355,6 +600,15 @@ def montar_snapshot(
             "media_satisfacao": round(sum(notas) / len(notas), 2) if notas else None,
             "distribuicao_notas": distribuicao,
             "comentarios": sum(bool(item["comentario"]) for item in pesquisas_unidade),
+            "taxa_participacao_satisfacao": round(
+                len(leads_com_nota) / total_leads * 100, 1
+            ) if total_leads else 0.0,
+            "segmentacao_perfis": _montar_segmentacao_perfis(
+                perfis_por_unidade[id_unidade],
+                conversas_funil_por_unidade[id_unidade],
+                suporte_idoso=bool(unidade["suporte_idoso"]),
+                bpa_ativo=bool(unidade["bpa_ativo"]),
+            ),
         }
         pesquisas_unidade.sort(
             key=lambda item: _ordenar_data(item["criado_em"]), reverse=True
@@ -429,7 +683,12 @@ def coletar_snapshot(
         filtro, params_filtro = _filtro_unidades(ids_unidade)
         cursor.execute(
             f"""
-            SELECT u.id_unidade, u.nome_unidade, u.nome_agente
+            SELECT
+                u.id_unidade,
+                u.nome_unidade,
+                u.nome_agente,
+                u.suporte_idoso,
+                u.bpa_ativo
               FROM chatbot.unidade u
              WHERE TRUE {filtro}
              ORDER BY u.nome_unidade, u.id_unidade
@@ -487,7 +746,11 @@ def coletar_snapshot(
                 {expr_profissao_conversa} AS profissao_conversa_recente,
                 c.id_conversa,
                 c.status_ativa,
+                c.status_dependente,
                 c.id_etapa_atual,
+                cl.idade AS idade_titular,
+                d.idade AS idade_dependente,
+                d.nome_dependente,
                 h.id_mensagem,
                 h.id_etapa,
                 h.received_data_hora,
@@ -500,6 +763,8 @@ def coletar_snapshot(
                AND c.id_cliente = cj.id_cliente
               JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+              LEFT JOIN chatbot.dependente d
+                ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
               JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
               {lateral_profissao}
              WHERE h.received_data_hora >= %s
@@ -531,10 +796,20 @@ def coletar_snapshot(
         filtro_funil, params_funil_filtro = _filtro_unidades(ids_unidade)
         cursor.execute(
             f"""
-            SELECT DISTINCT u.id_unidade, c.id_cliente
+            SELECT DISTINCT
+                u.id_unidade,
+                c.id_cliente,
+                c.id_conversa,
+                c.status_dependente,
+                cl.idade AS idade_titular,
+                d.idade AS idade_dependente,
+                d.nome_dependente
               FROM chatbot.funil_envios f
               JOIN chatbot.conversa c ON c.id_conversa = f.id_conversa
               JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+              LEFT JOIN chatbot.dependente d
+                ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
              WHERE f.status = 'sent'
                AND f.enviado_em >= %s
                AND f.enviado_em < %s
@@ -1088,6 +1363,7 @@ def renderizar_pdf(
         from reportlab.platypus import (
             CondPageBreak,
             HRFlowable,
+            KeepTogether,
             LongTable,
             PageBreak,
             Paragraph,
@@ -1104,7 +1380,6 @@ def renderizar_pdf(
 
     fonte, fonte_bold = _registrar_fontes_pdf()
     verde = colors.HexColor("#008069")
-    verde_claro = colors.HexColor("#E8F7F3")
     cinza = colors.HexColor("#667781")
     cinza_claro = colors.HexColor("#F4F6F7")
     amarelo = colors.HexColor("#F4B400")
@@ -1116,8 +1391,8 @@ def renderizar_pdf(
             "Titulo",
             parent=estilos_base["Title"],
             fontName=fonte_bold,
-            fontSize=23,
-            leading=27,
+            fontSize=20,
+            leading=24,
             textColor=colors.white,
             alignment=TA_LEFT,
             spaceAfter=3 * mm,
@@ -1165,6 +1440,29 @@ def renderizar_pdf(
             alignment=TA_CENTER,
             textColor=texto,
         ),
+        "cabecalho_tabela": ParagraphStyle(
+            "CabecalhoTabela",
+            fontName=fonte_bold,
+            fontSize=8,
+            leading=11,
+            textColor=colors.white,
+        ),
+        "indicador": ParagraphStyle(
+            "Indicador",
+            fontName=fonte_bold,
+            fontSize=23,
+            leading=28,
+            alignment=TA_CENTER,
+            textColor=verde,
+        ),
+        "rotulo_indicador": ParagraphStyle(
+            "RotuloIndicador",
+            fontName=fonte,
+            fontSize=8,
+            leading=11,
+            alignment=TA_CENTER,
+            textColor=texto,
+        ),
         "comentario": ParagraphStyle(
             "Comentario",
             parent=estilos_base["BodyText"],
@@ -1185,6 +1483,9 @@ def renderizar_pdf(
     def p(valor: Any, estilo: str = "corpo") -> Any:
         texto_seguro = html_escape(str(valor if valor not in (None, "") else "—"))
         return Paragraph(texto_seguro.replace("\n", "<br/>"), estilos[estilo])
+
+    def percentual(valor: float) -> str:
+        return f"{valor:.1f}%".replace(".", ",")
 
     nome_unidade = str(unidade["nome_unidade"])
     metricas = unidade["metricas"]
@@ -1222,6 +1523,11 @@ def renderizar_pdf(
             8.5 * mm,
             f"Página {doc.page} • gerado {_data_local(gerado_em)}",
         )
+        canvas.setFont(fonte, 6.5)
+        canvas.drawString(
+            16 * mm, 4.5 * mm,
+            "Documento privado • dados pessoais • uso exclusivo de pessoas autorizadas da unidade.",
+        )
         canvas.restoreState()
 
     historia: list[Any] = []
@@ -1252,23 +1558,23 @@ def renderizar_pdf(
                 ("BOX", (1, 0), (1, 0), 0.5, colors.white),
                 ("LEFTPADDING", (0, 0), (-1, -1), 7 * mm),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 7 * mm),
-                ("TOPPADDING", (0, 0), (-1, -1), 7 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 4 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4 * mm),
                 ("ROUNDEDCORNERS", [5]),
             ]
         )
     )
-    historia.extend([capa, Spacer(1, 8 * mm)])
+    historia.extend([capa, Spacer(1, 3 * mm)])
 
     valores_cards = [
-        (metricas["leads_contato"], "Leads que entraram em contato"),
-        (metricas["leads_funil"], "Leads enviados ao funil"),
-        (metricas["leads_com_nota"], "Leads que deram nota"),
+        (metricas["leads_contato"], "Leads em contato"),
+        (metricas["leads_funil"], "Enviados ao funil"),
+        (metricas["leads_com_nota"], "Leads que avaliaram"),
         (
-            metricas["media_satisfacao"]
+            f"{metricas['media_satisfacao']:.2f}".replace(".", ",")
             if metricas["media_satisfacao"] is not None
             else "—",
-            "Nota média de satisfação",
+            "Nota média / 5",
         ),
     ]
     cards = []
@@ -1276,21 +1582,18 @@ def renderizar_pdf(
         cards.append(
             Table(
                 [
-                    [
-                        Paragraph(
-                            f"<font size='20' color='#008069'><b>{html_escape(str(valor))}</b></font>",
-                            estilos["centro"],
-                        )
-                    ],
-                    [p(rotulo, "centro")],
+                    [p(valor, "indicador")],
+                    [p(rotulo, "rotulo_indicador")],
                 ],
-                colWidths=[76 * mm],
+                colWidths=[38.75 * mm],
+                style=[("LEFTPADDING", (0, 0), (-1, -1), 0),
+                       ("RIGHTPADDING", (0, 0), (-1, -1), 0)],
             )
         )
     tabela_cards = Table(
-        [cards[:2], cards[2:]],
-        colWidths=[83.5 * mm, 83.5 * mm],
-        rowHeights=[31 * mm, 31 * mm],
+        [cards],
+        colWidths=[41.75 * mm] * 4,
+        rowHeights=[26 * mm],
     )
     tabela_cards.setStyle(
         TableStyle(
@@ -1299,8 +1602,8 @@ def renderizar_pdf(
                 ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#DCE4E7")),
                 ("INNERGRID", (0, 0), (-1, -1), 3, colors.white),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4 * mm),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4 * mm),
+                ("LEFTPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 1.5 * mm),
             ]
         )
     )
@@ -1315,7 +1618,8 @@ def renderizar_pdf(
             p(
                 f"Os indicadores abaixo usam {descricao_intervalo}. "
                 "Conversas técnicas do mesmo cliente foram consolidadas apenas quando "
-                "pertencem à mesma unidade."
+                "pertencem à mesma unidade. "
+                f"A taxa geral de envio ao funil foi de {percentual(metricas['taxa_funil'])}."
             ),
             Spacer(1, 3 * mm),
             tabela_cards,
@@ -1323,20 +1627,158 @@ def renderizar_pdf(
         ]
     )
 
+    segmentacao = metricas["segmentacao_perfis"]
+    linhas_perfis: list[list[Any]] = [
+        [
+            p("Perfil atendido", "cabecalho_tabela"),
+            p("Leads", "cabecalho_tabela"),
+            p("Conversas", "cabecalho_tabela"),
+            p("No funil", "cabecalho_tabela"),
+            p("Taxa de envio", "cabecalho_tabela"),
+        ]
+    ]
+    linhas_politica: list[int] = []
+    for perfil in segmentacao["linhas"]:
+        if perfil["funil_nao_aplicavel"]:
+            valor_funil = "Não se aplica*"
+            valor_taxa = "—"
+            linhas_politica.append(len(linhas_perfis))
+        else:
+            valor_funil = perfil["leads_funil"]
+            valor_taxa = percentual(perfil["taxa_funil"])
+        linhas_perfis.append(
+            [
+                p(perfil["rotulo"], "pequeno"),
+                p(perfil["leads"], "centro"),
+                p(perfil["conversas"], "centro"),
+                p(valor_funil, "centro"),
+                p(valor_taxa, "centro"),
+            ]
+        )
+
+    tabela_perfis = Table(
+        linhas_perfis,
+        colWidths=[67 * mm, 20 * mm, 24 * mm, 31 * mm, 25 * mm],
+        repeatRows=1,
+    )
+    estilo_perfis = [
+        ("BACKGROUND", (0, 0), (-1, 0), verde),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, cinza_claro]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5 * mm),
+    ]
+    for indice_linha in linhas_politica:
+        estilo_perfis.append(
+            (
+                "BACKGROUND",
+                (0, indice_linha),
+                (-1, indice_linha),
+                colors.HexColor("#FFF4D6"),
+            )
+        )
+    tabela_perfis.setStyle(TableStyle(estilo_perfis))
+
+    total_conversas_perfil = (
+        segmentacao["conversas_classificadas"]
+        + segmentacao["conversas_sem_classificacao"]
+    )
+    leituras_rapidas: list[str] = []
+    predominantes = segmentacao["perfis_predominantes"]
+    if len(predominantes) == 1:
+        leituras_rapidas.append(f"Maior volume: {predominantes[0]}.")
+    elif predominantes:
+        leituras_rapidas.append("Maior volume, em empate: " + "; ".join(predominantes) + ".")
+    if segmentacao["leads_multiperfil"]:
+        leituras_rapidas.append(
+            f"{segmentacao['leads_multiperfil']} lead(s) apareceram em mais de um "
+            "perfil de atendimento."
+        )
+    if segmentacao["conversas_sem_classificacao"]:
+        leituras_rapidas.append(
+            f"{segmentacao['conversas_sem_classificacao']} conversa(s) tinham "
+            "tipo/idade ausente ou inválido, ou idade fora das faixas atuais."
+        )
+    if not leituras_rapidas:
+        leituras_rapidas.append("Nenhum atendimento para classificar neste período.")
+
+    bloco_perfis = [
+        Paragraph("Perfil dos atendimentos", estilos["secao"]),
+        p(
+            "Leads representa clientes únicos dentro de cada perfil; Conversas "
+            "mostra a demanda técnica. Um cliente pode aparecer em mais de um "
+            "perfil quando iniciou atendimentos para pessoas diferentes, portanto "
+            "as linhas não devem ser somadas para obter o total geral."
+        ),
+        Spacer(1, 2 * mm),
+        tabela_perfis,
+        Spacer(1, 2.5 * mm),
+        p(
+            f"Cobertura etária: {segmentacao['conversas_classificadas']} de "
+            f"{total_conversas_perfil} conversa(s) ({percentual(segmentacao['cobertura_conversas'])}). "
+            f"A faixa infantil começa aos {segmentacao['idade_minima_dependente']} "
+            "anos conforme a configuração de BPA da unidade."
+        ),
+        p("Leitura rápida: " + " ".join(leituras_rapidas), "pequeno"),
+    ]
+    if segmentacao["suporte_idoso"]:
+        bloco_perfis.append(
+            p(
+                "* Quantidade no funil para titulares 60+: não se aplica devido às "
+                "políticas da unidade franqueada. Pela regra atual, são encaminhados "
+                "ao comercial, sem envio automático ao funil (0 esperado).",
+                "pequeno",
+            )
+        )
+        titular_idoso = next(
+            perfil for perfil in segmentacao["linhas"]
+            if perfil["chave"] == "titular_idoso"
+        )
+        if titular_idoso["leads_funil_observados"]:
+            bloco_perfis.append(p(
+                f"Atenção ao histórico: {titular_idoso['leads_funil_observados']} "
+                "lead(s) titular(es) 60+ têm envio confirmado no período. Esses "
+                "registros continuam no total geral; a política atual não apaga "
+                "envios anteriores nem comprova qual configuração vigorava na época.",
+                "pequeno",
+            ))
+    if segmentacao["conversas_funil_sem_classificacao"]:
+        bloco_perfis.append(p(
+            f"Envios fora das cinco faixas: {segmentacao['conversas_funil_sem_classificacao']} "
+            "conversa(s) sem classificação, cujos leads continuam considerados "
+            "no total geral de enviados.",
+            "pequeno",
+        ))
+    historia.append(KeepTogether(bloco_perfis))
+    if not metricas["leads_contato"]:
+        historia.extend([
+            Spacer(1, 4 * mm),
+            p("Nenhum lead entrou em contato neste período. Não há notas, "
+              "comentários ou relação de leads a apresentar."),
+        ])
+        documento.build(
+            historia, onFirstPage=cabecalho_rodape, onLaterPages=cabecalho_rodape,
+        )
+        return
+    historia.append(PageBreak())
+
     distribuicao = metricas["distribuicao_notas"]
     maximo = max([int(valor) for valor in distribuicao.values()] + [1])
-    linhas_notas: list[list[Any]] = [[p("Nota", "pequeno"), p("Distribuição", "pequeno"), p("Respostas", "pequeno")]]
+    linhas_notas: list[list[Any]] = [[p("Nota", "cabecalho_tabela"), p("Distribuição", "cabecalho_tabela"), p("Respostas", "cabecalho_tabela")]]
     for nota in range(5, 0, -1):
         quantidade = int(distribuicao[str(nota)])
-        largura_barra = max(1, int(34 * quantidade / maximo))
-        barra = Table([[""]], colWidths=[largura_barra * mm], rowHeights=[4 * mm])
-        barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), amarelo)]))
+        barra: Any = ""
+        if quantidade:
+            barra = Table([[""]], colWidths=[90 * quantidade / maximo * mm], rowHeights=[4 * mm], hAlign="LEFT")
+            barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), amarelo)]))
         linhas_notas.append([p(f"{nota} / 5"), barra, p(quantidade, "centro")])
     tabela_notas = Table(linhas_notas, colWidths=[23 * mm, 120 * mm, 24 * mm], repeatRows=1)
     tabela_notas.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), verde_claro),
+                ("BACKGROUND", (0, 0), (-1, 0), verde),
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 2.3 * mm),
@@ -1349,21 +1791,45 @@ def renderizar_pdf(
             Paragraph("Satisfação", estilos["secao"]),
             p(
                 f"Foram registradas {metricas['respostas_satisfacao']} nota(s) e "
-                f"{metricas['comentarios']} comentário(s) no período."
+                f"{metricas['comentarios']} comentário(s) no período. "
+                f"Participação: {percentual(metricas['taxa_participacao_satisfacao'])} "
+                "dos leads em contato deram pelo menos uma nota."
             ),
             Spacer(1, 2 * mm),
             tabela_notas,
-            PageBreak(),
-            Paragraph("Leads identificados no período", estilos["secao"]),
+            Spacer(1, 4 * mm),
+            Paragraph("Como interpretar os números", estilos["secao"]),
+            p(
+                "No funil significa envio confirmado no registro local de integração, "
+                "dentro do período; não significa agendamento ou venda. Cada faixa "
+                "considera o envio da própria conversa, nunca de outro atendimento "
+                "do mesmo contato.", "pequeno",
+            ),
+            p(
+                "A idade do titular usa o cadastro atual; a do dependente usa o "
+                "registro ligado à conversa. Idades e configurações de BPA/suporte "
+                "ao idoso refletem o banco na extração, não um retrato histórico "
+                "da época de cada atendimento. Idades fora de 1–99, ausentes e "
+                "fora das faixas exibidas ficam sem classificação.", "pequeno",
+            ),
+            p(
+                f"{segmentacao['leads_sem_classificacao']} lead(s) apenas sem "
+                f"classificação; {segmentacao['leads_funil_apenas_sem_classificacao']} "
+                "lead(s) enviados somente por conversas sem classificação. "
+                f"{segmentacao['conversas_apenas_envio_funil']} conversa(s) foram "
+                "incluídas nos perfis pelo envio confirmado, mesmo sem mensagem "
+                "na janela, sempre de clientes que entraram em contato no período.",
+                "pequeno",
+            ),
         ]
     )
 
     cabecalho_leads = [
-        p("Lead", "pequeno"),
-        p("Profissão atual", "pequeno"),
-        p("Conversa(s)", "pequeno"),
-        p("Última atividade", "pequeno"),
-        p("Funil", "pequeno"),
+        p("Lead", "cabecalho_tabela"),
+        p("Profissão atual", "cabecalho_tabela"),
+        p("Conversa(s)", "cabecalho_tabela"),
+        p("Última atividade", "cabecalho_tabela"),
+        p("Funil", "cabecalho_tabela"),
     ]
     linhas_leads: list[list[Any]] = [cabecalho_leads]
     for lead in unidade["conversas"]:
@@ -1394,13 +1860,13 @@ def renderizar_pdf(
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, cinza_claro]),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.8 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8 * mm),
                 ("SPAN", (0, 1), (-1, 1)) if len(unidade["conversas"]) == 0 else ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.white),
             ]
         )
     )
-    historia.extend([tabela_leads, Spacer(1, 7 * mm), Paragraph("Comentários recebidos", estilos["secao"])])
+    historia.extend([Spacer(1, 4 * mm), Paragraph("Comentários recebidos", estilos["secao"])])
 
     comentarios = [item for item in unidade["pesquisas"] if item["comentario"]]
     if not comentarios:
@@ -1428,14 +1894,16 @@ def renderizar_pdf(
 
     historia.extend(
         [
-            Spacer(1, 8 * mm),
-            HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#CAD5D9")),
-            Spacer(1, 2 * mm),
+            PageBreak(),
+            Paragraph("Leads identificados no período", estilos["secao"]),
             p(
-                "Documento privado. Contém dados pessoais dos leads e deve ser "
-                "armazenado e compartilhado somente com pessoas autorizadas da unidade.",
+                "Relação consolidada por cliente da unidade. Os IDs abaixo remetem "
+                "às conversas do dashboard de histórico, que permanece separado "
+                "deste relatório de indicadores.",
                 "pequeno",
             ),
+            Spacer(1, 3 * mm),
+            tabela_leads,
         ]
     )
     documento.build(

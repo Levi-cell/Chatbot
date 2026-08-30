@@ -36,6 +36,26 @@ enviado vazio e as observações distinguem `não tem` (ausência declarada) de
 `não informado` (outra resposta aceita). Nunca é enviado um texto fictício no
 campo técnico de e-mail.
 
+Essa reconstrução classifica a resposta que já avançou de `10 -> 11`; não
+reaplica `email_obrigatorio` nem a idade com a configuração atual da unidade.
+O worker decide a política e o repositório fornece a resposta histórica;
+`core/validacoes/email.py` é compartilhado com a integração para manter a
+mesma classificação.
+
+## Profissão no snapshot da conversa
+
+A profissão vem exclusivamente de `conversa.profissao`, capturada na etapa 4.
+`cliente.profissao` pode mudar em outro atendimento e não substitui esse
+snapshot. Sem profissão na conversa, as observações exibem `Não informada`.
+
+## Identificação da oportunidade
+
+O payload usa o título `Chatbot Lead <nome_unidade>`. O destaque principal em
+`empresa.nome` contém nome e idade do titular ou nome do titular, nome e idade
+do dependente. O ID da conversa não faz parte do título atual; ele não é uma
+chave de idempotência externa. As garantias locais e a janela de possível
+duplicidade estão no [README dos workers](../../../workers/README.md#worker-do-funil).
+
 ## Teste manual
 
 Os testes usam dados fictícios específicos por unidade e só enviam com
