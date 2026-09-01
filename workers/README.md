@@ -57,10 +57,11 @@ reinicia o fluxo.
 
 ```text
 dequeue
--> validar cliente, unidade e conversa
--> vincular fila à conversa
--> adquirir lock
 -> respeitar mensagem anterior
+-> validar cliente, unidade e conversa
+-> barrar conversa com bloqueio vigente
+-> adquirir lock
+-> vincular fila à conversa
 -> persistir histórico do cliente
 -> rotear e enviar resposta
 -> persistir histórico/contexto do bot
@@ -74,12 +75,13 @@ Conexão, `commit`, `rollback` e `close` do ciclo pertencem ao `flow_worker.py`.
 Os commits intermediários são checkpoints recuperáveis:
 
 1. claim da fila;
-2. vínculo com a conversa;
-3. lock;
-4. histórico do cliente;
-5. histórico e contexto do bot;
-6. status `sent`;
-7. unlock.
+2. espera por mensagem anterior, quando necessária;
+3. validação do banco;
+4. lock e vínculo com a conversa;
+5. histórico do cliente;
+6. histórico e contexto do bot;
+7. status `sent`;
+8. unlock.
 
 Uma função auxiliar pode executar uma operação com o cursor recebido, mas não
 deve decidir a transação fora do orquestrador.
@@ -90,12 +92,11 @@ O vínculo `fila_mensagens.id_conversa` é uma anotação de integridade e
 ordenação; ele não é o lock de turno e não substitui a resolução atual por
 `(cliente, unidade)`.
 
-O repositório somente preenche o vínculo quando ele está vazio ou já aponta
-para a mesma conversa. Se o `UPDATE` retornar zero linhas, o worker registra
-`mensagem_conversa_vinculo_preservado` e continua com o contexto recalculado.
-Esse caso não entra no retry genérico porque pode acontecer legitimamente
-quando uma mensagem aguardou a anterior e a conversa foi encerrada sem
-bloqueio ativo antes do seu próximo processamento.
+O repositório preenche o vínculo quando ele está vazio ou já aponta para a mesma
+conversa. Um vínculo legado divergente só é reparado quando a fila ainda não tem
+histórico. Se nenhuma linha puder ser vinculada com segurança, o worker falha
+fechado: devolve a mensagem para `pending` por 300 segundos, sem consumir uma
+tentativa de erro e sem enviar resposta.
 
 Se a conversa anterior continuar ativa, a mensagem permanece na mesma conversa
 e segue a etapa já atualizada. Se o encerramento tiver bloqueio vigente, a
@@ -128,7 +129,10 @@ fila sem duplicar o envio.
 - apenas um worker processa a conversa por vez;
 - `lock_version` impede unlock por proprietário antigo;
 - uma mensagem posterior não ultrapassa outra anterior aberta;
-- espera por mensagem anterior não consome tentativa de erro.
+- a verificação de mensagem anterior ocorre logo depois do claim, antes de
+  resolver conversa e tentar seu lock;
+- espera por mensagem anterior (30 segundos) ou lock recusado (5 segundos) não
+  consome tentativa de erro.
 
 ## Response flow
 

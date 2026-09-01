@@ -72,11 +72,17 @@ Para impedir que uma chave seja recriada durante a manutencao, pare os tres
 servicos primeiro. Em seguida, execute:
 
 ```bash
-sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python -c "from core.cache.redis_client import get_redis; r=get_redis(); h=str(r.connection_pool.connection_kwargs.get(\"host\", \"\")).strip().lower(); assert h not in {\"localhost\", \"127.0.0.1\", \"::1\"}, f\"RECUSADO_REDIS_LOCAL={h}\"; p=\"conversa_bloqueada:*\"; ks=list(r.scan_iter(match=p, count=500)); print(\"DESTINO=\", h, r.connection_pool.connection_kwargs.get(\"port\")); print(\"ANTES=\", len(ks)); print(\"REMOVIDAS=\", r.delete(*ks) if ks else 0); depois=sum(1 for _ in r.scan_iter(match=p, count=500)); print(\"DEPOIS=\", depois); raise SystemExit(0 if depois == 0 else 1)"'
+cd /opt/chatbot/app
+sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
+  /opt/chatbot/venv/bin/python -m utilitarios.maintenance.cache_reset \
+  --bloqueios \
+  --confirmar \
+  --env-file /etc/chatbot/chatbot.env
 ```
 
-O resultado obrigatorio e `DEPOIS= 0`. Depois, inicie novamente os tres
-servicos com os comandos deste documento.
+O comando valida que o destino não é local, percorre apenas o padrão
+`conversa_bloqueada:*` e informa `RESET_CACHE_BLOQUEIOS_OK` com o total removido.
+Depois, inicie novamente os três serviços com os comandos deste documento.
 
 Importante: se o banco ainda possuir uma conversa encerrada dentro do periodo
 de bloqueio, a regra de recuperacao do sistema pode recriar a chave. Para um

@@ -266,7 +266,7 @@ Exemplos:
 ```text
 valida_etapa2.py
 valida_etapa4.py
-valida_quarta_etapa.py
+valida_etapa7.py
 ```
 
 O validador específico:
@@ -294,6 +294,11 @@ validador_nome.py
 
 O validador de nome é universal porque valida tanto o nome do cliente quanto o
 nome do dependente.
+
+Uma validação pura compartilhada por outros domínios não precisa ficar dentro do
+worker. O contrato estrutural de e-mail, usado pelo fluxo e pela reconstrução do
+snapshot do Funil, pertence a `core/validacoes/email.py`. Esse módulo não acessa
+banco, não envia mensagens e não decide transições.
 
 #### Regra de classificação dos validadores
 
@@ -396,19 +401,31 @@ def resolve_etapa4(contexto_historico):
     if not resultado.valida:
         return enviar_etapa4_contexto_profissao_invalida(...)
 
+    status_dependente = contexto_historico["status_dependente"]
+    if status_dependente:
+        evento = EVENTO_PROFISSAO_DEPENDENTE_VALIDA
+        destino_esperado = ETAPA_5_NOME_DEPENDENTE
+    else:
+        evento = EVENTO_PROFISSAO_TITULAR_VALIDA
+        destino_esperado = ETAPA_6_IDADE_ALUNO
+
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
     destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_PROFISSAO_TITULAR_VALIDA,
-        destinos_esperados={ETAPA_6_IDADE_ALUNO},
+        evento,
+        destinos_esperados={destino_esperado},
     )
 
-    contexto_envio = enviar_etapa6_cliente(...)
+    contexto_envio = (
+        enviar_etapa5(...) if status_dependente else enviar_etapa6_cliente(...)
+    )
     contexto_envio["profissao"] = resultado.profissao
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_PROFISSAO_TITULAR_VALIDA,
+        evento,
         destino,
     )
 ```
@@ -427,7 +444,7 @@ Exemplo:
 
 ```python
 if id_etapa_atual == 4:
-    return resolve_etapa4(contexto_historico)
+    return _resolver_com_saudacao(resolve_etapa4, contexto_historico)
 ```
 
 O `flow_sender`:
@@ -437,6 +454,12 @@ O `flow_sender`:
 - não decide destino;
 - não executa SQL;
 - não chama PyWa diretamente.
+
+A etapa 1 ainda não possui nome confirmado e é chamada diretamente. Nas etapas
+2 a 21, a rota atual usa `_resolver_com_saudacao` para aplicar, no mesmo envio e
+sem mudar validação ou destino, o prefixo de retorno quando a última mensagem do
+bot daquela conversa tem pelo menos três horas. A barreira de resposta já
+existente continua antes dessa lógica, para o retry não gerar novo envio.
 
 Uma etapa não implementada deve continuar levantando `NotImplementedError`.
 Não retornar sucesso fictício.
@@ -563,15 +586,15 @@ Estrutura:
 core/integrations/whatsapp/
 ├── messages/
 │   ├── etapa1_messages.py
-│   ├── etapa2_messages.py
-│   └── etapa3_messages.py
+│   ├── ...
+│   └── etapa22_messages.py
 └── pywa_functions/
     ├── cliente.py
     ├── saudacao.py
     └── pywa_senders/
         ├── etapa1.py
-        ├── etapa2.py
-        └── etapa3.py
+        ├── ...
+        └── etapa22.py
 ```
 
 ### Fronteiras
@@ -675,15 +698,16 @@ Evitar comentários que apenas repetem o código:
 
 ### Regressão
 
-Sempre executar:
+Executar os módulos diretamente afetados e, ao final, a suíte completa. Entre os
+contratos críticos atuais estão:
 
 ```text
 test_fluxo_turno_abc
 test_retry_essencial
-test_lastfrom_semantico
-test_roteamento_essencial
 test_persistencia_essencial
-test_persistencia_essencial
+test_worker_flow_runtime
+test_suporte_idoso_email_obrigatorio
+test_saudacao_retorno
 ```
 
 ## Definition of done

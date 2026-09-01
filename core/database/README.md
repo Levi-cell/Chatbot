@@ -173,6 +173,7 @@ gerenciador de segredos.
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_worker_flow_runtime.py`.
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`.
 
-A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
+A organização e o comando da suíte completa estão em `tests/README.md`.

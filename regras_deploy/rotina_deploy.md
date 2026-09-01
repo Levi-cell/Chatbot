@@ -82,7 +82,7 @@ Depois de concluir as alterações, ainda no computador local:
 ```powershell
 git branch --show-current
 git status --short
-python -m unittest discover -s tests -p "test_*.py"
+python -m unittest discover -s tests -t . -p "test_*.py"
 git diff --check
 
 git add -A
@@ -145,15 +145,16 @@ Regras:
 ```bash
 /opt/chatbot/venv/bin/pip install -r /opt/chatbot/app/requirements.txt
 
-sudo -u chatbot env PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1 \
-  /opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py check --deploy
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py check --deploy'
 
-sudo -u chatbot env PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1 \
-  /opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py migrate --noinput
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py migrate --noinput'
 
-sudo -u chatbot env PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1 \
-  /opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py collectstatic --noinput
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py collectstatic --noinput'
 ```
+
+O `EnvironmentFile` das units não é herdado pela sessão SSH. Esses comandos
+carregam explicitamente `/etc/chatbot/chatbot.env`; não use `cat`, `env` ou outro
+comando que imprima seus valores.
 
 `manage.py migrate` cuida das tabelas internas gerenciadas pelo Django. As
 tabelas de negócio `chatbot.*` usam modelos `managed = False` e seguem o fluxo
@@ -249,7 +250,8 @@ Resultados esperados:
 
 - os três serviços em `active` / `running`;
 - worker de fluxo iniciando ciclos sem erro de banco, Redis ou Meta;
-- worker do Funil concluindo o ciclo e informando o próximo ciclo em uma hora;
+- worker do Funil concluindo o ciclo e informando o próximo ciclo conforme
+  `FUNIL_INTERVALO_SEGUNDOS` (padrão atual: 30 minutos);
 - ausência de crescimento contínuo de `NRestarts`.
 
 ## 9. Casos que não são um deploy comum

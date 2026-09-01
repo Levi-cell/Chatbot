@@ -834,7 +834,7 @@ Depois da implementação:
 
 ```powershell
 python -m unittest discover -s tests -t . -p "test_*.py" -v
-python -m compileall core workers callback tests
+python -m compileall core workers callback utilitarios tests
 python callback/manage.py check
 git diff --check
 ```

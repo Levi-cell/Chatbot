@@ -38,8 +38,9 @@ utilitarios/
 │   ├── cache_reset.py
 │   └── message_partitions.py
 └── integrations/
-    ├── funil_saj.py
-    └── funi_rio_teste.py
+    ├── funil_saj_teste.py
+    ├── funil_rio_teste.py
+    └── funil_andre_teste.py
 ```
 
 As ferramentas foram preparadas para execução local no PyCharm. Nesse modo, o
@@ -187,23 +188,23 @@ O PDF inclui cobertura de classificação, participação na satisfação,
 distribuição das notas, comentários com profissão e relação nominal dos leads.
 Os HTMLs de conversas continuam separados e com a mesma finalidade anterior.
 
-## Consultas e alteração manual do PIN Meta
+## Consultas Meta e alerta sobre alteração do PIN
 
-Os três comandos abaixo usam `utilitarios/local_settings.py` no Windows. Na VM,
+As consultas abaixo usam `utilitarios/local_settings.py` no Windows. Na VM,
 acrescente `--env-file /etc/chatbot/chatbot.env`:
 
 ```bash
 python -m utilitarios.cache_consulta --limite 200
 python -m utilitarios.utlitys --phone-number-id PHONE_ID
-python -m utilitarios.pintregister \
-  --phone-number-id PHONE_ID \
-  --confirm-phone-number-id PHONE_ID \
-  --confirm-real-change
 ```
 
-Os identificadores são mascarados nas consultas por padrão. O último comando é
-mutante, lê o PIN somente do ambiente e exige repetição exata do alvo mais a
-confirmação explícita; token, PIN e resposta bruta da Meta nunca são impressos.
+Os identificadores são mascarados nas consultas por padrão.
+
+> **Não execute `utilitarios.pintregister` pela linha de comando, nem com
+> `--help`.** O bloco `__main__` atual substitui os argumentos recebidos por um
+> alvo e uma confirmação fixos e realiza imediatamente o POST mutante na Meta.
+> Enquanto esse entrypoint não for corrigido em uma tarefa de código própria,
+> ele não é uma ferramenta CLI segura. Importar o módulo não realiza o POST.
 
 ## Bloqueios Meta × banco
 
@@ -295,22 +296,36 @@ partição não puder ser criada.
 SAJ:
 
 ```bash
-python -m utilitarios.integrations.funil_saj catalog
-python -m utilitarios.integrations.funil_saj payload
-python -m utilitarios.integrations.funil_saj send-test --confirm-real-send
+python -m utilitarios.integrations.funil_saj_teste catalog
+python -m utilitarios.integrations.funil_saj_teste payload
+python -m utilitarios.integrations.funil_saj_teste send-test --confirm-real-send
 ```
 
 Rio Vermelho:
 
 ```bash
-python -m utilitarios.integrations.funi_rio_teste payload
-python -m utilitarios.integrations.funi_rio_teste \
+python -m utilitarios.integrations.funil_rio_teste payload
+python -m utilitarios.integrations.funil_rio_teste \
+  send-test --confirm-real-send
+```
+
+Santo André - Jardim Bela Vista:
+
+```bash
+python -m utilitarios.integrations.funil_andre_teste
+python -m utilitarios.integrations.funil_andre_teste payload
+python -m utilitarios.integrations.funil_andre_teste \
   send-test --confirm-real-send
 ```
 
 Em cada bloco, somente `send-test` envia uma oportunidade real, e isso exige a
-flag de confirmação. Cada sonda usa um lead fictício identificado para sua
-própria unidade. Importar os módulos nunca realiza uma requisição externa.
+flag de confirmação. Em Santo André, executar o arquivo ou módulo sem argumentos
+é o atalho intencional para esse mesmo envio confirmado, permitindo usar
+diretamente o botão **Run** do PyCharm. Cada sonda usa um lead fictício
+identificado para sua própria unidade. Como Santo André ainda não existe no
+banco, seu snapshot usa `id_unidade=-1` apenas para satisfazer o contrato
+interno; esse campo não é incluído no payload da ApiCarrossel. Importar os
+módulos nunca realiza uma requisição externa.
 
 ## Ideia futura: rotação automática do PIN
 

@@ -100,7 +100,7 @@ montagem de mensagens, retry e efeitos externos continuam fora desta pasta.
 ```text
 worker_flow  -> flow_worker.py
 worker_funil -> funil_worker.py e processamento.py
-webhook      -> post_flow.py ou flood_guard.py
+webhook      -> post_flow.py, flood_guard.py ou bloqueio_meta_guard.py
 scripts      -> proprio ponto de entrada
 ```
 

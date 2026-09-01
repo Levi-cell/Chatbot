@@ -78,7 +78,10 @@ persistida, não há novo envio.
 
 ## PyWa functions
 
-Único local permitido para importação e chamada direta da PyWa.
+Concentra a criação do cliente PyWa e o transporte das mensagens do fluxo. Os
+senders são o local normal para chamadas de envio; operações compartilhadas de
+bloqueio e desbloqueio ficam em `tools/usuarios.py`, que reutiliza a mesma
+fábrica de cliente em `pywa_functions/cliente.py`.
 
 - `cliente.py`: normaliza `phone_id`, cria `WhatsApp` e aplica o prefixo de
   retorno somente no escopo do envio corrente;
@@ -106,7 +109,8 @@ Os senders devolvem contexto simples para o worker. Falhas são encadeadas com
 
 ## Tools
 
-Ferramentas administrativas usadas pelo Django Admin:
+Operações Meta compartilhadas e ferramentas administrativas usadas pelo
+Django Admin e pelo webhook:
 
 - registrar/desregistrar número;
 - validar o vínculo entre WABA e phone ID;
@@ -118,8 +122,11 @@ Relatórios conscientes e somente leitura ficam em
 Eles comparam bloqueios pela chave completa
 `(waba_id, phone_id_unidade, wa_id_cliente)` e reconciliam registros Cloud API.
 
-`tools` não deve conter implementação duplicada usada pelo runtime. Uma operação
-compartilhada deve morar em `pywa_functions` e ser chamada pela ferramenta.
+`tools/usuarios.py` é a primitiva única de bloqueio e desbloqueio consumida pelo
+webhook e pelo Admin. Os demais módulos deste diretório atendem às operações de
+configuração da conta e do número. Eles podem reutilizar a fábrica de cliente,
+mas não devem duplicar envio de etapa nem assumir responsabilidades de banco,
+fila ou transação.
 
 `tools/config.py` centraliza a configuração operacional da integração Meta, mas
 os valores são lidos por `core/config_env.py` a partir de variáveis de ambiente:
@@ -127,6 +134,9 @@ os valores são lidos por `core/config_env.py` a partir de variáveis de ambient
 ```text
 META_ACCESS_TOKEN
 META_GRAPH_API_VERSION
+META_HTTP_CONNECT_TIMEOUT_SECONDS
+META_HTTP_READ_TIMEOUT_SECONDS
+META_PHONE_REGISTRATION_PIN
 ```
 
 `META_GRAPH_API_VERSION` usa o formato `26.0`, sem o prefixo `v`. Essa versão é
@@ -136,6 +146,9 @@ nova apresentar incompatibilidade, a variável pode retornar manualmente para a
 
 Não adicione token ou outro valor sensível diretamente nesse arquivo. WABA ID e
 phone number ID são dados por unidade e devem vir do banco/cache.
+`META_PHONE_REGISTRATION_PIN` também é segredo operacional e só é necessário
+para a operação administrativa de registro do número; não deve ser exibido em
+logs, documentação ou mensagens.
 
 ## Limites
 

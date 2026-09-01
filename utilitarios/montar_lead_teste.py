@@ -1,6 +1,10 @@
 """Fornece snapshots fictícios isolados para as sondas do Funil."""
 
 from datetime import datetime
+from unicodedata import normalize
+
+
+ID_UNIDADE_TESTE_SEM_CADASTRO = -1
 
 
 def montar_dados_lead_teste_saj():
@@ -21,6 +25,15 @@ def montar_dados_lead_teste_rio_vermelho():
     )
 
 
+def montar_dados_lead_teste_santo_andre():
+    """Monta um lead fictício para Santo André sem depender do banco."""
+    return _montar_dados_lead_teste(
+        id_unidade=ID_UNIDADE_TESTE_SEM_CADASTRO,
+        nome_unidade="Supera Santo André - Jardim Bela Vista",
+        identificador="Santo André",
+    )
+
+
 def _montar_dados_lead_teste(
     *,
     id_unidade,
@@ -28,7 +41,13 @@ def _montar_dados_lead_teste(
     identificador,
 ):
     """Monta a estrutura comum sem consultar banco ou executar requisição."""
-    marcador = identificador.casefold().replace(" ", "-")
+    marcador = (
+        normalize("NFKD", identificador)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .casefold()
+        .replace(" ", "-")
+    )
     return {
         "id_conversa": int(datetime.now().strftime("%m%d%H%M%S")),
         "id_unidade": id_unidade,

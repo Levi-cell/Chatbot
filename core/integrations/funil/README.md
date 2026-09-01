@@ -62,17 +62,25 @@ Os testes usam dados fictícios específicos por unidade e só enviam com
 confirmação explícita:
 
 ```bash
-python -m utilitarios.integrations.funil_saj payload
-python -m utilitarios.integrations.funil_saj \
+python -m utilitarios.integrations.funil_saj_teste payload
+python -m utilitarios.integrations.funil_saj_teste \
   send-test --confirm-real-send
-python -m utilitarios.integrations.funi_rio_teste payload
-python -m utilitarios.integrations.funi_rio_teste \
+python -m utilitarios.integrations.funil_rio_teste payload
+python -m utilitarios.integrations.funil_rio_teste \
+  send-test --confirm-real-send
+python -m utilitarios.integrations.funil_andre_teste payload
+python -m utilitarios.integrations.funil_andre_teste \
   send-test --confirm-real-send
 ```
 
-Cada sonda cria uma oportunidade claramente marcada com sua unidade. Antes de
-ativar o worker, confira no CRM pessoa, telefone, e-mail, título, observações e
-origem.
+SAJ e Rio também oferecem o comando `catalog` para conferir os códigos obtidos
+do banco. Santo André ainda usa configuração explícita de teste e não possui
+esse comando. Em SAJ e Rio, use os subcomandos documentados. Em Santo André, o
+ponto de entrada sem argumentos é um atalho intencional para envio real; use-o
+somente quando quiser criar a oportunidade de teste e prefira `payload` para
+inspeção sem envio. Cada sonda cria uma oportunidade claramente marcada com sua
+unidade. Antes de ativar o worker, confira no CRM pessoa, telefone, e-mail,
+título, observações e origem.
 Os dois últimos são enviados pelo mecanismo `personalizados` com os títulos
 exatos `Observações` e `Origem do lead`; a unidade precisa possuir campos
 compatíveis no ApiCarrossel.

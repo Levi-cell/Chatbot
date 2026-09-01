@@ -110,20 +110,16 @@ Fila A: processing, respondida
 Fila B: pending, sem resposta
 ```
 
-#### Etapa 3 - outro worker seleciona B imediatamente
+#### Etapa 3 - outro ciclo seleciona B
 
-Se o lock da conversa ainda pertencer ao worker que caiu:
-
-```text
-tentar_lock_conversa(B) => False
-```
-
-B permanece `processing`. A recusa do lock não exclui B e não a trata como erro
-de processamento.
+Antes de resolver a conversa ou tentar seu lock, o worker procura uma mensagem
+anterior ainda aberta para o mesmo cliente e unidade. Como A continua
+`processing`, B é devolvida para `pending` por 30 segundos. Essa espera não
+consome tentativa de erro.
 
 ```text
 Fila A: processing, respondida
-Fila B: processing, sem resposta
+Fila B: pending, sem resposta
 ```
 
 #### Etapa 4 - o cliente envia C
@@ -133,7 +129,7 @@ O webhook examina individualmente todas as filas abertas:
 | Fila | Status | Resposta própria do bot |
 |---|---|---|
 | A | `processing` | Sim |
-| B | `processing` | Não |
+| B | `pending` | Não |
 
 Como B ainda não possui resposta própria:
 
@@ -144,14 +140,10 @@ todas_abertas_respondidas = False
 C é descartada e nunca entra no banco. O `last_message_from = 'bot'` deixado por
 A não libera C, porque não existe histórico do bot vinculado especificamente a B.
 
-#### Etapa 5 - B adquire o lock antes da recuperação de A
+#### Etapa 5 - B aguarda a recuperação de A
 
-Se o lock antigo já tiver expirado, B poderá adquiri-lo. Em seguida,
-`reagendar_se_houver_mensagem_anterior()` encontrará A, que é mais antiga e ainda
-está aberta.
-
-B será devolvida para `pending` por 30 segundos, e o retry utilizado para essa
-espera será compensado:
+Enquanto A continuar aberta, cada claim de B repetirá a verificação de ordem e a
+devolverá para `pending` por 30 segundos, sem tentar o lock da conversa:
 
 ```text
 Fila A: processing, respondida
@@ -179,7 +171,9 @@ Fila B: pending
 
 #### Etapa 7 - B é processada
 
-B adquire o lock, não encontra mensagem anterior aberta e segue normalmente.
+B já não encontra mensagem anterior aberta, resolve a conversa, adquire o lock e
+segue normalmente. Se esse lock for recusado por outro motivo, B volta para
+`pending` por 5 segundos, também sem consumir uma tentativa de erro.
 Enquanto B não possuir sua própria resposta do bot, qualquer C será descartada.
 
 Depois que a resposta de B for persistida, a primeira mensagem do próximo turno
@@ -361,8 +355,8 @@ Implementação principal:
 ### 6.1 Oportunidade no Funil de Vendas
 
 - Uma conversa torna-se elegível ao entrar na etapa 18.
-- As etapas 18 a 22 permanecem elegíveis. Assim, avançar na pesquisa
-  antes do próximo ciclo horário não remove a conversa da fila do Funil.
+- As etapas 18 a 22 permanecem elegíveis. Assim, avançar na pesquisa antes do
+  próximo ciclo do worker não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
@@ -389,8 +383,9 @@ Implementação principal:
   não altera `lead_no_funil`.
 - `funil_envios` usa claim com `FOR UPDATE SKIP LOCKED` e lease para recuperar
   itens abandonados em `processing`.
-- O título `Chatbot Lead [C<id_conversa>]` fornece referência determinística
-  para auditoria e reconciliação manual.
+- O título segue `Chatbot Lead <nome_unidade>`. A conversa é identificada pelos
+  dados do snapshot e pelo estado local de `funil_envios`; o CRM não recebe o ID
+  interno da conversa no título.
 - A V1 não cria atividade e não sincroniza atualizações posteriores do CRM.
 
 O processo é desativado por padrão e só inicia com
@@ -472,9 +467,10 @@ Implementação principal:
   cadastrado para a combinação `origem + evento`.
 - Uma etapa poderá possuir mais de um destino, desde que cada evento identifique
   uma única transição.
-- A etapa nunca poderá retroceder.
-- Saltos numéricos são permitidos somente quando existir uma aresta explícita,
-  como `19 + comentario_satisfacao_recusado -> 21`.
+- Avanços, saltos e o retorno controlado `9 + retorno_adiado -> 8` são permitidos
+  somente quando existe uma aresta explícita.
+- Um exemplo de salto autorizado é
+  `20 + comentario_satisfacao_recusado -> 22`.
 - A atualização utilizará a origem persistida no histórico da mensagem e será
   revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do
@@ -482,8 +478,8 @@ Implementação principal:
 - Tratamentos que apenas orientam o cliente poderão responder sem avançar a
   etapa e não produzirão evento de transição.
 
-Retrocesso ou transição sem aresta cadastrada é bug. A ordem numérica dos IDs
-serve para organização e não define navegação.
+Qualquer transição sem aresta cadastrada é bug. A ordem numérica dos IDs serve
+para organização e não define navegação.
 
 ## 11. Tipos de mensagem na V1
 
@@ -799,9 +795,8 @@ Funil confirmou a oportunidade
         -> retry pode criar outra oportunidade
 ```
 
-O estado `processing` e o título determinístico reduzem e tornam rastreável esse
-caso, mas não existe exatamente uma vez sem consulta de reconciliação suportada
-pelo CRM.
+O estado local `processing` e o snapshot persistido tornam o caso rastreável, mas
+não existe exatamente uma vez sem consulta de reconciliação suportada pelo CRM.
 
 ## 15. O que é bug na V1
 
@@ -814,7 +809,7 @@ São bugs, entre outros:
 - o bot enviar novamente quando a resposta atual já estiver persistida;
 - `last_message_from` permanecer como `cliente` quando a resposta atual do bot já
   estiver persistida, ou como `bot` quando ainda não existir resposta persistida;
-- uma etapa retroceder ou saltar mais de uma posição;
+- uma etapa mudar sem a aresta `origem + evento -> destino` autorizada;
 - duas mensagens do mesmo turno avançarem a conversa como se fossem turnos
   independentes;
 - uma mensagem posterior ultrapassar outra anterior ainda aberta na conversa;
@@ -1013,14 +1008,17 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 - Se o Redis falhar depois de a Meta responder, o banco deverá permanecer sem
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
 - Exclusão em massa de unidades é proibida.
+- `suporte_idoso` e `email_obrigatorio` são editáveis no Admin; a ativação do
+  suporte exige um número comercial válido. `waba_id` e `phone_number_id` ficam
+  somente leitura depois da criação.
 
 ### 19.4. Papel de `status_pagamento`
 
 `status_pagamento` não representa vinculação ou desvinculação do número no WABA.
 
-- O campo está reservado ao controle comercial da unidade.
-- Futuramente, ele poderá desativar o atendimento de unidades com pagamento
-  vencido.
+- O campo é o controle atual de admissão da unidade: somente registros com
+  `status_pagamento = TRUE` entram no cache de unidades ativas e são localizados
+  pelo webhook e worker.
 - Uma futura tabela `payment` poderá automatizar essa decisão, mas ela não faz
   parte da V1.
 - Na V1, pagamentos e contratos poderão ser controlados manualmente, contrato por
@@ -1078,21 +1076,22 @@ serviço:
 - caches degradam para fallback ou negam uma operação administrativa que
   produziria inconsistência.
 
-Para a produção 24x7, o deploy futuro deverá utilizar Docker e uma política de
-reinício do container ou processo. As camadas serão complementares:
+Na produção atual, webhook, worker de atendimento e worker do Funil são serviços
+systemd independentes, todos com `Restart=always` e espera de 5 segundos. As
+camadas de recuperação são complementares:
 
 ```text
 operação individual falha
     -> exception ou fallback trata
     -> flow_worker continua
     -> iniciar_flow_worker reinicia o fluxo se ele escapar
-    -> Docker reinicia o processo ou container se necessário
+    -> systemd reinicia o processo se ele encerrar
 ```
 
-A URL pública e os containers de produção deverão permanecer disponíveis 24x7.
+A URL pública e os serviços de produção devem permanecer disponíveis 24x7.
 Falhas previstas não poderão produzir encerramento permanente do serviço nem
-corrupção silenciosa. A infraestrutura Docker ainda é uma etapa futura do deploy;
-os loops e fallbacks da aplicação já formam a base dessa estratégia.
+corrupção silenciosa. Os loops e fallbacks da aplicação atuam antes da supervisão
+dos processos pelo sistema operacional.
 
 Implementação principal:
 
@@ -1102,6 +1101,9 @@ Implementação principal:
 - `workers/worker_funil/iniciar_worker_funil.py`
 - `core/cache/redis_client.py`
 - `callback/webhook/services/post_flow.py`
+- `deploy/systemd/chatbot-webhook.service`
+- `deploy/systemd/chatbot-worker-flow.service`
+- `deploy/systemd/chatbot-worker-funil.service`
 
 ## 21. Matriz de aderência conferida no código
 
@@ -1116,15 +1118,15 @@ Implementação principal:
 | Falha operacional do webhook com mensagem válida | Implementada | Inserção/commit da fila e validação de unidade indisponível retornam HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
 | Cache Redis com fallback para banco | Implementada nos caches principais | Unidades, clientes e conversas bloqueadas possuem estratégias de fallback. |
 | Autocura Redis/banco | Implementada no contrato da V1 | Cobre falhas detectáveis e FK stale; edição direta no banco é proibida em produção. |
-| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade e desbloqueio individual. |
+| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade, integração com o Funil e desbloqueio individual. |
 | Admin somente desbloqueia clientes | Implementada | Meta primeiro; falha preserva o registro no banco. |
 | Unidade Meta-first na criação e exclusão | Implementada | Falha da Meta impede a alteração do banco. |
-| `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
+| `status_pagamento` sem chamada Meta | Implementada conforme a regra | O valor controla a admissão da unidade, mas não registra nem remove o número na Meta. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
+| Supervisão dos três processos | Implementada | Os serviços systemd usam `Restart=always`; Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
 

@@ -122,16 +122,23 @@ Referência: [preços da Plataforma do WhatsApp Business](https://developers.fac
 
 ## Situação do projeto
 
-Atualmente, `envios.py` suporta texto formatado e botões de resposta. Para
-alcançar todos os recursos visuais descritos neste documento, ainda será
-necessário acrescentar suporte a:
+O projeto não possui um `envios.py` genérico. Cada etapa usa seu sender em
+`pywa_senders/etapaN.py`, preservando o contrato de envio e o contexto que será
+persistido pelo worker.
+
+Recursos usados atualmente:
 
 ```text
-footer
-URLButton
-SectionList
-FlowButton
-VoiceCallButton
+texto e botões de resposta -> etapas do fluxo
+URLButton                  -> etapa 6, encaminhamento ao número comercial
+SectionList                -> etapa 19, pesquisa de satisfação
 ```
 
-A estrutura atual de envio já fornece a base para essa evolução.
+Cabeçalhos e rodapés textuais previstos pelo produto são incorporados ao corpo
+da mensagem pelos componentes compartilhados; os senders não dependem de um
+campo visual genérico de `header` ou `footer`.
+
+`FlowButton`, `VoiceCallButton` e envios de mídia não fazem parte do fluxo atual.
+Adotá-los exigirá uma regra de negócio e um contrato de persistência próprios;
+esta referência de recursos da biblioteca não significa que estejam
+implementados no chatbot.

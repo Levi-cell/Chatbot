@@ -33,10 +33,14 @@ cliente; use `DB_SSLMODE=verify-full` e `DB_SSLROOTCERT` para continuar
 validando o certificado do servidor. Depois, prepare o Django:
 
 ```bash
-/opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py check --deploy
-/opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py migrate
-/opt/chatbot/venv/bin/python /opt/chatbot/app/callback/manage.py collectstatic --noinput
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python callback/manage.py check --deploy'
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python callback/manage.py migrate --noinput'
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python callback/manage.py collectstatic --noinput'
 ```
+
+`EnvironmentFile` é carregado automaticamente somente pelo systemd. Uma sessão
+SSH comum não recebe essas variáveis; os comandos manuais acima carregam o mesmo
+arquivo privado dos serviços sem exibir seu conteúdo.
 
 ## Instalar os servicos
 
