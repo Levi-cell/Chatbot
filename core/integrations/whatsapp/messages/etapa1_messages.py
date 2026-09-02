@@ -73,6 +73,8 @@ MENSAGEM_FINANCEIRO_INICIO = (
     "Me diz, qual o seu primeiro nome?"
 )
 
+# mensagem_final = MENSAGEM_FINANCEIRO_INICIO + Midia.santo_andre (Ideia futura)
+
 def montar_mensagem_financeiro_inicio(
     saudacao,
     nome_unidade,
