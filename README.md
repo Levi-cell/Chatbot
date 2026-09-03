@@ -19,7 +19,7 @@ Para desenvolver novas etapas, siga a
 |---|---|
 | [Regras de negócio](REGRAS_DE_NEGOCIO.md) | Fonte de verdade sobre turno, fila, etapas, retries, bloqueios e comportamentos esperados. |
 | [Padrões de arquitetura](PADROES_DE_ARQUITETURA.md) | Fronteiras, dependências permitidas e local correto para novas funções. |
-| [Webhook](callback/README.md) | Entrada HTTP, validações, anti-flood e persistência na fila. |
+| [Aplicativos Django](callback/README.md) | Webhook, validações, fila e estrutura do aplicativo de monitoramento. |
 | [Core](core/README.md) | Mapa dos recursos compartilhados. |
 | [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
 | [Utilitários](utilitarios/README.md) | Monitoramento e manutenção executados manualmente. |
@@ -62,12 +62,18 @@ PostgreSQL: conversa em etapa elegível
     -> workers/worker_funil
     -> core/integrations/funil
     -> Funil de Vendas: oportunidade em Leads
+
+Franqueado autenticado
+    -> callback/monitoramento
+    -> autorização pela unidade da sessão
+    -> PostgreSQL: consultas somente leitura
 ```
 
 Responsabilidades principais:
 
 ```text
 callback/webhook  entrada HTTP e enfileiramento
+callback/monitoramento login, conversas, relatórios e CSV por unidade
 workers           fluxo assíncrono e recuperação
 core/repositories SQL de runtime
 core/database     conexão, DDL e setup
@@ -207,6 +213,15 @@ git diff --check
 
 Consulte [tests/README.md](tests/README.md) para os contratos críticos e a
 política de mocks.
+
+## Portal de monitoramento
+
+O aplicativo `callback/monitoramento` oferece login por conta Django vinculada
+1:1 à unidade, histórico consolidado de conversas, relatórios por período e dois
+arquivos CSV para Google Contatos. Cada requisição resolve novamente a unidade
+da sessão e todos os SELECTs mantêm esse escopo. O navegador atualiza conversas
+a cada 10 segundos e relatórios a cada 30 segundos pelo mesmo serviço web do
+webhook; não existe processo adicional na VM.
 
 ## Monitoramento manual
 

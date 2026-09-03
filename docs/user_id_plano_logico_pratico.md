@@ -51,6 +51,11 @@
 
 A lógica e os critérios autoritativos permanecem preservados em [`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver qualquer divergência interpretativa, o plano teórico vence; os blocos abaixo são a materialização prática dessa mesma lógica. O plano teórico já incorpora a decisão definitiva de continuidade anti-flood entre `user_id` e `wa_id`, e este documento implementa integralmente essa regra.
 
+A triagem por faixa etária já está implementada na baseline. O contrato a
+preservar durante a migração está na
+[seção 9.3 do plano teórico](./user_id_plano_logico_teorico.md#93-triagem-por-faixa-etária-preservada),
+incluindo a renumeração das seis perguntas de 12..17 para 13..18.
+
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
@@ -164,12 +169,14 @@ A lógica e os critérios autoritativos permanecem preservados em [`user_id_plan
 ## Inventário preparado
 
 - Arquivos finais criados: 22
-- Arquivos finais substituídos: 141
+- Arquivos finais substituídos: 140
 - Arquivos removidos: 9
-- Total de ações, incluindo a migração: 172
+- Total de ações, incluindo a migração: 171
 - Os rótulos aditivos `34A`, `97A`, `150A` a `150F` e `159A` a `159D`
   preservam a numeração já revisada dos passos seguintes; cada um representa
   uma ação real no total acima.
+- Os números dos passos são identificadores estáveis; lacunas na sequência não
+  representam ações pendentes.
 - Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
   `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
   identidade/anti-flood/apresentação/profissão e descoberta offline completa. A
@@ -34459,61 +34466,6 @@ Se uma nova regra não se encaixar neste padrão, ela deve ser discutida antes d
 introduzir exceção arquitetural.
 ````
 
-## Passo 154 — `TAREFA_FUTURA_TRIAGEM_POR_IDADE.txt`
-
-Substituir integralmente o arquivo com o conteúdo completo abaixo.
-
-SHA-256 do conteúdo UTF-8 normalizado: `537fbc6ea9f215191f8dccfb6ccc17e177235fac2d368f22359f316383621baa`
-
-````text
-TRIAGEM POR FAIXA ETÁRIA
-
-Status: implementada com catálogo compartilhado entre WhatsApp e Funil.
-
-DECISÃO DE ARQUITETURA
-
-- Não criar um novo mapa de transição.
-- Não criar novas etapas nem renumerar as etapas atuais.
-- Reutilizar as seis etapas de triagem existentes (etapas 13 a 18).
-- As duas triagens terão seis perguntas, as mesmas opções de resposta
-  (Nunca, Às vezes e Frequentemente), a mesma sequência e o mesmo destino.
-- Os arquivos da triagem obtêm a idade persistida no banco e selecionam
-  centralmente a variante correta da mensagem, sem duplicar a regra nos seis
-  senders.
-- `core/triagem/perguntas.py` é a fonte canônica para o WhatsApp e o Funil.
-
-REGRA DE SELEÇÃO
-
-- Atendimento para o próprio cliente:
-  usar a triagem adulta. Um titular menor de 18 anos já tem o atendimento
-  encerrado na validação de idade e, portanto, não alcança a triagem.
-- Atendimento para dependente:
-  - dependente.idade < 18: triagem infantil;
-  - dependente.idade >= 18: triagem adulta.
-- A idade mínima aceita continua sendo validada antes da triagem:
-  - unidade com BPA ativo: 4 anos;
-  - unidade sem BPA ativo: 5 anos.
-- Se a idade necessária estiver ausente ou inconsistente, não escolher uma
-  variante silenciosamente; tratar como inconsistência de dados.
-
-PRESERVAÇÕES
-
-- Manter o mapa de transição atual.
-- Manter os IDs das etapas 13 a 18.
-- Manter a persistência idempotente das seis respostas.
-- Manter as regras transacionais e de retry do worker.
-- Manter a consulta do Funil esperando exatamente seis respostas, ordenadas
-  pelas etapas 13 a 18.
-- Exibir no Funil cada pergunta seguida da sua resposta, sem resumo por
-  quantidade de alternativas.
-- O histórico continuará registrando o texto exato da pergunta enviada.
-
-CUIDADO NO DEPLOY
-
-- Antes do deploy, consultar conversas ativas nas etapas 12 a 18 para evitar
-  que uma conversa em andamento misture versões diferentes das perguntas.
-````
-
 # Fase 7 — Testes automatizados
 
 ## Passo 155 — `tests/unit/test_fluxo_turno_abc.py`
@@ -39399,6 +39351,10 @@ Os testes devem provar, no mínimo:
     precedência; a matriz de e-mail obrigatório/opcional, a limpeza para `NULL`,
     os tratamentos universais prioritários e o falso positivo “quero mais
     informações” permanecem cobertos após a renumeração.
+
+Na conferência das conversas ativas, preservar a sequência das perguntas já
+enviadas: introdução e triagem ocupam 11..17 antes da migração e 12..18 depois.
+Não misturar versões do catálogo na mesma conversa durante a implantação.
 
 Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL
 descartável que reflita exatamente a baseline V1.0.7 atualizada `2bc4188`,

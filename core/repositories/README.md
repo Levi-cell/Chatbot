@@ -30,6 +30,9 @@ core/repositories/
 |   |-- bloqueio_meta.py
 |   |-- suspeita_bot.py
 |   `-- turno_cliente.py
+|-- monitoramento/
+|   |-- acessos.py
+|   `-- painel.py
 `-- funil/
     |-- integracao.py
     |-- envios.py
@@ -40,6 +43,19 @@ core/repositories/
 registra regras do mapa de etapas. `unidades` concentra consultas e versao do
 cache. `seguranca` guarda as barreiras de turno e bloqueio. `funil` cobre a
 configuracao por unidade e o estado dos envios ao CRM.
+
+`monitoramento/acessos.py` consulta `unidade.id_usuario_monitoramento`, o vínculo
+1:1 opcional entre conta e unidade, revalidando a conta no banco. Sem referência
+não há acesso. Opcionalmente verifica conversa e mensagem na
+mesma leitura, sempre pela unidade da conversa. Recebe o ID do usuário da sessão
+por meio do serviço HTTP; não aceita um ID de unidade fornecido pelo navegador.
+Retorna `AcessoMonitoramento` ou `None`. Não lê credenciais nem concede acesso
+especial a superusuários.
+
+`monitoramento/painel.py` contém somente SELECTs para unidade, conversas,
+mensagens, métricas, perfis, satisfação, etapas, atividade e contatos. Todas as
+funções exigem o `id_unidade` já obtido pelo guard e repetem o escopo no próprio
+SQL. O navegador não fornece esse identificador.
 
 No domínio `funil`:
 

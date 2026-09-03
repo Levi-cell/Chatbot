@@ -6,6 +6,7 @@ from core.config_env import env_bool, env_csv, env_int, env_optional, env_requir
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 CSRF_TRUSTED_ORIGINS = env_csv("DJANGO_CSRF_TRUSTED_ORIGINS")
+CSRF_FAILURE_VIEW = 'monitoramento.views.falha_csrf'
 
 SECRET_KEY = env_required("DJANGO_SECRET_KEY")
 
@@ -41,6 +42,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'webhook',
+    'monitoramento.apps.MonitoramentoConfig',
 ]
 
 MIDDLEWARE = [
@@ -152,5 +154,5 @@ USE_I18N = True
 
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"

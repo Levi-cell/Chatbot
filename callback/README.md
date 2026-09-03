@@ -1,8 +1,10 @@
-# Callback e webhook
+# Aplicativos Django: webhook e monitoramento
 
-Camada HTTP Django responsável por receber eventos da Meta, validar a entrada e
-persistir mensagens aceitas na fila. O processamento da conversa pertence ao
-worker.
+Projeto Django que reúne o webhook e o aplicativo de monitoramento por unidade.
+O webhook recebe eventos da Meta, valida a entrada e persiste mensagens aceitas
+na fila. O processamento da conversa pertence ao worker. O monitoramento oferece
+login com autenticação Django, autorização por unidade, consulta responsiva de
+conversas e indicadores, além da exportação de contatos.
 
 Documentos centrais:
 
@@ -21,6 +23,21 @@ callback/
 │   ├── urls.py            rota /webhook
 │   ├── views.py           borda GET/POST
 │   └── services/          fluxo HTTP e anti-flood
+├── monitoramento/        aplicativo do painel por unidade
+│   ├── __init__.py
+│   ├── apps.py           registro MonitoramentoConfig
+│   ├── forms.py          credenciais nativas e autorização antes do login
+│   ├── views.py          login, saída, painel, APIs de leitura e CSV
+│   ├── urls.py           rotas públicas e privadas do monitoramento
+│   ├── monitoramento_guard.py  autorização da sessão e dos recursos
+│   ├── periodos.py       janelas de consulta aceitas pelo servidor
+│   ├── apresentacao.py   consolidação, perfis, botões e Google CSV
+│   ├── services.py       orquestra leituras da unidade autorizada
+│   ├── templates/monitoramento/  login, painel e acesso negado
+│   └── static/monitoramento/     estilos, interação e logo ESL Tech
+│       ├── css/
+│       ├── js/
+│       └── img/
 └── manage.py
 ```
 
@@ -206,12 +223,97 @@ O desbloqueio também zera `turnos_sem_avanco` das conversas ativas do par.
 Essa ordem administrativa é diferente do bloqueio preventivo do webhook,
 que persiste primeiro a lista local.
 
+## Cadastro e autorização do monitoramento
+
+O modelo `Unidade`, com `managed = False`, inclui `id_usuario_monitoramento`,
+um `OneToOneField` opcional para o usuário do Django. No Admin da unidade,
+**Usuário de monitoramento** seleciona uma conta comum criada em **Usuários**.
+Uma conta não pode ser vinculada a duas unidades; várias unidades podem ficar
+sem conta. Excluir o usuário limpa o campo com `SET_NULL` e preserva a unidade.
+O formulário permite contas inativas para preparar o cadastro, mas elas não
+passam pela autorização. A edição mantém o fluxo administrativo existente da
+unidade; o vínculo de acesso é consultado diretamente no banco, sem cache.
+As regras completas estão em [Regras de negócio, 19.6](../REGRAS_DE_NEGOCIO.md#196-contas-de-monitoramento-por-unidade).
+
+O aplicativo `monitoramento` está registrado por
+`monitoramento.apps.MonitoramentoConfig` em `callback/settings.py`. As rotas são
+incluídas no URLconf do projeto; `STATIC_URL=/static/` permite carregar os assets
+também nas URLs aninhadas. O login não cria tabelas nem migrações adicionais.
+
+`monitoramento/monitoramento_guard.py` oferece
+`exigir_acesso_monitoramento(request, id_conversa=..., id_mensagem=...)`.
+Somente `request.user.pk` identifica a conta. Os identificadores dos recursos
+são opcionais, mas, quando fornecidos, são conferidos na mesma consulta que
+valida o vínculo e a conta no banco. O retorno informa a unidade autorizada;
+falhas de autorização geram `PermissionDenied`, sem distinguir recurso ausente
+de recurso de outra unidade. Erros de banco propagam e não liberam acesso.
+
+`forms.py` estende `AuthenticationForm`: o Django verifica o hash da senha do
+username informado, depois `exigir_acesso_usuario_monitoramento` valida a conta
+e seu vínculo antes de criar a sessão. Não há consulta própria de senhas.
+Usuário inexistente e senha incorreta recebem o mesmo aviso, sem confirmar a
+existência de contas. Contas inativas, administrativas ou sem unidade não entram.
+
+- `GET /login/`: formulário responsivo com logo vetorial extraída do material
+  da ESL Tech, sem dependências visuais externas.
+- `POST /login/`: autenticação com CSRF, sessão Django e destino fixo. O
+  parâmetro `next` não controla o redirecionamento. Falhas de banco retornam 503
+  com aviso genérico; a senha não é reapresentada nem registrada pela view.
+- `POST /sair/`: encerra a sessão com CSRF; GET não executa logout.
+- `GET /`: entrega o painel privado e responsivo.
+- `GET /dados/conversas/`: resumo e lista consolidada dos contatos.
+- `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
+- `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
+- `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
+
+O login bem-sucedido retorna a `/`. A página e cada endpoint de dados chamam
+`exigir_acesso_monitoramento`; nenhum deles aceita unidade escolhida em URL,
+query string ou JavaScript. Depois do guard, cada SQL de
+`core/repositories/monitoramento/painel.py` recebe e aplica o `id_unidade`
+autorizado. O guard não modifica consultas posteriores nem concede acesso ao
+Admin.
+
+O navegador atualiza a seção de conversas a cada 10 segundos e a de relatórios
+a cada 30 segundos, somente enquanto a página está visível. Voltar à aba força
+uma nova leitura. Não há WebSocket, tarefa periódica no servidor nem quarto
+serviço: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
+Mensagens são carregadas somente quando um contato é aberto.
+
+O padrão é todo o histórico até o instante da requisição. Também existem os
+períodos 24 horas, 7 e 30 dias, 2, 3 e 6 meses e 1 ano. Os períodos finitos são
+comparados à janela imediatamente anterior de igual duração. A distribuição por
+etapa representa o estado atual da conversa mais recente de cada contato com
+atividade no período; não reconstrói a etapa histórica. Como o histórico
+persiste texto e tipo, mas não o
+payload original dos botões, o painel apresenta como referência os botões do
+catálogo atual da etapa, sempre desabilitados.
+
+O painel é somente leitura. Os filtros, a pesquisa, os seletores de período e os
+downloads não alteram registros. As regras `suporte_idoso`, `email_obrigatorio`
+e `bpa_ativo` vêm da unidade. O CSV completo preserva campos ausentes vazios; o
+CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
+internacional e usa cabeçalhos do Google Contatos.
+
+Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
+no portal. Contas e senhas continuam administradas pelo proprietário no Django
+Admin. Senhas ficam sempre mascaradas no campo; os formulários usam o mecanismo
+nativo de sessão e proteção CSRF. `falha_csrf` personaliza o aviso em português
+somente nas rotas de monitoramento, preservando o tratamento padrão nas demais.
+O HTTPS e os cookies seguros dependem das configurações de produção descritas
+na [rotina de deploy](../regras_deploy/rotina_deploy.md).
+
+`ALLOWED_HOSTS` aceita os domínios, mas não separa rotas por hostname; essa
+separação não foi implementada. Os relatórios em `utilitarios` seguem manuais.
+
 ## Testes relacionados
 
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
-- `tests/unit/test_worker_flow_runtime.py`.
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_monitoramento_unidade.py`;
+- `tests/unit/test_monitoramento_login.py`;
+- `tests/unit/test_monitoramento_painel.py`.
 
 Esses arquivos cobrem o núcleo transacional; consulte também
 [`tests/README.md`](../tests/README.md).

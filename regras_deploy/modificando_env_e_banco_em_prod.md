@@ -65,8 +65,8 @@ Antes de copiar, confira especialmente:
 
 ```text
 DJANGO_DEBUG=False
-DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,18.229.43.133,webhook.3esltech.com
-DJANGO_CSRF_TRUSTED_ORIGINS=https://webhook.3esltech.com
+DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,18.229.43.133,webhook.3esltech.com,monitoramento.3esltech.com
+DJANGO_CSRF_TRUSTED_ORIGINS=https://webhook.3esltech.com,https://monitoramento.3esltech.com
 DJANGO_TRUST_X_FORWARDED_PROTO=True
 DJANGO_SECURE_SSL_REDIRECT=True
 DJANGO_SESSION_COOKIE_SECURE=True
@@ -81,6 +81,14 @@ FUNIL_WORKER_ENABLED=True
 
 Os demais tokens, IDs, senhas e endpoints devem conter os valores reais do
 ambiente, sem serem enviados ao GitHub.
+
+O subdomínio `monitoramento.3esltech.com` usa o mesmo IP estático do webhook.
+Sua inclusão no ambiente prepara a aceitação do domínio pelo Django, mas não
+publica o painel sozinha. Nginx e certificado HTTPS para esse endereço devem ser
+configurados na VM durante a implantação. O aplicativo já possui login, painel,
+APIs de consulta e CSV. Ele depende das tabelas nativas de autenticação/sessões
+do Django e da migração do vínculo de usuário na unidade. Executar
+`collectstatic` para publicar CSS, JavaScript e logo.
 
 Na VM de producao, `REDIS_HOST` nunca deve ser `localhost`, `127.0.0.1` ou
 `::1`. A rotina operacional e a remocao do Redis local estao documentadas em

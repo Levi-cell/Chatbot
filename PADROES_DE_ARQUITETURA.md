@@ -81,6 +81,7 @@ observabilidade, desligamento gracioso e demanda real de produção.
 
 ```text
 callback/webhook  -> entrada HTTP e enfileiramento
+callback/monitoramento -> login e autorização do painel por unidade
 workers           -> processamento assíncrono e fluxo da conversa
 core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
@@ -95,11 +96,11 @@ tests             -> testes, mocks, fakes e contratos
 Direção esperada das dependências:
 
 ```text
-webhook ─┐
-         ├──> core/repositories
-worker  ─┤──> core/cache
-admin   ─┤──> core/integrations
-utilitários ─┘
+webhook ────────┐
+monitoramento ──┤──> core/repositories
+worker ────────┤──> core/cache
+admin ─────────┤──> core/integrations
+utilitários ───┘
 
 core nunca importa webhook ou worker
 ```
@@ -109,7 +110,7 @@ core nunca importa webhook ou worker
 O [`README.md`](README.md) da raiz é o portal da documentação. Cada README local
 explica somente a responsabilidade e os contratos da sua camada:
 
-- [`callback/README.md`](callback/README.md): entrada HTTP e enfileiramento;
+- [`callback/README.md`](callback/README.md): aplicativos Django, webhook e estrutura do monitoramento;
 - [`core/README.md`](core/README.md): mapa dos recursos compartilhados;
 - [`workers/README.md`](workers/README.md): ciclo, checkpoints e recuperação;
 - [`tests/README.md`](tests/README.md): estratégia e execução dos testes;
@@ -169,7 +170,8 @@ Os repositórios são agrupados por domínio e entidade:
 - `fluxo/`: políticas, transições, respostas da triagem e contextos por etapa;
 - `unidades/`: consultas de unidade e controle de versão do cache;
 - `seguranca/`: regra de turno e persistência de bloqueios Meta;
-- `funil/`: configuração da integração por unidade e estado dos envios.
+- `funil/`: configuração da integração por unidade e estado dos envios;
+- `monitoramento/`: vínculo e autorização de recursos por conta/unidade.
 
 Não agrupe operações apenas pelo verbo SQL. Uma mesma entidade pode concentrar
 consultas, inserções, atualizações e exclusões relacionadas ao seu contrato.
@@ -249,7 +251,7 @@ do Django ou uma fronteira explícita quando necessário.
 
 ## Webhook
 
-`callback/webhook` é a fronteira HTTP do sistema.
+`callback/webhook` é a fronteira HTTP de recebimento dos eventos da Meta.
 
 Responsabilidades:
 
@@ -272,6 +274,43 @@ O webhook não deve:
 
 Serviços HTTP pequenos ficam em `callback/webhook/services/`. `views.py` deve ser
 uma borda fina e delegar o fluxo para esses serviços.
+
+## Monitoramento
+
+`callback/monitoramento` é um aplicativo Django próprio, registrado em
+`INSTALLED_APPS`. Reúne login, autorização e interface do painel por
+unidade, sem participar do recebimento de eventos da Meta. Compartilha o projeto
+Django, a autenticação e o banco existentes. Login, conversas, relatórios e
+exportação de contatos pertencem ao mesmo aplicativo.
+
+`callback/monitoramento/monitoramento_guard.py` valida a sessão Django e usa um
+cursor do Django para a leitura autoritativa em
+`core/repositories/monitoramento/acessos.py`.
+O repositório recebe o cursor, não abre conexão nem importa Django. Não há cache
+do vínculo: ele é lido de `unidade.id_usuario_monitoramento`, sem tabela
+intermediária. O login valida o vínculo antes de criar a sessão e ao mostrar a
+confirmação de acesso. Cada rota de dados chama o guard e aplica explicitamente
+o `id_unidade` retornado em todas as consultas.
+
+`forms.py` estende a autenticação nativa do Django, sem SQL próprio para senhas.
+`views.py` controla login, logout por POST, respostas HTML, APIs GET e CSV;
+`urls.py` publica `/`, `/login/`, `/sair/`, `/dados/...` e `/contatos.csv`.
+`services.py` coordena as leituras e `apresentacao.py` mantém transformações
+puras. Os contratos completos estão no
+[README dos aplicativos](callback/README.md#cadastro-e-autorização-do-monitoramento).
+
+Templates e arquivos estáticos do painel pertencem, respectivamente, a
+`callback/monitoramento/templates/monitoramento/` e
+`callback/monitoramento/static/monitoramento/`. CSS, JavaScript e logo são locais,
+sem recursos de terceiros na página. SQL de runtime continua em
+`core/repositories/monitoramento/`, inclusive as leituras em `painel.py`; testes
+continuam em `tests/`. O modelo `Unidade` e seu Admin permanecem em
+`callback/webhook`.
+
+A atualização automática é iniciada pelo JavaScript da página e gera requisições
+GET comuns: 10 segundos para conversas e 30 segundos para relatórios. Ela não é
+um worker, orquestrador ou serviço systemd. O mesmo processo web atende webhook,
+Admin e monitoramento; o navegador só consulta a seção ativa e visível.
 
 ## Workers
 
@@ -805,7 +844,8 @@ Use esta sequência:
 5. Envia mensagens com PyWa? `core/integrations/whatsapp/pywa_functions`;
    bloqueio/desbloqueio reutiliza `core/integrations/whatsapp/tools/usuarios.py`.
 6. Define texto ou callback do WhatsApp? `messages`.
-7. Trata entrada HTTP? `callback/webhook`.
+7. Trata HTTP da Meta? `callback/webhook`. Trata acesso ou interface do painel?
+   `callback/monitoramento`.
 8. Decide processamento assíncrono ou etapa? `workers`.
 9. É comando humano de diagnóstico, monitoramento, manutenção ou probe?
    `utilitarios`.

@@ -136,6 +136,7 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_display = (
         "id_unidade",
         "nome_unidade",
+        "id_usuario_monitoramento",
         "nome_agente",
         "genero",
         "cnpj",
@@ -154,6 +155,7 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     search_fields = (
         "nome_unidade",
+        "id_usuario_monitoramento__username",
         "nome_agente",
         "cnpj",
         "telefone",
@@ -173,6 +175,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "status_pagamento",
     )
     ordering = ("nome_unidade",)
+    list_select_related = ("id_usuario_monitoramento",)
 
     list_per_page = 50
     empty_value_display = "-"

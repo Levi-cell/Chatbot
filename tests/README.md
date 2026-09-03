@@ -10,7 +10,11 @@ transacional, ela cobre regras e utilitários já implementados:
 - suporte ao idoso e obrigatoriedade do e-mail;
 - validação da oferta, profissão e saudação após inatividade;
 - montagem dos relatórios semanais e totais;
-- payloads e sondas manuais do Funil.
+- payloads e sondas manuais do Funil;
+- vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
+- login nativo, par username/senha, sessão, CSRF e revogação do acesso ao portal;
+- painel somente leitura, períodos, consultas por unidade, botões históricos,
+  indicadores e arquivos Google CSV.
 
 Para executar a suíte completa a partir da raiz:
 
@@ -32,6 +36,9 @@ tests/unit/test_validador_profissao.py
 tests/unit/test_gerar_monitoramento_unidades.py
 tests/unit/test_metricas_perfis_relatorios.py
 tests/unit/test_sondas_funil.py
+tests/unit/test_monitoramento_unidade.py
+tests/unit/test_monitoramento_login.py
+tests/unit/test_monitoramento_painel.py
 ```
 
 Os testes usam fakes e mocks para fronteiras externas: a descoberta da suíte não
@@ -40,3 +47,23 @@ não deve ser executado como forma de testar sua importação.
 
 Novos testes pertencem a `tests/unit/`; dados e classes auxiliares exclusivos de
 teste ficam em `tests/`, nunca nos módulos de produção.
+
+O teste de monitoramento executa o SQL de autorização em SQLite em memória,
+adaptando apenas os placeholders, com um cliente compartilhado por duas
+unidades. Cobre isolamento por conversa/mensagem, revogação do vínculo,
+desativação de conta, várias unidades sem conta, exclusividade do usuário,
+exclusão da conta com preservação da unidade, sessão inválida e falha de banco.
+Não acessa o RDS. `fixtures/unidade_monitoramento_legado.sql` representa apenas
+a proposta anterior para testar a transferência dos vínculos; não é uma
+migração de produção.
+
+`test_monitoramento_login.py` usa o backend, hashes de senha e sessões reais do
+Django com usuários fictícios e SQLite em memória. Cobre senha de outra conta,
+contas não autorizadas, erros, expiração de CSRF, logout, rotação de sessão,
+redirecionamento fixo e escape de HTML. Substitui somente a conexão da thread
+durante o teste e restaura-a ao terminar; não cria usuários nem tabelas no RDS.
+
+`test_monitoramento_painel.py` valida as rotas privadas, métodos permitidos,
+propagação obrigatória da unidade autorizada, quantidade de parâmetros dos SQLs,
+consolidação de perfis, 22 etapas, períodos comparáveis e as duas variantes do
+CSV. Seus payloads vivem em `fixtures/monitoramento_painel.py` e são fictícios.

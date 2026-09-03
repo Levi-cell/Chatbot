@@ -1,0 +1,104 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1c321d">
+  <meta name="referrer" content="same-origin">
+  <title>Monitoramento · ESL Tech</title>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}">
+  <script src="{% static 'monitoramento/js/painel.js' %}" defer></script>
+</head>
+<body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
+      data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
+      data-url-relatorio="{% url 'monitoramento:dados_relatorio' %}"
+      data-url-csv="{% url 'monitoramento:contatos_csv' %}"
+      data-url-login="{% url 'monitoramento:login' %}">
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <header class="cabecalho-app">
+    <div class="marca-app">
+      <img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt="ESL Tech" width="116" height="48">
+      <span class="divisor" aria-hidden="true"></span>
+      <div><strong>Monitoramento</strong><span id="nomeUnidade">{{ nome_unidade }}</span></div>
+    </div>
+    <nav class="seletor-secao" aria-label="Seções do monitoramento">
+      <button type="button" class="ativo" data-secao="conversas" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 3V5Z"/></svg>Conversas
+      </button>
+      <button type="button" data-secao="relatorios" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10m7 10V4m7 16v-7"/></svg>Relatórios
+      </button>
+    </nav>
+    <div class="acoes-cabecalho">
+      <span class="estado-atualizacao" id="estadoAtualizacao" role="status"><i></i>Atualizado agora</span>
+      <form method="post" action="{% url 'monitoramento:sair' %}">{% csrf_token %}<button type="submit" class="botao-sair" aria-label="Sair da conta">Sair</button></form>
+    </div>
+  </header>
+
+  <div class="faixa-consulta" role="note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/></svg>
+    <p><strong>Ambiente somente para monitoramento.</strong> Nenhuma mensagem pode ser enviada por aqui. Para falar com um contato, use o número comercial da unidade.</p>
+  </div>
+
+  <main id="conteudo">
+    <section id="secaoConversas" class="secao-painel" aria-labelledby="tituloConversas">
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">HISTÓRICO DA UNIDADE</p><h1 id="tituloConversas">Conversas</h1><p id="periodoConversas">Carregando período…</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div class="metricas-conversas" aria-label="Resumo do período">
+        <article><span>Leads</span><strong id="totalLeads">—</strong></article>
+        <article><span>Mensagens</span><strong id="totalMensagens">—</strong></article>
+        <article><span>Funil</span><strong id="totalFunil">—</strong></article>
+        <article><span>Nota média</span><strong id="notaMedia">—</strong></article>
+      </div>
+      <div class="app-conversas">
+        <aside class="lista-conversas" aria-label="Lista de conversas">
+          <div class="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input id="buscaConversas" type="search" placeholder="Pesquisar contato" aria-label="Pesquisar contato"></div>
+          <nav class="filtros-conversas" aria-label="Filtrar conversas">
+            <button type="button" class="ativo" data-filtro="todas">Todas</button>
+            <button type="button" data-filtro="continuacoes">Continuações</button>
+            <button type="button" data-filtro="funil">Funil</button>
+            <button type="button" data-filtro="avaliadas">Avaliadas</button>
+          </nav>
+          <div id="listaConversas" class="rolagem-lista" aria-live="polite"><div class="estado-vazio carregando">Carregando conversas…</div></div>
+        </aside>
+        <section class="janela-chat" aria-label="Histórico da conversa">
+          <header class="topo-chat" id="topoChat" hidden>
+            <button type="button" id="voltarConversas" class="voltar" aria-label="Voltar para a lista">‹</button>
+            <div class="avatar" id="avatarContato"></div>
+            <div class="identidade-contato"><h2 id="nomeContato"></h2><p id="detalhesContato"></p><div id="tagsContato" class="tags-contato"></div></div>
+            <button type="button" id="alternarDetalhes" class="detalhes-botao" aria-expanded="false">Detalhes</button>
+          </header>
+          <div class="painel-detalhes" id="painelDetalhes" hidden></div>
+          <div class="mensagens" id="mensagensChat">
+            <div class="marca-dagua" aria-hidden="true"><img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt=""></div>
+            <div class="boas-vindas"><span>ESL Tech</span><h2>Acompanhe cada atendimento.</h2><p>Selecione um contato para visualizar toda a conversa consolidada.</p></div>
+          </div>
+          <button id="irFinal" type="button" class="ir-final" aria-label="Ir para a mensagem mais recente" hidden>↓</button>
+          <footer class="rodape-chat">Conteúdo privado da unidade · consulta somente leitura</footer>
+        </section>
+      </div>
+    </section>
+
+    <section id="secaoRelatorios" class="secao-painel secao-relatorios" aria-labelledby="tituloRelatorios" hidden>
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">INTELIGÊNCIA COMERCIAL</p><h1 id="tituloRelatorios">Relatórios</h1><p id="periodoRelatorios">Selecione um período para interpretar os resultados.</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div id="conteudoRelatorio" class="conteudo-relatorio"><div class="cartao carregando-relatorio">Preparando os indicadores…</div></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

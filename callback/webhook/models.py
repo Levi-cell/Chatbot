@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -300,6 +302,34 @@ class Unidade(models.Model):
     )
     bpa_ativo = models.BooleanField(default=False)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
+    id_usuario_monitoramento = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        models.SET_NULL,
+        db_column='id_usuario_monitoramento',
+        related_name='unidade_monitorada',
+        verbose_name='usuário de monitoramento',
+        blank=True,
+        null=True,
+        limit_choices_to={'is_staff': False, 'is_superuser': False},
+        help_text=(
+            'Selecione uma conta comum cadastrada em Usuários. '
+            'Cada conta pode monitorar somente uma unidade. '
+            'Deixe vazio para manter a unidade sem acesso de monitoramento.'
+        ),
+    )
+
+    def clean(self):
+        super().clean()
+        if self.id_usuario_monitoramento_id and (
+            self.id_usuario_monitoramento.is_staff
+            or self.id_usuario_monitoramento.is_superuser
+        ):
+            raise ValidationError({
+                'id_usuario_monitoramento': (
+                    'O monitoramento exige uma conta sem acesso ao Admin '
+                    'e sem status de superusuário.'
+                ),
+            })
 
     def __str__(self):
         return self.nome_unidade

@@ -2,7 +2,9 @@
 
 Os arquivos assumem a aplicacao em `/opt/chatbot/app`, o ambiente virtual em
 `/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os tres
-processos da aplicacao sao independentes e escrevem seus logs no journald.
+processos da aplicacao sao independentes e escrevem seus logs no journald. O
+portal de monitoramento faz parte do processo web `chatbot-webhook`; ele não
+cria um quarto serviço.
 
 ## Preparar a aplicacao
 
@@ -30,7 +32,16 @@ endpoint do Redis remoto em `REDIS_HOST`. A aplicacao nao usa nem exige um
 `redis-server` local na VM. Mantenha `PGSSLCERTMODE=disable` quando o RDS
 autenticar por usuario/senha. Essa opcao desativa apenas o certificado TLS de
 cliente; use `DB_SSLMODE=verify-full` e `DB_SSLROOTCERT` para continuar
-validando o certificado do servidor. Depois, prepare o Django:
+validando o certificado do servidor.
+
+Se o banco estiver vazio, crie antes o schema de destino no DBeaver:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS chatbot;
+```
+
+Depois, prepare o Django. Suas migrations criam `chatbot.auth_user`, necessária
+antes do DDL de negócio por causa do vínculo de monitoramento:
 
 ```bash
 sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python callback/manage.py check --deploy'
@@ -41,6 +52,11 @@ sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /op
 `EnvironmentFile` é carregado automaticamente somente pelo systemd. Uma sessão
 SSH comum não recebe essas variáveis; os comandos manuais acima carregam o mesmo
 arquivo privado dos serviços sem exibir seu conteúdo.
+
+Em uma instalação vazia, após as migrations do Django, siga o
+[setup do banco de negócio](../core/database/README.md#setup) antes de iniciar
+os serviços. Na atualização de um banco existente, use a migração incremental
+específica, sem executar novamente o setup como substituto da migração.
 
 ## Instalar os servicos
 
@@ -102,6 +118,21 @@ Os scripts SQL revisáveis para o RDS existente ficam em `deploy/migrations/`.
 Eles não são executados por `manage.py migrate` nem pelo setup de instalação
 limpa. Siga os pré-requisitos, as validações e a orientação de rollback do
 próprio arquivo antes de publicar o código que depende do novo estado.
+
+Para o cadastro de monitoramento, execute
+`deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql` inteiro no DBeaver
+antes de publicar o Admin atualizado. Requer `chatbot.unidade` e
+`chatbot.auth_user`. O script adiciona `unidade.id_usuario_monitoramento`, com
+`UNIQUE` e FK `ON DELETE SET NULL`. Se `unidade_monitoramento` já existir,
+valida e transfere os vínculos antes de removê-la, sem `CASCADE`. O SQL anterior
+de criação da tabela foi substituído e não deve ser executado.
+
+É uma migração de aplicação única: coluna já existente causa erro. Em caso de
+falha, execute `ROLLBACK`; investigue a causa antes de repetir. `ALTER TABLE`
+fica somente nesta migração, enquanto o DDL de instalação limpa já contém a
+coluna em seu `CREATE TABLE`. Depois da migração, não publique novamente o
+código que depende da tabela antiga. Uma reversão exige preservar os vínculos
+atuais e preparar um SQL específico antes de voltar o código.
 
 ## Operacao dos servicos e do Redis remoto
 

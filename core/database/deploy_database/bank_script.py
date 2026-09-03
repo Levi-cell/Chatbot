@@ -155,7 +155,16 @@ def criar_tabelas():
         cursor.execute("""
         CREATE SCHEMA IF NOT EXISTS chatbot;
 
-        -- 1. ENTIDADES SEM DEPENDÊNCIAS ENTRE TABELAS
+        DO $dependencia_django$
+        BEGIN
+            IF TO_REGCLASS('chatbot.auth_user') IS NULL THEN
+                RAISE EXCEPTION
+                    'Prepare o schema chatbot e execute as migrations do Django antes do DDL de negocio: chatbot.auth_user deve existir.';
+            END IF;
+        END
+        $dependencia_django$;
+
+        -- 1. CLIENTE E UNIDADE (AUTH_USER PREPARADA PELO DJANGO)
 
         CREATE TABLE IF NOT EXISTS chatbot.cliente (
             id_cliente SERIAL PRIMARY KEY,
@@ -183,6 +192,7 @@ def criar_tabelas():
             link_instagram VARCHAR(400),
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
+            id_usuario_monitoramento INT NULL,
 
             CONSTRAINT uq_unidade_nome_unidade
                 UNIQUE (nome_unidade),
@@ -194,7 +204,14 @@ def criar_tabelas():
                 CHECK (nome_agente ~ '[^[:space:]]'),
 
             CONSTRAINT ck_unidade_genero
-                CHECK (genero IN ('masculino', 'feminino'))
+                CHECK (genero IN ('masculino', 'feminino')),
+
+            CONSTRAINT uq_unidade_usuario_monitoramento
+                UNIQUE (id_usuario_monitoramento),
+            CONSTRAINT unidade_id_usuario_monitoramento_fkey
+                FOREIGN KEY (id_usuario_monitoramento)
+                REFERENCES chatbot.auth_user(id)
+                ON DELETE SET NULL
         );
 
         CREATE TABLE IF NOT EXISTS chatbot.etapa (

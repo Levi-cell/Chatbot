@@ -34,7 +34,20 @@ core/database/
 
 ## Setup
 
-A partir da raiz:
+Em uma instalação vazia, prepare primeiro o schema `chatbot` e as tabelas
+gerenciadas pelo Django. No banco de destino:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS chatbot;
+```
+
+Depois, com as variáveis do ambiente configuradas, a partir da raiz:
+
+```powershell
+python callback/manage.py migrate --noinput
+```
+
+Somente então execute o setup do banco de negócio:
 
 ```powershell
 python -m core.database.deploy_database.setup_database
@@ -74,6 +87,17 @@ novo sem apagar o banco.
 `ALTER TABLE`, correções de colunas antigas, dados de unidade ou migrações
 históricas. As tabelas são criadas em ordem de dependência para que chaves
 estrangeiras e constraints já nasçam prontas.
+
+`chatbot.auth_user` é um pré-requisito explícito do DDL de negócio. Sua criação
+continua pertencendo às migrations do Django; o DDL não recria tabelas internas
+do framework. Se ela não existir, o setup falha com uma orientação antes de
+criar as tabelas de negócio.
+
+`unidade.id_usuario_monitoramento` é `INT NULL`, único quando preenchido e
+referencia `chatbot.auth_user(id)` com `ON DELETE SET NULL`. O DDL final define
+a coluna e suas constraints no `CREATE TABLE` da unidade. O banco garante a
+relação 1:1 opcional; a autorização dos recursos pertence ao serviço HTTP e ao
+repositório de monitoramento. Excluir um usuário não exclui a unidade.
 
 O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
@@ -123,6 +147,19 @@ backfill e recusa schemas parciais antes de publicar o novo contrato.
 de schema existente exige um script de migração separado ou decisão consciente
 de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL
 de criação final.
+
+A migração atual de monitoramento está em
+`deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`.
+Execute-a inteira no DBeaver antes de publicar o código atualizado, com
+`chatbot.unidade` e `chatbot.auth_user` já existentes. Ela adiciona a coluna
+opcional e suas constraints. Se a tabela da proposta anterior existir,
+transfere seus vínculos, confere o resultado e só então remove essa tabela,
+sem `CASCADE`. Vínculos inválidos ou ambíguos interrompem a transação.
+O SQL anterior de criação da tabela foi substituído e não deve ser executado.
+A migração atual é de aplicação única: coluna já existente causa erro em vez
+de aceitar uma estrutura divergente. Em caso de erro, execute `ROLLBACK`.
+`ALTER TABLE`, transferência e remoção de legado ficam somente na migração;
+o DDL continua sendo exclusivamente a definição final para instalação nova.
 
 ## Atomicidade
 

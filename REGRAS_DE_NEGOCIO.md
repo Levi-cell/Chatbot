@@ -1051,6 +1051,74 @@ Implementação principal:
 - `core/integrations/whatsapp/tools/ativando_numero.py`
 - `core/integrations/whatsapp/tools/desativando_numero.py`
 
+### 19.6. Contas de monitoramento por unidade
+
+- `chatbot.unidade.id_usuario_monitoramento` referencia `chatbot.auth_user.id`.
+  O vínculo é opcional e único: cada usuário pode monitorar no máximo uma
+  unidade e cada unidade pode possuir no máximo uma conta de monitoramento.
+  Várias unidades podem manter o campo `NULL`, sem acesso de monitoramento.
+- Login, hash da senha e ativação da conta pertencem à autenticação do Django;
+  a unidade armazena somente a referência. No Admin, crie a conta em **Usuários**
+  e selecione-a no campo **Usuário de monitoramento** do cadastro da unidade.
+- Contas de monitoramento não possuem `is_staff` nem `is_superuser`. O formulário
+  recusa contas administrativas e a autorização também confere esses estados
+  diretamente no banco, além de `is_active`.
+- A identidade vem de `request.user`; usuário/unidade informados pelo navegador
+  não definem o escopo. Sem sessão válida, vínculo ou conta habilitada, o acesso
+  é negado. Erro de banco não autoriza leitura.
+- Conversas são autorizadas por `conversa.id_unidade`; mensagens, pela unidade
+  de sua conversa. O cadastro global de cliente não concede acesso às conversas
+  dele em outras unidades. Se conversa e mensagem forem informadas juntas, a
+  mensagem deve pertencer àquela conversa.
+- O vínculo é consultado a cada requisição, sem cache nem bypass administrativo.
+  Remover o vínculo, desativar a conta ou mudar sua unidade afeta a próxima
+  consulta. `status_pagamento` continua com sua finalidade de admissão do bot;
+  não é um novo bloqueio do monitoramento.
+- Excluir um usuário limpa a referência por `ON DELETE SET NULL`, preservando
+  a unidade, suas conversas e seu histórico. Excluir a unidade pelo fluxo
+  administrativo existente não exclui a conta Django. Limpar somente o campo
+  de monitoramento revoga o acesso sem excluir entidades.
+- O login usa o par `username`/senha da mesma conta e o verificador de hash
+  nativo do Django. Antes de criar a sessão, exige conta habilitada, comum e
+  vinculada a uma unidade. Usuário inexistente e senha incorreta recebem o
+  mesmo aviso. Não há cadastro, recuperação/troca de senha ou bloqueio após
+  três tentativas no portal; o proprietário administra as contas pelo Admin.
+- Login e logout usam CSRF; logout somente por POST. O destino após autenticar
+  é fixo, sem aceitar redirecionamento escolhido pelo navegador. A senha fica
+  mascarada e não volta preenchida após erro. Falhas de banco não liberam acesso.
+- O acesso bem-sucedido abre o painel em `/`. A página e todas as rotas de dados
+  usam `exigir_acesso_monitoramento` e mantêm cada SELECT limitado à unidade
+  retornada. A autorização não filtra automaticamente outros SQLs ou QuerySets.
+- O painel é somente leitura. Suas rotas de dados aceitam apenas GET; não há
+  envio de mensagens, cadastro, edição nem exclusão de informações.
+- O período padrão cobre a primeira mensagem de cliente registrada na unidade
+  até o instante da consulta. Também são aceitas janelas de 24 horas, 7 e 30
+  dias, 2, 3 e 6 meses e 1 ano. Uma janela finita compara seus indicadores com
+  a janela imediatamente anterior de igual duração.
+- Conversas técnicas do mesmo cliente são consolidadas somente dentro da unidade
+  autorizada. Os filtros locais são Todas, Continuações, Funil e Avaliadas; os
+  perfis visuais são Menor de 18, Adulto, 60+ e Dependente.
+- O navegador consulta conversas a cada 10 segundos e relatórios a cada 30
+  segundos quando a página está visível. Voltar à aba força uma leitura. Esse
+  polling usa o mesmo serviço Django/Gunicorn do webhook e não cria worker ou
+  serviço systemd adicional.
+- As opções `suporte_idoso`, `email_obrigatorio` e `bpa_ativo` são lidas da
+  unidade. Elas controlam as informações e interpretações exibidas, inclusive a
+  idade mínima do dependente e os casos em que envio ao Funil não se aplica.
+- O relatório mostra métricas, comparação, demanda ao longo do tempo, perfis,
+  satisfação e a etapa atual da conversa mais recente de cada contato que teve
+  atividade no período. Cada contato conta uma vez. A etapa é um retrato atual;
+  o banco não permite reconstruir em qual etapa a conversa estava em uma data
+  passada.
+- O histórico armazena texto e tipo da mensagem, mas não o payload exato dos
+  botões enviados. Para mensagens interativas, o painel mostra os botões do
+  catálogo atual daquela etapa como referência visual, sempre desabilitados.
+- O CSV completo inclui todos os contatos ativos no período e deixa campos
+  ausentes vazios. O CSV elegível exige nome, e-mail estruturalmente válido e
+  telefone normalizado. Ambos usam
+  cabeçalhos compatíveis com importação no Google Contatos e nunca alteram o
+  banco.
+
 ## 20. Disponibilidade e recuperação automática
 
 “O sistema não deve cair nunca” é um requisito de resiliência operacional e
@@ -1118,7 +1186,7 @@ Implementação principal:
 | Falha operacional do webhook com mensagem válida | Implementada | Inserção/commit da fila e validação de unidade indisponível retornam HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
 | Cache Redis com fallback para banco | Implementada nos caches principais | Unidades, clientes e conversas bloqueadas possuem estratégias de fallback. |
 | Autocura Redis/banco | Implementada no contrato da V1 | Cobre falhas detectáveis e FK stale; edição direta no banco é proibida em produção. |
-| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade, integração com o Funil e desbloqueio individual. |
+| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade (incluindo seu usuário de monitoramento), integração com o Funil e desbloqueio individual. |
 | Admin somente desbloqueia clientes | Implementada | Meta primeiro; falha preserva o registro no banco. |
 | Unidade Meta-first na criação e exclusão | Implementada | Falha da Meta impede a alteração do banco. |
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O valor controla a admissão da unidade, mas não registra nem remove o número na Meta. |

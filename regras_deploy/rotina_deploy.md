@@ -9,7 +9,38 @@ Ambiente atual:
 - ambiente virtual: `/opt/chatbot/venv`;
 - configuração de produção: `/etc/chatbot/chatbot.env`;
 - webhook público: `https://webhook.3esltech.com/webhook`;
+- monitoramento planejado: `https://monitoramento.3esltech.com/`;
 - branch de produção: `prod`.
+
+## Pendências para o primeiro deploy do monitoramento
+
+O DNS de `monitoramento.3esltech.com` já aponta para `18.229.43.133`. O domínio
+foi acrescentado somente ao `.env` local; o ambiente da VM ainda precisa ser
+atualizado. Como esse arquivo é privado e ignorado pelo Git, um `git pull` não
+leva essa configuração para produção.
+
+Antes de disponibilizar o painel:
+
+- Atualizar `/etc/chatbot/chatbot.env`, preservando os valores existentes:
+  acrescentar `monitoramento.3esltech.com` a `DJANGO_ALLOWED_HOSTS` e
+  `https://monitoramento.3esltech.com` a `DJANGO_CSRF_TRUSTED_ORIGINS`.
+  Seguir o procedimento de backup, validação e aplicação da Parte A de
+  [modificando_env_e_banco_em_prod.md](modificando_env_e_banco_em_prod.md).
+- Reiniciar `chatbot-webhook.service` para carregar o ambiente atualizado;
+  o `HUP` do deploy comum não relê o `EnvironmentFile`.
+- Aplicar e conferir no DBeaver, se ainda pendente, a migração
+  [20260902_adicionar_usuario_monitoramento_unidade.sql](../deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql)
+  antes de carregar o código que depende de `unidade.id_usuario_monitoramento`.
+- Configurar o Nginx e emitir o certificado HTTPS para o subdomínio, mantendo
+  as opções de cookies seguros e HTTPS da Parte A do procedimento de ambiente.
+- Executar `collectstatic` para publicar CSS, JavaScript e logo do portal.
+  Validar `https://monitoramento.3esltech.com/login/` e `/` com contas comuns
+  vinculadas a unidades diferentes, além de senha incorreta e saída por POST.
+  Conferir os períodos, filtros, detalhes, relatórios, atualização automática e
+  os downloads completo/elegível sem permitir acesso cruzado entre unidades.
+
+Estas pendências são de implantação; ainda não foram executadas na VM. Atualize
+este registro conforme cada etapa for concluída e conferida em produção.
 
 ## Regra dos três serviços
 
@@ -18,6 +49,11 @@ Ambiente atual:
 | `chatbot-webhook.service` | Recebe a Meta e grava na fila | Permanece atendendo; recebe `HUP` depois da atualização |
 | `chatbot-worker-flow.service` | Processa o fluxo do atendimento | Para antes do `git pull` e inicia depois das validações |
 | `chatbot-worker-funil.service` | Envia oportunidades ao Funil | Para antes do `git pull` e inicia depois das validações |
+
+O monitoramento não acrescenta um quarto serviço. Nginx encaminha o subdomínio
+ao mesmo `chatbot-webhook.service`, cujo Gunicorn atende as rotas Django do
+webhook, Admin e painel. A atualização da página são requisições GET iniciadas
+pelo navegador.
 
 O webhook continuar ativo permite que novas mensagens sejam persistidas na
 fila enquanto os workers estão parados. Elas serão processadas quando o worker
