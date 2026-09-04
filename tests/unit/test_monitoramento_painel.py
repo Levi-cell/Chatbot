@@ -20,6 +20,21 @@ from core.repositories.monitoramento import painel as repositorio_painel
 from tests.fixtures.monitoramento_painel import CONTATOS, CONVERSAS, MENSAGENS, RELATORIO
 
 
+CABECALHO_OFICIAL_GOOGLE_CONTATOS = [
+    'Name Prefix', 'First Name', 'Middle Name', 'Last Name', 'Name Suffix',
+    'Phonetic First Name', 'Phonetic Middle Name', 'Phonetic Last Name',
+    'Nickname', 'File As', 'E-mail 1 - Label', 'E-mail 1 - Value',
+    'Phone 1 - Label', 'Phone 1 - Value', 'Address 1 - Label',
+    'Address 1 - Country', 'Address 1 - Street',
+    'Address 1 - Extended Address', 'Address 1 - City', 'Address 1 - Region',
+    'Address 1 - Postal Code', 'Address 1 - PO Box', 'Organization Name',
+    'Organization Title', 'Organization Department', 'Birthday',
+    'Event 1 - Label', 'Event 1 - Value', 'Relation 1 - Label',
+    'Relation 1 - Value', 'Website 1 - Label', 'Website 1 - Value',
+    'Custom Field 1 - Label', 'Custom Field 1 - Value', 'Notes', 'Labels',
+]
+
+
 class MonitoramentoPainelTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -93,12 +108,28 @@ class MonitoramentoPainelTests(unittest.TestCase):
         with patch('monitoramento.views.carregar_contatos', return_value=CONTATOS):
             completo = self.cliente.get('/contatos.csv?tipo=todos')
             elegivel = self.cliente.get('/contatos.csv?tipo=elegiveis')
-        linhas = list(csv.reader(StringIO(completo.content.decode('utf-8-sig'))))
-        self.assertEqual(linhas[0][:6], ['First Name', 'Last Name', 'Email 1 - Label', 'Email 1 - Value', 'Phone 1 - Label', 'Phone 1 - Value'])
-        self.assertEqual(linhas[1][0:2], ['Edcarlos', 'Silva'])
-        self.assertEqual(linhas[1][5], '+557194111866')
+        self.assertFalse(completo.content.startswith(b'\xef\xbb\xbf'))
+        linhas = list(csv.reader(StringIO(completo.content.decode('utf-8'))))
+        self.assertEqual(linhas[0], CABECALHO_OFICIAL_GOOGLE_CONTATOS)
+        self.assertTrue(all(len(linha) == 36 for linha in linhas))
+        self.assertEqual(linhas[1][1], 'Edcarlos')
+        self.assertEqual(linhas[1][3], 'Silva')
+        self.assertEqual(
+            linhas[1][10:14],
+            ['Work', 'edcarlos@example.com', 'Mobile', '+557194111866'],
+        )
+        self.assertTrue(all(not valor for valor in linhas[1][14:34]))
+        self.assertEqual(
+            linhas[1][34],
+            'Contato exportado pelo monitoramento ESL Tech',
+        )
+        self.assertTrue(linhas[1][35])
+        self.assertEqual(linhas[2][10:12], ['', ''])
+        self.assertEqual(linhas[2][12:14], ['Mobile', '+557599111222'])
         self.assertEqual(len(linhas), 3)
-        self.assertEqual(len(list(csv.reader(StringIO(elegivel.content.decode('utf-8-sig'))))), 2)
+        linhas_elegiveis = list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))
+        self.assertEqual(len(linhas_elegiveis), 2)
+        self.assertTrue(all(len(linha) == 36 for linha in linhas_elegiveis))
         self.assertEqual(normalizar_telefone_google('(71) 94111-1866'), '+5571941111866')
         self.assertEqual(normalizar_telefone_google('123'), '')
 
@@ -109,7 +140,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
         with patch('monitoramento.views.carregar_contatos', return_value=contato_invalido):
             elegivel = self.cliente.get('/contatos.csv?tipo=elegiveis')
         self.assertEqual(
-            len(list(csv.reader(StringIO(elegivel.content.decode('utf-8-sig'))))), 1
+            len(list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))), 1
         )
 
     def test_botoes_historicos_vem_do_catalogo_oficial(self):
@@ -134,7 +165,37 @@ class MonitoramentoPainelTests(unittest.TestCase):
         resultado = consolidar_conversas(linhas)
         self.assertEqual(resultado[0]['ids_conversa'], [10, 11])
         self.assertEqual(resultado[0]['perfis'], ['dependente', 'menor', 'idoso'])
+        self.assertEqual(resultado[0]['perfis_resumidos'], ['dependente_menor', 'idoso'])
         self.assertEqual(resultado[0]['ultima_mensagem'], 'Olá')
+
+    def test_perfis_resumidos_distinguem_dependentes_e_titulares(self):
+        cenarios = (
+            (1, True, 12, 'dependente_menor'),
+            (2, True, 35, 'dependente_adulto'),
+            (3, True, 65, 'dependente_idoso'),
+            (4, False, 35, 'adulto'),
+            (5, False, 65, 'idoso'),
+        )
+        linhas = []
+        for id_cliente, dependente, idade, esperado in cenarios:
+            linhas.append({
+                'id_cliente': id_cliente,
+                'id_conversa': id_cliente * 10,
+                'nome_cliente': f'Cliente {id_cliente}',
+                'waid_telefone': f'551{id_cliente}',
+                'status_dependente': dependente,
+                'idade_dependente': idade if dependente else None,
+                'idade_titular': None if dependente else idade,
+                'foi_funil': False,
+                'avaliada': False,
+                'ultima_atividade': f'2026-09-0{id_cliente}',
+                'ultima_mensagem_id': id_cliente,
+                'ultima_mensagem': esperado,
+            })
+
+        resultado = {item['id_cliente']: item for item in consolidar_conversas(linhas)}
+        for id_cliente, _dependente, _idade, esperado in cenarios:
+            self.assertEqual(resultado[id_cliente]['perfis_resumidos'], [esperado])
 
     def test_periodos_finitos_possuem_comparacao_e_total_nao(self):
         finito = resolver_periodo('7d')

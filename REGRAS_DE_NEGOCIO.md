@@ -303,6 +303,10 @@ Implementação principal:
 - A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
   etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
+- Na etapa 11, o clique em `Começar triagem` e confirmações textuais inequívocas
+  disparam o mesmo evento `triagem_iniciada`. A validação aceita variações de
+  começar, iniciar e prosseguir, enquanto negativas e respostas ambíguas mantêm
+  a conversa na etapa 11.
 - As etapas 12 a 17 não mudam de ID nem de transição conforme a idade. Elas
   selecionam somente o texto da pergunta: titular usa sempre a versão adulta;
   dependente com menos de 18 anos usa a versão infantil; dependente com 18 anos
@@ -1097,7 +1101,10 @@ Implementação principal:
   a janela imediatamente anterior de igual duração.
 - Conversas técnicas do mesmo cliente são consolidadas somente dentro da unidade
   autorizada. Os filtros locais são Todas, Continuações, Funil e Avaliadas; os
-  perfis visuais são Menor de 18, Adulto, 60+ e Dependente.
+  perfis visuais são Menor de 18, Adulto, 60+ e Dependente. Na lista de
+  conversas, as etiquetas ao lado da data preservam a relação entre faixa
+  etária e destino nas formas abreviadas DP -18, DP 18–59, DP 60+, 18–59 e
+  60+; a descrição completa permanece disponível como informação acessível.
 - O navegador consulta conversas a cada 10 segundos e relatórios a cada 30
   segundos quando a página está visível. Voltar à aba força uma leitura. Esse
   polling usa o mesmo serviço Django/Gunicorn do webhook e não cria worker ou

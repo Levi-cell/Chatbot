@@ -25,8 +25,9 @@ from .services import (
     carregar_relatorio,
 )
 from .apresentacao import (
+    CABECALHO_CSV_GOOGLE_CONTATOS,
+    montar_linha_csv_google_contatos,
     normalizar_telefone_google,
-    proteger_celula_csv,
     separar_nome,
 )
 
@@ -216,10 +217,7 @@ def contatos_csv(request):
         return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
     saida = StringIO(newline='')
     escritor = csv.writer(saida, lineterminator='\r\n')
-    escritor.writerow([
-        'First Name', 'Last Name', 'Email 1 - Label', 'Email 1 - Value',
-        'Phone 1 - Label', 'Phone 1 - Value', 'Notes', 'Labels',
-    ])
+    escritor.writerow(CABECALHO_CSV_GOOGLE_CONTATOS)
     for contato in contatos:
         primeiro, sobrenome = separar_nome(contato.get('nome'))
         email = str(contato.get('email') or '').strip()
@@ -230,14 +228,14 @@ def contatos_csv(request):
             primeiro and validacao_email.valido and telefone
         ):
             continue
-        escritor.writerow([
-            proteger_celula_csv(primeiro), proteger_celula_csv(sobrenome),
-            'Work' if email_exportado else '', proteger_celula_csv(email_exportado),
-            'Mobile' if telefone else '', telefone,
-            'Contato exportado pelo monitoramento ESL Tech',
-            proteger_celula_csv(acesso.nome_unidade),
-        ])
-    resposta = HttpResponse('\ufeff' + saida.getvalue(), content_type='text/csv; charset=utf-8')
+        escritor.writerow(montar_linha_csv_google_contatos(
+            primeiro_nome=primeiro,
+            sobrenome=sobrenome,
+            email=email_exportado,
+            telefone=telefone,
+            nome_unidade=acesso.nome_unidade,
+        ))
+    resposta = HttpResponse(saida.getvalue(), content_type='text/csv; charset=utf-8')
     resposta['Content-Disposition'] = (
         f'attachment; filename="contatos_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
     )

@@ -8,7 +8,7 @@ transacional, ela cobre regras e utilitários já implementados:
 - persistência idempotente, avanço e não avanço de etapa;
 - checkpoints, commits, rollback e conclusão da fila no worker.
 - suporte ao idoso e obrigatoriedade do e-mail;
-- validação da oferta, profissão e saudação após inatividade;
+- validação da oferta, início da triagem, profissão e saudação após inatividade;
 - montagem dos relatórios semanais e totais;
 - payloads e sondas manuais do Funil;
 - vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
@@ -32,6 +32,7 @@ tests/unit/test_worker_flow_runtime.py
 tests/unit/test_suporte_idoso_email_obrigatorio.py
 tests/unit/test_saudacao_retorno.py
 tests/unit/test_valida_etapa7.py
+tests/unit/test_valida_etapa11.py
 tests/unit/test_validador_profissao.py
 tests/unit/test_gerar_monitoramento_unidades.py
 tests/unit/test_metricas_perfis_relatorios.py

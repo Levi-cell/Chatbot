@@ -17,46 +17,69 @@ TIPOS_MENSAGEM_ACEITOS_ETAPA11 = {
 }
 
 _CONFIRMACOES_DIRETAS = {
+    "aceito",
     "beleza",
+    "bora",
     "certo",
     "claro",
+    "claro que sim",
     "com certeza",
     "combinado",
     "estou pronta",
     "estou pronto",
     "fechado",
+    "manda ver",
     "ok",
     "okay",
     "partiu",
+    "pode",
+    "pode sim",
     "pode ser",
+    "podemos",
+    "podemos sim",
     "pronta",
     "pronto",
+    "quero",
+    "quero sim",
     "sim",
+    "sim pode",
+    "simbora",
     "ta bom",
     "ta certo",
+    "topo",
     "tudo bem",
     "tudo certo",
+    "vamos",
+    "vamos sim",
 }
 
 _PADRAO_NEGACAO = re.compile(
     r"\b(?:nao|nunca|jamais|talvez|depois|recuso|dispenso)\b"
 )
 
-_PADRAO_CONFIRMACAO_COM_ACAO = re.compile(
-    r"(?:"
+_ACAO_INICIAR_TRIAGEM = (
+    r"(?:comecar|comeca|comece|iniciar|inicia|inicie)"
+    r"(?:\s+(?:a\s+)?triagem)?"
+)
+
+_ACAO_CONTINUAR = r"(?:continuar|continue|prosseguir|prossiga|seguir)"
+
+_ACAO_CONFIRMADA = rf"(?:{_ACAO_INICIAR_TRIAGEM}|{_ACAO_CONTINUAR})"
+
+_PREFIXO_AFIRMATIVO = (
     r"(?:sim|ok|okay|certo|claro|com\s+certeza|beleza|combinado|"
-    r"fechado|pronto|pronta|estou\s+pronto|estou\s+pronta)\s+"
-    r")?"
-    r"(?:"
-    r"(?:vamos|bora)(?:\s+(?:la|nessa|comecar(?:\s+a\s+triagem)?|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|continuar|prosseguir|seguir))?|"
-    r"(?:pode|podemos|quero)\s+(?:comecar(?:\s+a\s+triagem)?|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|continuar|prosseguir|seguir)|"
-    r"comecar(?:\s+a\s+triagem)?|comece|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|"
-    r"continuar|continue|prosseguir|prossiga|seguir"
-    r")"
-    r"(?:\s+(?:por\s+favor|entao))?"
+    r"fechado|pronto|pronta|estou\s+pronto|estou\s+pronta)"
+)
+
+_PADRAO_CONFIRMACAO_COM_ACAO = re.compile(
+    rf"(?:{_PREFIXO_AFIRMATIVO}\s+)?"
+    rf"(?:"
+    rf"(?:vamos|bora)(?:\s+(?:la|nessa|agora))?"
+    rf"(?:\s+{_ACAO_CONFIRMADA})?|"
+    rf"(?:pode|podemos|quero)(?:\s+sim)?\s+{_ACAO_CONFIRMADA}|"
+    rf"{_ACAO_CONFIRMADA}"
+    rf")"
+    rf"(?:\s+(?:por\s+favor|entao|agora|sim))?"
 )
 
 

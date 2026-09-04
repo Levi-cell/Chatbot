@@ -265,6 +265,8 @@ existência de contas. Contas inativas, administrativas ou sem unidade não entr
 - `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
 - `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
 - `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
+  O arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
+  Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
 
 O login bem-sucedido retorna a `/`. A página e cada endpoint de dados chamam
 `exigir_acesso_monitoramento`; nenhum deles aceita unidade escolhida em URL,
