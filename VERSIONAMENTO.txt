@@ -34,6 +34,9 @@ Commit: 62dca9a8c616f4682308c75600ab53a32d70c2db
 V1.0.9 - Portal de monitoramento por unidade
 Commit: 830e5634fdcc244d29e19114eb806c03846065c8
 
+V1.1.0 - Painel responsivo, tags, CSV e triagem
+Commit: 3f75447eb64a1a01085cccbc4a676a6a052d8493
+
 REGRA PARA AS PRÓXIMAS VERSÕES
 ==============================
 

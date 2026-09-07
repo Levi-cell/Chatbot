@@ -14,7 +14,7 @@ from monitoramento.apresentacao import (
     montar_relatorio,
     normalizar_telefone_google,
 )
-from monitoramento.periodos import resolver_periodo
+from monitoramento.periodos import PERIODOS, resolver_periodo
 from monitoramento.services import _agrupar_perfis
 from core.repositories.monitoramento import painel as repositorio_painel
 from tests.fixtures.monitoramento_painel import CONTATOS, CONVERSAS, MENSAGENS, RELATORIO
@@ -142,6 +142,76 @@ class MonitoramentoPainelTests(unittest.TestCase):
         self.assertEqual(
             len(list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))), 1
         )
+
+    def test_csv_essencial_preserva_nome_completo_acentos_e_campos_vazios(self):
+        self.autenticar()
+        contatos = [
+            {'nome': ' João da Silva ', 'email': 'joao@example.com', 'waid_telefone': '557194111866'},
+            {'nome': None, 'email': None, 'waid_telefone': '557599111222'},
+            {'nome': 'Sem telefone', 'email': 'outro@example.com', 'waid_telefone': None},
+            {'nome': '=Nome; "especial"', 'email': '=1+1', 'waid_telefone': '123'},
+        ]
+        with patch('monitoramento.views.carregar_contatos', return_value=contatos):
+            completo = self.cliente.get('/contatos.csv?formato=essencial&tipo=todos')
+            elegivel = self.cliente.get('/contatos.csv?formato=essencial&tipo=elegiveis')
+        self.assertTrue(completo.content.startswith(b'\xef\xbb\xbf'))
+        linhas = list(csv.reader(StringIO(completo.content.decode('utf-8-sig')), delimiter=';'))
+        self.assertEqual(linhas, [
+            ['Nome', 'E-mail', 'Telefone'],
+            ['João da Silva', 'joao@example.com', '+557194111866'],
+            ['', '', '+557599111222'],
+            ['Sem telefone', 'outro@example.com', ''],
+            ["'=Nome; \"especial\"", "'=1+1", ''],
+        ])
+        self.assertEqual(
+            list(csv.reader(StringIO(elegivel.content.decode('utf-8-sig')), delimiter=';')),
+            linhas[:2],
+        )
+        self.assertIn('contatos_essenciais_total_todos.csv', completo['Content-Disposition'])
+        self.assertIn('no-store', completo['Cache-Control'])
+
+    def test_quatro_exports_respeitam_todos_periodos_e_unidade_autorizada(self):
+        agora = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+        for usuario, unidade in ((self.cenario.usuario_a, 10), (self.cenario.usuario_b, 20)):
+            self.cliente = Client()
+            self.autenticar(usuario)
+            for chave in ('total', *PERIODOS):
+                periodo = resolver_periodo(chave, agora=agora)
+                for formato in ('google', 'essencial'):
+                    for tipo in ('todos', 'elegiveis'):
+                        with self.subTest(unidade=unidade, periodo=chave, formato=formato, tipo=tipo):
+                            with patch('monitoramento.views.resolver_periodo', return_value=periodo) as resolver, \
+                                 patch('monitoramento.views.carregar_contatos', return_value=CONTATOS) as carregar:
+                                resposta = self.cliente.get('/contatos.csv', {
+                                    'formato': formato, 'tipo': tipo, 'periodo': chave,
+                                    'id_unidade': 999,
+                                })
+                            self.assertEqual(resposta.status_code, 200)
+                            resolver.assert_called_once_with(chave)
+                            acesso, recebido = carregar.call_args.args
+                            self.assertEqual(acesso.id_unidade, unidade)
+                            self.assertEqual(recebido, periodo)
+                            leitor = csv.reader(
+                                StringIO(resposta.content.decode('utf-8-sig')),
+                                delimiter=';' if formato == 'essencial' else ',',
+                            )
+                            linhas = list(leitor)
+                            self.assertEqual(len(linhas), 2 if tipo == 'elegiveis' else 3)
+                            self.assertTrue(all(len(linha) == (3 if formato == 'essencial' else 36) for linha in linhas))
+                            self.assertIn(f'_{chave}_{tipo}.csv', resposta['Content-Disposition'])
+
+    def test_export_essencial_recusa_acesso_invalido_e_parametros_invalidos(self):
+        rota = '/contatos.csv?formato=essencial'
+        with patch('monitoramento.views.carregar_contatos') as carregar:
+            self.assertEqual(self.cliente.get(rota).status_code, 401)
+            self.autenticar()
+            self.assertEqual(self.cliente.get(rota + '&periodo=invalido').status_code, 400)
+            self.assertEqual(self.cliente.get('/contatos.csv?formato=invalido').status_code, 400)
+            self.assertEqual(self.cliente.post(rota).status_code, 405)
+            with self.cenario.banco.cursor() as cursor:
+                cursor.execute('UPDATE unidade SET id_usuario_monitoramento = NULL WHERE id_unidade = 10')
+            self.assertEqual(self.cliente.get(rota).status_code, 403)
+            carregar.assert_not_called()
 
     def test_botoes_historicos_vem_do_catalogo_oficial(self):
         mensagem = {'quem_enviou': 'bot', 'tipo': 'interactive_button', 'id_etapa': 2}

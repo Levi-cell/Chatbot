@@ -1,101 +1,71 @@
 # Plano autoritativo — `user_id`, WA ID e PyWa 4.x
 
-> **Baseline autoritativa — V1.0.7 (`2bc41888db4987e957c5653825acf4a55e9d611d`):** o estado inicial deste plano
-> já possui `unidade.nome_unidade`, `unidade.nome_agente` e `unidade.genero`,
-> com gênero restrito a `masculino` ou `feminino`. Esses campos configuram
-> somente as apresentações iniciais padrão, de mídia, financeira e de
-> tratamento de reforço escolar da etapa 1. Eles não identificam cliente e não
-> entram em turno, lock, fila, cache de identidade, anti-flood ou
-> reconciliação. A implementação de `user_id` deve preservar esse contrato e
-> nunca restaurar a coluna legada `unidade.nome`.
+> **Baseline autoritativa — V1.1.0 (`3f75447eb64a1a01085cccbc4a676a6a052d8493`):** este plano parte do estado efetivamente entregue e validado em produção. A futura compatibilidade com `user_id` deve ser aditiva e preservar todos os contratos atuais.
 
 ## 1. Estado deste documento
 
-Este plano substitui integralmente as versões anteriores do desenho de
-`user_id`.
-Ele ainda **não foi aplicado ao runtime**. Nesta revisão, os dois planos
-Markdown são sincronizados com a baseline; todos os caminhos de código, banco,
-testes e deploy citados abaixo continuam descrevendo impacto futuro.
+Este documento substitui integralmente as versões anteriores do desenho de
+`user_id`. Ele ainda **não foi aplicado ao runtime**: descreve uma migração de
+emergência preparada para quando a Meta disponibilizar e documentar essa forma
+de identidade na API usada pelo projeto.
 
-A baseline versionada usada nesta revisão é a V1.0.7, commit completo
-`2bc41888db4987e957c5653825acf4a55e9d611d`, com 22 etapas e 25 transições.
-Sobre ela, o estado pré-`user_id` auditado em 29/08/2026 contém os deltas
-aprovados e ainda não necessariamente consolidados em um único commit descritos
-nesta seção. A futura implementação deste plano acrescentará somente a etapa de
-compartilhamento oficial do contato após o nome; por isso o estado final terá 23
-etapas e 27 transições. Nenhum dos deltas pré-existentes abaixo cria etapa ou
-aresta adicional.
+A baseline auditada em 04/09/2026 é a V1.1.0, commit completo
+`3f75447eb64a1a01085cccbc4a676a6a052d8493`. O fluxo atual possui 22 etapas e
+25 transições. A futura etapa 2 solicitará o contato oficial somente para quem
+chegar sem WA ID; a renumeração resultará em 23 etapas e 27 transições. Quem já
+chega com WA ID continuará saltando diretamente da etapa 1 para a futura etapa
+3.
 
-O commit-base já contém as mensagens editoriais das etapas atuais 2, 10 e 22
-(que continuam sendo 3, 11 e 23 após a renumeração), o snapshot de profissão em
-`conversa.profissao`, a coluna `cliente.profissao`, sua migração e a proteção
-aditiva do validador de profissão. Esses itens não são deltas posteriores ao
-commit: o plano apenas os preserva nos blocos renumerados e exige que o estado
-do banco já esteja materializado. A proteção continua recusando somente as oito
-respostas completas observadas como fora de contexto, repetindo a própria etapa
-sem criar nova etapa, evento ou persistência.
+A baseline já inclui e deve conservar:
 
-O estado de trabalho auditado depois do commit acrescenta somente os deltas que
-precisam atravessar explicitamente a renumeração: o prefixo atual da mensagem da
-etapa 11 e o botão `Começar triagem` (futura etapa 12), a saudação de retorno, a
-proteção contextual da oferta e a política de suporte ao idoso/e-mail. O texto
-original da etapa 11 permanece como parte da baseline; o prefixo e o botão são
-os únicos ajustes editoriais dessa mensagem a preservar.
+- profissão canônica do cliente e snapshot por conversa;
+- apresentações dinâmicas por unidade (`nome_unidade`, `nome_agente` e
+  `genero`), inclusive os fluxos de mídia, financeiro e reforço escolar;
+- política por unidade para suporte a idosos, e-mail obrigatório e BPA;
+- saudação de retorno após três horas e proteção contextual da oferta;
+- aceite amplo e seguro para começar a triagem, com negativas prevalecendo;
+- aplicativo Django `monitoramento`, autenticação pelo usuário nativo do
+  Django, isolamento de uma unidade por usuário, painel responsivo, atualização
+  periódica, relatórios e CSV compatível com o Google Contatos;
+- execução atual por `chatbot-webhook.service`, `chatbot-worker-flow.service` e
+  `chatbot-worker-funil.service`.
 
-A saudação de retorno `Olá novamente, {nome}!` ocorre quando o cliente
-responde na mesma conversa e unidade depois de pelo menos três horas desde a
-última mensagem efetivamente enviada pelo bot. Ela é apenas um prefixo da
-resposta normal já escolhida, tanto em avanço válido quanto em tratamento
-inválido. Não cria etapa, evento, transição, envio ou linha de histórico
-adicional e não altera turno, retry, lock, identidade ou persistência. Seu
-contrato completo está na seção 10.2.
+A relação `unidade.id_usuario_monitoramento -> auth_user.id` pertence ao login
+do painel. Esse identificador Django nunca se mistura com o `user_id` da Meta.
+O primeiro autoriza a consulta de uma unidade; o segundo é uma identidade Meta
+provisória e um destinatário técnico enquanto o telefone oficial não existe.
 
-Outro delta funcional é a proteção contextual da oferta: pedidos de informação como
-`quero mais informações` não são confirmação positiva, enquanto respostas
-curtas como `quero`, `sim, quero`, `quero sim` e `sim, gostaria` continuam
-válidas. Essa regra está na etapa atual 7 e passa à futura etapa 8 sem criar
-evento ou aresta.
+São pré-requisitos bancários da futura migração:
 
-O último grupo é a política de suporte ao idoso e obrigatoriedade de e-mail,
-materializada pela migração prévia
-`deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`.
-Ela adiciona `unidade.suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
-`unidade.email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE` e o motivo de
-encerramento `encaminhado_suporte_idoso`. As unidades existentes preservam a
-configuração geral anterior pelos defaults, ressalvada a exceção universal
-aprovada de e-mail opcional para titular de 60 a 99 anos. Essa migração é
-pré-requisito do plano
-de `user_id`: o SQL futuro apenas prova e preserva seu estado, sem recriar as
-colunas, reexecutar backfill ou alterar seus valores.
+- migrações Django de `contenttypes`, `auth`, `admin` e `sessions`, com
+  `chatbot.auth_user` já existente;
+- `deploy/migrations/20260812_personalizar_agente_unidade.sql`;
+- `deploy/migrations/20260823_adicionar_profissao_cliente.sql`;
+- `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
+- `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`.
 
-Os contratos de payload usados como referência são:
+Os contratos de payload usados como referência continuam sendo:
 
 - `payloads/WAID.json`;
 - `payloads/BSUID_USERNAME.json`;
 - `payloads/WAID_BSUID_USERNAME.json`;
 - `payloads/CONTACT_INFO.json`.
 
-Os três primeiros representam combinações normais de identidade no envelope.
-`CONTACT_INFO.json` representa o webhook inbound recebido como resposta ao envio
-outbound `request_contact_info(...)`: o nome da chamada não aparece literalmente
-no retorno; a prova persistível é `type='contacts'` com
-`origin='contact_request'` e o WA ID dentro do cartão oficial.
+Os nomes com `BSUID` são legados dos fixtures. O nome canônico no desenho é
+sempre `user_id`. Esses arquivos são exemplos representativos, não prova do
+formato final de produção. Cada formato deverá ser confirmado por captura real,
+assinada e anonimizada antes do deploy.
 
-Os nomes de dois fixtures e o nome deste próprio Markdown ainda contêm `BSUID`
-por legado de arquivo; esses caminhos serão preservados para não quebrar as
-referências da tarefa. No contrato, no banco, no código e nos logs o nome correto
-será sempre `user_id`. Não são dois identificadores diferentes.
+Ainda não existe fixture real para `system.user_changed_user_id`. A futura
+implementação apenas reconhece o envelope `system` e encerra a requisição com
+sucesso, sem criar cliente, alias, turno ou fila. Qualquer interpretação ou
+mutação de identidade fica proibida até haver payload real assinado e contrato
+oficial da versão da Graph API utilizada.
 
-Esses arquivos são fixtures representativas, e não capturas reais de produção.
-Antes do deploy, o primeiro payload bruto real de cada formato deverá ser salvo,
-anonimizado e confrontado com os testes.
-
-Quando este plano for aplicado, cada passo deverá apresentar o conteúdo completo
-de todo arquivo criado ou alterado. Não serão aceitos trechos soltos que
-dependam de interpretação durante o deploy. Como os senders ainda serão
-refinados antes da aplicação, o apêndice de código completo deverá ser
-regenerado a partir do commit definitivo imediatamente antes da implementação;
-o contrato comportamental e de banco deste documento já é autoritativo.
+O plano prático sincronizado contém 182 ações ordenadas: 23 criações, 149
+substituições completas e 10 remoções. Todo arquivo criado ou alterado aparece
+com seu conteúdo integral e hash SHA-256, para que a aplicação futura seja
+mecânica e verificável.
 
 ## 2. Objetivo e limites
 
@@ -131,6 +101,8 @@ O plano não autoriza:
 - alterar os resultados funcionais dos fluxos A/B/C de turno;
 - criar salto, retorno ou avanço fora de `chatbot.etapa_transicao`;
 - usar username como identidade, lock, destinatário Meta ou chave de conversa;
+- expor o `user_id` da Meta no JSON, HTML ou CSV do monitoramento;
+- confundir `auth_user.id`/`unidade.id_usuario_monitoramento` com o `user_id` da Meta;
 - usar `user_id` como fallback de sender depois da etapa obrigatória de
   compartilhamento do WA ID;
 - usar WAMID como identidade da pessoa;
@@ -151,8 +123,11 @@ As extensões comportamentais aprovadas neste plano são:
 4. resolver turno, ordem, bloqueios e denylist pelo conjunto de aliases
    oficialmente comprovado do cliente na unidade, sem exigir que clientes
    legados passem a possuir user ID;
-5. tornar a reconciliação consciente da posse das conversas envolvidas: o merge
-   reutiliza exatamente o limiar da V1.0.7, no qual um lock só é stale quando
+5. adaptar o monitoramento ao período provisório: mostrar `@username` somente enquanto
+   o contato oficial não foi compartilhado, voltar automaticamente ao telefone quando
+   houver WA ID e sinalizar o bloqueio confirmado após 12 turnos sem avanço;
+6. tornar a reconciliação consciente da posse das conversas envolvidas: o merge
+   reutiliza exatamente o limiar da V1.1.0, no qual um lock só é stale quando
    `processing_started_at < NOW() - INTERVAL '110.0 seconds'`; antes disso ele
    nunca é removido. O takeover incrementa `lock_version`, preservando a proteção
    já existente no `unlock` sem prometer cancelamento de um trabalho externo já
@@ -201,10 +176,12 @@ Dentro de `entry[].changes[].value`:
 - `nome_unidade`, `nome_agente` e `genero`: não vêm no webhook; são lidos da
   unidade localizada por `metadata.phone_number_id` somente para montar a
   apresentação inicial da etapa 1;
-- `suporte_idoso` e `email_obrigatorio`: não vêm no webhook; são políticas
-  booleanas lidas da mesma unidade em snapshots específicos das etapas de idade
-  e e-mail. Elas não participam da identidade nem podem ser inferidas pelo
-  conteúdo da mensagem.
+- `suporte_idoso`, `email_obrigatorio` e `bpa_ativo`: não vêm no webhook; são
+  políticas booleanas lidas da mesma unidade nos pontos próprios do fluxo. Elas
+  não participam da identidade nem podem ser inferidas pelo conteúdo da mensagem;
+- `id_usuario_monitoramento`: não vem no webhook; referencia `auth_user.id` e
+  autoriza um usuário Django a consultar exatamente uma unidade. Ele não é o
+  `user_id` da Meta e nunca participa do processamento de mensagens.
 
 `nome_unidade` é o nome institucional exibido, `nome_agente` é o nome editorial
 do atendente virtual e `genero` aceita somente `masculino` ou `feminino`, para
@@ -225,7 +202,7 @@ identifica cliente ou unidade e jamais é passado como `sender`; todo envio usa 
 `phone_number_id` canônico da unidade validada no banco. HTTP 503 fica reservado
 a falha transitória depois de uma entrada estruturalmente válida quando não
 existir fallback seguro, como RDS indisponível, falha de `INSERT` ou de commit.
-Falha isolada do Redis continua usando os fallbacks já definidos pela V1.0.7.
+Falha isolada do Redis continua usando os fallbacks já definidos pela V1.1.0.
 
 ### 3.2 Campos do cliente
 
@@ -264,6 +241,7 @@ Eles nunca podem ser confundidos.
 | somente user ID já mapeado, em qualquer etapa | aceita | user ID permanece a identidade do item; cliente e WA ID canônico são resolvidos no worker | fluxo normal somente com WA ID canônico |
 | somente username | ignora com HTTP 200 | inexistente | não executa |
 | nenhum dos três | ignora com HTTP 200 | inexistente | não executa |
+| evento `system`, inclusive `system.user_changed_user_id` | reconhece e encerra com HTTP 200 | não resolve nem altera | não executa |
 
 Um evento é processável quando:
 
@@ -275,6 +253,12 @@ O WA ID contido no cartão de um `contact_request` não torna o evento processá
 por si só e não vira identidade do remetente. Ele é o
 `wa_id_compartilhado`; no fixture atual o remetente continua processável pelo
 `user_id` presente no envelope.
+
+A linha `system` descreve apenas a classificação segura do envelope. Enquanto não
+existir captura real assinada e documentação oficial compatível, o conteúdo desse
+evento não autoriza criar alias, reconciliar clientes ou alterar identidades. Um
+`value` que misture `messages`, `statuses` e/ou `system` falha fechado como evento
+desconhecido e também termina sem efeito.
 
 ## 4. Decisões de identidade
 
@@ -389,7 +373,9 @@ Username:
 - nunca seleciona cliente ou conversa;
 - nunca entra em lock, turno, cache ou deduplicação;
 - nunca é usado no campo `to` da Meta;
-- é mostrado no funil com exatamente um `@`, quando existir.
+- é mostrado no funil com exatamente um `@`, quando existir;
+- pode aparecer no monitoramento como contato provisório somente quando o cliente
+  ainda não possui WA ID canônico.
 
 Somente `cliente.username` representa o valor canônico mais recente. Todo novo
 payload com username não vazio sobrescreve essa coluna; payload sem username
@@ -500,6 +486,44 @@ O contexto da coleta de e-mail deve existir no arquivo futuro
 `contextos/etapa10.py` não pode ser perdido quando a etapa atual 9 for
 renumerada para 10: o plano prático primeiro materializa o novo contexto 11 e
 depois substitui o contexto 10 pelo conteúdo correspondente à etapa renumerada.
+
+### 4.3.3 Monitoramento, username provisório e bloqueio visível
+
+O isolamento continua sendo decidido no servidor em todas as requisições:
+`request.user -> unidade.id_usuario_monitoramento -> conversa/id_unidade ->
+historico_mensagem/id_unidade`. O navegador não escolhe unidade e nenhum ID
+recebido da interface pode ampliar esse escopo. A relação é revalidada tanto no
+HTML quanto nas rotas JSON e CSV.
+
+A informação de contato segue uma única ordem:
+
+```text
+cliente.wa_id válido -> exibir telefone
+sem WA ID + username válido -> exibir @username
+sem ambos -> exibir "Contato não compartilhado"
+```
+
+O `user_id` da Meta nunca é serializado para o painel. Username é apenas uma
+pista visual provisória e não entra nos CSVs, na elegibilidade de contatos nem
+no telefone importado pelo Google. Assim que a reconciliação gravar o WA ID, o
+telefone passa a ser exibido automaticamente na próxima atualização.
+
+A etapa futura 2 aparece no histórico como uma solicitação desabilitada de
+`Compartilhar contato`, coerente com o caráter somente leitura da plataforma. O
+catálogo do relatório passa a listar 23 etapas.
+
+A sinalização `BLOQUEADO` exige prova dupla e escopada à unidade:
+
+1. `conversa.turnos_sem_avanco >= 12`; e
+2. registro correspondente na denylist/bloqueio Meta para o mesmo
+   `(id_cliente, id_unidade)`.
+
+O contador isolado não basta. Esse estado aparece no card e no detalhe da
+conversa, sem oferecer qualquer ação de desbloqueio ao franqueado.
+
+O painel conserva a atualização periódica já implantada: 10 segundos enquanto a
+aba está visível e 30 segundos em segundo plano. Cada resposta continua vindo do
+banco e passando pelo escopo do usuário autenticado.
 
 ### 4.4 Handoff seguro de user ID para WA ID
 
@@ -702,6 +726,8 @@ nome_agente VARCHAR(100) NOT NULL
 genero VARCHAR(9) NOT NULL
 suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE
 email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE
+bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+id_usuario_monitoramento INTEGER NULL
 id_portfolio VARCHAR(100) NULL
 
 CONSTRAINT uq_unidade_nome_unidade
@@ -712,6 +738,12 @@ CONSTRAINT ck_unidade_nome_agente_nao_vazio
     CHECK (nome_agente ~ '[^[:space:]]')
 CONSTRAINT ck_unidade_genero
     CHECK (genero IN ('masculino', 'feminino'))
+CONSTRAINT uq_unidade_usuario_monitoramento
+    UNIQUE (id_usuario_monitoramento)
+CONSTRAINT unidade_id_usuario_monitoramento_fkey
+    FOREIGN KEY (id_usuario_monitoramento)
+    REFERENCES chatbot.auth_user(id)
+    ON DELETE SET NULL
 CONSTRAINT ck_unidade_id_portfolio_nao_vazio
     CHECK (
         id_portfolio IS NULL
@@ -719,12 +751,11 @@ CONSTRAINT ck_unidade_id_portfolio_nao_vazio
     )
 ```
 
-As três primeiras colunas e suas quatro constraints pertencem à baseline
-versionada. As duas flags pertencem ao delta pré-`user_id` de 29/08/2026 e são
-preservadas sem nova migração ou alteração de dados por este plano.
-`id_portfolio` é a única ampliação futura e opcional da unidade pertencente à
-feature de `user_id`; isso não significa que seja a única evolução já existente
-na tabela.
+Todos os campos acima, exceto `id_portfolio`, já pertencem à baseline V1.1.0.
+A relação opcional de monitoramento é um para um: a unicidade impede que a
+mesma conta Django seja vinculada a duas unidades, e `ON DELETE SET NULL`
+preserva a unidade quando a conta for removida. `id_portfolio` é a única
+ampliação futura dessa tabela pertencente à feature de `user_id`.
 
 `chatbot.cliente`:
 
@@ -813,7 +844,7 @@ chatbot.conversa.motivo_encerramento
 
 O delta da feature de `user_id` soma 22 campos listados nesta seção, contando
 chaves/FKs da tabela de vínculo e colunas renomeadas. As três colunas de
-apresentação da unidade já existentes na baseline V1.0.7 e as profissões já
+apresentação da unidade já existentes na baseline V1.1.0 e as profissões já
 presentes no estado pré-`user_id` não entram nessa conta. Renome não cria uma
 segunda cópia do WA ID legado.
 
@@ -858,8 +889,10 @@ Também são exceções à nulabilidade:
 - `unidade.nome_unidade` e `unidade.nome_agente` são obrigatórios, não vazios e
   `nome_unidade` permanece único;
 - `unidade.genero` é obrigatório e aceita somente `masculino` ou `feminino`;
-- `unidade.suporte_idoso` e `unidade.email_obrigatorio` são booleanos
-  obrigatórios, com defaults `FALSE` e `TRUE`, respectivamente;
+- `unidade.suporte_idoso`, `unidade.email_obrigatorio` e `unidade.bpa_ativo`
+  são booleanos obrigatórios, com defaults `FALSE`, `TRUE` e `FALSE`;
+- `unidade.id_usuario_monitoramento` é inteiro anulável, único, referencia
+  `chatbot.auth_user(id)` e usa `ON DELETE SET NULL`;
 - `unidade.id_portfolio` é opcional; aceita `NULL` e, quando informado, não
   aceita valor vazio ou composto somente por espaços;
 - `user_id_cliente.id_cliente`, `user_id` e `id_unidade` são obrigatórios;
@@ -910,6 +943,8 @@ sem transformar os valores em uma concatenação:
 - flood por `(user_id, phone_id_unidade, received_at)`;
 - vínculo canônico único por `(user_id, id_unidade)`;
 - vínculo canônico único por `(id_cliente, id_unidade)`;
+- a constraint `UNIQUE (unidade.id_usuario_monitoramento)` já fornece o índice
+  para a resolução do usuário do painel; não se cria índice redundante;
 - apoio à FK/cascade de unidade por `(id_unidade, id_cliente)`;
 - histórico mantém apenas seus índices cronológicos atuais; não será criado
   índice por identidade sem consulta operacional concreta que o justifique.
@@ -925,63 +960,46 @@ chave nem serve de fallback.
 
 ### 5.4 DDL e migração
 
-Os arquivos Python de deploy conterão somente o estado final de criação. Não
-haverá `ALTER TABLE` em Python.
+Os arquivos Python de criação conterão somente o estado final. Nenhum `ALTER
+TABLE` será executado pela aplicação.
 
-O último passo do plano conterá um único SQL puro, transacional, para produção,
-com:
+O SQL normativo será
+`deploy/migrations/20260904_adicionar_user_id_whatsapp.sql`, transacional e
+executado com os serviços parados. A ordem obrigatória é:
 
-1. preflight exato do estado bancário pré-`user_id` — baseline V1.0.7 com a
-   migração de profissão já materializada, mais o delta de suporte ao idoso e
-   política de e-mail —, complementado pelo manifesto de código que preserva a
-   proteção contextual da oferta, inclusive `cliente.profissao VARCHAR(100) NULL`
-   sem default, as três colunas
-   de apresentação, `suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
-   `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`, suas constraints e a
-   ausência de `unidade.nome`;
-2. serviços parados e filas operacionais vazias;
-3. renome das cinco colunas existentes de WA ID;
-4. preservação, sem renome, recriação, backfill ou novo `ADD COLUMN`, de
-   `cliente.profissao`, `nome_unidade`, `nome_agente`, `genero`,
-   `suporte_idoso` e `email_obrigatorio`;
-5. criação das colunas novas e de `user_id_cliente`;
-6. criação anulável de `id_portfolio`, sem backfill obrigatório e com CHECK
-   apenas para rejeitar texto vazio quando houver valor;
-7. remoção de `NOT NULL` dos WA IDs de snapshot;
-8. ampliação do CHECK já composto por `idade_invalida`, `foi_agendado` e
-   `encaminhado_suporte_idoso` para incluir `ativou_privacidade` e
-   `bloqueio_reconciliado`;
-9. constraints, FKs e índices finais;
-10. atualização preservada do catálogo/mapa de etapas;
-11. recriação controlada de `chatbot.dequeue_message()` e preservação semântica
-    de `chatbot.lock_conversa()`/`chatbot.unlock_conversa()`: a fila mantém sua
-    recuperação própria de 2 minutos, enquanto a conversa conserva o predicado
-    exato da V1.0.7, `processing_started_at < NOW() - INTERVAL '110.0 seconds'`,
-    com `lock_version` no takeover e `unlock` condicionado à versão vigente;
-12. pós-validação completa, incluindo apresentação da unidade, ações das FKs e
-    definição dos índices;
-13. `COMMIT` apenas depois de todas as validações.
+1. provar a baseline V1.1.0, inclusive `chatbot.auth_user`, a coluna
+   `unidade.id_usuario_monitoramento`, sua unicidade e a FK exata para
+   `auth_user(id)` com `ON DELETE SET NULL`;
+2. provar as colunas de apresentação, profissão, suporte ao idoso, e-mail
+   obrigatório e BPA, sem alterar seus valores;
+3. provar que as filas operacionais estão vazias e bloquear as tabelas
+   envolvidas, inclusive `auth_user` e `unidade`;
+4. capturar snapshots dos dados e dos vínculos de monitoramento;
+5. renomear as cinco colunas legadas de WA ID, sem criar cópias;
+6. criar as colunas `user_id`/`username`, `id_portfolio` e a tabela
+   `user_id_cliente`, com nulabilidade, checks, FKs e unicidades canônicas;
+7. ampliar `motivo_encerramento`, renumerar o catálogo de 22 para 23 etapas e
+   materializar as 27 transições finais;
+8. recriar `dequeue_message()` com a nova assinatura e preservar literalmente
+   a recuperação da fila em 2 minutos, a posse da conversa em 110 segundos,
+   `lock_version`, `FOR UPDATE SKIP LOCKED`, retry e ordenação;
+9. validar pai e partições de `historico_mensagens`, índices, ações das FKs,
+   catálogo, transições e as 38 constraints finais esperadas;
+10. comparar os snapshots, inclusive `id_usuario_monitoramento`, e executar
+    `COMMIT` somente se todo dado anterior tiver sido preservado.
 
-A migração `deploy/migrations/20260812_personalizar_agente_unidade.sql` já
-pertence à baseline e não será incorporada, repetida nem reexecutada pela
-migração de `user_id`. O SQL futuro apenas prova que seu estado final continua
-íntegro antes e depois da mudança.
+As migrações
+`20260812_personalizar_agente_unidade.sql`,
+`20260823_adicionar_profissao_cliente.sql`,
+`20260829_adicionar_suporte_idoso_email_obrigatorio.sql` e
+`20260902_adicionar_usuario_monitoramento_unidade.sql` são pré-requisitos. O SQL
+futuro prova seus efeitos; não repete seus `ADD COLUMN`, backfills ou regras.
 
-A transação desse SQL pertence exclusivamente à futura janela de migração com
-os serviços parados. Ela não move commits, rollbacks, ponto do lock ou política
-de retry do `flow_worker`; preserva os dois limiares distintos da V1.0.7 — 2
-minutos para recuperação da fila e 110 segundos para posse da conversa — e a
-proteção de versão já exigida para o `unlock`.
-
-Como `historico_mensagens` é particionada, a migração validará pai e partições.
-Como a assinatura de retorno de `dequeue_message()` mudará, não será usado
-`CREATE OR REPLACE` sobre a assinatura antiga: o SQL fará `DROP FUNCTION` e
-recriará a função com o mesmo CTE, filtros, ordem, `FOR UPDATE SKIP LOCKED`,
-posse, incremento de retry e timestamps, alterando somente nomes/colunas de
-retorno.
-
-Essa recriação é mecânica para transportar `wa_id`, `user_id` e username lidos
-da fila. Ela não autoriza qualquer mudança no algoritmo transacional da função.
+Como `historico_mensagens` é particionada, pai e partições são validados. Como a
+assinatura de `dequeue_message()` muda, a função é removida e recriada; não se
+usa `CREATE OR REPLACE` sobre uma assinatura incompatível. A recriação serve
+somente para transportar `wa_id`, `user_id` e username, sem alterar o algoritmo
+transacional.
 
 ## 6. Webhook
 
@@ -1043,6 +1061,19 @@ Regras:
 diretamente seu único `phones[].wa_id`; sem esse campo explícito, a etapa 2 não
 promove, não reconcilia e apenas reapresenta o pedido oficial.
 
+### 6.1.1 Evento `system.user_changed_user_id`
+
+A classificação do webhook passa a reconhecer `value.system` como categoria
+própria antes de qualquer extração de identidade, denylist, flood ou fila. O
+handler registra o tipo e responde HTTP 200 sem mutação. Um envelope misto com
+mais de uma entre `messages`, `statuses` e `system` é tratado como desconhecido.
+
+Esse comportamento impede reentregas sem adivinhar a semântica de um formato
+ainda não comprovado. Só uma captura real assinada, confrontada com a
+documentação oficial da Graph API em uso, poderá autorizar uma revisão futura
+para trocar aliases. Até lá, `system.user_changed_user_id` nunca cria cliente,
+nunca reconcilia WA ID e nunca muda destinatário.
+
 ### 6.2 Mensagem `contacts`
 
 O tipo bruto persistido na fila continuará sendo `contacts`. Não será inventado
@@ -1101,14 +1132,17 @@ junto dos campos que já normaliza e o anti-flood passa a resolver aliases
 oficialmente vinculados antes de contabilizar a janela:
 
 1. validação de content type, tamanho, assinatura e estrutura JSON;
-2. classificação do evento, extração dos identificadores e exigência de
+2. classificação exclusiva do evento;
+3. encerramento imediato e sem efeito para `statuses`, `system` ou categoria
+   desconhecida;
+4. para `messages`, extração dos identificadores e exigência de
    `metadata.phone_number_id`;
-3. denylist/bloqueio alias-aware e tentativa de bloqueio na Meta;
-4. deduplicação e flood por WAMID;
-5. validação da unidade ativa;
-6. bloqueio temporário da conversa;
-7. regra de turno e inserção idempotente na mesma transação de fila;
-8. resposta HTTP e tratamento atual das exceções.
+5. denylist/bloqueio alias-aware e tentativa de bloqueio na Meta;
+6. deduplicação e flood por WAMID;
+7. validação da unidade ativa;
+8. bloqueio temporário da conversa;
+9. regra de turno e inserção idempotente na mesma transação de fila;
+10. resposta HTTP e tratamento atual das exceções.
 
 O limite de 15 WAMIDs distintos em 5 segundos, o efeito do bloqueio e a posição
 relativa desses guardas não mudam. São acrescentados somente TTLs auxiliares da
@@ -1180,7 +1214,7 @@ permanecem 15 WAMIDs distintos em 5 segundos.
 Ausência de vínculo pode receber cache negativo de 5 segundos para evitar uma
 consulta ao RDS por evento. Se o RDS responder autoritativamente que não existe
 vínculo, falha do Redis conserva o alias unitário e deixa o anti-flood seguir seu
-fallback banco -> memória da V1.0.7; o cache negativo e sua releitura são apenas
+fallback banco -> memória da V1.1.0; o cache negativo e sua releitura são apenas
 otimizações. Conflito determinístico é descartado com HTTP 200, sem mutação ou
 bloqueio Meta. HTTP 503 fica reservado à indisponibilidade transitória do RDS ou
 de outra fonte indispensável à decisão. Contato manual, username, nome,
@@ -1307,7 +1341,7 @@ saudação.
 No passo 2, encontrar predecessor sempre interrompe o ciclo atual. O retorno de
 `reagendar_mensagem_sem_erro()` diferente de uma linha continua gerando o alerta
 de corrida `mensagem_ordem_nao_reagendada`; ele não autoriza ultrapassar a
-mensagem anterior e não muda o `return True` da V1.0.7.
+mensagem anterior e não muda o `return True` da V1.1.0.
 
 Durante o passo 3, a reconciliação pode devolver dois resultados controlados:
 
@@ -1341,7 +1375,7 @@ Também permanecem:
 - espera atual de 1,5 segundo quando a fila está vazia;
 - toda a verdade lógica de `tests/unit/test_fluxo_turno_abc.py`.
 
-A janela de posse da conversa permanece exatamente a da V1.0.7 e não deve ser
+A janela de posse da conversa permanece exatamente a da V1.1.0 e não deve ser
 confundida com os 2 minutos de recuperação da fila. O takeover da conversa só é
 permitido quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`;
 enquanto esse predicado não for verdadeiro, o lock é fresco e recusado. A
@@ -1393,7 +1427,7 @@ três chaves, ainda que o valor de alguma delas seja `None`:
 Admin, mas não substitui silenciosamente o snapshot da conversa no contexto nem
 no histórico do bot.
 
-Em paralelo e sem integrar esse trio de identidade, a baseline V1.0.7 conserva
+Em paralelo e sem integrar esse trio de identidade, a baseline V1.1.0 conserva
 o contexto editorial da etapa 1. Quando `id_etapa_atual is None`, e somente
 nesse primeiro contato, `valida_historico()` chama
 `core/repositories/fluxo/contextos/etapa1.py` e acrescenta ao
@@ -1893,7 +1927,7 @@ O catálogo final terá 23 etapas:
 | 22 | Satisfação — comentário | sim | não |
 | 23 | Finalização | sim | sim, bloqueio de 30 dias |
 
-A baseline V1.0.7 já possui 22 etapas. Na migração futura, as etapas atuais
+A baseline V1.1.0 já possui 22 etapas. Na migração futura, as etapas atuais
 2..22 serão remapeadas para 3..23 sem apagar dados. A etapa 1 permanece no
 mesmo ID e a única etapa realmente adicionada sobre essa baseline é a etapa 2
 de compartilhamento oficial.
@@ -1967,7 +2001,7 @@ validador contextual:
 
 ### 9.2 Confirmação do destino preservada
 
-A confirmação implantada na V1.0.4 e preservada na baseline V1.0.7 passa da etapa
+A confirmação implantada na V1.0.4 e preservada na baseline V1.1.0 passa da etapa
 atual 3 para a futura etapa 4 sem ampliar sua gramática. Na baseline corrigida,
 ela produz o evento único `destino_atendimento_confirmado` e sempre segue de 3
 para a profissão atual 4; depois da renumeração, a mesma regra segue da
@@ -2031,6 +2065,22 @@ estado prévio validado. Suas
 mudanças futuras são de numeração, catálogo, validadores, mensagens e projeções
 já previstas; o desenho físico de identidade da seção 5 permanece intacto.
 
+### 9.4 Aceite da introdução à triagem preservado
+
+A futura etapa 12 herda integralmente o validador entregue na V1.1.0. O clique
+no botão `Começar triagem` e respostas textuais afirmativas como `começar
+triagem`, `iniciar triagem`, `iniciar a triagem`, `sim começar`, `vamos
+começar`, `pode começar`, `sim`, `vamos`, `bora` e variações normalizadas devem
+produzir o mesmo evento de avanço.
+
+O validador reconhece a intenção da frase completa, não depende do texto antigo
+do botão e aceita tanto `interactive` quanto texto digitado. Negativas e recusas
+explícitas prevalecem sobre palavras afirmativas presentes na mesma resposta.
+Mídia, financeiro, reforço escolar e conteúdo sem intenção suficiente continuam
+nos tratamentos já existentes. A renumeração move
+`valida_etapa11.py`/seus testes para `valida_etapa12.py` sem regredir essa
+matriz.
+
 ## 10. Senders
 
 Todos os resolvers recebem os identificadores já resolvidos pelo banco no
@@ -2085,7 +2135,7 @@ canônico relido do banco.
 
 ### 10.1 Tratamentos atuais preservados
 
-A implementação futura não volta ao conjunto de validadores anterior à V1.0.7.
+A implementação futura não volta ao conjunto de validadores anterior à V1.1.0.
 Toda etapa que possui tratamento financeiro continua possuindo também o
 tratamento universal de dúvida sobre reforço escolar, inclusive a nova etapa 2.
 O tipo técnico permanece `duvida_reforco_escolar`.
@@ -2160,7 +2210,7 @@ botão `Começar triagem`.
 
 ### 10.2 Saudação de retorno após três horas
 
-Como delta estritamente aditivo da V1.0.7, uma resposta pode receber o prefixo
+Como delta estritamente aditivo da V1.1.0, uma resposta pode receber o prefixo
 `Olá novamente, {nome}!` quando todas as condições abaixo forem verdadeiras:
 
 1. o atendimento continua na mesma `id_conversa`, que já determina o mesmo
@@ -2261,7 +2311,7 @@ cliente. `montar_payload_oportunidade()` e `montar_observacoes_lead()` recebem a
 mesma classificação já resolvida para não divergirem entre campo técnico e
 texto humano.
 
-O detalhamento preservado na V1.0.7 também é obrigatório:
+O detalhamento preservado na V1.1.0 também é obrigatório:
 
 - `buscar_dados_lead_funil()` lê as respostas das futuras etapas 13..18 em
   ordem crescente;
@@ -2379,7 +2429,12 @@ Admin:
 - `__str__` não presume WA ID e usa fallback legível para user ID/chave;
 - username não altera ações, filtros de identidade ou permissões;
 - relações administrativas com unidade usam `id_unidade__nome_unidade`, nunca o
-  caminho legado `id_unidade__nome`.
+  caminho legado `id_unidade__nome`;
+- Unidade conserva `bpa_ativo` e `id_usuario_monitoramento`; a conta de
+  monitoramento deve ser comum (`is_staff=False`, `is_superuser=False`), pode
+  ser selecionada no Django Admin e, pela unicidade, só pertence a uma unidade;
+- o usuário autenticado do monitoramento não recebe permissões de edição sobre
+  conversa, histórico, cliente ou relatórios.
 
 ## 13. PyWa 4.x
 
@@ -2427,7 +2482,8 @@ Atualizar, com arquivo completo:
 
 Ao mesclar o estado final, `bank_script.py`, models e Admin devem partir do
 contrato pré-`user_id` auditado: `nome_unidade`, `nome_agente`, `genero`,
-`suporte_idoso`, `email_obrigatorio`, suas constraints/defaults e todos os
+`suporte_idoso`, `email_obrigatorio`, `bpa_ativo`,
+`id_usuario_monitoramento`, sua unicidade/FK para `auth_user` e todos os
 caminhos ORM com `nome_unidade` são preservados. Este passo acrescenta
 `id_portfolio` opcional e o contrato de identidade sem restaurar `unidade.nome` nem
 reaplicar as migrações de apresentação, profissão ou políticas de unidade.
@@ -2454,7 +2510,9 @@ Atualizar, com arquivo completo:
 - `core/cache/runtime/cache_flood_redis.py`;
 - `core/cache/cache_flood_memoria.py`;
 - `core/repositories/seguranca/bloqueio_meta.py`;
-- demais caches Redis e fallbacks em memória que recebem identidade técnica.
+- demais caches Redis e fallbacks em memória que recebem identidade técnica;
+- `callback/webhook/services/post_flow.py`, para classificar `system` e encerrar
+  esse evento antes de identidade, proteções e fila.
 
 Turno, denylist e bloqueios preservam o alias primário do item, mas resolvem uma
 única decisão sobre todo o conjunto comprovado da pessoa/unidade. Os advisory
@@ -2474,7 +2532,7 @@ falha de forma fechada sem criar equivalência ou bloqueio por hipótese: confli
 determinístico recebe HTTP 200 e indisponibilidade transitória do RDS recebe HTTP
 503. Quando o RDS prova que ainda não existe vínculo, Redis indisponível não
 descarta a mensagem válida; o alias unitário continua pelo fallback banco ->
-memória da V1.0.7. O limite continua 15 WAMIDs distintos em 5 segundos. Antes do primeiro
+memória da V1.1.0. O limite continua 15 WAMIDs distintos em 5 segundos. Antes do primeiro
 commit, a segunda barreira de predecessor do worker impede que a prova posterior
 ultrapasse item anterior do outro alias. Essa continuidade
 fica nas camadas próprias do webhook/cache/repositório e não cria efeito lateral
@@ -2537,7 +2595,7 @@ cache de outra unidade.
 Os mesmos arquivos preservam `lock_version` no contrato atual de posse e
 `unlock`. Os helpers de reconciliação bloqueiam linhas em ordem determinística,
 recusam todo lock que ainda não satisfaça o predicado stale de 110 segundos da
-V1.0.7 e, no takeover stale, incrementam a versão antes de limpar a posse. Assim,
+V1.1.0 e, no takeover stale, incrementam a versão antes de limpar a posse. Assim,
 um `unlock` tardio com a
 versão anterior não libera um lock novo; esta feature não reescreve toda a
 persistência pós-lock. Os helpers também copiam o nome provisório para o canônico
@@ -2546,7 +2604,7 @@ e nunca fazem backfill de fila/histórico/username da conversa.
 ### Passo 5 — Etapa especial e renumeração
 
 Antes de criar a etapa especial, atualizar e entregar completos os arquivos da
-etapa 1 já personalizados na baseline V1.0.7:
+etapa 1 já personalizados na baseline V1.1.0:
 
 - `core/integrations/whatsapp/messages/etapa1_messages.py`;
 - `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa1.py`;
@@ -2584,6 +2642,11 @@ Nos caminhos físicos, a movimentação ocorre em ordem decrescente — 22 -> 23
 arquivo da etapa 2, evitando sobrescrever módulos da baseline.
 
 A renumeração inclui explicitamente:
+
+- o aceite amplo da introdução à triagem atual 11 -> futura 12, inclusive clique
+  em `Começar triagem`, sinônimos afirmativos e precedência das negativas; o
+  teste atual `test_valida_etapa11.py` é removido após a criação equivalente de
+  `test_valida_etapa12.py`;
 
 - a confirmação atual 3 -> futura 4, seu bloco idempotente em
   `flow_sender.py`, seu evento único `destino_atendimento_confirmado`, a saída
@@ -2694,25 +2757,52 @@ histórico. Na implementação futura, atualizar as choices e
 `bloqueio_reconciliado`, mantendo também `encaminhado_suporte_idoso` e os usos
 distintos definidos nas seções 4.3.2 e 4.5.
 
-No Admin de unidade, preservar ainda os campos V1.0.7 `nome_unidade`,
+No Admin de unidade, preservar ainda os campos V1.1.0 `nome_unidade`,
 `nome_agente` e `genero`, incluindo pesquisa, filtro, ordenação e referências
 ORM por `id_unidade__nome_unidade`; preservar as flags de suporte/e-mail e a
 validação compartilhada do número comercial; acrescentar `id_portfolio`
 opcional sem reduzir esse contrato.
 
-### Passo 8 — PyWa
+### Passo 8 — Monitoramento
+
+Atualizar o painel somente leitura para acompanhar o schema e a etapa nova, com
+conteúdo completo no plano prático:
+
+- `core/repositories/monitoramento/painel.py`;
+- `callback/monitoramento/apresentacao.py`;
+- `callback/monitoramento/views.py`;
+- `callback/monitoramento/static/monitoramento/js/painel.js`;
+- `callback/monitoramento/static/monitoramento/css/painel.css`;
+- `tests/fixtures/monitoramento_painel.py`;
+- `tests/unit/test_monitoramento_painel.py`;
+- `callback/README.md` e `tests/README.md`.
+
+As consultas continuam recebendo a unidade resolvida pelo guard do servidor.
+Elas passam a ler `cliente.wa_id`, os snapshots de username e
+`turnos_sem_avanco`, sem expor `user_id`. A apresentação prefere telefone,
+mostra `@username` apenas durante a fase provisória e usa `Contato não
+compartilhado` quando nenhum dado público existe. O estado bloqueado exige o
+contador 12 e a denylist da mesma unidade.
+
+O histórico representa a futura etapa 2 como solicitação de contato desabilitada
+e o relatório usa 23 etapas. Os CSVs continuam aceitando somente WA ID como
+telefone; username e `user_id` não tornam um contato elegível. Filtros,
+responsividade, polling e o formato Google Contatos da V1.1.0 permanecem.
+
+### Passo 9 — PyWa
 
 Atualizar `requirements.txt`, adaptar apenas APIs incompatíveis e executar os
 smokes reais antes de produção.
 
-### Passo 9 — SQL manual final
+### Passo 10 — SQL manual final
 
-O SQL normativo é a migração-base completa para o schema derivado da V1.0.7,
-commit `2bc41888db4987e957c5653825acf4a55e9d611d`, acrescido dos deltas
-pré-`user_id` aprovados. Ele deverá ser revalidado contra o commit definitivo antes da
+O SQL normativo é a migração-base completa para o schema derivado da V1.1.0,
+commit `3f75447eb64a1a01085cccbc4a676a6a052d8493`, preservando todos os
+contratos já entregues antes de acrescentar `user_id`. Ele deverá ser revalidado contra o commit definitivo antes da
 execução, porque os serviços e o banco ainda não receberam a feature de
-`user_id`. As migrações de apresentação, profissão e
-`20260829_adicionar_suporte_idoso_email_obrigatorio.sql` são pré-condições e não
+`user_id`. As migrações de apresentação, profissão,
+`20260829_adicionar_suporte_idoso_email_obrigatorio.sql` e
+`20260902_adicionar_usuario_monitoramento_unidade.sql` são pré-condições e não
 são reaplicadas por este SQL.
 
 O comando normativo e integral está mantido em um único lugar: o **Passo 160
@@ -2728,7 +2818,7 @@ promoção para produção só poderá usar o mesmo artefato já validado em dev
 O SQL garante aquisição/takeover e `unlock` por versão. A implementação Python
 preserva o uso atual do `lock_version` na posse e no `unlock`. Para esta feature,
 o requisito adicional é delimitado: o merge nunca limpa um lock enquanto não for
-verdadeiro o predicado stale de 110 segundos da V1.0.7; depois disso, o takeover
+verdadeiro o predicado stale de 110 segundos da V1.1.0; depois disso, o takeover
 incrementa a versão sob row lock, de modo que um `unlock` atrasado com a versão
 anterior não solte a posse nova.
 Não se inclui neste plano uma conversão de cada escrita pós-lock em CAS.
@@ -2743,21 +2833,23 @@ de testes que repitam a mesma regra. O plano prático consolida essa cobertura n
 suítes integrais enumeradas no plano prático; esta lista não autoriza criar
 variações redundantes da mesma regra.
 
-Três desses métodos formam uma prova diferencial explícita da baseline: depois de
-normalizar a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles comparam o
-catálogo e o mapa legados, os textos e botões das 22 etapas existentes e o
-payload do Funil no caminho WA-only sem username. A comparação textual aceita
-exclusivamente os deltas posteriores ao commit `2bc4188`: a mensagem e o CTA de
-suporte na etapa atual 6/futura 7, além do prefixo “Certo” e do botão “Começar
-triagem” na etapa atual 11/futura 12. Todos os demais textos e botões devem
-permanecer idênticos. Essa prova
-complementa os testes funcionais de destinatário, persistência, retry e turno;
-ela não autoriza copiar a implementação antiga nem enfraquecer os testes
-aditivos de `user_id`.
+Três desses métodos formam uma prova diferencial explícita da baseline: depois
+de normalizar a renumeração deliberada `1 -> 1` e `2..22 -> 3..23`, eles
+comparam catálogo, mapa, textos, botões, regras do Funil e respostas do painel
+contra a V1.1.0. A diferença permitida é somente a etapa 2 de contato, os novos
+campos de identidade e as adaptações mecânicas descritas neste plano.
+
+Profissão, apresentação dinâmica, suporte/e-mail/BPA, saudação de retorno,
+proteção da oferta, aceite amplo da triagem, monitoramento, CSV Google e
+responsividade já fazem parte da referência. Nenhum deles pode ser tratado como
+delta dispensável durante a comparação.
 
 ### 15.1 Payload e webhook
 
 - cada um dos quatro fixtures é interpretado corretamente;
+- `value.system`, inclusive `system.user_changed_user_id`, é classificado e
+  encerrado com HTTP 200 antes de identidade, flood e fila; nenhuma mutação
+  ocorre, e envelope misto é tratado como desconhecido;
 - ausência estrutural de `metadata.phone_number_id` responde HTTP 200 e não
   enfileira; falha transitória de RDS/insert/commit responde HTTP 503. Redis
   indisponível só produz 503 quando não existir fallback seguro;
@@ -2817,12 +2909,16 @@ aditivos de `user_id`.
 - todas as colunas finais existem com os nomes exatos;
 - `unidade.nome` não existe e `nome_unidade VARCHAR(300)`,
   `nome_agente VARCHAR(100)` e `genero VARCHAR(9)` permanecem `NOT NULL`, sem
-  default e com as quatro constraints canônicas da V1.0.7 validadas;
+  default e com as quatro constraints canônicas da V1.1.0 validadas;
 - `nome_unidade` e `nome_agente` rejeitam valores sem caractere não branco,
   `nome_unidade` permanece único e `genero` rejeita qualquer valor diferente de
   `masculino`/`feminino`;
 - a migração de `user_id` preserva os valores de apresentação existentes e não
   tenta recriar, renomear ou repovoar essas três colunas;
+- `bpa_ativo` conserva tipo/default/valores;
+- `id_usuario_monitoramento` conserva nulabilidade, dados, unicidade e FK para
+  `chatbot.auth_user(id)` com `ON DELETE SET NULL`; a migração não o confunde
+  com a tabela futura `user_id_cliente`;
 - colunas individuais de snapshot aceitam `NULL`;
 - `unidade.id_portfolio` aceita `NULL` e rejeita vazio somente quando informado;
   as três colunas de negócio de `user_id_cliente` rejeitam `NULL`, e `user_id`
@@ -3024,7 +3120,10 @@ aditivos de `user_id`.
   pedidos informativos como “quero mais informações” antes do padrão positivo;
 - a futura etapa 11 aplica a matriz de e-mail efetivamente obrigatório, mantém
   mídia/reforço/financeiro prioritários, grava e-mail válido ou `NULL` de forma
-  absoluta e não reavalia a configuração da unidade no retry.
+  absoluta e não reavalia a configuração da unidade no retry;
+- a futura etapa 12 aceita o botão `Começar triagem` e variações afirmativas
+  digitadas (`iniciar`, `sim`, `vamos`, `pode começar`, `bora`), mantendo
+  negativas explícitas com precedência e os tratamentos contextuais.
 
 ### 15.6 Arquitetura
 
@@ -3099,7 +3198,9 @@ aditivos de `user_id`.
   falha parcial ou conflito preserva a linha;
 - models/Admin não quebram com WA ID nulo;
 - unidade exige e exibe `nome_unidade`, `nome_agente`, `genero`,
-  `suporte_idoso` e `email_obrigatorio`, exibe e permite editar o
+  `suporte_idoso`, `email_obrigatorio`, `bpa_ativo` e
+  `id_usuario_monitoramento`; rejeita conta staff/superuser, e a mesma conta
+  comum não pode ser vinculada a duas unidades; exibe e permite editar o
   `id_portfolio` opcional, usa `id_unidade__nome_unidade` nas relações, oferece
   os filtros aprovados e valida o número comercial pelo helper compartilhado
   quando o suporte é ativado;
@@ -3132,37 +3233,85 @@ aditivos de `user_id`.
 - a cobertura confirma que nenhum DDL, índice, etapa, evento, transição, commit,
   rollback, retry, lock ou contador novo foi introduzido.
 
+### 15.9 Monitoramento
+
+- todas as consultas HTML, JSON e CSV partem da unidade resolvida por
+  `request.user`, sem aceitar seleção de unidade enviada pelo navegador;
+- um usuário Django comum enxerga somente conversas e históricos da unidade à
+  qual está vinculado; usuário sem vínculo não recebe dados;
+- telefone/WA ID é exibido quando existe; sem ele, `@username` aparece apenas
+  como identificação provisória; sem ambos, aparece `Contato não compartilhado`;
+- nenhum JSON, HTML, texto, atributo ou CSV contém o `user_id` da Meta;
+- a futura etapa 2 aparece como solicitação desabilitada de compartilhamento e o
+  relatório lista exatamente 23 etapas;
+- `BLOQUEADO` só aparece quando `turnos_sem_avanco >= 12` e a denylist confirma o
+  mesmo cliente na mesma unidade; cada condição isolada é insuficiente;
+- filtro, busca, tags etárias, detalhes dinâmicos, polling de 10/30 segundos e
+  comportamento responsivo da V1.1.0 permanecem;
+- CSV completo e elegível continuam no formato Google Contatos, usam apenas WA
+  ID como telefone e nunca exportam username ou `user_id` como número.
+
 ## 16. Sequência de deploy futura
 
-1. congelar e commitar a baseline definitiva derivada da V1.0.7 atualizada
-   `2bc4188`, preservando profissão, suporte/e-mail, saudação de retorno de três
-   horas, proteção contextual da oferta e o texto/CTA atual da introdução da
-   triagem;
-2. regenerar o apêndice de código completo deste plano;
-3. implementar em branch separada;
-4. executar testes unitários e de integração;
-5. capturar payloads reais em ambiente de teste;
-6. validar PyWa/Graph v26.0;
-7. gerar e revisar o SQL final;
-8. aplicar e validar código, dependências e SQL em ambiente dev controlado;
-9. promover para produção somente o mesmo artefato aprovado em dev;
-10. garantir fila, conversa processing e funil sem trabalho aberto;
-11. parar webhook, flow worker e funil worker;
-12. atualizar código e o virtualenv pelo `requirements.txt` versionado;
-13. executar SQL e checks de produção;
-14. subir webhook e executar smoke;
-15. subir flow worker e funil worker;
-16. verificar logs, fila, transições e funil.
+1. congelar a baseline V1.1.0 no commit
+   `3f75447eb64a1a01085cccbc4a676a6a052d8493` e reaplicar o plano prático em
+   branch separada;
+2. materializar os 182 passos e conferir todos os SHA-256;
+3. executar as suítes unitárias, integração, diferencial V1.1.0, monitoramento e
+   compilação estática;
+4. capturar e anonimizar payloads reais em ambiente de teste, inclusive qualquer
+   evento `system`, sem alterar a política conservadora antes da validação;
+5. validar PyWa 4.4 e a Graph API escolhida;
+6. conferir que as migrações prévias, inclusive
+   `20260902_adicionar_usuario_monitoramento_unidade.sql`, já estão aplicadas;
+7. aplicar exatamente `20260904_adicionar_user_id_whatsapp.sql` em uma cópia de
+   desenvolvimento e validar snapshots, 23 etapas e 27 transições;
+8. testar login, isolamento de unidade, painel, JSON, CSV, assets estáticos e os
+   dois caminhos etapa 1 -> 2 -> 3 / etapa 1 -> 3;
+9. promover para produção somente o mesmo código e SQL aprovados em dev;
+10. confirmar workspace limpo, backup operacional e filas sem trabalho aberto;
+11. parar `chatbot-worker-flow.service` e `chatbot-worker-funil.service`, mantendo
+    o webhook conforme a janela operacional exigir;
+12. atualizar código e virtualenv pelo `requirements.txt` versionado;
+13. executar `manage.py check --deploy`, as migrações Django já existentes e
+    `collectstatic --noinput`;
+14. parar o webhook, confirmar fila/conversas sem processamento e executar o SQL
+    manual em transação;
+15. iniciar/recarregar o webhook e testar `/webhook`, `/login/`, painel autenticado
+    e arquivos estáticos;
+16. iniciar os dois workers;
+17. conferir `ActiveState`, `SubState`, `NRestarts`, logs, fila, transições, Funil
+    e atualização do monitoramento;
+18. manter rollback apenas pelos artefatos e procedimento operacional aprovados;
+    não improvisar SQL inverso depois da promoção.
 
 ## 17. Gates finais
 
 O plano só poderá ser aplicado se:
 
+- a baseline for exatamente a V1.1.0 auditada, ou todo desvio posterior tiver
+  sido reconciliado nos dois planos antes da aplicação;
+- `bpa_ativo` e `id_usuario_monitoramento` forem preservados, com a FK de
+  monitoramento apontando exclusivamente para `chatbot.auth_user(id)`, única e
+  com `ON DELETE SET NULL`;
+- `auth_user.id` e o `user_id` da Meta permanecerem domínios distintos no banco,
+  nos models, nas consultas, nos logs e na documentação;
+- eventos `system` forem encerrados antes de qualquer mutação, e
+  `system.user_changed_user_id` não for interpretado sem captura real assinada e
+  contrato oficial validado;
+- o aceite amplo da futura etapa 12, inclusive o botão `Começar triagem`, suas
+  variações afirmativas e a precedência das negativas, passar integralmente;
+- o monitoramento resolver unidade somente por `request.user`, nunca expuser
+  `user_id`, usar username somente sem WA ID e exigir contador mais denylist da
+  mesma unidade para sinalizar bloqueio;
+- o painel e o relatório apresentarem 23 etapas, e os CSVs continuarem usando
+  somente telefone canônico no formato Google Contatos;
+
 - não existir `telefone_informado` nem `username_informado`;
 - os nomes das colunas forem exatamente os da seção 5;
 - não existir `unidade.nome`, e `nome_unidade`, `nome_agente` e `genero`
   corresponderem exatamente aos tipos, à nulabilidade, aos dados e às quatro
-  constraints da baseline V1.0.7 atualizada `2bc4188`;
+  constraints da baseline V1.1.0 atualizada `3f75447`;
 - `id_portfolio` estiver escrito corretamente como `VARCHAR(100) NULL`, sem
   default, aceitando ausência e rejeitando texto vazio quando houver valor;
 - `suporte_idoso` e `email_obrigatorio` permanecerem `BOOLEAN NOT NULL` com
@@ -3183,7 +3332,7 @@ O plano só poderá ser aplicado se:
   WA ID canônico como prova da origem do payload;
 - username nunca for identidade técnica;
 - WA ID for obrigatório para chegar ao funil;
-- somente a etapa especial 2 for adicionada sobre a baseline V1.0.7;
+- somente a etapa especial 2 for adicionada sobre a baseline V1.1.0;
 - catálogo tiver 23 etapas e mapa 27 transições;
 - somente etapa 23 encerrar e bloquear por 30 dias; o encerramento especial
   `encaminhado_suporte_idoso` na futura etapa 7 permanece sem bloqueio;
@@ -3275,7 +3424,7 @@ O plano só poderá ser aplicado se:
   bloqueio vigente fecha a conversa, exclui a fila atual na mesma transação, usa
   o commit pós-validação e interrompe o ciclo antes de histórico, lock normal,
   `bot_resposta_atual()` e sender;
-- `lock_conversa()` preservar o predicado exato da V1.0.7: lock fresco enquanto
+- `lock_conversa()` preservar o predicado exato da V1.1.0: lock fresco enquanto
   `processing_started_at >= NOW() - INTERVAL '110.0 seconds'` e stale takeover
   somente com `<`, incrementando `lock_version`; `unlock_conversa()` exige o
   token;
@@ -3284,7 +3433,7 @@ O plano só poderá ser aplicado se:
   a conversão de toda escrita pós-lock em CAS;
 - `dequeue_message()` mantiver seu CTE, ordem, `SKIP LOCKED` e retry, com seu
   limiar próprio de 2 minutos, enquanto `lock_conversa()` preservar literalmente
-  o limiar de 110 segundos da V1.0.7;
+  o limiar de 110 segundos da V1.1.0;
 - no caminho normal, commits, rollbacks, retries, locks, turnos e autocura
   permanecerem nos mesmos pontos; os dois ramos controlados reutilizarem o
   rollback/commit da validação, sem nova fronteira transacional;
@@ -3339,6 +3488,14 @@ O plano só poderá ser aplicado se:
    pós-lock nem cancela chamada externa já iniciada; esta última continua coberta
    pela janela Meta -> banco do item 4.
 
+8. O formato e a semântica de `system.user_changed_user_id` ainda não estão
+   comprovados por fixture real. Reconhecer e ignorar o envelope evita reentrega,
+   mas uma futura ação sobre aliases exigirá nova revisão explícita deste plano.
+9. Username é mutável e pode deixar de existir ou mudar. Por isso sua exibição no
+   monitoramento é apenas provisória, nunca prova de identidade nem dado de
+   exportação; sem WA ID e sem username, a interface assume a ausência e a
+   comunica como contato não compartilhado.
+
 O antigo reset da janela anti-flood na promoção `user_id` -> `wa_id` não é mais
 um risco aceito. A implementação prática deve somar as duas rajadas como uma só
 depois que a associação estiver persistida; antes disso, a barreira de
@@ -3366,7 +3523,7 @@ Há somente duas ramificações delimitadas: lock fresco interrompe o merge ante
 de mutação e usa rollback/requeue sem erro de 5 segundos; bloqueio vigente fecha
 a conversa e remove sua fila na transação de validação, usa o commit já existente
 e termina o ciclo sem histórico, lock normal ou sender. No stale takeover da
-conversa, a janela de 110 segundos da V1.0.7 é mantida e `lock_version` é
+conversa, a janela de 110 segundos da V1.1.0 é mantida e `lock_version` é
 incrementado antes de limpar a posse.
 
 O anti-flood também preserva a continuidade de identidade: quando a prova
@@ -3404,3 +3561,16 @@ faixa etária, perguntas e respostas detalhadas no Funil e terminalidade de 30
 dias são apenas renumerados, nunca redesenhados. As políticas já aprovadas de
 suporte ao idoso, e-mail opcional/obrigatório, proteção da oferta, botão “Começar
 triagem”, profissão e saudação de retorno atravessam a aplicação sem regressão.
+
+No monitoramento, essa transição permanece legível sem vazar a chave privada da
+Meta: enquanto não houver WA ID, a interface pode mostrar `@username`; depois do
+compartilhamento, mostra o telefone canônico. A marca de bloqueio usa a prova
+dupla de 12 turnos sem avanço e denylist na mesma unidade. Autenticação e escopo
+continuam pertencendo ao usuário Django ligado por um para um à unidade, um
+domínio completamente separado do `user_id` da Meta.
+
+O evento `system.user_changed_user_id` fica deliberadamente sem efeito na
+primeira implementação. Essa é a única conclusão sustentada pelos dados atuais:
+o webhook reconhece e encerra o envelope, mas só uma captura real assinada e a
+documentação oficial da versão implantada poderão autorizar reconciliação ou
+troca de alias.

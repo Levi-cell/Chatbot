@@ -8,8 +8,8 @@
   <meta name="theme-color" content="#1c321d">
   <meta name="referrer" content="same-origin">
   <title>Monitoramento · ESL Tech</title>
-  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}">
-  <script src="{% static 'monitoramento/js/painel.js' %}" defer></script>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260907">
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260907" defer></script>
 </head>
 <body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
       data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
@@ -45,19 +45,13 @@
   <main id="conteudo">
     <section id="secaoConversas" class="secao-painel" aria-labelledby="tituloConversas">
       <header class="barra-contexto">
-        <div><p class="sobrelinha">HISTÓRICO DA UNIDADE</p><h1 id="tituloConversas">Conversas</h1><p id="periodoConversas">Carregando período…</p></div>
+        <div><h1 id="tituloConversas">Conversas</h1><p id="periodoConversas">Carregando período…</p></div>
         <label class="seletor-periodo">Período
           <select data-periodo>
             {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
           </select>
         </label>
       </header>
-      <div class="metricas-conversas" aria-label="Resumo do período">
-        <article><span>Leads</span><strong id="totalLeads">—</strong></article>
-        <article><span>Mensagens</span><strong id="totalMensagens">—</strong></article>
-        <article><span>Funil</span><strong id="totalFunil">—</strong></article>
-        <article><span>Nota média</span><strong id="notaMedia">—</strong></article>
-      </div>
       <div class="app-conversas">
         <aside class="lista-conversas" aria-label="Lista de conversas">
           <div class="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input id="buscaConversas" type="search" placeholder="Pesquisar contato" aria-label="Pesquisar contato"></div>

@@ -66,5 +66,8 @@ durante o teste e restaura-a ao terminar; não cria usuários nem tabelas no RDS
 
 `test_monitoramento_painel.py` valida as rotas privadas, métodos permitidos,
 propagação obrigatória da unidade autorizada, quantidade de parâmetros dos SQLs,
-consolidação de perfis, 22 etapas, períodos comparáveis e as duas variantes do
-CSV. Seus payloads vivem em `fixtures/monitoramento_painel.py` e são fictícios.
+consolidação de perfis, 22 etapas, períodos comparáveis e os quatro downloads
+CSV (Google e essencial, todos e elegíveis). Cobre todos os períodos, unidade
+autorizada, revogação de acesso, acentos, campos vazios e proteção contra fórmulas
+nos dados textuais. Seus payloads vivem em `fixtures/monitoramento_painel.py` e
+são fictícios.

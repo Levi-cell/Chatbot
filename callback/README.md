@@ -265,8 +265,11 @@ existência de contas. Contas inativas, administrativas ou sem unidade não entr
 - `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
 - `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
 - `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
-  O arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
+  Por padrão, o arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
   Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
+  Com `formato=essencial`, entrega somente `Nome`, `E-mail` e `Telefone`, com
+  nome completo na primeira coluna, separador `;` e UTF-8 com BOM para planilhas
+  em pt-BR. Os quatro downloads usam o mesmo período e escopo autorizado.
 
 O login bem-sucedido retorna a `/`. A página e cada endpoint de dados chamam
 `exigir_acesso_monitoramento`; nenhum deles aceita unidade escolhida em URL,
@@ -281,6 +284,12 @@ uma nova leitura. Não há WebSocket, tarefa periódica no servidor nem quarto
 serviço: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
 Mensagens são carregadas somente quando um contato é aberto.
 
+Conversas prioriza a lista e o histórico, sem repetir os quatro indicadores do
+relatório. O layout compacto preserva as fontes e ajusta o espaço do chat pela
+altura real do cabeçalho e do aviso, inclusive ao girar o celular. Em telas
+estreitas, lista e conversa alternam com o botão de voltar. Os downloads
+essenciais ficam logo abaixo dos downloads para Google Contatos em Relatórios.
+
 O padrão é todo o histórico até o instante da requisição. Também existem os
 períodos 24 horas, 7 e 30 dias, 2, 3 e 6 meses e 1 ano. Os períodos finitos são
 comparados à janela imediatamente anterior de igual duração. A distribuição por
@@ -294,7 +303,8 @@ O painel é somente leitura. Os filtros, a pesquisa, os seletores de período e 
 downloads não alteram registros. As regras `suporte_idoso`, `email_obrigatorio`
 e `bpa_ativo` vêm da unidade. O CSV completo preserva campos ausentes vazios; o
 CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
-internacional e usa cabeçalhos do Google Contatos.
+internacional. Essa regra vale tanto para Google CSV quanto para CSV essencial;
+nenhum dos formatos acrescenta etiquetas comerciais ou datas ao nome.
 
 Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
 no portal. Contas e senhas continuam administradas pelo proprietário no Django

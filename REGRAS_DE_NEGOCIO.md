@@ -1120,11 +1120,17 @@ Implementação principal:
 - O histórico armazena texto e tipo da mensagem, mas não o payload exato dos
   botões enviados. Para mensagens interativas, o painel mostra os botões do
   catálogo atual daquela etapa como referência visual, sempre desabilitados.
+- Os quatro indicadores agregados ficam na seção Relatórios. A seção Conversas
+  prioriza a visualização da lista e do histórico, mantendo filtros e período.
 - O CSV completo inclui todos os contatos ativos no período e deixa campos
   ausentes vazios. O CSV elegível exige nome, e-mail estruturalmente válido e
   telefone normalizado. Ambos usam
   cabeçalhos compatíveis com importação no Google Contatos e nunca alteram o
   banco.
+- Há também duas exportações de dados essenciais, para todos os contatos ou
+  apenas elegíveis, com somente Nome, E-mail e Telefone. Mantêm o nome completo
+  em uma coluna, sem acrescentar rótulos ou datas, e reutilizam as mesmas regras
+  de período, unidade, normalização e elegibilidade dos arquivos Google CSV.
 
 ## 20. Disponibilidade e recuperação automática
 

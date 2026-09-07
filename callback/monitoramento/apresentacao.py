@@ -187,6 +187,15 @@ def proteger_celula_csv(valor):
     return "'" + texto if texto.startswith(('=', '+', '-', '@')) else texto
 
 
+CABECALHO_CSV_ESSENCIAL = ('Nome', 'E-mail', 'Telefone')
+
+
+def montar_linha_csv_essencial(*, primeiro_nome, sobrenome, email, telefone):
+    """Mantém o nome completo em uma coluna, sem acrescentar rótulos comerciais."""
+    nome = ' '.join(parte for parte in (primeiro_nome, sobrenome) if parte)
+    return [proteger_celula_csv(nome), proteger_celula_csv(email), telefone]
+
+
 def montar_linha_csv_google_contatos(
     *,
     primeiro_nome,

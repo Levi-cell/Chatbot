@@ -1,188 +1,184 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
-> Documento de implementação preparado sobre a baseline funcional V1.0.7,
-> commit completo `2bc41888db4987e957c5653825acf4a55e9d611d`, acrescida do
-> estado funcional pré-`user_id` auditado em 29/08/2026. Ele inclui profissão, saudação
-> de retorno, proteção contextual da oferta, suporte ao idoso, política de e-mail
-> e o rótulo `Começar triagem`. Este arquivo não altera o runtime; ele registra o
-> estado final completo a aplicar em uma tarefa futura.
+> Documento de implementação preparado sobre a baseline funcional V1.1.0,
+> commit completo `3f75447eb64a1a01085cccbc4a676a6a052d8493`, auditada em 04/09/2026. A baseline já
+> contém o aplicativo Django de monitoramento, autenticação nativa, vínculo
+> opcional 1:1 entre usuário e unidade, painel responsivo, relatórios, Google
+> CSV, tags de perfil, correção do aceite da triagem e a operação pelos três
+> serviços systemd. Este arquivo não altera o runtime; ele registra o estado
+> final completo a aplicar quando a Meta disponibilizar `user_id` no contrato
+> usado pelo projeto.
 >
-> A baseline já possui `unidade.nome_unidade`, `unidade.nome_agente` e
-> `unidade.genero`. O estado final abaixo preserva essas colunas, suas constraints
-> e as apresentações iniciais dinâmica padrão, de mídia, financeira e de reforço
-> escolar da etapa 1. Esses dados editoriais não participam da identidade, turno,
-> lock, fila, cache, anti-flood, reconciliação ou atomicidade.
-> O commit-base V1.0.7 `2bc41888db4987e957c5653825acf4a55e9d611d` já possui
-> `conversa.profissao` como snapshot, `cliente.profissao` como valor canônico
-> mais recente e a migração versionada
-> `20260823_adicionar_profissao_cliente.sql`, responsável por materializar a
-> coluna do cliente e seu backfill no banco existente. A migração de `user_id`
-> exige que esse componente da própria baseline já esteja aplicado e preserva
-> ambas as colunas; ela não repete o `ADD` nem o backfill. O mesmo estado
-> pré-`user_id` já contém a proteção
-> literal do validador de profissão: somente as oito respostas completas fora
-> de contexto observadas são recusadas após normalização e repetem a própria
-> etapa, sem filtro por palavras, novo evento ou persistência.
-> O mesmo estado pré-`user_id` contém a saudação aditiva de retorno: depois que
-> a etapa 1 foi concluída, uma mensagem recebida `>= 3 horas` após o último
-> envio `sent` do bot na mesma `id_conversa` recebe `Olá novamente, {nome}!`
-> como prefixo da resposta normal. Ela não cria etapa, envio ou histórico
-> separado, não altera a barreira idempotente da V1.0.7 e não exige DDL: a
-> consulta reutiliza o histórico e seu índice cronológico por conversa.
-> O estado pré-`user_id` também exige a migração
-> `20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, com
-> `unidade.suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE`,
-> `unidade.email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE` e o motivo
-> `encaminhado_suporte_idoso`. O plano preserva a lógica de titular 60–99,
-> encerramento sem bloqueio, classificação de e-mail opcional e reconstrução
-> histórica no Funil. Ele não recria as duas colunas nem altera seus valores.
-> A proteção de oferta que recusa pedidos como `quero mais informações`, sem
-> recusar confirmações curtas como `quero`, migra da etapa atual 7 para a futura
-> 8. A introdução atual da triagem migra para a futura etapa 12 com o texto
-> iniciado por `Certo, antes...` e o botão `Começar triagem`.
+> A baseline possui 22 etapas e 25 transições. A implementação futura acrescenta
+> somente a solicitação oficial de contato como nova etapa 2, renumera as etapas
+> atuais 2..22 para 3..23 e termina com 23 etapas e 27 transições. Todo recurso
+> entregue até a V1.1.0 deve atravessar essa renumeração sem regressão.
 
-> **Regra de negócio da numeração:** a tabela `etapa` representa, em ordem
-> cronológica, o percurso integral do cliente elegível a todas as etapas. Por
-> isso, a nova solicitação de contato ocupa o ID 2 e as etapas atuais 2..22 são
-> migradas para 3..23. O mapa de transições faz o cliente que já possui WA ID
-> saltar a etapa 2; o cliente somente com `user_id` percorre a sequência completa.
-> Usar o ID 23 para a etapa nova apenas para evitar renumeração é tecnicamente
-> possível, mas contraria esta convenção deliberada do negócio.
+A lógica e os critérios autoritativos permanecem em
+[`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver
+qualquer divergência interpretativa, o plano teórico vence. Os blocos deste
+arquivo são a materialização integral do mesmo desenho sobre o commit
+`3f75447`.
 
-A lógica e os critérios autoritativos permanecem preservados em [`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver qualquer divergência interpretativa, o plano teórico vence; os blocos abaixo são a materialização prática dessa mesma lógica. O plano teórico já incorpora a decisão definitiva de continuidade anti-flood entre `user_id` e `wa_id`, e este documento implementa integralmente essa regra.
+## Baseline que deve ser preservada
 
-A triagem por faixa etária já está implementada na baseline. O contrato a
-preservar durante a migração está na
-[seção 9.3 do plano teórico](./user_id_plano_logico_teorico.md#93-triagem-por-faixa-etária-preservada),
-incluindo a renumeração das seis perguntas de 12..17 para 13..18.
+- `unidade.nome_unidade`, `unidade.nome_agente` e `unidade.genero` continuam
+  configurando somente as apresentações da etapa 1.
+- `cliente.profissao` guarda o valor canônico mais recente e
+  `conversa.profissao` conserva o snapshot usado pelo Funil.
+- `unidade.suporte_idoso`, `unidade.email_obrigatorio` e `unidade.bpa_ativo`
+  continuam dirigindo os fluxos e a apresentação dinâmica do monitoramento.
+- A saudação de retorno depois de três horas, a proteção contextual da oferta e
+  a política de e-mail/suporte ao idoso permanecem intactas.
+- A introdução atual da triagem migra da etapa 11 para a etapa 12. O botão
+  `Começar triagem` e os aceites textuais já cobertos na V1.1.0 — como `sim`,
+  `vamos`, `começar a triagem`, `sim começar`, `pode começar` e equivalentes —
+  continuam aceitos; negativas explícitas continuam prevalecendo.
+- O monitoramento mantém login e sessão do Django, autorização por
+  `unidade.id_usuario_monitoramento`, consultas somente leitura e isolamento
+  obrigatório por `id_unidade`.
+- `auth_user.id` e o futuro Meta `user_id` pertencem a domínios diferentes. O
+  primeiro autoriza o franqueado no portal; o segundo identifica
+  provisoriamente o cliente do WhatsApp. Eles nunca são comparados ou
+  reutilizados entre si.
+
+A migração atual
+`deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql` já deve
+estar materializada no banco da V1.1.0. Ela depende das migrations nativas do
+Django, que criam `chatbot.auth_user`, e adiciona
+`unidade.id_usuario_monitoramento INT NULL`, unicidade e FK com
+`ON DELETE SET NULL`. A futura migração de `user_id` prova e preserva esse
+contrato; não recria a coluna, não transfere contas e não altera vínculos.
+
+Também continuam como pré-requisitos já aplicados:
+
+- `deploy/migrations/20260812_personalizar_agente_unidade.sql`;
+- `deploy/migrations/20260823_adicionar_profissao_cliente.sql`;
+- `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
+- `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`.
 
 ## Como usar este documento
 
-- Aplicar os passos na ordem apresentada e sempre usar o conteúdo integral, não trechos ou diffs parciais.
-- Antes de aplicar, confirmar
-  `2bc41888db4987e957c5653825acf4a55e9d611d` como ancestral da baseline,
-  confirmar a migração versionada
-  `20260823_adicionar_profissao_cliente.sql` e o delta
-  `20260829_adicionar_suporte_idoso_email_obrigatorio.sql` já materializados e
-  gerar um manifesto SHA-256 do estado pré-`user_id` resultante. Recusar qualquer
-  árvore divergente. Utilitários executáveis que consultam colunas/etapas
-  renomeadas participam do manifesto e recebem passos completos; artefatos
-  gerados em `monitoramento/`, `output/` e `tmp/` permanecem fora.
-- Preservar as fronteiras transacionais, retries, ordem do worker, idempotência e contratos descritos no plano teórico.
-- Não executar o SQL antes de todo o código estar revisado, testado e pronto para publicação.
-- O último passo contém tanto o arquivo versionado da migração quanto o comando manual integral para execução no DBeaver.
-- Não transformar este documento em uma coleção de remendos: cada bloco representa o estado final e organizado do respectivo arquivo.
-- Este plano será aplicado e validado primeiro em ambiente dev controlado. Por
-  decisão de escopo, não cria kill switch nem SQL inverso e não autoriza mudar
-  os pontos, a ordem ou a semântica dos `rollback()` atuais do `flow_worker`.
-- Arquivos atuais que não recebem um passo explícito permanecem byte a byte como
-  estão na baseline pré-`user_id`; aplicar o plano não autoriza apagá-los nem
-  restaurá-los pelo commit-base. Isso inclui os auxiliares já implementados
-  `core/integrations/whatsapp/numero_comercial.py`,
-  `core/validacoes/__init__.py` e `core/validacoes/email.py`, usados pelos blocos
-  finais de suporte ao idoso e política de e-mail. Também permanecem intactos os
-  utilitários e testes atuais que não dependem de nomes físicos ou IDs de etapas
-  migrados. A migração `20260829_adicionar_suporte_idoso_email_obrigatorio.sql`
-  é pré-requisito já aplicado, não um artefato a recriar pela migração de
-  `user_id`.
+- Aplicar os passos na ordem apresentada e usar sempre o conteúdo integral, sem
+  montar arquivos por trechos.
+- Confirmar `3f75447eb64a1a01085cccbc4a676a6a052d8493` como ancestral da árvore de implementação e gerar
+  um manifesto SHA-256 do estado inicial. Recusar uma baseline divergente e
+  regenerar o plano a partir dela.
+- Incluir no manifesto os módulos executáveis, utilitários e fontes do portal
+  que consultam nomes físicos ou IDs de etapa. Artefatos gerados em
+  `monitoramento/`, `output/`, `tmp/` e `patch/` ficam fora; o código-fonte em
+  `callback/monitoramento/` e `core/repositories/monitoramento/` participa.
+- Preservar as fronteiras transacionais, retries, ordem do worker,
+  idempotência, locks, cache e contratos descritos no plano teórico.
+- Não executar o SQL antes de todo o código estar materializado, revisado,
+  testado e pronto para publicação.
+- O passo final contém o arquivo versionado e o mesmo comando integral a
+  executar no DBeaver.
+- Este plano deve ser aplicado primeiro em ambiente controlado. Ele não cria
+  kill switch, SQL inverso ou autorização para mover os `commit()` e
+  `rollback()` existentes.
+- Arquivos sem passo explícito permanecem byte a byte como estão na baseline.
+  O plano não autoriza restaurar arquivos antigos nem apagar funcionalidades da
+  V1.1.0.
 
-## Garantias de arquitetura, legibilidade e comentários
+## Garantias de arquitetura
 
-- `identidade.py` e os validadores permanecem puros: normalizam e classificam dados, sem SQL, cache, commit ou I/O com a Meta.
-- O webhook apenas extrai e congela o snapshot do evento; repositórios concentram SQL; caches recebem chaves tipadas; o worker preserva turno, retry e ordem transacional.
-- Messages constroem texto e componentes; senders fazem somente o envio e devolvem o contrato; resolvers escolhem evento/mapa/sender; efeitos transacionais persistem o resultado final.
-- Ao aceitar a profissão na etapa atual 4 — futura etapa 5 depois da renumeração
-  de `user_id` — o mesmo efeito e o mesmo cursor gravam o snapshot em
-  `conversa.profissao` e substituem `cliente.profissao`. O retry reaplica o mesmo
-  valor de forma idempotente e a transação externa confirma ou desfaz as duas
-  escritas em conjunto.
-- Nenhum sender, validador ou resolver recebe autorização para fazer `commit`, reconciliar clientes ou promover um WA ID candidato.
-- A saudação de retorno usa o horário original do evento atual e o último envio
-  `sent` do bot na mesma conversa; atividade em outra unidade não interfere. O
-  cálculo é inclusivo em três horas e só ocorre depois da etapa 1, com nome já
-  validado e persistido.
-- A saudação é prefixada na única mensagem que o fluxo já enviaria, tanto no
-  avanço válido quanto no tratamento inválido. Nome ou timestamps ausentes e
-  falhas na composição apenas preservam a resposta normal. O retry que já possui
-  resposta exata sai pela barreira idempotente antes de qualquer composição ou
-  sender.
-- Comentários novos explicam invariantes, riscos e o motivo de uma decisão. Eles não narram linha por linha nem escondem regra de negócio em comentário.
-- O suporte especializado conserva a precedência de idade acima de 99, alcança
-  apenas titular de 60 a 99 anos quando a flag está ativa, persiste a idade,
-  encerra sem bloqueio e é reconstruído pela resposta histórica no retry.
-- A futura etapa 11 conserva mídia -> reforço -> financeiro -> política de
-  e-mail; respostas opcionais continuam na aresta técnica `email_valido`, mas
-  gravam endereço ou `NULL` segundo a classificação transportada/reconstruída.
-- Nomes de módulos, funções, constantes e etapas de runtime acompanham a numeração final. Imports legados e aliases mortos do runtime são removidos; utilitários consumidores do schema acompanham os mesmos nomes e IDs.
-- Dicionários de contexto como `identidade_do_item`, `wa_id_compartilhado` e `wa_id_canonico` são contratos de runtime, não novas colunas com esses nomes.
+- Validadores e `identidade.py` permanecem puros: sem SQL, cache, commit ou I/O
+  com a Meta.
+- O webhook extrai e congela o evento; repositórios concentram SQL; caches usam
+  chaves tipadas; o worker preserva turno, retry e ordem transacional.
+- Messages constroem conteúdo e componentes; senders enviam e devolvem o
+  contrato; resolvers escolhem evento/mapa/sender; efeitos transacionais
+  persistem o resultado final.
+- Nenhum sender, validador ou resolver recebe autorização para fazer commit,
+  reconciliar clientes ou promover um WA ID candidato.
+- `identidade_do_item`, `wa_id_compartilhado` e `wa_id_canonico` são papéis de
+  runtime, não nomes de novas colunas.
+- Comentários novos explicam invariantes, risco ou motivo. Eles não narram cada
+  linha nem escondem regra de negócio.
 
-## Continuidade anti-flood na promoção de identidade
+## Continuidade de identidade e anti-flood
 
-- A melhoria está materializada principalmente nos passos 12, 16, 19, 22, 28,
-  36 e 45. Os passos 31, 32 e 45 fornecem a prova oficial persistida; o webhook
-  nunca publica um vínculo provisório antes do gate bancário.
-- Antes do vínculo, o user ID é a referência disponível. O `contact_request` ou
-  envelope conjunto autenticado fornece somente um candidato. Depois do gate e
-  antes da mutação, o worker consulta uma segunda barreira de predecessor nos
-  snapshots WA/user da unidade; item anterior aberto causa rollback e requeue de
-  5 segundos. Depois que `user_id_cliente` prova a associação permanente, o WA ID
-  continua como referência canônica sem zerar eventos ainda válidos do user ID.
-- Redis e memória somam as duas janelas; o banco usa `COUNT(DISTINCT id_hash_msg)`. A deduplicação por WAMID impede que a mesma mensagem seja contada duas vezes.
-- A associação é estritamente limitada à mesma unidade e nunca é inferida por username, nome, coincidência temporal ou semelhança de valores. Identidades sem vínculo permanecem separadas.
-- O cache confirmado dura uma hora. Ausências recebem um marcador negativo de 5
-  segundos para impedir uma consulta ao RDS por evento.
-- Em cache miss, o banco revalida a prova persistida. Se o RDS confirmar que não
-  existe vínculo, uma falha isolada do Redis conserva o alias unitário e o
-  anti-flood segue pelo fallback banco -> memória da V1.0.7. Conflito
-  determinístico recebe HTTP 200 sem mutação; HTTP 503 fica reservado à
-  indisponibilidade transitória de uma fonte autoritativa necessária.
-- O limite continua exatamente 15 WAMIDs distintos em 5 segundos. Portanto, um cliente real não ganha uma nova causa de bloqueio; apenas deixa de poder dividir a mesma rajada entre duas identidades oficialmente vinculadas.
-- A melhoria não exige DDL, coluna nem alteração no SQL final. Ela reutiliza `user_id_cliente`, os snapshots de evento existentes e as chaves efêmeras do cache.
+- Antes do vínculo, o `user_id` é a única referência possível para o cliente
+  privado. O primeiro atendimento cria ou resolve um cliente provisório e a
+  etapa 2 solicita o contato oficial.
+- `contact_request` ou envelope conjunto autenticado fornece apenas um
+  candidato. O worker valida a prova no banco, persiste o vínculo, reconcilia o
+  cliente e relê o WA ID canônico antes de avançar.
+- A identidade tipada pela qual o item entrou permanece imutável durante turno,
+  ordem, retry, logs e autocura, mesmo que a reconciliação descubra o WA ID.
+- Depois do vínculo, WA ID e `user_id` comprovados compartilham a mesma janela
+  anti-flood na unidade. Redis e memória somam as janelas; o banco usa WAMIDs
+  distintos para impedir contagem duplicada.
+- A associação nunca é inferida por username, nome, coincidência temporal ou
+  semelhança de valores.
+- O limite continua em 15 WAMIDs distintos em 5 segundos. Lock fresco durante
+  reconciliação causa rollback e requeue sem erro; bloqueio vigente produz o
+  encerramento terminal previsto antes de histórico e sender.
+
+## Contrato do monitoramento depois de `user_id`
+
+- A autorização continua derivada exclusivamente de
+  `request.user.pk -> unidade.id_usuario_monitoramento -> id_unidade`.
+- Cada endpoint e cada consulta recebem o `id_unidade` produzido pelo guard. URL,
+  query string e JavaScript nunca escolhem uma unidade.
+- O Meta `user_id` não é enviado ao HTML, JSON ou CSV e não aparece em pesquisa,
+  detalhes, logs do navegador ou atributos DOM.
+- O contato exibido segue a ordem: WA ID canônico; `@username` enquanto o
+  telefone ainda não foi compartilhado; `Contato não compartilhado` quando
+  ambos faltarem. O username é apenas apresentação.
+- O aviso `Bloqueado · 12 repetições` exige as duas provas da mesma unidade:
+  `conversa.turnos_sem_avanco >= 12` e linha correspondente na denylist
+  `cliente_bloqueado_meta`.
+- O histórico representa a etapa 2 com o botão desabilitado
+  `Compartilhar contato`. Catálogo, relatório de etapas e gráficos passam a
+  trabalhar com 23 etapas.
+- O Google CSV exporta somente nome, e-mail e WA ID canônico. Cliente ainda
+  identificado apenas por username não ganha telefone inventado e não entra no
+  arquivo de elegíveis.
+- A atualização periódica já existente no portal permanece: conversas a cada 10
+  segundos e relatórios a cada 30 segundos, sempre por leitura autenticada.
+
+## Eventos `system.user_changed_user_id`
+
+Os quatro fixtures atuais não incluem uma captura real desse evento. Até haver
+payload bruto assinado da Graph API v26 e documentação oficial compatível com a
+versão implantada, o webhook apenas reconhece eventos `system`, registra a
+classificação segura e retorna HTTP 200 sem fila, merge, atualização de alias ou
+mudança de destinatário. Implementar sem essa prova seria inventar a direção da
+troca e poderia unir pessoas erradas. Quando a Meta publicar o contrato real, o
+fixture anonimizado e os testes devem entrar antes de qualquer mutação.
 
 ## Estado dos dados na migração
 
-- Na baseline V1.0.7 derivada de
-  `2bc41888db4987e957c5653825acf4a55e9d611d`,
-  `chatbot.unidade.id_portfolio` ainda não existe. No DDL final ela é uma coluna
-  `VARCHAR(100) NULL` opcional de `unidade`, destinada somente a consultas de
-  monitoramento e auditoria.
-- Não existe mapa nem backfill obrigatório de `id_portfolio`: unidades já
-  existentes recebem `NULL`, que significa “não cadastrado”. Quando houver um
-  valor, ele deve ser conferido com a Meta e não pode ser vazio ou composto
-  apenas por espaços; o sistema nunca o infere pelo WABA ou phone ID.
-- Se a inspeção do RDS mostrar que `id_portfolio` já existe, o SQL deste documento não deve ser executado: ele aborta de propósito para impedir que um estado divergente seja sobrescrito. Nesse caso, deve-se regenerar a migração a partir do schema real, preservando os valores existentes.
-- Novas colunas opcionais de `user_id` e `username` começam `NULL` nos registros antigos. Colunas de WA ID apenas renomeadas preservam seus dados.
-- `conversa.profissao VARCHAR(100) NULL`, `cliente.profissao VARCHAR(100) NULL`
-  e a migração que materializa a coluna do cliente já pertencem ao commit-base
-  V1.0.7. Depois de confirmar esse pré-requisito no banco, a migração de `user_id`
-  fotografa os dois conjuntos de valores e prova no pós-flight que nenhum
-  cadastro ou snapshot foi alterado; não existe `ADD COLUMN profissao` nesse SQL.
-- A exceção deliberada ao “tudo novo fica NULL” é `conversa.wa_id`, preenchida a
-  partir do WA canônico do cliente para que conversas antigas continuem
-  enviando com identidade canônica. `unidade.id_portfolio` permanece `NULL` até
-  ser cadastrado para fins de consulta ou auditoria.
-- `chatbot.user_id_cliente` nasce vazia: não existe `user_id` histórico confiável para inventar ou retropreencher.
-- `suporte_idoso`, `email_obrigatorio` e seus valores atuais são fotografados no
-  preflight e provados no pós-flight; a migração de `user_id` não os recria,
-  não os redefine e não executa atualização de dados nessas colunas.
+- `unidade.id_usuario_monitoramento` e seus vínculos atuais são fotografados no
+  preflight e comparados no pós-flight.
+- `unidade.id_portfolio` ainda não existe na baseline. A migração o cria como
+  `VARCHAR(100) NULL`, sem inferência ou backfill.
+- Novas colunas opcionais de `user_id` e username começam `NULL` nos registros
+  antigos. Colunas de WA ID renomeadas preservam todos os dígitos.
+- `conversa.wa_id` é preenchida a partir do WA canônico do cliente para manter
+  conversas antigas operacionais.
+- `chatbot.user_id_cliente` nasce vazia; nenhum `user_id` histórico é inventado.
+- Profissão, flags de unidade, catálogo, históricos, fila, Funil e dados de
+  monitoramento são fotografados e preservados.
 
 ## Inventário preparado
 
-- Arquivos finais criados: 22
-- Arquivos finais substituídos: 140
-- Arquivos removidos: 9
-- Total de ações, incluindo a migração: 171
-- Os rótulos aditivos `34A`, `97A`, `150A` a `150F` e `159A` a `159D`
-  preservam a numeração já revisada dos passos seguintes; cada um representa
-  uma ação real no total acima.
-- Os números dos passos são identificadores estáveis; lacunas na sequência não
-  representam ações pendentes.
-- Validação obrigatória do estado materializado: `compileall`, `git diff --check`,
-  `pip check`, matriz futura de 23 etapas/27 transições, testes focados de
-  identidade/anti-flood/apresentação/profissão e descoberta offline completa. A
-  baseline V1.0.7 possui 22 etapas/25 transições.
-- PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API `v26.0` são gates explícitos.
-- Os testes offline usam fixtures, fakes e mocks e não exigem credenciais de Meta, Redis ou RDS. Smokes reais ficam separados e controlados.
+- Arquivos finais criados: 23
+- Arquivos finais substituídos: 149
+- Arquivos removidos: 10
+- Total de ações, incluindo a migração: 182
+- Os rótulos aditivos `34A`, `97A`, `150A` a `150L` e `159A` a `159I`
+  preservam a numeração estável dos passos seguintes.
+- Validação obrigatória: hashes de todos os blocos, materialização limpa sobre
+  `3f75447`, `compileall`, `git diff --check`, `pip check`, matriz final
+  de 23 etapas/27 transições, testes de identidade, anti-flood, apresentação,
+  profissão, triagem e monitoramento.
+- PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API
+  `v26.0` são gates explícitos.
+- A suíte offline usa fixtures, fakes e mocks. Smokes reais de Meta, Redis e RDS
+  permanecem separados e controlados.
 
 # Fase 1 — Contratos e dependências
 
@@ -230,7 +226,7 @@ pelos serviços.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `eb5e8994e1b625c5573649b1e0a99b975554db10f8d221b65fdd62e33e58291c`
+SHA-256 do conteúdo UTF-8 normalizado: `027f480bdfdbf1b5b695abf351653e477ae0e85d939bf5e9e124ec400b585c3d`
 
 ````python
 import logging
@@ -375,6 +371,7 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_display = (
         "id_unidade",
         "nome_unidade",
+        "id_usuario_monitoramento",
         "nome_agente",
         "genero",
         "cnpj",
@@ -394,6 +391,7 @@ class UnidadeAdmin(admin.ModelAdmin):
 
     search_fields = (
         "nome_unidade",
+        "id_usuario_monitoramento__username",
         "nome_agente",
         "cnpj",
         "telefone",
@@ -414,6 +412,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "status_pagamento",
     )
     ordering = ("nome_unidade",)
+    list_select_related = ("id_usuario_monitoramento",)
 
     list_per_page = 50
     empty_value_display = "-"
@@ -1736,9 +1735,11 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f39bd673ec263abd3d96920de1b9f3078a3827f6240bf21a1cfae85c7f02b02f`
+SHA-256 do conteúdo UTF-8 normalizado: `2461caa97949142667285689db6e9dc1348ab7264698319ea6f839f6959a188f`
 
 ````python
+from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -2061,6 +2062,34 @@ class Unidade(models.Model):
     )
     bpa_ativo = models.BooleanField(default=False)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
+    id_usuario_monitoramento = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        models.SET_NULL,
+        db_column='id_usuario_monitoramento',
+        related_name='unidade_monitorada',
+        verbose_name='usuário de monitoramento',
+        blank=True,
+        null=True,
+        limit_choices_to={'is_staff': False, 'is_superuser': False},
+        help_text=(
+            'Selecione uma conta comum cadastrada em Usuários. '
+            'Cada conta pode monitorar somente uma unidade. '
+            'Deixe vazio para manter a unidade sem acesso de monitoramento.'
+        ),
+    )
+
+    def clean(self):
+        super().clean()
+        if self.id_usuario_monitoramento_id and (
+            self.id_usuario_monitoramento.is_staff
+            or self.id_usuario_monitoramento.is_superuser
+        ):
+            raise ValidationError({
+                'id_usuario_monitoramento': (
+                    'O monitoramento exige uma conta sem acesso ao Admin '
+                    'e sem status de superusuário.'
+                ),
+            })
 
     def __str__(self):
         return self.nome_unidade
@@ -2256,7 +2285,7 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `4138325cfab7831cfe573c317e833f213154fe0054869b1575d89439e4ddfabf`
+SHA-256 do conteúdo UTF-8 normalizado: `690852f710f3eb0f31760cb979b7b9dcc5faf74a377b01282859991acf83c8e6`
 
 ````python
 import logging
@@ -2421,7 +2450,16 @@ def criar_tabelas():
         cursor.execute("""
         CREATE SCHEMA IF NOT EXISTS chatbot;
 
-        -- 1. ENTIDADES SEM DEPENDÊNCIAS ENTRE TABELAS
+        DO $dependencia_django$
+        BEGIN
+            IF TO_REGCLASS('chatbot.auth_user') IS NULL THEN
+                RAISE EXCEPTION
+                    'Prepare o schema chatbot e execute as migrations do Django antes do DDL de negocio: chatbot.auth_user deve existir.';
+            END IF;
+        END
+        $dependencia_django$;
+
+        -- 1. CLIENTE E UNIDADE (AUTH_USER PREPARADA PELO DJANGO)
 
         CREATE TABLE IF NOT EXISTS chatbot.cliente (
             id_cliente SERIAL PRIMARY KEY,
@@ -2457,6 +2495,7 @@ def criar_tabelas():
             id_portfolio VARCHAR(100) NULL,
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
+            id_usuario_monitoramento INT NULL,
 
             CONSTRAINT uq_unidade_nome_unidade
                 UNIQUE (nome_unidade),
@@ -2470,12 +2509,19 @@ def criar_tabelas():
             CONSTRAINT ck_unidade_genero
                 CHECK (genero IN ('masculino', 'feminino')),
 
+            CONSTRAINT uq_unidade_usuario_monitoramento
+                UNIQUE (id_usuario_monitoramento),
+
+            CONSTRAINT unidade_id_usuario_monitoramento_fkey
+                FOREIGN KEY (id_usuario_monitoramento)
+                REFERENCES chatbot.auth_user(id)
+                ON DELETE SET NULL,
+
             CONSTRAINT ck_unidade_id_portfolio_nao_vazio
                 CHECK (
                     id_portfolio IS NULL
                     OR BTRIM(id_portfolio) <> ''
-                )
-        );
+                )        );
 
         CREATE INDEX IF NOT EXISTS idx_unidade_id_portfolio
         ON chatbot.unidade (id_portfolio);
@@ -3392,7 +3438,7 @@ def criar_indices_turno_cliente():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b1a49de6ca944251ef7dec208a8bb2749c1942ce724fb16332998935089567eb`
+SHA-256 do conteúdo UTF-8 normalizado: `d482654ab0a41af907690dc4ae28ea6b474864bcbe5c18507d1bf245debdb1da`
 
 ````markdown
 # Banco de dados
@@ -3431,7 +3477,20 @@ core/database/
 
 ## Setup
 
-A partir da raiz:
+Em uma instalação vazia, prepare primeiro o schema `chatbot` e as tabelas
+gerenciadas pelo Django. No banco de destino:
+
+```sql
+CREATE SCHEMA IF NOT EXISTS chatbot;
+```
+
+Depois, com as variáveis do ambiente configuradas, a partir da raiz:
+
+```powershell
+python callback/manage.py migrate --noinput
+```
+
+Somente então execute o setup do banco de negócio:
 
 ```powershell
 python -m core.database.deploy_database.setup_database
@@ -3472,6 +3531,17 @@ novo sem apagar o banco.
 históricas. As tabelas são criadas em ordem de dependência para que chaves
 estrangeiras e constraints já nasçam prontas.
 
+`chatbot.auth_user` é um pré-requisito explícito do DDL de negócio. Sua criação
+continua pertencendo às migrations do Django; o DDL não recria tabelas internas
+do framework. Se ela não existir, o setup falha com uma orientação antes de
+criar as tabelas de negócio.
+
+`unidade.id_usuario_monitoramento` é `INT NULL`, único quando preenchido e
+referencia `chatbot.auth_user(id)` com `ON DELETE SET NULL`. O DDL final define
+a coluna e suas constraints no `CREATE TABLE` da unidade. O banco garante a
+relação 1:1 opcional; a autorização dos recursos pertence ao serviço HTTP e ao
+repositório de monitoramento. Excluir um usuário não exclui a unidade.
+
 O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
 cliente naquela conversa, a profissão válida mais recente no cadastro do
@@ -3497,8 +3567,8 @@ Ela troca somente o catálogo de transições, aceita reexecução no estado fin
 não retrocede conversas que já passaram pela profissão.
 
 A migração que adiciona `cliente.profissao` está em
-`deploy/migrations/20260823_adicionar_profissao_cliente.sql` e já integra o
-commit-base V1.0.7. No banco existente, ela precisa estar materializada antes de
+`deploy/migrations/20260823_adicionar_profissao_cliente.sql` e já integra a
+baseline V1.1.0. No banco existente, ela precisa estar materializada antes de
 `user_id`: mantém `conversa.profissao` como snapshot e preenche o cadastro com a
 profissão não vazia da conversa mais recente de cada cliente. A migração
 posterior de `user_id` apenas exige esse estado; ela não repete o `ADD COLUMN`
@@ -3512,13 +3582,26 @@ backfill e recusa schemas parciais antes de publicar o novo contrato.
 
 A migração incremental seguinte insere o compartilhamento oficial como nova
 etapa 2, remapeia as antigas etapas 2 a 22 para 3 a 23 e adiciona os contratos
-de user ID em `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql`. Ela
+de user ID em `deploy/migrations/20260904_adicionar_user_id_whatsapp.sql`. Ela
 também deve ser executada inteira no DBeaver com os serviços parados.
 
 `IF NOT EXISTS` não migra uma estrutura criada por uma versão antiga. Evolução
 de schema existente exige um script de migração separado ou decisão consciente
 de recriação em desenvolvimento. Novas migrações não devem ser anexadas ao DDL
 de criação final.
+
+A migração atual de monitoramento está em
+`deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`.
+Execute-a inteira no DBeaver antes de publicar o código atualizado, com
+`chatbot.unidade` e `chatbot.auth_user` já existentes. Ela adiciona a coluna
+opcional e suas constraints. Se a tabela da proposta anterior existir,
+transfere seus vínculos, confere o resultado e só então remove essa tabela,
+sem `CASCADE`. Vínculos inválidos ou ambíguos interrompem a transação.
+O SQL anterior de criação da tabela foi substituído e não deve ser executado.
+A migração atual é de aplicação única: coluna já existente causa erro em vez
+de aceitar uma estrutura divergente. Em caso de erro, execute `ROLLBACK`.
+`ALTER TABLE`, transferência e remoção de legado ficam somente na migração;
+o DDL continua sendo exclusivamente a definição final para instalação nova.
 
 ## Atomicidade
 
@@ -3568,11 +3651,15 @@ gerenciador de segredos.
 
 - `tests/unit/test_fluxo_turno_abc.py`;
 - `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`;
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_validador_profissao.py`;
-- `tests/unit/test_worker_flow_runtime.py`.
-
-A suíte foi reduzida ao núcleo transacional descrito em `tests/README.md`.
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_monitoramento_unidade.py`;
+- `tests/unit/test_monitoramento_login.py`;
+- `tests/unit/test_monitoramento_painel.py`;
+- `tests/unit/test_valida_etapa12.py`.
+A organização e o comando da suíte completa estão em `tests/README.md`.
 ````
 
 # Fase 3 — Webhook, identidade de entrada, segurança e cache
@@ -5148,7 +5235,7 @@ def povoando_fila(dados, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6f25dcaef41c2640c457603307a257df8ce1ffe132839572a71ac7e79d6a8b64`
+SHA-256 do conteúdo UTF-8 normalizado: `c6048a57c27bdc985af5c93887d0d1f7f309c0962cbc8c4637fdab453d817e9b`
 
 ````python
 import json
@@ -5189,6 +5276,7 @@ fila_logger = logging.getLogger("webhook.fila")
 
 TIPO_EVENTO_MENSAGEM = "messages"
 TIPO_EVENTO_STATUS = "statuses"
+TIPO_EVENTO_SYSTEM = "system"
 TIPO_EVENTO_DESCONHECIDO = "unknown"
 
 
@@ -5230,6 +5318,17 @@ def responder_post_webhook(request):
 
         if tipo_evento == TIPO_EVENTO_STATUS:
             return _responder_status_meta_sem_processar(data)
+
+        if tipo_evento == TIPO_EVENTO_SYSTEM:
+            # O formato de troca de user_id ainda não foi comprovado por uma
+            # captura real assinada. Reconhecer a classe evita que ela seja
+            # confundida com mensagem sem autorizar qualquer mutação.
+            logger.info(
+                "evento_meta_ignorado | "
+                "motivo=evento_system_sem_contrato_validado "
+                "acao=retornar_200"
+            )
+            return JsonResponse({"status": "ok"})
 
         if tipo_evento != TIPO_EVENTO_MENSAGEM:
             logger.info(
@@ -5450,14 +5549,20 @@ def _classificar_evento_meta(data):
     value = _extrair_value(data)
     possui_mensagens = bool(value.get("messages"))
     possui_statuses = bool(value.get("statuses"))
+    possui_system = "system" in value
 
-    if possui_mensagens and not possui_statuses:
+    tipos_presentes = sum((
+        possui_mensagens,
+        possui_statuses,
+        possui_system,
+    ))
+    if tipos_presentes != 1:
+        return TIPO_EVENTO_DESCONHECIDO
+    if possui_mensagens:
         return TIPO_EVENTO_MENSAGEM
-
-    if possui_statuses and not possui_mensagens:
+    if possui_statuses:
         return TIPO_EVENTO_STATUS
-
-    return TIPO_EVENTO_DESCONHECIDO
+    return TIPO_EVENTO_SYSTEM
 
 
 def _responder_status_meta_sem_processar(data):
@@ -5947,7 +6052,7 @@ def _id_cliente_valido(id_cliente):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `fc420b95df342d149e2114072cf1349ccb94396419a9dfd8e29e421814786829`
+SHA-256 do conteúdo UTF-8 normalizado: `9522c809a20a20537423b6242f0d9532ead8ebc83fae47544be619568b6a285d`
 
 ````python
 import hashlib
@@ -5982,7 +6087,7 @@ def conversa_esta_bloqueada_cache(
 
     try:
         redis = get_redis_safe(retries=1, delay=0, validate=False)
-        # Mantém a semântica da V1.0.7: miss válido significa "não bloqueado"
+        # Mantém o contrato preservado na V1.1.0: miss válido significa "não bloqueado"
         # e não transforma toda mensagem normal em consulta ao PostgreSQL.
         return bool(redis.exists(key))
     except Exception as exc:
@@ -8171,6 +8276,8 @@ def _resolver_sujeito_turno(
     }
 ````
 
+# Fase 4 — Repositórios, worker e reconciliação
+
 ## Passo 25 — `core/repositories/atendimento/clientes.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
@@ -8477,7 +8584,7 @@ def _normalizar_cliente(registro):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `31d0b505f3ac8a7d1a3f26efec189d0fef3172734f0db5e3b0c98acbd747a8f6`
+SHA-256 do conteúdo UTF-8 normalizado: `292ddc090a3fae77b5125462a3655d80a84aa3e64ba151bde3f1088ed2bc9eba`
 
 ````python
 import logging
@@ -8679,7 +8786,7 @@ def bloquear_conversas_reconciliacao(ids_conversa, cursor):
 
     # Um dono com lock stale perde apenas a versão e a capacidade de executar
     # unlock sobre uma posse posterior. Este é exatamente o limiar de 110
-    # segundos da V1.0.7, aplicado antes de qualquer efeito do merge.
+    # segundos preservado na baseline V1.1.0, aplicado antes de qualquer efeito do merge.
     cursor.execute(
         """
         UPDATE chatbot.conversa
@@ -14814,7 +14921,7 @@ def _normalizar_resposta_bot(registro):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `363e813d5d14a7fbab057319090027200c406efa3a30a751e91f9257e4ed9e63`
+SHA-256 do conteúdo UTF-8 normalizado: `cdfafa5d04a85820b75c9c1a4a7db68e4bd6d67912ba3cfc30d6b632d5633dbd`
 
 ````python
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
@@ -14891,6 +14998,8 @@ MENSAGEM_FINANCEIRO_INICIO = (
     "presencial após sua aula *gratuita*.\n"
     "Me diz, qual o seu primeiro nome?"
 )
+
+# mensagem_final = MENSAGEM_FINANCEIRO_INICIO + Midia.santo_andre (Ideia futura)
 
 def montar_mensagem_financeiro_inicio(
     saudacao,
@@ -25671,7 +25780,7 @@ __all__ = [
 
 Criar o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0b6357996928ccbf5c1b1f5797847e717e52fd3d456912a0b838406b06bd4e08`
+SHA-256 do conteúdo UTF-8 normalizado: `7b9d1f77acf1d010ec0313178c994d512ee0615ad6b0a664d3f6470589d79e0f`
 
 ````python
 import re
@@ -25693,46 +25802,69 @@ TIPOS_MENSAGEM_ACEITOS_ETAPA12 = {
 }
 
 _CONFIRMACOES_DIRETAS = {
+    "aceito",
     "beleza",
+    "bora",
     "certo",
     "claro",
+    "claro que sim",
     "com certeza",
     "combinado",
     "estou pronta",
     "estou pronto",
     "fechado",
+    "manda ver",
     "ok",
     "okay",
     "partiu",
+    "pode",
+    "pode sim",
     "pode ser",
+    "podemos",
+    "podemos sim",
     "pronta",
     "pronto",
+    "quero",
+    "quero sim",
     "sim",
+    "sim pode",
+    "simbora",
     "ta bom",
     "ta certo",
+    "topo",
     "tudo bem",
     "tudo certo",
+    "vamos",
+    "vamos sim",
 }
 
 _PADRAO_NEGACAO = re.compile(
     r"\b(?:nao|nunca|jamais|talvez|depois|recuso|dispenso)\b"
 )
 
-_PADRAO_CONFIRMACAO_COM_ACAO = re.compile(
-    r"(?:"
+_ACAO_INICIAR_TRIAGEM = (
+    r"(?:comecar|comeca|comece|iniciar|inicia|inicie)"
+    r"(?:\s+(?:a\s+)?triagem)?"
+)
+
+_ACAO_CONTINUAR = r"(?:continuar|continue|prosseguir|prossiga|seguir)"
+
+_ACAO_CONFIRMADA = rf"(?:{_ACAO_INICIAR_TRIAGEM}|{_ACAO_CONTINUAR})"
+
+_PREFIXO_AFIRMATIVO = (
     r"(?:sim|ok|okay|certo|claro|com\s+certeza|beleza|combinado|"
-    r"fechado|pronto|pronta|estou\s+pronto|estou\s+pronta)\s+"
-    r")?"
-    r"(?:"
-    r"(?:vamos|bora)(?:\s+(?:la|nessa|comecar(?:\s+a\s+triagem)?|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|continuar|prosseguir|seguir))?|"
-    r"(?:pode|podemos|quero)\s+(?:comecar(?:\s+a\s+triagem)?|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|continuar|prosseguir|seguir)|"
-    r"comecar(?:\s+a\s+triagem)?|comece|"
-    r"iniciar(?:\s+a)?\s+triagem|iniciar|"
-    r"continuar|continue|prosseguir|prossiga|seguir"
-    r")"
-    r"(?:\s+(?:por\s+favor|entao))?"
+    r"fechado|pronto|pronta|estou\s+pronto|estou\s+pronta)"
+)
+
+_PADRAO_CONFIRMACAO_COM_ACAO = re.compile(
+    rf"(?:{_PREFIXO_AFIRMATIVO}\s+)?"
+    rf"(?:"
+    rf"(?:vamos|bora)(?:\s+(?:la|nessa|agora))?"
+    rf"(?:\s+{_ACAO_CONFIRMADA})?|"
+    rf"(?:pode|podemos|quero)(?:\s+sim)?\s+{_ACAO_CONFIRMADA}|"
+    rf"{_ACAO_CONFIRMADA}"
+    rf")"
+    rf"(?:\s+(?:por\s+favor|entao|agora|sim))?"
 )
 
 
@@ -31337,12 +31469,16 @@ Substituir integralmente o arquivo com o conteúdo completo abaixo. Os dois
 payloads fictícios são preservados e somente as seis respostas da triagem são
 renumeradas de 12..17 para 13..18.
 
-SHA-256 do conteúdo UTF-8 normalizado: `5b2205a2c6229369606ec3716617c4563284fcc5136d9311e65f8706a11291a5`
+SHA-256 do conteúdo UTF-8 normalizado: `4fe9cc7dfd65a669b3f5f84fd5f1602674e788f5c45eaccccd2e784613d56aef`
 
 ````python
 """Fornece snapshots fictícios isolados para as sondas do Funil."""
 
 from datetime import datetime
+from unicodedata import normalize
+
+
+ID_UNIDADE_TESTE_SEM_CADASTRO = -1
 
 
 def montar_dados_lead_teste_saj():
@@ -31363,6 +31499,15 @@ def montar_dados_lead_teste_rio_vermelho():
     )
 
 
+def montar_dados_lead_teste_santo_andre():
+    """Monta um lead fictício para Santo André sem depender do banco."""
+    return _montar_dados_lead_teste(
+        id_unidade=ID_UNIDADE_TESTE_SEM_CADASTRO,
+        nome_unidade="Supera Santo André - Jardim Bela Vista",
+        identificador="Santo André",
+    )
+
+
 def _montar_dados_lead_teste(
     *,
     id_unidade,
@@ -31370,7 +31515,13 @@ def _montar_dados_lead_teste(
     identificador,
 ):
     """Monta a estrutura comum sem consultar banco ou executar requisição."""
-    marcador = identificador.casefold().replace(" ", "-")
+    marcador = (
+        normalize("NFKD", identificador)
+        .encode("ascii", "ignore")
+        .decode("ascii")
+        .casefold()
+        .replace(" ", "-")
+    )
     return {
         "id_conversa": int(datetime.now().strftime("%m%d%H%M%S")),
         "id_unidade": id_unidade,
@@ -31581,11 +31732,1677 @@ COMMIT;
 ````
 
 
+## Passo 150G — `callback/monitoramento/apresentacao.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A apresentação mantém as transformações puras, desloca o catálogo para 23 etapas, representa `contact_request`, prioriza WA ID, usa username apenas como fallback visual e só marca o bloqueio com contador e denylist.
+
+SHA-256 do conteúdo UTF-8 normalizado: `a74217cbb388f6d0334bf5e98fe9c871cf82824a1dc1b256283b54cc04e6c961`
+
+````python
+"""Transformações puras dos dados do painel, sem acesso ao banco."""
+
+import re
+
+from core.integrations.whatsapp.messages.etapa3_messages import montar_botoes_etapa3
+from core.integrations.whatsapp.messages.etapa4_messages import montar_botoes_etapa4
+from core.integrations.whatsapp.messages.etapa8_messages import montar_botoes_etapa8
+from core.integrations.whatsapp.messages.etapa10_messages import montar_botoes_etapa10
+from core.integrations.whatsapp.messages.etapa12_messages import montar_botoes_etapa12
+from core.integrations.whatsapp.messages.etapa19_messages import montar_botoes_etapa19
+from core.integrations.whatsapp.messages.etapa20_messages import montar_opcoes_satisfacao_etapa20
+from core.integrations.whatsapp.messages.etapa21_messages import montar_botoes_etapa21
+from core.integrations.whatsapp.messages.triagem_componentes import montar_botoes_triagem
+
+
+_BOTOES_POR_ETAPA = {
+    3: montar_botoes_etapa3,
+    4: montar_botoes_etapa4,
+    8: montar_botoes_etapa8,
+    10: montar_botoes_etapa10,
+    12: montar_botoes_etapa12,
+    13: montar_botoes_triagem,
+    14: montar_botoes_triagem,
+    15: montar_botoes_triagem,
+    16: montar_botoes_triagem,
+    17: montar_botoes_triagem,
+    18: montar_botoes_triagem,
+    19: montar_botoes_etapa19,
+    20: lambda: [titulo for _, titulo in montar_opcoes_satisfacao_etapa20()],
+    21: montar_botoes_etapa21,
+}
+
+_BOTAO_COMPARTILHAR_CONTATO = 'Compartilhar contato'
+
+
+
+# Ordem e grafia do modelo CSV distribuído pelo Google Contacts.
+CABECALHO_CSV_GOOGLE_CONTATOS = (
+    'Name Prefix',
+    'First Name',
+    'Middle Name',
+    'Last Name',
+    'Name Suffix',
+    'Phonetic First Name',
+    'Phonetic Middle Name',
+    'Phonetic Last Name',
+    'Nickname',
+    'File As',
+    'E-mail 1 - Label',
+    'E-mail 1 - Value',
+    'Phone 1 - Label',
+    'Phone 1 - Value',
+    'Address 1 - Label',
+    'Address 1 - Country',
+    'Address 1 - Street',
+    'Address 1 - Extended Address',
+    'Address 1 - City',
+    'Address 1 - Region',
+    'Address 1 - Postal Code',
+    'Address 1 - PO Box',
+    'Organization Name',
+    'Organization Title',
+    'Organization Department',
+    'Birthday',
+    'Event 1 - Label',
+    'Event 1 - Value',
+    'Relation 1 - Label',
+    'Relation 1 - Value',
+    'Website 1 - Label',
+    'Website 1 - Value',
+    'Custom Field 1 - Label',
+    'Custom Field 1 - Value',
+    'Notes',
+    'Labels',
+)
+
+
+def botoes_para_mensagem(mensagem):
+    if mensagem.get('quem_enviou') != 'bot':
+        return []
+    tipo = str(mensagem.get('tipo') or '')
+    etapa = mensagem.get('id_etapa')
+    if etapa == 2 and tipo == 'contact_request':
+        return [_BOTAO_COMPARTILHAR_CONTATO]
+    if not tipo.startswith('interactive'):
+        return []
+    fabrica = _BOTOES_POR_ETAPA.get(etapa)
+    return list(fabrica()) if fabrica else []
+
+
+def classificar_faixa(idade):
+    if type(idade) is not int or idade <= 0 or idade >= 100:
+        return None
+    if idade < 18:
+        return 'menor'
+    if idade < 60:
+        return 'adulto'
+    return 'idoso'
+
+
+def _perfil_resumido(status_dependente, faixa):
+    if status_dependente is True:
+        return f'dependente_{faixa}' if faixa else 'dependente'
+    if status_dependente is False:
+        return faixa
+    return None
+
+
+def _normalizar_username(valor):
+    username = str(valor or '').strip().lstrip('@').strip()
+    return f'@{username}' if username else ''
+
+
+def _contato_da_linha(linha):
+    wa_id = str(linha.get('wa_id') or '').strip()
+    if wa_id:
+        return wa_id, 'telefone'
+    username = _normalizar_username(
+        linha.get('username_conversa') or linha.get('username_cliente')
+    )
+    if username:
+        return username, 'username'
+    return '', 'indisponivel'
+
+
+def _bloqueado_apos_repeticoes(linha):
+    try:
+        turnos_sem_avanco = int(linha.get('turnos_sem_avanco') or 0)
+    except (TypeError, ValueError):
+        return False
+    return turnos_sem_avanco >= 12 and bool(linha.get('bloqueado_meta'))
+
+
+def consolidar_conversas(linhas):
+    clientes = {}
+    for linha in linhas:
+        contato_linha, contato_tipo_linha = _contato_da_linha(linha)
+        cliente = clientes.setdefault(linha['id_cliente'], {
+            'id_cliente': linha['id_cliente'],
+            'nome': linha.get('nome_cliente') or 'Cliente sem nome',
+            'contato': '',
+            'contato_tipo': 'indisponivel',
+            'email': linha.get('email') or '',
+            'profissao': linha.get('profissao_cliente') or linha.get('profissao_conversa') or '',
+            'ids_conversa': [], 'perfis': set(), 'perfis_resumidos': set(),
+            'dependentes': set(),
+            'foi_funil': False, 'avaliada': False,
+            'bloqueado_apos_repeticoes': False,
+            'ultima_atividade': None, 'ultima_mensagem': '',
+            'ultima_mensagem_id': None,
+        })
+        if contato_tipo_linha == 'telefone' or (
+            not cliente['contato'] and contato_linha
+        ):
+            cliente['contato'] = contato_linha
+            cliente['contato_tipo'] = contato_tipo_linha
+        cliente['ids_conversa'].append(linha['id_conversa'])
+        cliente['foi_funil'] |= bool(linha.get('foi_funil'))
+        cliente['avaliada'] |= bool(linha.get('avaliada'))
+        cliente['bloqueado_apos_repeticoes'] |= _bloqueado_apos_repeticoes(linha)
+        status_dependente = linha.get('status_dependente')
+        dependente = status_dependente is True
+        if dependente:
+            cliente['perfis'].add('dependente')
+            if linha.get('nome_dependente'):
+                cliente['dependentes'].add(str(linha['nome_dependente']))
+        idade = (
+            linha.get('idade_dependente') if dependente
+            else linha.get('idade_titular') if status_dependente is False
+            else None
+        )
+        faixa = classificar_faixa(idade)
+        if faixa:
+            cliente['perfis'].add(faixa)
+        perfil_resumido = _perfil_resumido(status_dependente, faixa)
+        if perfil_resumido:
+            cliente['perfis_resumidos'].add(perfil_resumido)
+        atividade = linha.get('ultima_atividade')
+        id_mensagem = linha.get('ultima_mensagem_id') or 0
+        if atividade and (
+            cliente['ultima_atividade'] is None
+            or atividade > cliente['ultima_atividade']
+            or (
+                atividade == cliente['ultima_atividade']
+                and id_mensagem > (cliente['ultima_mensagem_id'] or 0)
+            )
+        ):
+            cliente['ultima_atividade'] = atividade
+            cliente['ultima_mensagem'] = linha.get('ultima_mensagem') or ''
+            cliente['ultima_mensagem_id'] = linha.get('ultima_mensagem_id')
+    ordem = {'dependente': 0, 'menor': 1, 'adulto': 2, 'idoso': 3}
+    ordem_resumida = {
+        'dependente_menor': 0,
+        'dependente_adulto': 1,
+        'dependente_idoso': 2,
+        'menor': 3,
+        'adulto': 4,
+        'idoso': 5,
+        'dependente': 6,
+    }
+    for cliente in clientes.values():
+        cliente['ids_conversa'].sort()
+        cliente['perfis'] = sorted(cliente['perfis'], key=lambda item: ordem[item])
+        cliente['perfis_resumidos'] = sorted(
+            cliente['perfis_resumidos'], key=lambda item: ordem_resumida[item]
+        )
+        cliente['dependentes'] = sorted(cliente['dependentes'])
+    return sorted(clientes.values(), key=lambda item: item['ultima_atividade'] or '', reverse=True)
+
+
+def normalizar_telefone_google(valor):
+    digitos = re.sub(r'\D', '', str(valor or ''))
+    if len(digitos) in (10, 11):
+        digitos = '55' + digitos
+    if not re.fullmatch(r'[1-9]\d{7,14}', digitos):
+        return ''
+    return '+' + digitos
+
+
+def separar_nome(valor):
+    partes = str(valor or '').strip().split()
+    if not partes:
+        return '', ''
+    return partes[0], ' '.join(partes[1:])
+
+
+def proteger_celula_csv(valor):
+    texto = str(valor or '')
+    return "'" + texto if texto.startswith(('=', '+', '-', '@')) else texto
+
+
+def montar_linha_csv_google_contatos(
+    *,
+    primeiro_nome,
+    sobrenome,
+    email,
+    telefone,
+    nome_unidade,
+):
+    """Posiciona os dados nas colunas exatas do modelo do Google Contacts."""
+    valores = {
+        'First Name': proteger_celula_csv(primeiro_nome),
+        'Last Name': proteger_celula_csv(sobrenome),
+        'E-mail 1 - Label': 'Work' if email else '',
+        'E-mail 1 - Value': proteger_celula_csv(email),
+        'Phone 1 - Label': 'Mobile' if telefone else '',
+        'Phone 1 - Value': telefone,
+        'Notes': 'Contato exportado pelo monitoramento ESL Tech',
+        'Labels': proteger_celula_csv(nome_unidade),
+    }
+    return [valores.get(coluna, '') for coluna in CABECALHO_CSV_GOOGLE_CONTATOS]
+
+
+def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade):
+    def variacao(atual, anterior):
+        if atual is None or anterior is None:
+            return None
+        if anterior == 0:
+            return 100.0 if atual else 0.0
+        return round((atual - anterior) / anterior * 100, 1)
+    tendencias = {}
+    for chave in ('leads', 'mensagens', 'funil', 'avaliacoes', 'nota_media'):
+        tendencias[chave] = variacao(metricas.get(chave, 0), anteriores.get(chave) if anteriores else None)
+    return {
+        'metricas': metricas,
+        'tendencias': tendencias,
+        'perfis': perfis,
+        'satisfacao': satisfacao,
+        'etapas': etapas,
+        'atividade': atividade,
+    }
+````
+
+## Passo 150H — `callback/monitoramento/views.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A exportação passa a ler o nome físico final `wa_id`; autenticação, escopo da unidade, respostas privadas e os dois tipos de Google CSV permanecem iguais.
+
+SHA-256 do conteúdo UTF-8 normalizado: `29739043a60ed55c733c67b751a1eca8035bdb2f2194197d7c9bf636e5e05982`
+
+````python
+"""Entrada do portal; credenciais sao verificadas pelo Django e nunca por SQL proprio."""
+
+import logging
+import csv
+from io import StringIO
+
+from django.contrib.auth.views import LoginView, LogoutView
+from django.core.exceptions import PermissionDenied
+from django.db import DatabaseError
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect, render, resolve_url
+from django.views.decorators.http import require_GET
+from django.views.csrf import csrf_failure
+from django.views.decorators.cache import never_cache
+
+from core.validacoes.email import validar_email_estrutural
+
+from .forms import LoginMonitoramentoForm
+from .monitoramento_guard import exigir_acesso_monitoramento
+from .periodos import PERIODOS, resolver_periodo
+from .services import (
+    carregar_contatos,
+    carregar_conversas,
+    carregar_mensagens,
+    carregar_relatorio,
+)
+from .apresentacao import (
+    CABECALHO_CSV_GOOGLE_CONTATOS,
+    montar_linha_csv_google_contatos,
+    normalizar_telefone_google,
+    separar_nome,
+)
+
+
+logger = logging.getLogger(__name__)
+MENSAGEM_LOGIN_INDISPONIVEL = (
+    'Não foi possível entrar agora. Aguarde um instante e tente novamente.'
+)
+MENSAGEM_DADOS_INDISPONIVEIS = (
+    'Não foi possível atualizar os dados agora. Aguarde um instante e tente novamente.'
+)
+
+
+class LoginMonitoramentoView(LoginView):
+    authentication_form = LoginMonitoramentoForm
+    template_name = 'monitoramento/login.html'
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_success_url(self):
+        # Destino fixo evita redirecionamentos enviados pelo navegador.
+        return resolve_url('monitoramento:painel')
+
+    def render_to_response(self, context, **response_kwargs):
+        return _headers_privados(
+            super().render_to_response(context, **response_kwargs)
+        )
+
+    def get(self, request, *args, **kwargs):
+        try:
+            return super().get(request, *args, **kwargs)
+        except DatabaseError:
+            return self.resposta_indisponivel()
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except DatabaseError:
+            return self.resposta_indisponivel()
+
+    def get_context_data(self, **kwargs):
+        contexto = super().get_context_data(**kwargs)
+        if not getattr(self, 'banco_indisponivel', False) and self.request.method in ('GET', 'HEAD'):
+            if self.request.user.is_authenticated:
+                try:
+                    contexto['acesso_confirmado'] = exigir_acesso_monitoramento(self.request)
+                except PermissionDenied:
+                    contexto['aviso_acesso'] = (
+                        'Sua conta não possui acesso ao monitoramento. '
+                        'Entre com uma conta vinculada à sua unidade.'
+                    )
+        return contexto
+
+    def resposta_indisponivel(self):
+        # Nao registrar usuario, senha ou o detalhe da excecao de autenticacao.
+        logger.error('monitoramento_login_banco_indisponivel')
+        self.banco_indisponivel = True
+        formulario = self.authentication_form(
+            request=self.request,
+            initial={'username': self.request.POST.get('username', '')},
+        )
+        contexto = self.get_context_data(form=formulario)
+        contexto['aviso_acesso'] = MENSAGEM_LOGIN_INDISPONIVEL
+        return self.render_to_response(contexto, status=503)
+
+
+class LogoutMonitoramentoView(LogoutView):
+    def get_success_url(self):
+        return resolve_url('monitoramento:login')
+
+
+def _headers_privados(resposta):
+    resposta['Cache-Control'] = 'private, no-store, max-age=0'
+    resposta['Pragma'] = 'no-cache'
+    resposta['Content-Security-Policy'] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self'; "
+        "script-src 'self'; connect-src 'self'; font-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    )
+    return resposta
+
+
+def _acesso(request, *, api=False):
+    if not getattr(request, 'user', None) or not request.user.is_authenticated:
+        if api:
+            return None, _headers_privados(JsonResponse(
+                {'erro': 'Sua sessão expirou. Entre novamente.'}, status=401
+            ))
+        return None, redirect('monitoramento:login')
+    try:
+        return exigir_acesso_monitoramento(request), None
+    except PermissionDenied:
+        if api:
+            return None, _headers_privados(JsonResponse(
+                {'erro': 'Acesso ao monitoramento não autorizado.'}, status=403
+            ))
+        return None, _headers_privados(render(
+            request, 'monitoramento/sem_acesso.html', status=403
+        ))
+
+
+def _resolver_periodo_request(request):
+    try:
+        return resolver_periodo(request.GET.get('periodo', 'total'))
+    except ValueError:
+        return None
+
+
+@never_cache
+@require_GET
+def painel(request):
+    acesso, resposta = _acesso(request)
+    if resposta:
+        return resposta
+    return _headers_privados(render(request, 'monitoramento/painel.html', {
+        'nome_unidade': acesso.nome_unidade,
+        'periodos': [('total', 'Todo o histórico')] + [
+            (chave, configuracao[0]) for chave, configuracao in PERIODOS.items()
+        ],
+    }))
+
+
+@never_cache
+@require_GET
+def dados_conversas(request):
+    acesso, resposta = _acesso(request, api=True)
+    if resposta:
+        return resposta
+    periodo = _resolver_periodo_request(request)
+    if periodo is None:
+        return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    try:
+        return _headers_privados(JsonResponse(carregar_conversas(acesso, periodo)))
+    except DatabaseError:
+        logger.error('monitoramento_conversas_banco_indisponivel')
+        return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
+
+
+@never_cache
+@require_GET
+def dados_mensagens(request, id_cliente):
+    acesso, resposta = _acesso(request, api=True)
+    if resposta:
+        return resposta
+    periodo = _resolver_periodo_request(request)
+    if periodo is None:
+        return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    try:
+        dados = carregar_mensagens(acesso, id_cliente, periodo)
+        if not dados['mensagens']:
+            return _headers_privados(JsonResponse({'erro': 'Conversa não encontrada.'}, status=404))
+        return _headers_privados(JsonResponse(dados))
+    except DatabaseError:
+        logger.error('monitoramento_mensagens_banco_indisponivel')
+        return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
+
+
+@never_cache
+@require_GET
+def dados_relatorio(request):
+    acesso, resposta = _acesso(request, api=True)
+    if resposta:
+        return resposta
+    periodo = _resolver_periodo_request(request)
+    if periodo is None:
+        return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    try:
+        return _headers_privados(JsonResponse(carregar_relatorio(acesso, periodo)))
+    except DatabaseError:
+        logger.error('monitoramento_relatorio_banco_indisponivel')
+        return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
+
+
+@never_cache
+@require_GET
+def contatos_csv(request):
+    acesso, resposta = _acesso(request, api=True)
+    if resposta:
+        return resposta
+    periodo = _resolver_periodo_request(request)
+    if periodo is None:
+        return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    apenas_elegiveis = request.GET.get('tipo') == 'elegiveis'
+    try:
+        contatos = carregar_contatos(acesso, periodo)
+    except DatabaseError:
+        logger.error('monitoramento_csv_banco_indisponivel')
+        return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
+    saida = StringIO(newline='')
+    escritor = csv.writer(saida, lineterminator='\r\n')
+    escritor.writerow(CABECALHO_CSV_GOOGLE_CONTATOS)
+    for contato in contatos:
+        primeiro, sobrenome = separar_nome(contato.get('nome'))
+        email = str(contato.get('email') or '').strip()
+        validacao_email = validar_email_estrutural(email)
+        email_exportado = validacao_email.email if validacao_email.valido else email
+        telefone = normalizar_telefone_google(contato.get('wa_id'))
+        if apenas_elegiveis and not (
+            primeiro and validacao_email.valido and telefone
+        ):
+            continue
+        escritor.writerow(montar_linha_csv_google_contatos(
+            primeiro_nome=primeiro,
+            sobrenome=sobrenome,
+            email=email_exportado,
+            telefone=telefone,
+            nome_unidade=acesso.nome_unidade,
+        ))
+    resposta = HttpResponse(saida.getvalue(), content_type='text/csv; charset=utf-8')
+    resposta['Content-Disposition'] = (
+        f'attachment; filename="contatos_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
+    )
+    return _headers_privados(resposta)
+
+
+@never_cache
+def falha_csrf(request, reason='', template_name='403_csrf.html'):
+    if getattr(request.resolver_match, 'app_name', None) != 'monitoramento':
+        return csrf_failure(request, reason=reason, template_name=template_name)
+    return _headers_privados(render(request, 'monitoramento/login.html', {
+        'form': LoginMonitoramentoForm(request=request),
+        'aviso_acesso': 'A verificação de segurança expirou ou é inválida. Digite seus dados e tente novamente.',
+    }, status=403))
+````
+
+## Passo 150I — `core/repositories/monitoramento/painel.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Toda consulta continua somente leitura e limitada à unidade autorizada. A projeção fornece WA ID, username e a dupla prova de bloqueio sem selecionar nem expor o Meta `user_id`.
+
+SHA-256 do conteúdo UTF-8 normalizado: `4cce90bc31eef190c056801d0481d942c199ad2a4f3d459b4459d7bb282bfb07`
+
+````python
+"""Consultas somente leitura do painel, sempre limitadas à unidade autorizada."""
+
+
+def _linhas(cursor):
+    colunas = [item[0] for item in cursor.description]
+    return [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+
+
+def _linha(cursor):
+    colunas = [item[0] for item in cursor.description]
+    valor = cursor.fetchone()
+    return dict(zip(colunas, valor)) if valor else None
+
+
+def _periodo(coluna, inicio, fim, parametros):
+    trecho = f' AND {coluna} < %s'
+    if inicio is not None:
+        trecho = f' AND {coluna} >= %s' + trecho
+        parametros.extend((inicio, fim))
+    else:
+        parametros.append(fim)
+    return trecho
+
+
+def buscar_unidade(id_unidade, cursor):
+    cursor.execute("""
+        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.suporte_idoso,
+               u.email_obrigatorio, u.bpa_ativo,
+               MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
+          FROM chatbot.unidade u
+          LEFT JOIN chatbot.conversa c ON c.id_unidade = u.id_unidade
+          LEFT JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
+         WHERE u.id_unidade = %s
+         GROUP BY u.id_unidade, u.nome_unidade, u.nome_agente,
+                  u.suporte_idoso, u.email_obrigatorio, u.bpa_ativo
+    """, (id_unidade,))
+    return _linha(cursor)
+
+
+def listar_conversas(id_unidade, inicio, fim, cursor):
+    p_contato = [id_unidade]
+    filtro_contato = _periodo('h0.received_data_hora', inicio, fim, p_contato)
+    p_funil = []
+    filtro_funil = _periodo('f.enviado_em', inicio, fim, p_funil)
+    p_avaliacao = []
+    filtro_avaliacao = _periodo('p.criado_em', inicio, fim, p_avaliacao)
+    p_atividade = []
+    filtro_atividade = _periodo('h.received_data_hora', inicio, fim, p_atividade)
+    cursor.execute(f"""
+        WITH conversas_periodo AS (
+            SELECT c.*
+              FROM chatbot.conversa c
+             WHERE c.id_unidade = %s
+               AND EXISTS (
+                   SELECT 1 FROM chatbot.historico_mensagens h0
+                    WHERE h0.id_conversa = c.id_conversa
+                      AND h0.quem_enviou = 'cliente' {filtro_contato}
+               )
+        )
+        SELECT c.id_cliente, c.id_conversa, c.status_dependente,
+               c.id_etapa_atual, c.turnos_sem_avanco,
+               cl.nome AS nome_cliente, cl.wa_id,
+               cl.username AS username_cliente,
+               c.username AS username_conversa,
+               cl.email, cl.idade AS idade_titular,
+               cl.profissao AS profissao_cliente, c.profissao AS profissao_conversa,
+               d.nome_dependente, d.idade AS idade_dependente,
+               EXISTS (SELECT 1 FROM chatbot.cliente_bloqueado_meta b
+                        WHERE b.id_cliente = c.id_cliente
+                          AND b.id_unidade = c.id_unidade) AS bloqueado_meta,
+               EXISTS (SELECT 1 FROM chatbot.funil_envios f
+                        WHERE f.id_conversa = c.id_conversa AND f.status = 'sent'
+                        {filtro_funil}) AS foi_funil,
+               EXISTS (SELECT 1 FROM chatbot.pesquisa_satisfacao p
+                        WHERE p.id_conversa = c.id_conversa AND p.nota IS NOT NULL
+                        {filtro_avaliacao}) AS avaliada,
+               (SELECT h.received_data_hora FROM chatbot.historico_mensagens h
+                 WHERE h.id_conversa = c.id_conversa {filtro_atividade}
+                   AND (h.quem_enviou = 'cliente' OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent'))
+                 ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1) AS ultima_atividade,
+               (SELECT h.conteudo_texto FROM chatbot.historico_mensagens h
+                 WHERE h.id_conversa = c.id_conversa {filtro_atividade}
+                   AND (h.quem_enviou = 'cliente' OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent'))
+                 ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1) AS ultima_mensagem,
+               (SELECT h.id_mensagem FROM chatbot.historico_mensagens h
+                 WHERE h.id_conversa = c.id_conversa {filtro_atividade}
+                   AND (h.quem_enviou = 'cliente' OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent'))
+                 ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1) AS ultima_mensagem_id
+          FROM conversas_periodo c
+          JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+          LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
+         ORDER BY ultima_atividade DESC NULLS LAST, c.id_conversa DESC
+    """, tuple(
+        p_contato + p_funil + p_avaliacao
+        + p_atividade + p_atividade + p_atividade
+    ))
+    return _linhas(cursor)
+
+
+def buscar_mensagens(id_unidade, id_cliente, inicio, fim, cursor):
+    parametros = [id_unidade, id_cliente]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT h.id_mensagem, h.id_conversa, h.id_etapa,
+               h.received_data_hora AS data, h.quem_enviou,
+               h.tipo_mensagem AS tipo, h.conteudo_texto AS texto
+          FROM chatbot.historico_mensagens h
+          JOIN chatbot.conversa c ON c.id_conversa = h.id_conversa
+         WHERE c.id_unidade = %s AND c.id_cliente = %s {filtro}
+           AND (h.quem_enviou = 'cliente' OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent'))
+         ORDER BY h.received_data_hora, h.id_mensagem
+    """, tuple(parametros))
+    return _linhas(cursor)
+
+
+def buscar_metricas(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    p_msg = []
+    f_msg = _periodo('h.received_data_hora', inicio, fim, p_msg)
+    p_funil = []
+    f_funil = _periodo('f.enviado_em', inicio, fim, p_funil)
+    p_nota = []
+    f_nota = _periodo('p.criado_em', inicio, fim, p_nota)
+    cursor.execute(f"""
+        WITH contatos AS (
+          SELECT DISTINCT c.id_cliente
+            FROM chatbot.conversa c JOIN chatbot.historico_mensagens h ON h.id_conversa=c.id_conversa
+           WHERE c.id_unidade=%s AND h.quem_enviou='cliente' {filtro}
+        )
+        SELECT (SELECT COUNT(*) FROM contatos) AS leads,
+               (SELECT COUNT(*) FROM chatbot.historico_mensagens h
+                 JOIN chatbot.conversa c ON c.id_conversa=h.id_conversa
+                WHERE c.id_unidade=%s AND c.id_cliente IN (SELECT id_cliente FROM contatos)
+                  {f_msg} AND (h.quem_enviou='cliente' OR (h.quem_enviou='bot' AND h.status_envio='sent'))) AS mensagens,
+               (SELECT COUNT(DISTINCT c.id_cliente) FROM chatbot.funil_envios f
+                 JOIN chatbot.conversa c ON c.id_conversa=f.id_conversa
+                WHERE c.id_unidade=%s AND c.id_cliente IN (SELECT id_cliente FROM contatos)
+                  AND f.status='sent' {f_funil}) AS funil,
+               (SELECT COUNT(DISTINCT c.id_cliente) FROM chatbot.pesquisa_satisfacao p
+                 JOIN chatbot.conversa c ON c.id_conversa=p.id_conversa
+                WHERE c.id_unidade=%s AND c.id_cliente IN (SELECT id_cliente FROM contatos)
+                  AND p.nota IS NOT NULL {f_nota}) AS avaliacoes,
+               (SELECT ROUND(AVG(p.nota)::numeric,2) FROM chatbot.pesquisa_satisfacao p
+                 JOIN chatbot.conversa c ON c.id_conversa=p.id_conversa
+                WHERE c.id_unidade=%s AND c.id_cliente IN (SELECT id_cliente FROM contatos)
+                  AND p.nota IS NOT NULL {f_nota}) AS nota_media
+    """, tuple(parametros + [id_unidade] + p_msg + [id_unidade] + p_funil + [id_unidade] + p_nota + [id_unidade] + p_nota))
+    return _linha(cursor)
+
+
+def buscar_perfis(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    parametros_funil = []
+    filtro_funil = _periodo('f.enviado_em', inicio, fim, parametros_funil)
+    cursor.execute(f"""
+        SELECT DISTINCT c.id_cliente, c.id_conversa, c.status_dependente,
+               cl.idade AS idade_titular, d.idade AS idade_dependente,
+               EXISTS (SELECT 1 FROM chatbot.funil_envios f
+                        WHERE f.id_conversa=c.id_conversa AND f.status='sent'
+                        {filtro_funil}) AS foi_funil
+          FROM chatbot.conversa c JOIN chatbot.cliente cl ON cl.id_cliente=c.id_cliente
+          LEFT JOIN chatbot.dependente d ON d.id_conversa=c.id_conversa
+         WHERE c.id_unidade=%s AND EXISTS (
+               SELECT 1 FROM chatbot.historico_mensagens h
+                WHERE h.id_conversa=c.id_conversa AND h.quem_enviou='cliente' {filtro})
+    """, tuple(parametros_funil + parametros))
+    return _linhas(cursor)
+
+
+def buscar_satisfacao(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('p.criado_em', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT p.nota, COUNT(*) AS quantidade
+          FROM chatbot.pesquisa_satisfacao p
+          JOIN chatbot.conversa c ON c.id_conversa=p.id_conversa
+         WHERE c.id_unidade=%s AND p.nota IS NOT NULL {filtro}
+         GROUP BY p.nota ORDER BY p.nota
+    """, tuple(parametros))
+    return _linhas(cursor)
+
+
+def buscar_etapas(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    cursor.execute(f"""
+        WITH conversas_periodo AS (
+            SELECT c.id_cliente, c.id_conversa, c.id_etapa_atual,
+                   MAX(h.received_data_hora) AS ultima_atividade
+              FROM chatbot.conversa c
+              JOIN chatbot.historico_mensagens h
+                ON h.id_conversa = c.id_conversa
+             WHERE c.id_unidade = %s AND h.quem_enviou = 'cliente' {filtro}
+             GROUP BY c.id_cliente, c.id_conversa, c.id_etapa_atual
+        ),
+        ultimas_conversas AS (
+            SELECT *, ROW_NUMBER() OVER (
+                       PARTITION BY id_cliente
+                       ORDER BY ultima_atividade DESC, id_conversa DESC
+                   ) AS ordem
+              FROM conversas_periodo
+        )
+        SELECT e.id_etapa, e.nome_etapa, COUNT(c.id_cliente) AS quantidade
+          FROM chatbot.etapa e
+          LEFT JOIN ultimas_conversas c
+            ON c.id_etapa_atual = e.id_etapa AND c.ordem = 1
+         WHERE e.id_etapa BETWEEN 1 AND 23
+         GROUP BY e.id_etapa, e.nome_etapa ORDER BY e.id_etapa
+    """, tuple(parametros))
+    return _linhas(cursor)
+
+
+def buscar_atividade(id_unidade, inicio, fim, cursor, granularidade):
+    unidade_tempo = {'dia': 'day', 'semana': 'week', 'mes': 'month'}[granularidade]
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT DATE_TRUNC('{unidade_tempo}', h.received_data_hora AT TIME ZONE 'America/Sao_Paulo') AS periodo,
+               COUNT(*) FILTER (WHERE h.quem_enviou='cliente' OR (h.quem_enviou='bot' AND h.status_envio='sent')) AS mensagens,
+               COUNT(DISTINCT c.id_cliente) FILTER (WHERE h.quem_enviou='cliente') AS leads
+          FROM chatbot.historico_mensagens h JOIN chatbot.conversa c ON c.id_conversa=h.id_conversa
+         WHERE c.id_unidade=%s {filtro}
+         GROUP BY 1 ORDER BY 1
+    """, tuple(parametros))
+    return _linhas(cursor)
+
+
+def listar_contatos(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT cl.id_cliente, cl.nome, cl.email, cl.wa_id
+          FROM chatbot.cliente cl
+         WHERE EXISTS (
+             SELECT 1 FROM chatbot.conversa c
+             JOIN chatbot.historico_mensagens h ON h.id_conversa=c.id_conversa
+              WHERE c.id_cliente=cl.id_cliente AND c.id_unidade=%s
+                AND h.quem_enviou='cliente' {filtro})
+         ORDER BY cl.nome NULLS LAST, cl.id_cliente
+    """, tuple(parametros))
+    return _linhas(cursor)
+````
+
+## Passo 150J — `callback/monitoramento/static/monitoramento/js/painel.js`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A interface apresenta `@username` somente sem telefone, mostra contato indisponível e bloqueio, renderiza as 23 etapas e conserva atualização periódica e responsividade.
+
+SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f6a27b25da3803d2d90b465f98`
+
+````javascript
+(() => {
+  'use strict';
+  const corpo=document.body, ids=id=>document.getElementById(id);
+  const urls={conversas:corpo.dataset.urlConversas,mensagens:corpo.dataset.urlMensagens,relatorio:corpo.dataset.urlRelatorio,csv:corpo.dataset.urlCsv,login:corpo.dataset.urlLogin};
+  const estado={secao:'conversas',periodo:'total',filtro:'todas',busca:'',conversas:[],selecionada:null,regras:{},carregandoConversas:false,recarregarConversas:false,carregandoRelatorio:false,recarregarRelatorio:false,sequenciaConversas:0,sequenciaRelatorio:0};
+  const criar=(tag,classe='',texto='')=>{const n=document.createElement(tag);if(classe)n.className=classe;if(texto!==''&&texto!==null)n.textContent=texto;return n;};
+  const numero=new Intl.NumberFormat('pt-BR'), data=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeZone:'America/Sao_Paulo'}), dia=new Intl.DateTimeFormat('pt-BR',{dateStyle:'long',timeZone:'America/Sao_Paulo'}), hora=new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}), curto=new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'});
+  const cores=['#37663d','#5d568f','#a35b38','#44758a','#8a4f67','#4d7468','#7b683b'];
+  async function json(url){const a=new AbortController(),t=setTimeout(()=>a.abort(),15000);try{const r=await fetch(url,{headers:{Accept:'application/json'},credentials:'same-origin',cache:'no-store',signal:a.signal});let d={};try{d=await r.json();}catch(_e){}if(r.status===401){location.assign(urls.login);throw new Error('Sessão expirada.');}if(!r.ok)throw new Error(d.erro||'Não foi possível carregar os dados.');return d;}finally{clearTimeout(t);}}
+  const urlPeriodo=(base,periodo=estado.periodo)=>base+'?periodo='+encodeURIComponent(periodo);
+  function status(texto,tipo=''){const n=ids('estadoAtualizacao');n.className='estado-atualizacao '+tipo;n.lastChild.textContent=texto;}
+  function toast(texto){const n=ids('toast');n.textContent=texto;n.hidden=false;clearTimeout(toast.timer);toast.timer=setTimeout(()=>n.hidden=true,4500);}
+  const iniciais=nome=>(nome||'?').split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase();
+  const cor=id=>cores[Math.abs(Number(id)||0)%cores.length];
+  const perfil=p=>({dependente:'Dependente',menor:'Menor de 18',adulto:'Adulto',idoso:'60+'}[p]||p);
+  const perfisResumidos={
+    dependente_menor:{curto:'DP -18',completo:'Dependente menor de 18 anos'},
+    dependente_adulto:{curto:'DP 18–59',completo:'Dependente de 18 a 59 anos'},
+    dependente_idoso:{curto:'DP 60+',completo:'Dependente com 60 anos ou mais'},
+    dependente:{curto:'DP',completo:'Dependente sem faixa etária informada'},
+    menor:{curto:'-18',completo:'Titular menor de 18 anos'},
+    adulto:{curto:'18–59',completo:'Titular de 18 a 59 anos'},
+    idoso:{curto:'60+',completo:'Titular com 60 anos ou mais'},
+  };
+  function metricas(m){ids('totalLeads').textContent=numero.format(m.leads||0);ids('totalMensagens').textContent=numero.format(m.mensagens||0);ids('totalFunil').textContent=numero.format(m.funil||0);ids('notaMedia').textContent=m.nota_media==null?'—':Number(m.nota_media).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});}
+  function visivel(i){if(estado.filtro==='continuacoes'&&i.ids_conversa.length<2)return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
+  function mini(pai,texto,classe=''){pai.appendChild(criar('span','mini-tag '+classe,texto));}
+  function renderLista(){
+    const lista=ids('listaConversas');
+    const itens=estado.conversas.filter(visivel);
+    lista.replaceChildren();
+
+    if(!itens.length){
+      lista.appendChild(criar('div','estado-vazio',estado.conversas.length?'Nenhum contato corresponde à pesquisa ou filtro.':'Nenhuma conversa neste período.'));
+      return;
+    }
+
+    itens.forEach(item=>{
+      const botao=criar('button','item-conversa');
+      const avatar=criar('div','avatar',iniciais(item.nome));
+      const corpo=criar('div','item-corpo');
+      const cabecalho=criar('div','item-linha');
+      const metadados=criar('span','item-metadados');
+      const perfisResumo=criar('span','perfis-resumidos-item');
+      const dataAtividade=criar('time','',item.ultima_atividade?data.format(new Date(item.ultima_atividade)):'—');
+
+      botao.type='button';
+      botao.dataset.cliente=String(item.id_cliente);
+      if(estado.selecionada===item.id_cliente)botao.classList.add('ativo');
+      avatar.style.background=cor(item.id_cliente);
+
+      (item.perfis_resumidos||[]).forEach(chave=>{
+        const classe=chave.replaceAll('_','-');
+        const perfilAtual=perfisResumidos[chave]||{curto:chave,completo:chave};
+        const etiqueta=criar('span','mini-tag perfil-resumido '+classe,perfilAtual.curto);
+        etiqueta.title=perfilAtual.completo;
+        etiqueta.setAttribute('aria-label',perfilAtual.completo);
+        perfisResumo.appendChild(etiqueta);
+      });
+      if(perfisResumo.childElementCount)metadados.appendChild(perfisResumo);
+      metadados.appendChild(dataAtividade);
+      cabecalho.append(criar('strong','',item.nome),metadados);
+      corpo.append(cabecalho,criar('div','item-previa',item.ultima_mensagem||'Sem conteúdo textual'));
+
+      const tags=criar('div','mini-tags');
+      if(item.ids_conversa.length>1)mini(tags,item.ids_conversa.length+' conversas');
+      if(item.foi_funil)mini(tags,'Funil','funil');
+      if(item.avaliada)mini(tags,'Avaliada','nota');
+      if(item.bloqueado_apos_repeticoes)mini(tags,'Bloqueado · 12 repetições','bloqueado');
+      corpo.appendChild(tags);
+      botao.append(avatar,corpo);
+      botao.addEventListener('click',()=>abrir(item.id_cliente));
+      lista.appendChild(botao);
+    });
+  }
+  function detalhes(i){
+    ids('nomeContato').textContent=i.nome;
+    ids('avatarContato').textContent=iniciais(i.nome);
+    ids('avatarContato').style.background=cor(i.id_cliente);
+    const rotuloContato=i.contato_tipo==='username'?'Username':'Contato';
+    const resumo=[];
+    resumo.push(i.contato?rotuloContato+': '+i.contato:'Contato não compartilhado');
+    if(i.profissao)resumo.push('Profissão: '+i.profissao);
+    ids('detalhesContato').textContent=resumo.join(' • ');
+    const tags=ids('tagsContato');
+    tags.replaceChildren();
+    i.perfis.forEach(p=>tags.appendChild(criar('span','tag-contato '+p,perfil(p))));
+    if(i.foi_funil)tags.appendChild(criar('span','tag-contato funil','Funil'));
+    if(i.bloqueado_apos_repeticoes)tags.appendChild(criar('span','tag-contato bloqueado','Bloqueado · 12 repetições'));
+    const dl=criar('dl');
+    const campos=[[rotuloContato,i.contato||'Não compartilhado'],['Profissão',i.profissao||'Não informada']];
+    if(estado.regras.email_obrigatorio||i.email)campos.push(['E-mail',i.email||'Obrigatório · não informado']);
+    if(i.dependentes.length)campos.push(['Dependente(s)',i.dependentes.join(', ')]);
+    campos.push(['Conversas técnicas',i.ids_conversa.join(', ')]);
+    campos.push(['Regras da unidade',[estado.regras.email_obrigatorio?'E-mail obrigatório':'E-mail opcional',estado.regras.suporte_idoso?'Suporte 60+ ativo':'Fluxo comum para 60+',estado.regras.bpa_ativo?'BPA ativo':'BPA inativo'].join(' · ')]);
+    campos.forEach(([tituloCampo,valor])=>{const grupo=criar('div');grupo.append(criar('dt','',tituloCampo),criar('dd','',valor));dl.appendChild(grupo);});
+    ids('painelDetalhes').replaceChildren(dl);
+  }
+  function marca(){const c=criar('div','marca-dagua');c.setAttribute('aria-hidden','true');const i=document.querySelector('.marca-app img').cloneNode();i.alt='';c.appendChild(i);return c;}
+  function renderMensagens(ms,{manter=false}={}){const c=ids('mensagensChat'),final=c.scrollHeight-c.scrollTop-c.clientHeight<120,topo=c.scrollTop;c.replaceChildren(marca());let d='',conv=null;ms.forEach(m=>{const dt=new Date(m.data),nd=dia.format(dt);if(nd!==d){c.appendChild(criar('div','dia',nd));d=nd;}if(conv!==m.id_conversa){c.appendChild(criar('div','separador-conversa',(conv===null?'Início':'Continuação')+' do atendimento · conversa '+m.id_conversa));conv=m.id_conversa;}const l=criar('div','linha-mensagem '+(m.quem_enviou==='bot'?'bot':'cliente')),b=criar('div','bolha');if(m.tipo&&m.tipo!=='text')b.appendChild(criar('span','tipo-mensagem',m.tipo.replaceAll('_',' ')));b.appendChild(criar('div','texto-mensagem',m.texto));if(m.botoes?.length){const bs=criar('div','botoes-mensagem');m.botoes.forEach(x=>{const bt=criar('button','botao-mensagem',x);bt.type='button';bt.disabled=true;bt.setAttribute('aria-label',x+' (botão histórico)');bs.appendChild(bt);});b.appendChild(bs);}const mt=criar('div','meta-mensagem');mt.appendChild(criar('span','','Etapa '+(m.id_etapa??'—')+' · '+hora.format(dt)));if(m.quem_enviou==='bot')mt.appendChild(criar('span','ticks','✓✓'));b.appendChild(mt);l.appendChild(b);c.appendChild(l);});if(!ms.length)c.appendChild(criar('div','boas-vindas','Nenhuma mensagem visível no período.'));requestAnimationFrame(()=>{if(!manter||final)c.scrollTop=c.scrollHeight;else c.scrollTop=topo;});}
+  async function abrir(idCliente,{silencioso=false}={}){const i=estado.conversas.find(c=>c.id_cliente===idCliente);if(!i)return;const periodo=estado.periodo;estado.selecionada=idCliente;renderLista();detalhes(i);ids('topoChat').hidden=false;document.querySelector('.app-conversas').classList.add('chat-aberto');const c=ids('mensagensChat');if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio carregando','Carregando histórico…'));try{const d=await json(urls.mensagens+idCliente+'/?periodo='+encodeURIComponent(periodo));if(estado.selecionada===idCliente&&estado.periodo===periodo)renderMensagens(d.mensagens,{manter:silencioso});}catch(e){if(estado.periodo!==periodo)return;if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio',e.message));else toast('Não foi possível atualizar a conversa agora.');}}
+  async function carregarConversas(silencioso=false){if(estado.carregandoConversas){estado.recarregarConversas=true;return;}estado.carregandoConversas=true;const periodo=estado.periodo,seq=++estado.sequenciaConversas;if(estado.secao==='conversas')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.conversas,periodo));if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;const velha=estado.conversas.find(c=>c.id_cliente===estado.selecionada);estado.conversas=d.conversas;estado.regras=d.unidade.regras;ids('nomeUnidade').textContent=d.unidade.nome;ids('periodoConversas').textContent='Agente '+d.unidade.agente+' · '+d.periodo.texto;metricas(d.metricas);renderLista();const nova=estado.conversas.find(c=>c.id_cliente===estado.selecionada);if(nova&&(!silencioso||!velha||nova.ultima_mensagem_id!==velha.ultima_mensagem_id||nova.ultima_atividade!==velha.ultima_atividade))await abrir(nova.id_cliente,{silencioso});else if(!estado.selecionada&&matchMedia('(min-width:721px)').matches&&estado.conversas[0])await abrir(estado.conversas[0].id_cliente);if(estado.secao==='conversas')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;if(estado.secao==='conversas')status('Falha ao atualizar','erro');if(!silencioso)ids('listaConversas').replaceChildren(criar('div','estado-vazio',e.message));else toast(e.message);}finally{estado.carregandoConversas=false;if(estado.recarregarConversas){estado.recarregarConversas=false;void carregarConversas(true);}}}
+  function tend(v){if(v==null)return['Histórico completo',''];if(v===0)return['Sem variação ante o período anterior',''];return[(v>0?'↑ ':'↓ ')+Math.abs(v).toLocaleString('pt-BR')+'% ante o período anterior',v>0?'positiva':'negativa'];}
+  function kpi(rotulo,valor,v){const c=criar('article','cartao kpi'),t=tend(v);c.append(criar('span','rotulo',rotulo),criar('strong','',valor),criar('span','tendencia '+t[1],t[0]));return c;}
+  function titulo(t,d,l=''){const h=criar('header','titulo-cartao'),x=criar('div');x.append(criar('h2','',t),criar('p','',d));h.appendChild(x);if(l)h.appendChild(criar('span','legenda',l));return h;}
+  function atividade(ds){
+    const componente=criar('div','grafico-atividade');
+    if(!ds.length){
+      componente.appendChild(criar('div','estado-vazio','Sem atividade no período.'));
+      return componente;
+    }
+
+    const resumo=criar('p','grafico-resumo','Toque em uma barra para ver data, leads e mensagens.');
+    resumo.setAttribute('aria-live','polite');
+    const rolagem=criar('div','grafico-rolagem');
+    const barras=criar('div','grafico-barras');
+    const maximo=Math.max(1,...ds.flatMap(item=>[Number(item.leads)||0,Number(item.mensagens)||0]));
+
+    ds.forEach((item,indice)=>{
+      const leads=Number(item.leads)||0;
+      const mensagens=Number(item.mensagens)||0;
+      const dataCurta=curto.format(new Date(item.periodo));
+      const descricao=dataCurta+': '+numero.format(leads)+' leads e '+numero.format(mensagens)+' mensagens';
+      const coluna=criar('button','coluna-grafico');
+      const barraLeads=criar('i');
+      const barraMensagens=criar('i','barra-mensagens');
+
+      coluna.type='button';
+      coluna.title=descricao;
+      coluna.setAttribute('aria-label',descricao);
+      barraLeads.style.height=Math.max(2,leads/maximo*100)+'%';
+      barraMensagens.style.height=Math.max(2,mensagens/maximo*100)+'%';
+      coluna.append(barraLeads,barraMensagens);
+
+      if(ds.length<35||indice%Math.ceil(ds.length/16)===0){
+        coluna.appendChild(criar('span','rotulo-data',dataCurta));
+      }
+
+      const mostrarResumo=()=>{resumo.textContent=descricao;};
+      coluna.addEventListener('click',mostrarResumo);
+      coluna.addEventListener('focus',mostrarResumo);
+      coluna.addEventListener('mouseenter',mostrarResumo);
+      barras.appendChild(coluna);
+    });
+
+    rolagem.appendChild(barras);
+    componente.append(resumo,rolagem);
+    return componente;
+  }
+  function satisfacao(ds){const c=criar('article','cartao');c.appendChild(titulo('Satisfação','Distribuição das notas registradas.'));const b=criar('div','barras-satisfacao'),max=Math.max(1,...Object.values(ds).map(Number));[5,4,3,2,1].forEach(n=>{const q=Number(ds[String(n)]||0),l=criar('div','barra-linha'),tr=criar('div','trilho'),i=criar('i');i.style.width=q/max*100+'%';tr.appendChild(i);l.append(criar('span','',n+' ★'),tr,criar('strong','',String(q)));b.appendChild(l);});c.appendChild(b);return c;}
+  function perfis(ds){
+    const colunas=['Perfil','Leads','Conversas','Funil','Taxa'];
+    const cartao=criar('article','cartao');
+    const tabela=criar('table','tabela-perfis');
+    const cabecalho=criar('thead');
+    const linhaCabecalho=criar('tr');
+
+    cartao.appendChild(titulo('Perfil dos atendimentos','Faixas atuais; dependentes a partir de '+ds.idade_minima_dependente+' anos.'));
+    colunas.forEach(coluna=>linhaCabecalho.appendChild(criar('th','',coluna)));
+    cabecalho.appendChild(linhaCabecalho);
+    tabela.appendChild(cabecalho);
+
+    const corpoTabela=criar('tbody');
+    ds.linhas.forEach(item=>{
+      const linha=criar('tr');
+      const valores=[
+        item.rotulo,
+        item.leads,
+        item.conversas,
+        item.funil,
+        item.taxa_funil==null?'—':item.taxa_funil.toLocaleString('pt-BR')+'%',
+      ];
+
+      valores.forEach((valor,indice)=>{
+        const celula=criar('td','',String(valor));
+        celula.dataset.rotulo=colunas[indice];
+        linha.appendChild(celula);
+      });
+      corpoTabela.appendChild(linha);
+    });
+
+    tabela.appendChild(corpoTabela);
+    cartao.appendChild(tabela);
+    if(ds.sem_classificacao){
+      cartao.appendChild(criar('p','tendencia',ds.sem_classificacao+' lead(s) sem classificação etária completa.'));
+    }
+    return cartao;
+  }
+  function etapas(ds){const c=criar('article','cartao');c.appendChild(titulo('Onde os atendimentos estão','Etapa atual da conversa mais recente de cada contato ativo no período.',numero.format(ds.length)+' etapas'));const lista=criar('div','etapas-lista'),max=Math.max(1,...ds.map(e=>Number(e.quantidade)));ds.forEach(e=>{const l=criar('div','etapa-linha'),tr=criar('div','trilho'),i=criar('i');i.style.width=Number(e.quantidade)/max*100+'%';tr.appendChild(i);l.append(criar('span','etapa-numero',String(e.id_etapa)),criar('span','etapa-nome',e.nome_etapa),tr,criar('strong','',String(e.quantidade)));lista.appendChild(l);});c.appendChild(lista);return c;}
+  function exportacao(){const c=criar('article','cartao exportacao'),d=criar('div'),bs=criar('div','botoes-download');d.append(criar('h2','','Leve os contatos para o Google Contatos'),criar('p','','Arquivos no formato Google CSV. Elegíveis possuem nome, e-mail e telefone; campos ausentes ficam vazios no arquivo completo. Para mais de 3.000 contatos, escolha períodos menores antes de importar no Google.'));[['Baixar todos os contatos','todos','botao-download'],['Baixar apenas elegíveis','elegiveis','botao-download primario']].forEach(([t,tipo,cl])=>{const a=criar('a',cl,t);a.href=urls.csv+'?periodo='+estado.periodo+'&tipo='+tipo;bs.appendChild(a);});c.append(d,bs);return c;}
+  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
+  function renderRelatorio(d){
+    ids('periodoRelatorios').textContent=d.periodo.texto;
+    const relatorio=ids('conteudoRelatorio');
+    const metricasRelatorio=d.metricas;
+    const tendencias=d.tendencias;
+    const gradeKpis=criar('div','grade-kpis');
+    const gradeRelatorio=criar('div','grade-relatorio');
+    const cartaoAtividade=criar('article','cartao');
+    const instrucaoGrafico=matchMedia('(hover: none)').matches
+      ?'Toque nas barras para ver cada valor. Deslize para consultar outras datas.'
+      :'Passe o cursor sobre as barras para ver cada valor.';
+
+    relatorio.replaceChildren();
+    gradeKpis.append(
+      kpi('Leads em contato',numero.format(metricasRelatorio.leads||0),tendencias.leads),
+      kpi('Mensagens',numero.format(metricasRelatorio.mensagens||0),tendencias.mensagens),
+      kpi('Enviados ao funil',numero.format(metricasRelatorio.funil||0),tendencias.funil),
+      kpi('Nota média',metricasRelatorio.nota_media==null?'—':Number(metricasRelatorio.nota_media).toLocaleString('pt-BR')+' / 5',tendencias.nota_media),
+    );
+    cartaoAtividade.append(
+      titulo('Evolução da demanda',instrucaoGrafico,'Verde: leads · Lima: mensagens'),
+      atividade(d.atividade),
+    );
+    gradeRelatorio.append(cartaoAtividade,satisfacao(d.satisfacao));
+    relatorio.append(
+      gradeKpis,
+      gradeRelatorio,
+      perfis(d.perfis),
+      etapas(d.etapas),
+      exportacao(),
+      interpretar(metricasRelatorio),
+    );
+  }
+  async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
+  function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
+  document.querySelectorAll('[data-secao]').forEach(b=>b.addEventListener('click',()=>trocar(b.dataset.secao)));
+  document.querySelectorAll('[data-periodo]').forEach(s=>s.addEventListener('change',()=>{estado.periodo=s.value;estado.selecionada=null;estado.sequenciaConversas++;estado.sequenciaRelatorio++;document.querySelectorAll('[data-periodo]').forEach(o=>o.value=s.value);estado.secao==='relatorios'?carregarRelatorio():carregarConversas();}));
+  document.querySelectorAll('[data-filtro]').forEach(b=>b.addEventListener('click',()=>{estado.filtro=b.dataset.filtro;document.querySelectorAll('[data-filtro]').forEach(x=>x.classList.toggle('ativo',x===b));renderLista();}));
+  ids('buscaConversas').addEventListener('input',e=>{estado.busca=e.target.value;renderLista();});
+  ids('voltarConversas').addEventListener('click',()=>document.querySelector('.app-conversas').classList.remove('chat-aberto'));
+  ids('alternarDetalhes').addEventListener('click',e=>{const a=e.currentTarget.getAttribute('aria-expanded')==='true';e.currentTarget.setAttribute('aria-expanded',String(!a));ids('painelDetalhes').hidden=a;});
+  ids('mensagensChat').addEventListener('scroll',()=>{const c=ids('mensagensChat');ids('irFinal').hidden=c.scrollHeight-c.scrollTop-c.clientHeight<150;});
+  ids('irFinal').addEventListener('click',()=>ids('mensagensChat').scrollTo({top:ids('mensagensChat').scrollHeight,behavior:'smooth'}));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)(estado.secao==='conversas'?carregarConversas(true):carregarRelatorio(true));});
+  setInterval(()=>{if(!document.hidden&&estado.secao==='conversas')carregarConversas(true);},10000);
+  setInterval(()=>{if(!document.hidden&&estado.secao==='relatorios')carregarRelatorio(true);},30000);
+  carregarConversas();
+})();
+````
+
+## Passo 150K — `callback/monitoramento/static/monitoramento/css/painel.css`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Os estilos acrescentam a etiqueta de bloqueio sem alterar os breakpoints e o layout responsivo consolidado na V1.1.0.
+
+SHA-256 do conteúdo UTF-8 normalizado: `937b78f091282d2ecee0dd399fb5ecdd6b1b111d76380cd31c545e0d8812d023`
+
+````css
+:root{color-scheme:light;--verde-950:#122716;--verde-900:#1c321d;--verde-800:#274a2c;--verde-700:#37663d;--lima:#d9ff6b;--creme:#f5f1ef;--branco:#fff;--texto:#1c2a1d;--muted:#6f796e;--linha:#dde2d8;--painel:#f8f9f5;--erro:#a93636;--sombra:0 16px 45px rgba(20,43,23,.09);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif;font-synthesis:none}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;max-width:100%;background:var(--creme);color:var(--texto)}
+body{min-width:300px;overflow-x:clip}
+button,input,select{font:inherit}
+button,select{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid #83a84d;outline-offset:2px}
+svg{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.skip-link{position:fixed;z-index:50;left:14px;top:-60px;padding:11px 14px;border-radius:8px;background:#fff;color:var(--verde-900)}
+.skip-link:focus{top:10px}
+.cabecalho-app{height:72px;padding:0 clamp(18px,3vw,44px);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:25px;background:var(--verde-900);color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 4px 16px #10231328}
+.marca-app{display:flex;align-items:center;min-width:0}
+.marca-app img{width:104px;height:auto;filter:brightness(0) invert(1)}
+.marca-app .divisor{height:30px;width:1px;background:#ffffff30;margin:0 18px}
+.marca-app div{display:flex;flex-direction:column;min-width:0}
+.marca-app strong{font-size:13px;letter-spacing:.06em}
+.marca-app div span{font-size:11px;color:#becaba;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seletor-secao{display:flex;padding:4px;border:1px solid #ffffff15;border-radius:13px;background:#0e211278}
+.seletor-secao button{height:40px;padding:0 20px;border:0;border-radius:9px;background:transparent;color:#c7d2c4;display:flex;align-items:center;gap:8px;font-weight:650}
+.seletor-secao button svg{width:17px}
+.seletor-secao button.ativo{background:#fff;color:var(--verde-900);box-shadow:0 3px 9px #0003}
+.acoes-cabecalho{justify-self:end;display:flex;align-items:center;gap:18px}
+.estado-atualizacao{font-size:11px;color:#c5d1c2;display:flex;align-items:center;white-space:nowrap}
+.estado-atualizacao i{width:7px;height:7px;border-radius:50%;background:var(--lima);box-shadow:0 0 0 4px #d9ff6b17;margin-right:8px}
+.estado-atualizacao.atualizando i{animation:pulso 1s infinite}
+.estado-atualizacao.erro i{background:#ff908a}
+.botao-sair{border:1px solid #ffffff30;border-radius:8px;background:transparent;color:#fff;padding:8px 13px}
+.botao-sair:hover{background:#ffffff12}
+.faixa-consulta{min-height:44px;padding:8px clamp(18px,3vw,44px);display:flex;align-items:center;justify-content:center;gap:10px;background:#e8f0d0;border-bottom:1px solid #cfdaae;color:#3f522f}
+.faixa-consulta svg{width:17px;flex:0 0 17px}
+.faixa-consulta p{font-size:11px;margin:0;line-height:1.5}
+main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
+.secao-painel{min-width:0;padding:26px clamp(16px,3vw,42px) 34px}
+.barra-contexto{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
+.sobrelinha{font-size:9px;font-weight:800;letter-spacing:.18em;color:var(--verde-700);margin:0 0 6px}
+.barra-contexto h1{font-size:28px;line-height:1.1;letter-spacing:-.04em;margin:0 0 5px}
+.barra-contexto>div>p:last-child{font-size:12px;color:var(--muted);margin:0}
+.seletor-periodo{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.seletor-periodo select{min-width:190px;height:42px;padding:0 34px 0 12px;border:1px solid var(--linha);border-radius:9px;color:var(--texto);background:#fff}
+.metricas-conversas{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.metricas-conversas article{min-height:72px;padding:13px 17px;border:1px solid var(--linha);border-radius:12px;background:#fff;display:flex;justify-content:space-between;align-items:center}
+.metricas-conversas span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.metricas-conversas strong{font-size:24px;color:var(--verde-800);letter-spacing:-.04em}
+.app-conversas{height:calc(100vh - 287px);min-height:570px;display:grid;grid-template-columns:minmax(310px,370px) 1fr;overflow:hidden;border:1px solid #d5dbd1;border-radius:17px;background:#fff;box-shadow:var(--sombra)}
+.lista-conversas{min-width:0;min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--linha);background:#fff}
+.busca{position:relative;padding:14px 14px 8px}
+.busca svg{position:absolute;width:17px;left:27px;top:27px;color:#7a8677}
+.busca input{width:100%;height:42px;border:1px solid var(--linha);border-radius:9px;background:var(--painel);padding:0 12px 0 39px;color:var(--texto);outline:0}
+.busca input:focus{border-color:var(--verde-700);background:#fff}
+.filtros-conversas{display:flex;gap:6px;padding:2px 14px 12px;overflow-x:auto;scrollbar-width:none}
+.filtros-conversas button{white-space:nowrap;padding:7px 11px;border:1px solid var(--linha);border-radius:999px;background:#fff;color:#667064;font-size:11px}
+.filtros-conversas button.ativo{border-color:var(--verde-700);background:var(--verde-800);color:#fff}
+.rolagem-lista{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
+.item-conversa{width:100%;padding:13px 14px;border:0;border-top:1px solid #edf0e9;background:#fff;display:grid;grid-template-columns:45px minmax(0,1fr);gap:11px;text-align:left;color:inherit}
+.item-conversa:hover,.item-conversa.ativo{background:#f0f4e9}
+.item-conversa.ativo{box-shadow:inset 3px 0 var(--verde-700)}
+.avatar{width:45px;height:45px;border-radius:50%;background:var(--verde-700);color:#fff;display:grid;place-items:center;font-weight:750}
+.item-corpo{min-width:0}
+.item-linha{display:flex;justify-content:space-between;gap:7px;align-items:flex-start}
+.item-linha strong{min-width:0;flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-linha time{font-size:9px;color:#8a9487;white-space:nowrap}
+.item-metadados{min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:5px;flex:0 0 auto}
+.perfis-resumidos-item{max-width:100px;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:2px}
+.mini-tag.perfil-resumido{padding:2px 5px;font-size:7px;white-space:nowrap;background:#edf2e8;color:#40573e}
+.mini-tag.perfil-resumido.dependente-menor,.mini-tag.perfil-resumido.menor{background:#e1edff;color:#315f98}
+.mini-tag.perfil-resumido.dependente-adulto{background:#ddf1e4;color:#296b42}
+.mini-tag.perfil-resumido.dependente-idoso,.mini-tag.perfil-resumido.idoso{background:#e9e1ff;color:#614299}
+.item-previa{margin:3px 0 6px;font-size:11px;color:#748071;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-tags,.tags-contato{display:flex;flex-wrap:wrap;gap:4px}
+.mini-tag,.tag-contato{display:inline-flex;align-items:center;border-radius:999px;background:#edf2e8;color:#50614b;padding:2px 6px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.mini-tag.funil,.tag-contato.funil{background:#dff4e3;color:#267242}
+.mini-tag.nota{background:#fff2cb;color:#8b6813}
+.mini-tag.bloqueado,.tag-contato.bloqueado{background:#ffe1df;color:#9a332d}
+.tag-contato.idoso{background:#e9e1ff;color:#614299}
+.tag-contato.menor{background:#e1edff;color:#315f98}
+.estado-vazio{padding:42px 18px;text-align:center;color:var(--muted);font-size:12px}
+.carregando::before{content:"";display:block;width:24px;height:24px;margin:0 auto 13px;border:2px solid #d8dfd2;border-top-color:var(--verde-700);border-radius:50%;animation:girar .8s linear infinite}
+.janela-chat{min-width:0;min-height:0;position:relative;display:flex;flex-direction:column;background:#eef0e8;overflow:hidden}
+.topo-chat{min-height:70px;padding:10px 16px;display:flex;align-items:center;gap:12px;background:#fff;border-bottom:1px solid var(--linha);z-index:2}
+.voltar{display:none;border:0;background:transparent;font-size:28px;color:var(--verde-800)}
+.identidade-contato{min-width:0;flex:1}
+.identidade-contato h2{font-size:14px;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.identidade-contato p{font-size:10px;color:var(--muted);margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detalhes-botao{border:1px solid var(--linha);border-radius:8px;padding:7px 10px;background:#fff;color:#5c685b;font-size:10px}
+.detalhes-botao[aria-expanded=true]{background:var(--verde-800);color:#fff}
+.painel-detalhes{padding:10px 18px;background:#fbfcf9;border-bottom:1px solid var(--linha);font-size:11px;color:#606b5e;z-index:2}
+.painel-detalhes dl{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.painel-detalhes dt{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#8a9388}
+.painel-detalhes dd{margin:2px 0 0;overflow-wrap:anywhere}
+.mensagens{flex:1;min-height:0;overflow-y:auto;position:relative;padding:22px clamp(18px,5vw,70px);background-color:#eef0e8;background-image:radial-gradient(#63755a12 1px,transparent 1px);background-size:18px 18px;overscroll-behavior:contain}
+.marca-dagua{position:fixed;pointer-events:none;opacity:.035;width:260px;left:calc(50% + 135px);top:50%;transform:translate(-50%,-50%) rotate(-8deg)}
+.marca-dagua img{width:100%;filter:grayscale(1)}
+.boas-vindas{position:relative;z-index:1;max-width:410px;margin:14vh auto 0;padding:25px;border:1px solid #d7ddd1;border-radius:15px;background:#ffffffd9;text-align:center;box-shadow:0 8px 25px #25331d0b}
+.boas-vindas span{font-size:9px;font-weight:800;letter-spacing:.14em;color:var(--verde-700)}
+.boas-vindas h2{font-size:20px;margin:7px 0}
+.boas-vindas p{font-size:12px;color:var(--muted);margin:0}
+.dia,.separador-conversa{position:relative;z-index:1;width:max-content;max-width:90%;margin:8px auto 14px;padding:5px 10px;border:1px solid #d6ddcd;border-radius:8px;background:#f9fbf5;color:#6c7868;font-size:9px;box-shadow:0 1px 2px #0000000d}
+.separador-conversa{margin-top:18px;background:#e3edd8;color:#4d6446}
+.linha-mensagem{position:relative;z-index:1;display:flex;margin:3px 0}
+.linha-mensagem.bot{justify-content:flex-end}
+.bolha{max-width:min(76%,720px);padding:8px 10px 6px;border-radius:4px 11px 11px 11px;background:#fff;box-shadow:0 1px 2px #23301f1c}
+.linha-mensagem.bot .bolha{border-radius:11px 4px 11px 11px;background:#dff1cf}
+.tipo-mensagem{display:block;width:max-content;margin-bottom:4px;padding:2px 5px;border-radius:4px;background:#213b2520;color:#496346;font-size:8px;font-weight:700;text-transform:uppercase}
+.texto-mensagem{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.45}
+.botoes-mensagem{display:grid;gap:4px;margin:8px -4px -1px}
+.botao-mensagem:disabled{cursor:default;opacity:1}
+.botao-mensagem{min-height:31px;border:0;border-top:1px solid #bed2b3;background:transparent;color:#39704a;font-size:11px;text-align:center}
+.meta-mensagem{display:flex;justify-content:flex-end;align-items:center;gap:4px;margin-top:3px;color:#73806f;font-size:8px}
+.ticks{color:#4e8eb1;font-size:10px}
+.rodape-chat{padding:7px 16px;text-align:center;background:#fff;border-top:1px solid var(--linha);color:#8a9388;font-size:8px}
+.ir-final{position:absolute;right:20px;bottom:42px;z-index:4;width:39px;height:39px;border:1px solid var(--linha);border-radius:50%;background:#fff;color:var(--verde-800);box-shadow:0 5px 17px #1c321d30}
+.secao-relatorios{padding-bottom:60px}
+.conteudo-relatorio{min-width:0;display:grid;gap:14px}
+.conteudo-relatorio>*{min-width:0;max-width:100%}
+.cartao{min-width:0;max-width:100%;border:1px solid var(--linha);border-radius:14px;background:#fff;padding:20px;box-shadow:0 5px 20px #1c321d08}
+.carregando-relatorio{text-align:center;color:var(--muted);padding:60px}
+.grade-kpis{min-width:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.kpi{min-height:126px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;right:-28px;bottom:-40px;width:90px;height:90px;border-radius:50%;background:#d9ff6b38}
+.kpi .rotulo{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.kpi strong{display:block;margin:10px 0 6px;font-size:30px;color:var(--verde-900);letter-spacing:-.05em}
+.tendencia{font-size:10px;color:#687266}
+.tendencia.positiva{color:#2c7b45}
+.tendencia.negativa{color:#ae4444}
+.grade-relatorio{min-width:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:14px}
+.titulo-cartao{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px}
+.titulo-cartao h2{font-size:16px;margin:0 0 4px}
+.titulo-cartao p{font-size:10px;color:var(--muted);margin:0;line-height:1.5}
+.legenda{font-size:9px;color:var(--muted);white-space:nowrap}
+.grafico-atividade{width:100%;max-width:100%;min-width:0}
+.grafico-resumo{display:none;min-height:28px;margin:0 0 8px;padding:7px 9px;border-radius:7px;background:#f0f4e9;color:#536050;font-size:9px}
+.grafico-rolagem{width:100%;max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
+.grafico-barras{height:230px;width:max-content;min-width:100%;display:flex;align-items:flex-end;gap:5px;padding:18px 4px 30px;border-bottom:1px solid var(--linha)}
+.coluna-grafico{appearance:none;height:100%;min-width:19px;flex:1 0 19px;display:flex;align-items:flex-end;justify-content:center;gap:2px;position:relative;padding:0;border:0;background:transparent;color:inherit}
+.coluna-grafico i{display:block;width:7px;min-height:2px;border-radius:3px 3px 0 0;background:var(--verde-700)}
+.coluna-grafico i.barra-mensagens{position:static;padding:0;background:#c6e662}
+.coluna-grafico .rotulo-data{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%) rotate(-35deg);font-size:7px;color:#7d8879;white-space:nowrap}
+.barras-satisfacao{display:grid;gap:12px}
+.barra-linha{display:grid;grid-template-columns:35px 1fr 30px;align-items:center;gap:8px;font-size:10px}
+.trilho{height:8px;border-radius:999px;background:#edf0e9;overflow:hidden}
+.trilho i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--verde-700),#96bd50)}
+.tabela-perfis{width:100%;border-collapse:collapse;font-size:11px}
+.tabela-perfis th{text-align:left;padding:9px 8px;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--linha)}
+.tabela-perfis td{padding:11px 8px;border-bottom:1px solid #edf0e9}
+.tabela-perfis td:not(:first-child),.tabela-perfis th:not(:first-child){text-align:right}
+.etapas-lista{display:grid;gap:8px}
+.etapa-linha{display:grid;grid-template-columns:25px minmax(160px,1fr) 2fr 30px;gap:8px;align-items:center;font-size:9px}
+.etapa-numero{width:22px;height:22px;border-radius:6px;background:#edf2e8;display:grid;place-items:center;font-weight:700;color:var(--verde-700)}
+.etapa-nome{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.exportacao{display:flex;align-items:center;justify-content:space-between;gap:20px;background:var(--verde-900);color:#fff}
+.exportacao h2{margin:0 0 5px;font-size:17px}
+.exportacao p{margin:0;color:#c2cec0;font-size:10px;max-width:690px}
+.botoes-download{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.botao-download{display:inline-flex;min-height:40px;align-items:center;padding:0 13px;border:1px solid #ffffff30;border-radius:8px;color:#fff;text-decoration:none;font-size:10px}
+.botao-download.primario{background:var(--lima);border-color:var(--lima);color:var(--verde-950);font-weight:700}
+.como-interpretar{background:#f0f4e9}
+.como-interpretar h2{font-size:15px;margin:0 0 12px}
+.como-interpretar ul{margin:0;padding-left:18px;color:#5f6b5c;font-size:10px;line-height:1.7}
+.toast{position:fixed;z-index:100;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(90vw,430px);padding:11px 15px;border-radius:9px;background:#202b21;color:#fff;box-shadow:0 8px 30px #0004;font-size:11px}
+@keyframes girar{to{transform:rotate(360deg)}
+}
+@keyframes pulso{50%{opacity:.35}
+}
+@media(max-width:1000px){.cabecalho-app{grid-template-columns:minmax(0,1fr) auto auto;gap:12px;padding-inline:clamp(16px,2.5vw,28px)}
+.seletor-secao{grid-row:1;grid-column:2;justify-self:center;margin:0;transform:none;z-index:auto}
+.seletor-secao button{height:38px;padding:0 14px}
+.acoes-cabecalho{grid-row:1;grid-column:3}
+.faixa-consulta{margin-top:0}
+.acoes-cabecalho .estado-atualizacao{display:none}
+.app-conversas{grid-template-columns:minmax(270px,330px) minmax(0,1fr)}
+.grade-relatorio{grid-template-columns:1fr}
+.grade-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.filtros-conversas{gap:4px;padding-inline:10px}
+.filtros-conversas button{padding:6px 8px;font-size:10px}
+.marca-dagua{position:absolute;left:50%}
+}
+@media(max-width:720px){.cabecalho-app{height:auto;min-height:62px;padding:0 16px 10px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:62px auto;gap:0 10px}
+.marca-app img{width:82px}
+.marca-app .divisor{height:25px;margin:0 10px}
+.marca-app strong{font-size:11px}
+.marca-app div span{max-width:125px;font-size:9px}
+.botao-sair{padding:7px 10px;font-size:10px}
+.seletor-secao{grid-row:2;grid-column:1/-1;width:100%;margin:0;transform:none}
+.seletor-secao button{flex:1;justify-content:center;height:38px;padding:0 10px;font-size:11px}
+.acoes-cabecalho{grid-row:1;grid-column:2}
+.faixa-consulta{margin-top:0;padding:8px 16px;align-items:flex-start}
+.faixa-consulta p{font-size:9px}
+.secao-painel{padding:20px 0 0}
+.barra-contexto{padding:0 16px;align-items:flex-end}
+.barra-contexto h1{font-size:24px}
+.barra-contexto>div>p:last-child{font-size:10px}
+.seletor-periodo select{min-width:150px;width:150px;height:39px;font-size:10px}
+.metricas-conversas{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 16px;overflow:visible}
+.metricas-conversas article{min-height:65px;padding:10px;display:block}
+.metricas-conversas span{font-size:8px}
+.metricas-conversas strong{display:block;font-size:20px;margin-top:4px}
+.app-conversas{height:calc(100dvh - 295px);min-height:420px;border-radius:0;border-left:0;border-right:0;display:block}
+.lista-conversas{height:100%;border:0}
+.janela-chat{display:none;height:100%}
+.chat-aberto .lista-conversas{display:none}
+.chat-aberto .janela-chat{display:flex}
+.voltar{display:block}
+.topo-chat{padding-left:8px}
+.detalhes-botao{font-size:0;padding:7px}
+.detalhes-botao::before{content:"i";font-size:12px;font-family:Georgia,serif}
+.painel-detalhes dl{grid-template-columns:repeat(2,minmax(0,1fr))}
+.mensagens{padding:16px 10px}
+.marca-dagua{position:absolute;left:50%;width:210px}
+.bolha{max-width:88%}
+.secao-relatorios{padding:20px 13px 40px}
+.secao-relatorios .barra-contexto{padding:0 3px}
+.grade-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+.kpi{min-height:110px;padding:15px}
+.kpi strong{font-size:25px}
+.cartao{padding:16px}
+.grade-relatorio{display:block}
+.grade-relatorio>.cartao+ .cartao{margin-top:14px}
+.tabela-perfis{font-size:9px}
+.tabela-perfis th,.tabela-perfis td{padding:9px 4px}
+.etapa-linha{grid-template-columns:24px minmax(105px,1.2fr) 1fr 25px}
+.exportacao{display:block}
+.botoes-download{justify-content:flex-start;margin-top:16px}
+.botao-download{flex:1;justify-content:center}
+.estado-vazio{padding:30px 15px}
+.grafico-resumo{display:block}
+}
+@media(max-width:560px){.barra-contexto{flex-direction:column;align-items:stretch;gap:12px}
+.seletor-periodo{width:100%;margin-top:0}
+.seletor-periodo select{width:100%;min-width:0}
+.tabela-perfis,.tabela-perfis tbody,.tabela-perfis tr,.tabela-perfis td{display:block;width:100%}
+.tabela-perfis thead{display:none}
+.tabela-perfis tbody{display:grid;gap:9px}
+.tabela-perfis tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 12px;padding:10px;border:1px solid #e5e9e1;border-radius:10px;background:#fbfcf9}
+.tabela-perfis td,.tabela-perfis td:not(:first-child){padding:0;border:0;text-align:left;font-size:11px}
+.tabela-perfis td:first-child{grid-column:1/-1;padding-bottom:3px;font-weight:650;overflow-wrap:anywhere}
+.tabela-perfis td:not(:first-child)::before{content:attr(data-rotulo);display:block;margin-bottom:2px;color:var(--muted);font-size:7px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.etapa-linha{grid-template-columns:25px minmax(0,1fr) 28px;grid-template-rows:auto 7px;gap:5px 8px;font-size:10px}
+.etapa-numero{grid-column:1;grid-row:1/3;align-self:center}
+.etapa-nome{grid-column:2;grid-row:1;white-space:normal;overflow:visible;line-height:1.3}
+.etapa-linha .trilho{grid-column:2;grid-row:2}
+.etapa-linha>strong{grid-column:3;grid-row:1/3;align-self:center;text-align:right}
+}
+@media(max-width:390px){
+.metricas-conversas{margin-top:10px}
+.app-conversas{height:calc(100svh - 360px)}
+.grade-kpis{grid-template-columns:1fr 1fr}
+.titulo-cartao{display:block}
+.legenda{display:block;margin-top:7px}
+.exportacao .botao-download{flex-basis:100%}
+}
+@media(hover:none){.grafico-resumo{display:block}
+}
+@media(orientation:landscape) and (max-height:600px) and (max-width:1000px){.cabecalho-app{height:56px;min-height:56px;padding:0 12px;grid-template-columns:minmax(0,1fr) auto auto;grid-template-rows:56px;gap:8px}
+.marca-app img{width:70px}
+.marca-app .divisor{height:24px;margin:0 9px}
+.marca-app strong{font-size:10px}
+.marca-app div span{max-width:145px;font-size:8px}
+.seletor-secao{grid-row:1;grid-column:2;width:auto;padding:3px;border-radius:10px}
+.seletor-secao button{height:34px;padding:0 9px;gap:6px;font-size:10px}
+.seletor-secao button svg{width:14px}
+.acoes-cabecalho{grid-row:1;grid-column:3}
+.botao-sair{padding:6px 9px;font-size:10px}
+.faixa-consulta{min-height:32px;padding:5px 12px}
+.faixa-consulta p{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:8px;line-height:1.3}
+.secao-painel{padding-top:14px}
+.barra-contexto{flex-direction:row;align-items:flex-end;gap:12px}
+.seletor-periodo{width:auto;margin:0}
+.seletor-periodo select{width:min(190px,32vw);min-width:140px;height:36px}
+.app-conversas{height:calc(100dvh - 140px);min-height:280px}
+}
+@media(orientation:landscape) and (max-height:440px) and (max-width:560px){.marca-app div span{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}
+}
+````
+
+## Passo 150L — `callback/README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A documentação do Django passa a registrar a identidade tipada, o tratamento conservador de eventos `system`, o portal sem exposição de `user_id`, o fallback visual e o catálogo final.
+
+SHA-256 do conteúdo UTF-8 normalizado: `6caf79870c5da8953085c0c82670a8deb8ce96979cf6c91fd686ffbf6a69e639`
+
+````markdown
+# Aplicativos Django: webhook e monitoramento
+
+Projeto Django que reúne o webhook e o aplicativo de monitoramento por unidade.
+O webhook recebe eventos da Meta, valida a entrada e persiste mensagens aceitas
+na fila. O processamento da conversa pertence ao worker. O monitoramento oferece
+login com autenticação Django, autorização por unidade, consulta responsiva de
+conversas e indicadores, além da exportação de contatos.
+
+Documentos centrais:
+
+- [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
+- [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md)
+- [Portal do projeto](../README.md)
+
+## Estrutura
+
+```text
+callback/
+├── callback/              configuração Django
+├── webhook/
+│   ├── admin.py           operações administrativas
+│   ├── models.py          mapeamento das tabelas
+│   ├── urls.py            rota /webhook
+│   ├── views.py           borda GET/POST
+│   └── services/          fluxo HTTP e anti-flood
+├── monitoramento/        aplicativo do painel por unidade
+│   ├── __init__.py
+│   ├── apps.py           registro MonitoramentoConfig
+│   ├── forms.py          credenciais nativas e autorização antes do login
+│   ├── views.py          login, saída, painel, APIs de leitura e CSV
+│   ├── urls.py           rotas públicas e privadas do monitoramento
+│   ├── monitoramento_guard.py  autorização da sessão e dos recursos
+│   ├── periodos.py       janelas de consulta aceitas pelo servidor
+│   ├── apresentacao.py   consolidação, perfis, botões e Google CSV
+│   ├── services.py       orquestra leituras da unidade autorizada
+│   ├── templates/monitoramento/  login, painel e acesso negado
+│   └── static/monitoramento/     estilos, interação e logo ESL Tech
+│       ├── css/
+│       ├── js/
+│       └── img/
+└── manage.py
+```
+
+Arquivos principais de `services`:
+
+- `post_flow.py`: validações e transação da fila;
+- `meta_signature.py`: assinatura `X-Hub-Signature-256`;
+- `bloqueio_meta_guard.py`: consulta da lista local de bloqueio, promoção de
+  suspeita e nova tentativa de bloqueio na Meta;
+- `flood_guard.py`: Redis, banco, memória e bloqueio Meta;
+- `populating_fila_mensagens.py`: parse e inserção usando cursor recebido;
+- `alerta_flood_memoria.py`: alerta local quando banco e Redis falham.
+
+## Endpoint
+
+```text
+GET  /webhook
+POST /webhook
+```
+
+A rota não possui barra final. O `GET` atende à verificação inicial da Meta. O
+`POST` recebe eventos reais.
+
+O `GET` devolve `hub.challenge` quando `hub.mode=subscribe` e
+`hub.verify_token` coincide com `META_WEBHOOK_VERIFY_TOKEN`; nos demais casos,
+devolve `Webhook ativo` com HTTP 200.
+
+O limite do body é configurado por `WEBHOOK_MAX_BODY_BYTES` (padrão: 256 KiB).
+Quando `META_WEBHOOK_SIGNATURE_REQUIRED=true`, o POST exige HMAC-SHA256 do body
+original, calculado com `META_APP_SECRET` e comparado com
+`X-Hub-Signature-256` por `hmac.compare_digest`. Secret vazio, header ausente ou
+assinatura inválida resultam em 403. O padrão dessa flag no código é `False`;
+a exigência efetiva depende da configuração do ambiente.
+
+## Ordem do POST
+
+```text
+Content-Type
+-> tamanho do body
+-> assinatura Meta
+-> parse JSON
+-> classificação do evento Meta
+-> lista local de bloqueio / suspeita de bot
+-> anti-flood
+-> unidade ativa
+-> conversa bloqueada
+-> preparação da mensagem
+-> transação da fila
+-> resposta HTTP
+```
+
+O webhook não envia etapas, não avança conversa e não executa dequeue.
+
+Eventos contendo apenas `statuses` retornam 200 sem processamento. Eventos
+`system`, inclusive `user_changed_user_id`, não alteram identidade: até existir
+captura real assinada da Graph API v26 e contrato oficial validado, são
+reconhecidos e ignorados sem merge. Eventos sem `messages`/`statuses`, ou com
+ambos, também retornam 200 sem enfileirar. Esses descartes ocorrem antes dos
+controles de bloqueio e flood.
+
+## Contrato HTTP
+
+| Cenário | HTTP | Resultado |
+|---|---:|---|
+| Mensagem inserida | 200 | `status=ok` |
+| Descarte por regra de negócio | 200 | `status=ignored` ou `status=ok`, conforme o ponto do fluxo |
+| JSON inválido | 200 | `status=ignored`, `reason=invalid_json` |
+| Falha de conexão, inserção ou commit da fila | 503 | `status=unavailable`, `reason=insert_exception` |
+| Falha ao confirmar a unidade no banco após cache sem resposta conclusiva | 503 | `status=unavailable`, `reason=unit_validation_unavailable` |
+| Falha de Redis e banco ao validar bloqueio de conversa | 503 | `status=unavailable`, `reason=conversation_block_validation_unavailable` |
+| Falha na consulta ou promoção da lista local de bloqueio | 503 | `status=unavailable`, `reason=blocklist_validation_unavailable` |
+| Flood detectado sem conseguir consultar ou persistir o bloqueio local | 503 | `status=unavailable`, `reason=flood_<origem>_banco_indisponivel` ou `flood_<origem>_persistencia_local_falhou` |
+| Erro inesperado identificável, nas três primeiras ocorrências por WAMID | 503 | `status=unavailable`, `reason=unexpected_error_retry`, com `attempt` |
+| Erro inesperado com limite esgotado ou contador indisponível | 200 | `status=ignored`, `reason=unexpected_error_retry_exhausted` ou `unexpected_error_retry_unavailable` |
+| Assinatura inválida | 403 | `status=forbidden` |
+| Payload grande | 413 | `status=payload_too_large` |
+| `Content-Type` inválido | 415 | `status=unsupported_media_type` |
+| `Content-Length` inválido | 400 | `status=bad_request` |
+| Método não permitido | 405 | `status=method_not_allowed` |
+
+Turno ocupado, duplicidade, unidade inativa, conversa bloqueada e flood com
+bloqueio local persistido são descartes com HTTP 200. Falhas operacionais de
+validação ou persistência usam os motivos 503 acima. Em motivos de flood,
+`<origem>` é `redis`, `banco` ou `memoria`.
+
+O limite de três respostas 503 aplica-se somente ao tratamento genérico de
+erro inesperado, com contador Redis por WAMID e TTL de sete dias renovado a cada
+ocorrência. Sem WAMID ou sem Redis, esse tratamento retorna 200 com
+`unexpected_error_retry_unavailable`; os demais cenários 503 não passam por
+esse contador.
+
+## Turno e duplicidade
+
+O par lógico é:
+
+```text
+tipo_identidade + identidade + id_phone_unidade
+```
+
+`core/repositories/seguranca/turno_cliente.py` usa advisory lock transacional para impedir
+corridas. Enquanto existir fila aberta sem resposta própria do bot, mensagens
+posteriores do mesmo par são descartadas.
+
+Mensagens com timestamp anterior a uma interação já registrada também são
+descartadas como reentregas fora de ordem. Se todas as filas abertas já têm sua
+própria resposta do bot com `status_envio=sent`, o turno pode ser liberado.
+
+`id_hash_msg` é único. Reentregas da Meta não criam duas linhas; o insert utiliza
+`ON CONFLICT DO NOTHING`.
+
+## Anti-flood
+
+A regra atual mede cada cliente dentro de cada unidade:
+
+```text
+15 WAMIDs distintos em 5 segundos
+chave = wa_id_cliente + phone_id_unidade
+```
+
+Clientes diferentes da mesma unidade não compartilham contador. A ordem dos
+fallbacks é Redis, banco e memória local. No Redis, deduplicação por WAMID e
+incremento são atômicos, com janela fixa e deduplicação por duas horas.
+
+O bloqueio utiliza `core/integrations/whatsapp/tools/usuarios.py`. O fluxo
+persiste a intenção em `chatbot.cliente_bloqueado_meta` antes de chamar a Meta.
+Se a Meta falhar, mantém o bloqueio local e descarta a mensagem com HTTP 200;
+uma nova mensagem desse par tenta bloquear na Meta novamente. Se o banco
+impedir a persistência, retorna 503 sem chamar a Meta. Unidade não cadastrada
+é descartada sem bloqueio externo.
+
+Antes do anti-flood, `bloqueio_meta_guard.py` verifica essa lista local e
+também promove conversas que atingiram o limite de turnos sem avanço. A
+promoção é confirmada no banco antes da chamada externa.
+
+Relatórios e reconciliação manual ficam em
+`utilitarios/monitoring/blocked_users.py`.
+
+O relatório é somente leitura e possui duas conferências distintas:
+
+- bloqueios: compara
+  `(waba_id, phone_id_unidade, wa_id_cliente)` entre a lista da Meta e
+  `chatbot.cliente_bloqueado_meta`;
+- registros Cloud API: percorre o `waba_id` de cada unidade e compara os
+  `phone_number_id` retornados pela Meta com `chatbot.unidade`.
+
+Ele também separa falhas de coleta e vínculos divergentes; não bloqueia,
+desbloqueia, registra ou remove dados automaticamente.
+
+## Transações
+
+`post_flow.py` é dono da conexão usada para enfileirar:
+
+```text
+abrir conexão -> povoando_fila -> commit/rollback -> close
+```
+
+`populating_fila_mensagens.py` recebe cursor e não controla conexão.
+
+As transações independentes do anti-flood pertencem a `flood_guard.py`; a
+consulta e promoção da lista local pertencem a `bloqueio_meta_guard.py`. Essa
+separação está detalhada em
+[Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md).
+
+## Django Admin
+
+O Admin é majoritariamente somente leitura. As exceções operacionais são:
+
+- criação, edição e exclusão individual de unidade;
+- criação, edição e exclusão de configuração de integração do Funil por unidade;
+- desbloqueio individual de cliente bloqueado na Meta.
+
+Cada unidade exige `nome_unidade`, `nome_agente` e `genero`. O campo `genero`
+oferece no formulário somente `Masculino` e `Feminino`; ele controla o artigo
+usado para apresentar o agente nos inícios padrão, de mídia, financeiro e de
+tratamento de reforço escolar da etapa 1.
+
+`waba_id` e `phone_number_id` ficam somente leitura após a criação. O Admin
+também expõe `suporte_idoso` e `email_obrigatorio`; ativar suporte ao idoso
+exige um `numero_comercial` brasileiro válido.
+
+No Admin, criação/exclusão de unidade e desbloqueio individual seguem
+Meta-first. Se a Meta falhar, a alteração local correspondente não é
+confirmada. Se a Meta concluir e uma etapa local posterior falhar, a operação
+externa não é compensada automaticamente: a unidade exige conferência manual.
+O desbloqueio também zera `turnos_sem_avanco` das conversas ativas do par.
+Essa ordem administrativa é diferente do bloqueio preventivo do webhook,
+que persiste primeiro a lista local.
+
+## Cadastro e autorização do monitoramento
+
+O modelo `Unidade`, com `managed = False`, inclui `id_usuario_monitoramento`,
+um `OneToOneField` opcional para o usuário do Django. No Admin da unidade,
+**Usuário de monitoramento** seleciona uma conta comum criada em **Usuários**.
+Uma conta não pode ser vinculada a duas unidades; várias unidades podem ficar
+sem conta. Excluir o usuário limpa o campo com `SET_NULL` e preserva a unidade.
+O formulário permite contas inativas para preparar o cadastro, mas elas não
+passam pela autorização. A edição mantém o fluxo administrativo existente da
+unidade; o vínculo de acesso é consultado diretamente no banco, sem cache.
+As regras completas estão em [Regras de negócio, 19.6](../REGRAS_DE_NEGOCIO.md#196-contas-de-monitoramento-por-unidade).
+
+O aplicativo `monitoramento` está registrado por
+`monitoramento.apps.MonitoramentoConfig` em `callback/settings.py`. As rotas são
+incluídas no URLconf do projeto; `STATIC_URL=/static/` permite carregar os assets
+também nas URLs aninhadas. O login não cria tabelas nem migrações adicionais.
+
+`monitoramento/monitoramento_guard.py` oferece
+`exigir_acesso_monitoramento(request, id_conversa=..., id_mensagem=...)`.
+Somente `request.user.pk` identifica a conta. Os identificadores dos recursos
+são opcionais, mas, quando fornecidos, são conferidos na mesma consulta que
+valida o vínculo e a conta no banco. O retorno informa a unidade autorizada;
+falhas de autorização geram `PermissionDenied`, sem distinguir recurso ausente
+de recurso de outra unidade. Erros de banco propagam e não liberam acesso.
+
+`forms.py` estende `AuthenticationForm`: o Django verifica o hash da senha do
+username informado, depois `exigir_acesso_usuario_monitoramento` valida a conta
+e seu vínculo antes de criar a sessão. Não há consulta própria de senhas.
+Usuário inexistente e senha incorreta recebem o mesmo aviso, sem confirmar a
+existência de contas. Contas inativas, administrativas ou sem unidade não entram.
+
+- `GET /login/`: formulário responsivo com logo vetorial extraída do material
+  da ESL Tech, sem dependências visuais externas.
+- `POST /login/`: autenticação com CSRF, sessão Django e destino fixo. O
+  parâmetro `next` não controla o redirecionamento. Falhas de banco retornam 503
+  com aviso genérico; a senha não é reapresentada nem registrada pela view.
+- `POST /sair/`: encerra a sessão com CSRF; GET não executa logout.
+- `GET /`: entrega o painel privado e responsivo.
+- `GET /dados/conversas/`: resumo e lista consolidada dos contatos.
+- `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
+- `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
+- `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
+  O arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
+  Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
+
+O login bem-sucedido retorna a `/`. A página e cada endpoint de dados chamam
+`exigir_acesso_monitoramento`; nenhum deles aceita unidade escolhida em URL,
+query string ou JavaScript. Depois do guard, cada SQL de
+`core/repositories/monitoramento/painel.py` recebe e aplica o `id_unidade`
+autorizado. O guard não modifica consultas posteriores nem concede acesso ao
+Admin.
+
+O navegador atualiza a seção de conversas a cada 10 segundos e a de relatórios
+a cada 30 segundos, somente enquanto a página está visível. Voltar à aba força
+uma nova leitura. Não há WebSocket, tarefa periódica no servidor nem quarto
+serviço: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
+Mensagens são carregadas somente quando um contato é aberto.
+
+O painel nunca envia `user_id` ao navegador ou ao CSV. Ele mostra o WA ID
+canônico quando disponível e, para o cliente provisório que ainda não
+compartilhou o telefone, mostra `@username` no campo de contato. Sem os dois,
+exibe `Contato não compartilhado`. A etiqueta de bloqueio por 12 repetições
+exige simultaneamente o contador da conversa e a denylist persistida na mesma
+unidade. O histórico representa o `contact_request` da etapa 2 com o controle
+desabilitado `Compartilhar contato`.
+
+O padrão é todo o histórico até o instante da requisição. Também existem os
+períodos 24 horas, 7 e 30 dias, 2, 3 e 6 meses e 1 ano. Os períodos finitos são
+comparados à janela imediatamente anterior de igual duração. A distribuição por
+etapa representa o estado atual da conversa mais recente de cada contato com
+atividade no período; não reconstrói a etapa histórica. Como o histórico
+persiste texto e tipo, mas não o
+payload original dos botões, o painel apresenta como referência os botões do
+catálogo final de 23 etapas, sempre desabilitados.
+
+O painel é somente leitura. Os filtros, a pesquisa, os seletores de período e os
+downloads não alteram registros. As regras `suporte_idoso`, `email_obrigatorio`
+e `bpa_ativo` vêm da unidade. O CSV completo preserva campos ausentes vazios; o
+CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
+internacional e usa cabeçalhos do Google Contatos.
+
+Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
+no portal. Contas e senhas continuam administradas pelo proprietário no Django
+Admin. Senhas ficam sempre mascaradas no campo; os formulários usam o mecanismo
+nativo de sessão e proteção CSRF. `falha_csrf` personaliza o aviso em português
+somente nas rotas de monitoramento, preservando o tratamento padrão nas demais.
+O HTTPS e os cookies seguros dependem das configurações de produção descritas
+na [rotina de deploy](../regras_deploy/rotina_deploy.md).
+
+`ALLOWED_HOSTS` aceita os domínios, mas não separa rotas por hostname; essa
+separação não foi implementada. Os relatórios em `utilitarios` seguem manuais.
+
+## Testes relacionados
+
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_monitoramento_unidade.py`;
+- `tests/unit/test_monitoramento_login.py`;
+- `tests/unit/test_monitoramento_painel.py`;
+- `tests/unit/test_valida_etapa12.py`.
+
+Esses arquivos cobrem o núcleo transacional; consulte também
+[`tests/README.md`](../tests/README.md).
+````
+
 ## Passo 151 — `PADROES_DE_ARQUITETURA.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8e04d1a368537fcf5733db4b0fc78c22b8b3ab34b2f303943c40a4a8d5af8c5d`
+SHA-256 do conteúdo UTF-8 normalizado: `3654ee1cd0ac27a48168fac2b501987aedbff66913292367234a02689315782b`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -31671,6 +33488,7 @@ observabilidade, desligamento gracioso e demanda real de produção.
 
 ```text
 callback/webhook  -> entrada HTTP e enfileiramento
+callback/monitoramento -> login e autorização do painel por unidade
 workers           -> processamento assíncrono e fluxo da conversa
 core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
@@ -31683,11 +33501,11 @@ tests             -> testes, mocks, fakes e contratos
 Direção esperada das dependências:
 
 ```text
-webhook ─┐
-         ├──> core/repositories
-worker  ─┤──> core/cache
-admin   ─┤──> core/integrations
-utilitários ─┘
+webhook ────────┐
+monitoramento ──┤──> core/repositories
+worker ────────┤──> core/cache
+admin ─────────┤──> core/integrations
+utilitários ───┘
 
 core nunca importa webhook ou worker
 ```
@@ -31697,7 +33515,7 @@ core nunca importa webhook ou worker
 O [`README.md`](README.md) da raiz é o portal da documentação. Cada README local
 explica somente a responsabilidade e os contratos da sua camada:
 
-- [`callback/README.md`](callback/README.md): entrada HTTP e enfileiramento;
+- [`callback/README.md`](callback/README.md): aplicativos Django, webhook e estrutura do monitoramento;
 - [`core/README.md`](core/README.md): mapa dos recursos compartilhados;
 - [`workers/README.md`](workers/README.md): ciclo, checkpoints e recuperação;
 - [`tests/README.md`](tests/README.md): estratégia e execução dos testes;
@@ -31751,7 +33569,8 @@ Os repositórios são agrupados por domínio e entidade:
 - `fluxo/`: políticas, transições, respostas da triagem e contextos por etapa;
 - `unidades/`: consultas de unidade e controle de versão do cache;
 - `seguranca/`: regra de turno e persistência de bloqueios Meta;
-- `funil/`: configuração da integração por unidade e estado dos envios.
+- `funil/`: configuração da integração por unidade e estado dos envios;
+- `monitoramento/`: vínculo e autorização de recursos por conta/unidade.
 
 Não agrupe operações apenas pelo verbo SQL. Uma mesma entidade pode concentrar
 consultas, inserções, atualizações e exclusões relacionadas ao seu contrato.
@@ -31858,8 +33677,8 @@ como `identidade_do_item`. Fila e histórico nunca recebem backfill posterior.
 O worker é o único dono da promoção/reconciliação. O gate autoritativo ocorre em
 `validar_banco_mensagem()` antes da primeira mutação e diferencia o remetente do
 cartão compartilhado. Clientes e conversas envolvidos são bloqueados em ordem
-determinística. Um lock que ainda não ultrapassou o limiar de 110 segundos da
-V1.0.7 gera rollback e requeue sem erro; um lock stale segue a recuperação
+determinística. Um lock que ainda não ultrapassou o limiar de 110 segundos preservado na
+baseline V1.1.0 gera rollback e requeue sem erro; um lock stale segue a recuperação
 versionada já existente.
 
 O resultado terminal `bloqueio_reconciliado` pertence à mesma transação do
@@ -31889,7 +33708,7 @@ do Django ou uma fronteira explícita quando necessário.
 
 ## Webhook
 
-`callback/webhook` é a fronteira HTTP do sistema.
+`callback/webhook` é a fronteira HTTP de recebimento dos eventos da Meta.
 
 Responsabilidades:
 
@@ -31912,6 +33731,43 @@ O webhook não deve:
 
 Serviços HTTP pequenos ficam em `callback/webhook/services/`. `views.py` deve ser
 uma borda fina e delegar o fluxo para esses serviços.
+
+## Monitoramento
+
+`callback/monitoramento` é um aplicativo Django próprio, registrado em
+`INSTALLED_APPS`. Reúne login, autorização e interface do painel por
+unidade, sem participar do recebimento de eventos da Meta. Compartilha o projeto
+Django, a autenticação e o banco existentes. Login, conversas, relatórios e
+exportação de contatos pertencem ao mesmo aplicativo.
+
+`callback/monitoramento/monitoramento_guard.py` valida a sessão Django e usa um
+cursor do Django para a leitura autoritativa em
+`core/repositories/monitoramento/acessos.py`.
+O repositório recebe o cursor, não abre conexão nem importa Django. Não há cache
+do vínculo: ele é lido de `unidade.id_usuario_monitoramento`, sem tabela
+intermediária. O login valida o vínculo antes de criar a sessão e ao mostrar a
+confirmação de acesso. Cada rota de dados chama o guard e aplica explicitamente
+o `id_unidade` retornado em todas as consultas.
+
+`forms.py` estende a autenticação nativa do Django, sem SQL próprio para senhas.
+`views.py` controla login, logout por POST, respostas HTML, APIs GET e CSV;
+`urls.py` publica `/`, `/login/`, `/sair/`, `/dados/...` e `/contatos.csv`.
+`services.py` coordena as leituras e `apresentacao.py` mantém transformações
+puras. Os contratos completos estão no
+[README dos aplicativos](callback/README.md#cadastro-e-autorização-do-monitoramento).
+
+Templates e arquivos estáticos do painel pertencem, respectivamente, a
+`callback/monitoramento/templates/monitoramento/` e
+`callback/monitoramento/static/monitoramento/`. CSS, JavaScript e logo são locais,
+sem recursos de terceiros na página. SQL de runtime continua em
+`core/repositories/monitoramento/`, inclusive as leituras em `painel.py`; testes
+continuam em `tests/`. O modelo `Unidade` e seu Admin permanecem em
+`callback/webhook`.
+
+A atualização automática é iniciada pelo JavaScript da página e gera requisições
+GET comuns: 10 segundos para conversas e 30 segundos para relatórios. Ela não é
+um worker, orquestrador ou serviço systemd. O mesmo processo web atende webhook,
+Admin e monitoramento; o navegador só consulta a seção ativa e visível.
 
 ## Workers
 
@@ -32444,7 +34300,8 @@ Use esta sequência:
 4. Chama serviço externo compartilhado? `core/integrations/<serviço>`.
 5. Chama diretamente PyWa? `core/integrations/whatsapp/pywa_functions`.
 6. Define texto ou callback do WhatsApp? `messages`.
-7. Trata entrada HTTP? `callback/webhook`.
+7. Trata HTTP da Meta? `callback/webhook`. Trata acesso ou interface do painel?
+   `callback/monitoramento`.
 8. Decide processamento assíncrono ou etapa? `workers`.
 9. É comando humano de diagnóstico, monitoramento, manutenção ou probe?
    `utilitarios`.
@@ -32472,8 +34329,8 @@ Durante a implementação:
 Depois da implementação:
 
 ```powershell
-python -m unittest discover -s tests -v
-python -m compileall core workers callback tests
+python -m unittest discover -s tests -t . -p "test_*.py" -v
+python -m compileall core workers callback utilitarios tests
 python callback/manage.py check
 git diff --check
 ```
@@ -32505,7 +34362,7 @@ regras de negócio.
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `428dc6366ac0c7fa68ff4170de701fed141c4cd4ef99deabe1f7d1844ace893c`
+SHA-256 do conteúdo UTF-8 normalizado: `293dd2583f828bc1aa9cbe07604392ae59b9a99a4df6ecbc47518170925fdc2c`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -32625,20 +34482,16 @@ Fila A: processing, respondida
 Fila B: pending, sem resposta
 ```
 
-#### Etapa 3 - outro worker seleciona B imediatamente
+#### Etapa 3 - outro ciclo seleciona B
 
-Se o lock da conversa ainda pertencer ao worker que caiu:
-
-```text
-tentar_lock_conversa(B) => False
-```
-
-B permanece `processing`. A recusa do lock não exclui B e não a trata como erro
-de processamento.
+Antes de resolver a conversa ou tentar seu lock, o worker procura uma mensagem
+anterior ainda aberta para o mesmo cliente e unidade. Como A continua
+`processing`, B é devolvida para `pending` por 30 segundos. Essa espera não
+consome tentativa de erro.
 
 ```text
 Fila A: processing, respondida
-Fila B: processing, sem resposta
+Fila B: pending, sem resposta
 ```
 
 #### Etapa 4 - o cliente envia C
@@ -32648,7 +34501,7 @@ O webhook examina individualmente todas as filas abertas:
 | Fila | Status | Resposta própria do bot |
 |---|---|---|
 | A | `processing` | Sim |
-| B | `processing` | Não |
+| B | `pending` | Não |
 
 Como B ainda não possui resposta própria:
 
@@ -32659,14 +34512,10 @@ todas_abertas_respondidas = False
 C é descartada e nunca entra no banco. O `last_message_from = 'bot'` deixado por
 A não libera C, porque não existe histórico do bot vinculado especificamente a B.
 
-#### Etapa 5 - B adquire o lock antes da recuperação de A
+#### Etapa 5 - B aguarda a recuperação de A
 
-Se o lock antigo já tiver expirado, B poderá adquiri-lo. Em seguida,
-`reagendar_se_houver_mensagem_anterior()` encontrará A, que é mais antiga e ainda
-está aberta.
-
-B será devolvida para `pending` por 30 segundos, e o retry utilizado para essa
-espera será compensado:
+Enquanto A continuar aberta, cada claim de B repetirá a verificação de ordem e a
+devolverá para `pending` por 30 segundos, sem tentar o lock da conversa:
 
 ```text
 Fila A: processing, respondida
@@ -32694,7 +34543,9 @@ Fila B: pending
 
 #### Etapa 7 - B é processada
 
-B adquire o lock, não encontra mensagem anterior aberta e segue normalmente.
+B já não encontra mensagem anterior aberta, resolve a conversa, adquire o lock e
+segue normalmente. Se esse lock for recusado por outro motivo, B volta para
+`pending` por 5 segundos, também sem consumir uma tentativa de erro.
 Enquanto B não possuir sua própria resposta do bot, qualquer C será descartada.
 
 Depois que a resposta de B for persistida, a primeira mensagem do próximo turno
@@ -32771,7 +34622,7 @@ Implementação principal:
 ## 5. Ordenação e exclusão mútua
 
 - Uma conversa deve ser processada por apenas um worker por vez.
-- O lock da conversa preserva exatamente o predicado da V1.0.7: só poderá ser
+- O lock da conversa preserva exatamente o predicado preservado na V1.1.0: só poderá ser
   retomado quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`.
 - `lock_version` impede que um worker antigo libere o lock adquirido por um
   worker mais novo.
@@ -32830,6 +34681,12 @@ Implementação principal:
 - A etapa 12 introduz a triagem, as etapas 13 a 18 fazem as seis perguntas e a
   etapa 19 apresenta o agendamento. A etapa 19 torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
+- Na etapa 12, o clique em `Começar triagem` e confirmações textuais inequívocas
+  disparam o mesmo evento `triagem_iniciada`. A regra aceita, entre outras,
+  `Começar triagem`, `sim começar triagem`, `pode começar triagem`, `Iniciar a
+  triagem`, `sim`, `vamos`, `bora`, `pode prosseguir` e variações equivalentes
+  de começar, iniciar, continuar ou prosseguir. Negativas e respostas ambíguas
+  mantêm a conversa na etapa 12. Botão e texto livre passam pelo mesmo validador.
 - As etapas 13 a 18 não mudam de ID nem de transição conforme a idade. Elas
   selecionam somente o texto da pergunta: titular usa sempre a versão adulta;
   dependente com menos de 18 anos usa a versão infantil; dependente com 18 anos
@@ -32876,7 +34733,7 @@ Implementação principal:
   `conversa.profissao`, que continua sendo o snapshot daquele atendimento.
 - Lock fresco em qualquer conversa envolvida cancela o merge inteiro e reagenda
   o item por 5 segundos sem consumir retry. Lock stale segue exatamente o limiar
-  de 110 segundos da V1.0.7 e incrementa `lock_version`; o dono antigo não pode
+  de 110 segundos preservado na V1.1.0 e incrementa `lock_version`; o dono antigo não pode
   liberar a versão nova.
 - Se o cliente canônico ainda possui bloqueio comercial vigente, a conversa nova
   fecha com `bloqueio_reconciliado`, o item atual é removido atomicamente e nada
@@ -32898,7 +34755,7 @@ Implementação principal:
 
 - Uma conversa torna-se elegível ao entrar na etapa 19.
 - As etapas 19 a 23 permanecem elegíveis. Assim, avançar na pesquisa
-  antes do próximo ciclo horário não remove a conversa da fila do Funil.
+  antes do próximo ciclo do worker não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
 - O worker cria uma oportunidade por vez na coluna `Leads` do CRM.
@@ -32919,8 +34776,9 @@ Implementação principal:
   não altera `lead_no_funil`.
 - `funil_envios` usa claim com `FOR UPDATE SKIP LOCKED` e lease para recuperar
   itens abandonados em `processing`.
-- O título `Chatbot Lead [C<id_conversa>]` fornece referência determinística
-  para auditoria e reconciliação manual.
+- O título segue `Chatbot Lead <nome_unidade>`. A conversa é identificada pelos
+  dados do snapshot e pelo estado local de `funil_envios`; o CRM não recebe o ID
+  interno da conversa no título.
 - A V1 não cria atividade e não sincroniza atualizações posteriores do CRM.
 
 O processo é desativado por padrão e só inicia com
@@ -33002,9 +34860,10 @@ Implementação principal:
   cadastrado para a combinação `origem + evento`.
 - Uma etapa poderá possuir mais de um destino, desde que cada evento identifique
   uma única transição.
-- A etapa nunca poderá retroceder.
-- Saltos numéricos são permitidos somente quando existir uma aresta explícita,
-  como `19 + comentario_satisfacao_recusado -> 21`.
+- Avanços, saltos e o retorno controlado `9 + retorno_adiado -> 8` são permitidos
+  somente quando existe uma aresta explícita.
+- Um exemplo de salto autorizado é
+  `20 + comentario_satisfacao_recusado -> 22`.
 - A atualização utilizará a origem persistida no histórico da mensagem e será
   revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do
@@ -33012,8 +34871,8 @@ Implementação principal:
 - Tratamentos que apenas orientam o cliente poderão responder sem avançar a
   etapa e não produzirão evento de transição.
 
-Retrocesso ou transição sem aresta cadastrada é bug. A ordem numérica dos IDs
-serve para organização e não define navegação.
+Qualquer transição sem aresta cadastrada é bug. A ordem numérica dos IDs serve
+para organização e não define navegação.
 
 ## 11. Tipos de mensagem na V1
 
@@ -33355,9 +35214,8 @@ Funil confirmou a oportunidade
         -> retry pode criar outra oportunidade
 ```
 
-O estado `processing` e o título determinístico reduzem e tornam rastreável esse
-caso, mas não existe exatamente uma vez sem consulta de reconciliação suportada
-pelo CRM.
+O estado local `processing` e o snapshot persistido tornam o caso rastreável, mas
+não existe exatamente uma vez sem consulta de reconciliação suportada pelo CRM.
 
 ## 15. O que é bug na V1
 
@@ -33370,7 +35228,7 @@ São bugs, entre outros:
 - o bot enviar novamente quando a resposta atual já estiver persistida;
 - `last_message_from` permanecer como `cliente` quando a resposta atual do bot já
   estiver persistida, ou como `bot` quando ainda não existir resposta persistida;
-- uma etapa retroceder ou saltar mais de uma posição;
+- uma etapa mudar sem a aresta `origem + evento -> destino` autorizada;
 - duas mensagens do mesmo turno avançarem a conversa como se fossem turnos
   independentes;
 - uma mensagem posterior ultrapassar outra anterior ainda aberta na conversa;
@@ -33578,14 +35436,17 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 - Se o Redis falhar depois de a Meta responder, o banco deverá permanecer sem
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
 - Exclusão em massa de unidades é proibida.
+- `suporte_idoso` e `email_obrigatorio` são editáveis no Admin; a ativação do
+  suporte exige um número comercial válido. `waba_id` e `phone_number_id` ficam
+  somente leitura depois da criação.
 
 ### 19.4. Papel de `status_pagamento`
 
 `status_pagamento` não representa vinculação ou desvinculação do número no WABA.
 
-- O campo está reservado ao controle comercial da unidade.
-- Futuramente, ele poderá desativar o atendimento de unidades com pagamento
-  vencido.
+- O campo é o controle atual de admissão da unidade: somente registros com
+  `status_pagamento = TRUE` entram no cache de unidades ativas e são localizados
+  pelo webhook e worker.
 - Uma futura tabela `payment` poderá automatizar essa decisão, mas ela não faz
   parte da V1.
 - Na V1, pagamentos e contratos poderão ser controlados manualmente, contrato por
@@ -33618,6 +35479,93 @@ Implementação principal:
 - `core/integrations/whatsapp/tools/ativando_numero.py`
 - `core/integrations/whatsapp/tools/desativando_numero.py`
 
+### 19.6. Contas de monitoramento por unidade
+
+- `chatbot.unidade.id_usuario_monitoramento` referencia `chatbot.auth_user.id`.
+  O vínculo é opcional e único: cada usuário pode monitorar no máximo uma
+  unidade e cada unidade pode possuir no máximo uma conta de monitoramento.
+  Várias unidades podem manter o campo `NULL`, sem acesso de monitoramento.
+- Login, hash da senha e ativação da conta pertencem à autenticação do Django;
+  a unidade armazena somente a referência. No Admin, crie a conta em **Usuários**
+  e selecione-a no campo **Usuário de monitoramento** do cadastro da unidade.
+- Contas de monitoramento não possuem `is_staff` nem `is_superuser`. O formulário
+  recusa contas administrativas e a autorização também confere esses estados
+  diretamente no banco, além de `is_active`.
+- A identidade vem de `request.user`; usuário/unidade informados pelo navegador
+  não definem o escopo. Sem sessão válida, vínculo ou conta habilitada, o acesso
+  é negado. Erro de banco não autoriza leitura.
+- Conversas são autorizadas por `conversa.id_unidade`; mensagens, pela unidade
+  de sua conversa. O cadastro global de cliente não concede acesso às conversas
+  dele em outras unidades. Se conversa e mensagem forem informadas juntas, a
+  mensagem deve pertencer àquela conversa.
+- O vínculo é consultado a cada requisição, sem cache nem bypass administrativo.
+  Remover o vínculo, desativar a conta ou mudar sua unidade afeta a próxima
+  consulta. `status_pagamento` continua com sua finalidade de admissão do bot;
+  não é um novo bloqueio do monitoramento.
+- Excluir um usuário limpa a referência por `ON DELETE SET NULL`, preservando
+  a unidade, suas conversas e seu histórico. Excluir a unidade pelo fluxo
+  administrativo existente não exclui a conta Django. Limpar somente o campo
+  de monitoramento revoga o acesso sem excluir entidades.
+- O login usa o par `username`/senha da mesma conta e o verificador de hash
+  nativo do Django. Antes de criar a sessão, exige conta habilitada, comum e
+  vinculada a uma unidade. Usuário inexistente e senha incorreta recebem o
+  mesmo aviso. Não há cadastro, recuperação/troca de senha ou bloqueio após
+  três tentativas no portal; o proprietário administra as contas pelo Admin.
+- Login e logout usam CSRF; logout somente por POST. O destino após autenticar
+  é fixo, sem aceitar redirecionamento escolhido pelo navegador. A senha fica
+  mascarada e não volta preenchida após erro. Falhas de banco não liberam acesso.
+- O acesso bem-sucedido abre o painel em `/`. A página e todas as rotas de dados
+  usam `exigir_acesso_monitoramento` e mantêm cada SELECT limitado à unidade
+  retornada. A autorização não filtra automaticamente outros SQLs ou QuerySets.
+- O painel é somente leitura. Suas rotas de dados aceitam apenas GET; não há
+  envio de mensagens, cadastro, edição nem exclusão de informações.
+- O período padrão cobre a primeira mensagem de cliente registrada na unidade
+  até o instante da consulta. Também são aceitas janelas de 24 horas, 7 e 30
+  dias, 2, 3 e 6 meses e 1 ano. Uma janela finita compara seus indicadores com
+  a janela imediatamente anterior de igual duração.
+- Conversas técnicas do mesmo cliente são consolidadas somente dentro da unidade
+  autorizada. Os filtros locais são Todas, Continuações, Funil e Avaliadas; os
+  perfis visuais são Menor de 18, Adulto, 60+ e Dependente. Na lista de
+  conversas, as etiquetas ao lado da data preservam a relação entre faixa
+  etária e destino nas formas abreviadas DP -18, DP 18–59, DP 60+, 18–59 e
+  60+; a descrição completa permanece disponível como informação acessível.
+- O navegador consulta conversas a cada 10 segundos e relatórios a cada 30
+  segundos quando a página está visível. Voltar à aba força uma leitura. Esse
+  polling usa o mesmo serviço Django/Gunicorn do webhook e não cria worker ou
+  serviço systemd adicional.
+- As opções `suporte_idoso`, `email_obrigatorio` e `bpa_ativo` são lidas da
+  unidade. Elas controlam as informações e interpretações exibidas, inclusive a
+  idade mínima do dependente e os casos em que envio ao Funil não se aplica.
+- O painel nunca expõe o `user_id` privado da Meta, nem no HTML, JSON ou CSV.
+  Quando existe WA ID canônico, o campo de contato mostra esse telefone. Enquanto
+  o cliente provisório ainda não compartilhou o contato oficial, o mesmo espaço
+  mostra o `@username` normalizado; sem ambos, mostra `Contato não compartilhado`.
+  Username continua sendo somente apresentação e pesquisa, sem virar identidade,
+  destinatário, chave de cache, turno, lock ou vínculo entre clientes.
+- Um contato sem WA ID permanece com telefone vazio no CSV completo e nunca entra
+  no CSV de elegíveis. O username não é exportado como telefone e o `user_id` não
+  é exportado em nenhuma coluna.
+- A etiqueta `Bloqueado · 12 repetições` aparece somente quando a conversa atingiu
+  `turnos_sem_avanco = 12` e existe bloqueio persistido para o mesmo cliente e
+  unidade em `cliente_bloqueado_meta`. Um contador isolado ou uma linha de outra
+  unidade não autoriza a marcação.
+- O histórico visual reconhece a solicitação da etapa 2 como `contact_request` e
+  apresenta o controle desabilitado `Compartilhar contato`, apenas para reproduzir
+  o que foi enviado; o painel continua sem executar ações no WhatsApp.
+- O relatório mostra métricas, comparação, demanda ao longo do tempo, perfis,
+  satisfação e a etapa atual da conversa mais recente de cada contato que teve
+  atividade no período. Cada contato conta uma vez. A etapa é um retrato atual;
+  o banco não permite reconstruir em qual etapa a conversa estava em uma data
+  passada.
+- O histórico armazena texto e tipo da mensagem, mas não o payload exato dos
+  botões enviados. Para mensagens interativas, o painel mostra os botões do
+  catálogo atual daquela etapa como referência visual, sempre desabilitados.
+- O CSV completo inclui todos os contatos ativos no período e deixa campos
+  ausentes vazios. O CSV elegível exige nome, e-mail estruturalmente válido e
+  telefone normalizado. Ambos usam
+  cabeçalhos compatíveis com importação no Google Contatos e nunca alteram o
+  banco.
+
 ## 20. Disponibilidade e recuperação automática
 
 “O sistema não deve cair nunca” é um requisito de resiliência operacional e
@@ -33643,21 +35591,22 @@ serviço:
 - caches degradam para fallback ou negam uma operação administrativa que
   produziria inconsistência.
 
-Para a produção 24x7, o deploy futuro deverá utilizar Docker e uma política de
-reinício do container ou processo. As camadas serão complementares:
+Na produção atual, webhook, worker de atendimento e worker do Funil são serviços
+systemd independentes, todos com `Restart=always` e espera de 5 segundos. As
+camadas de recuperação são complementares:
 
 ```text
 operação individual falha
     -> exception ou fallback trata
     -> flow_worker continua
     -> iniciar_flow_worker reinicia o fluxo se ele escapar
-    -> Docker reinicia o processo ou container se necessário
+    -> systemd reinicia o processo se ele encerrar
 ```
 
-A URL pública e os containers de produção deverão permanecer disponíveis 24x7.
+A URL pública e os serviços de produção devem permanecer disponíveis 24x7.
 Falhas previstas não poderão produzir encerramento permanente do serviço nem
-corrupção silenciosa. A infraestrutura Docker ainda é uma etapa futura do deploy;
-os loops e fallbacks da aplicação já formam a base dessa estratégia.
+corrupção silenciosa. Os loops e fallbacks da aplicação atuam antes da supervisão
+dos processos pelo sistema operacional.
 
 Implementação principal:
 
@@ -33667,6 +35616,9 @@ Implementação principal:
 - `workers/worker_funil/iniciar_worker_funil.py`
 - `core/cache/redis_client.py`
 - `callback/webhook/services/post_flow.py`
+- `deploy/systemd/chatbot-webhook.service`
+- `deploy/systemd/chatbot-worker-flow.service`
+- `deploy/systemd/chatbot-worker-funil.service`
 
 ## 21. Matriz de aderência conferida no código
 
@@ -33681,15 +35633,15 @@ Implementação principal:
 | Falha operacional do webhook com mensagem válida | Implementada | Inserção/commit da fila e validação de unidade indisponível retornam HTTP 503 para permitir reentrega; descartes de negócio continuam HTTP 200. |
 | Cache Redis com fallback para banco | Implementada nos caches principais | Unidades, clientes e conversas bloqueadas possuem estratégias de fallback. |
 | Autocura Redis/banco | Implementada no contrato da V1 | Cobre falhas detectáveis e FK stale; edição direta no banco é proibida em produção. |
-| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade e desbloqueio individual. |
+| Admin majoritariamente somente leitura | Implementada | As exceções operacionais são unidade (incluindo seu usuário de monitoramento), integração com o Funil e desbloqueio individual. |
 | Admin somente desbloqueia clientes | Implementada | Meta primeiro; falha preserva o registro no banco. |
 | Unidade Meta-first na criação e exclusão | Implementada | Falha da Meta impede a alteração do banco. |
-| `status_pagamento` sem chamada Meta | Implementada conforme a regra | O campo é comercial; a futura automação de pagamentos não pertence à V1. |
+| `status_pagamento` sem chamada Meta | Implementada conforme a regra | O valor controla a admissão da unidade, mas não registra nem remove o número na Meta. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 19–23, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Deploy Docker 24x7 | Futuro | Containers e política de restart complementarão as proteções da aplicação. |
+| Supervisão dos três processos | Implementada | Os serviços systemd usam `Restart=always`; Nginx encaminha os endpoints públicos ao Django/Gunicorn. |
 
 ## 22. Orientação para futuras alterações
 
@@ -33710,7 +35662,7 @@ Antes de modificar o fluxo:
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `de3310e2f4985d9c05ce5a304195f4287ae559beb08dce5807b470a8353cef24`
+SHA-256 do conteúdo UTF-8 normalizado: `3a32bf0af963bbc5df17ad4322eea681c3e8b940d993742384591e2f03a701c0`
 
 ````markdown
 # Rotina de implementação de novas etapas
@@ -33980,7 +35932,7 @@ Exemplos:
 ```text
 valida_etapa2.py
 valida_etapa4.py
-valida_quarta_etapa.py
+valida_etapa7.py
 ```
 
 O validador específico:
@@ -34008,6 +35960,11 @@ validador_nome.py
 
 O validador de nome é universal porque valida tanto o nome do cliente quanto o
 nome do dependente.
+
+Uma validação pura compartilhada por outros domínios não precisa ficar dentro do
+worker. O contrato estrutural de e-mail, usado pelo fluxo e pela reconstrução do
+snapshot do Funil, pertence a `core/validacoes/email.py`. Esse módulo não acessa
+banco, não envia mensagens e não decide transições.
 
 #### Regra de classificação dos validadores
 
@@ -34110,19 +36067,30 @@ def resolve_etapa5(contexto_historico):
     if not resultado.valida:
         return enviar_etapa5_contexto_profissao_invalida(...)
 
+    status_dependente = contexto_historico["status_dependente"]
+    if status_dependente:
+        evento = EVENTO_PROFISSAO_DEPENDENTE_VALIDA
+        destino_esperado = ETAPA_6_NOME_DEPENDENTE
+    else:
+        evento = EVENTO_PROFISSAO_TITULAR_VALIDA
+        destino_esperado = ETAPA_7_IDADE_ALUNO
+
+    # A resposta já foi tratada; o mapa agora autoriza somente a aresta esperada.
     destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_PROFISSAO_TITULAR_VALIDA,
-        destinos_esperados={ETAPA_7_IDADE_ALUNO},
+        evento,
+        destinos_esperados={destino_esperado},
     )
 
-    contexto_envio = enviar_etapa7_cliente(...)
+    contexto_envio = (
+        enviar_etapa6(...) if status_dependente else enviar_etapa7_cliente(...)
+    )
     contexto_envio["profissao"] = resultado.profissao
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_PROFISSAO_TITULAR_VALIDA,
+        evento,
         destino,
     )
 ```
@@ -34140,8 +36108,9 @@ workers/worker_flow/response_flow/flow_sender.py
 Exemplo:
 
 ```python
-if id_etapa_atual == 4:
-    return resolve_etapa4(contexto_historico)
+resolver = RESOLVERS.get(id_etapa_atual)
+with usar_prefixo_mensagem_bot(saudacao_retorno):
+    contexto_envio = resolver(contexto_historico)
 ```
 
 O `flow_sender`:
@@ -34151,6 +36120,12 @@ O `flow_sender`:
 - não decide destino;
 - não executa SQL;
 - não chama PyWa diretamente.
+
+A etapa 1 ainda não possui nome confirmado e é chamada diretamente. Nas etapas
+2 a 22, a rota atual usa `_resolver_com_saudacao` para aplicar, no mesmo envio e
+sem mudar validação ou destino, o prefixo de retorno quando a última mensagem do
+bot daquela conversa tem pelo menos três horas. A barreira de resposta já
+existente continua antes dessa lógica, para o retry não gerar novo envio.
 
 Uma etapa não implementada deve continuar levantando `NotImplementedError`.
 Não retornar sucesso fictício.
@@ -34279,15 +36254,15 @@ Estrutura:
 core/integrations/whatsapp/
 ├── messages/
 │   ├── etapa1_messages.py
-│   ├── etapa2_messages.py
-│   └── etapa3_messages.py
+│   ├── ...
+│   └── etapa22_messages.py
 └── pywa_functions/
     ├── cliente.py
     ├── saudacao.py
     └── pywa_senders/
         ├── etapa1.py
-        ├── etapa2.py
-        └── etapa3.py
+        ├── ...
+        └── etapa22.py
 ```
 
 ### Fronteiras
@@ -34399,7 +36374,8 @@ regex.
 
 ### Regressão
 
-Sempre executar:
+Executar os módulos diretamente afetados e, ao final, a suíte completa. Entre os
+contratos críticos atuais estão:
 
 ```text
 test_fluxo_turno_abc
@@ -34407,6 +36383,10 @@ test_retry_essencial
 test_persistencia_essencial
 test_validador_profissao
 test_worker_flow_runtime
+test_suporte_idoso_email_obrigatorio
+test_saudacao_retorno
+test_valida_etapa12
+test_monitoramento_painel
 ```
 
 ## Definition of done
@@ -34938,7 +36918,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `46bfa80ca81c3c7c7d50536431c8698692457051553a5f0a02dd8d0c7b9ce392`
+SHA-256 do conteúdo UTF-8 normalizado: `f3aa1f936c506b8ee2ce480e7b840141a730b5a297c0425472423cbbb82747d7`
 
 ````python
 import ast
@@ -35031,7 +37011,7 @@ ADICOES_EDITORIAIS_AUTORIZADAS_V107 = {
 
 def _ler_arquivo_da_v107(caminho):
     processo = subprocess.run(
-        ["git", "show", f"2bc4188:{caminho}"],
+        ["git", "show", f"3f75447:{caminho}"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.PIPE,
@@ -35050,7 +37030,7 @@ def _literal_atribuido(fonte, nome):
             for alvo in no.targets
         ):
             return ast.literal_eval(no.value)
-    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.0.7")
+    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.1.0")
 
 
 def _strings_executaveis(fonte):
@@ -36601,7 +38581,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f3b8c8f6795871e478154469a088c567b337b01e9dd0977ffcb52a5a423b1632`
+SHA-256 do conteúdo UTF-8 normalizado: `6c654f07c1f08ef43554cc8bdd086d1843b330a59bd0137b1401b708ebcda60b`
 
 ````python
 import inspect
@@ -37073,7 +39053,7 @@ class ContratosConcorrenciaIdentidadeTests(unittest.TestCase):
             ROOT
             / "deploy"
             / "migrations"
-            / "20260813_adicionar_user_id_whatsapp.sql"
+            / "20260904_adicionar_user_id_whatsapp.sql"
         ).read_text(encoding="utf-8")
         self.assertIn("status_ativa IS TRUE", sql_final)
         self.assertIn("INTERVAL '110.0 seconds'", sql_final)
@@ -37263,7 +39243,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f5ee04d5181ba998644b5f9ad03799674c2e0188f40100a698df3f7dfcedcf90`
+SHA-256 do conteúdo UTF-8 normalizado: `7fce4dd553f6e91e9b69d4ead33c5529bc8bc42ae38ad02431db901f43590d4e`
 
 ````python
 import inspect
@@ -37374,6 +39354,29 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         ]
 
         self.assertEqual(posicoes, sorted(posicoes))
+
+    def test_evento_system_e_reconhecido_sem_assumir_contrato_de_troca(self):
+        payload = {
+            "entry": [{
+                "changes": [{
+                    "value": {
+                        "system": {"type": "user_changed_user_id"},
+                    },
+                }],
+            }],
+        }
+
+        self.assertEqual(
+            post_flow._classificar_evento_meta(payload),
+            post_flow.TIPO_EVENTO_SYSTEM,
+        )
+        payload["entry"][0]["changes"][0]["value"]["messages"] = [
+            {"id": "wamid.nao_processar"}
+        ]
+        self.assertEqual(
+            post_flow._classificar_evento_meta(payload),
+            post_flow.TIPO_EVENTO_DESCONHECIDO,
+        )
 
     def test_fila_vazia_aguarda_um_segundo_e_meio(self):
         with (
@@ -38583,7 +40586,7 @@ Substituir integralmente o arquivo com o conteúdo completo abaixo. Esta suíte
 preserva a matriz atual de `suporte_idoso` e `email_obrigatorio`, movendo
 somente os IDs físicos afetados pela nova etapa oficial de contato.
 
-SHA-256 do conteúdo UTF-8 normalizado: `b96c1e43d53151f556711ef5a835591de2a4241e24669ade44057be261dae955`
+SHA-256 do conteúdo UTF-8 normalizado: `c18f9efff974bed083db027ac4e9b88fedbc8bfcde8f80d8ec8d191f6eea1059`
 
 ````python
 import unittest
@@ -39161,7 +41164,7 @@ class PersistenciaEmailEFunilTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         migracao_user_id = (
             RAIZ_PROJETO
-            / "deploy/migrations/20260813_adicionar_user_id_whatsapp.sql"
+            / "deploy/migrations/20260904_adicionar_user_id_whatsapp.sql"
         ).read_text(encoding="utf-8")
 
         for conteudo in (ddl, migracao):
@@ -39287,14 +41290,702 @@ if __name__ == "__main__":
 
 
 
+## Passo 159E — `tests/README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. O catálogo da suíte inclui a futura etapa 12 e os contratos do monitoramento adaptados a 23 etapas.
+
+SHA-256 do conteúdo UTF-8 normalizado: `398224e489299019d851c964d0589ffcefe4bc489e5b85ff6289638f18835026`
+
+````markdown
+# Testes do projeto
+
+Esta pasta reúne a suíte unitária e de contrato do projeto. Além do núcleo
+transacional, ela cobre regras e utilitários já implementados:
+
+- cenário completo de turno A/B/C;
+- retry, requeue, ordem da fila e fencing por `lock_version`;
+- persistência idempotente, avanço e não avanço de etapa;
+- checkpoints, commits, rollback e conclusão da fila no worker.
+- suporte ao idoso e obrigatoriedade do e-mail;
+- validação da oferta, início da triagem, profissão e saudação após inatividade;
+- montagem dos relatórios semanais e totais;
+- payloads e sondas manuais do Funil;
+- vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
+- login nativo, par username/senha, sessão, CSRF e revogação do acesso ao portal;
+- painel somente leitura, períodos, consultas por unidade, botões históricos,
+  indicadores e arquivos Google CSV.
+
+Para executar a suíte completa a partir da raiz:
+
+```powershell
+python -m unittest discover -s tests -t . -p "test_*.py"
+```
+
+Organização atual:
+
+```text
+tests/unit/test_fluxo_turno_abc.py
+tests/unit/test_retry_essencial.py
+tests/unit/test_persistencia_essencial.py
+tests/unit/test_worker_flow_runtime.py
+tests/unit/test_suporte_idoso_email_obrigatorio.py
+tests/unit/test_saudacao_retorno.py
+tests/unit/test_valida_etapa7.py
+tests/unit/test_valida_etapa12.py
+tests/unit/test_validador_profissao.py
+tests/unit/test_gerar_monitoramento_unidades.py
+tests/unit/test_metricas_perfis_relatorios.py
+tests/unit/test_sondas_funil.py
+tests/unit/test_monitoramento_unidade.py
+tests/unit/test_monitoramento_login.py
+tests/unit/test_monitoramento_painel.py
+```
+
+Os testes usam fakes e mocks para fronteiras externas: a descoberta da suíte não
+deve chamar Meta, Funil, Redis, RDS nem outro serviço real. Um utilitário manual
+não deve ser executado como forma de testar sua importação.
+
+Novos testes pertencem a `tests/unit/`; dados e classes auxiliares exclusivos de
+teste ficam em `tests/`, nunca nos módulos de produção.
+
+O teste de monitoramento executa o SQL de autorização em SQLite em memória,
+adaptando apenas os placeholders, com um cliente compartilhado por duas
+unidades. Cobre isolamento por conversa/mensagem, revogação do vínculo,
+desativação de conta, várias unidades sem conta, exclusividade do usuário,
+exclusão da conta com preservação da unidade, sessão inválida e falha de banco.
+Não acessa o RDS. `fixtures/unidade_monitoramento_legado.sql` representa apenas
+a proposta anterior para testar a transferência dos vínculos; não é uma
+migração de produção.
+
+`test_monitoramento_login.py` usa o backend, hashes de senha e sessões reais do
+Django com usuários fictícios e SQLite em memória. Cobre senha de outra conta,
+contas não autorizadas, erros, expiração de CSRF, logout, rotação de sessão,
+redirecionamento fixo e escape de HTML. Substitui somente a conexão da thread
+durante o teste e restaura-a ao terminar; não cria usuários nem tabelas no RDS.
+
+`test_monitoramento_painel.py` valida as rotas privadas, métodos permitidos,
+propagação obrigatória da unidade autorizada, quantidade de parâmetros dos SQLs,
+consolidação de perfis, 23 etapas, fallback visual de username sem exposição
+de `user_id`, bloqueio comprovado após 12 repetições, `contact_request`,
+períodos comparáveis e as duas variantes do CSV. Seus payloads vivem em `fixtures/monitoramento_painel.py` e são fictícios.
+````
+
+## Passo 159F — `tests/fixtures/monitoramento_painel.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. Os dados fictícios representam WA ID, fallback por username, bloqueio por repetição, `contact_request` e 23 etapas.
+
+SHA-256 do conteúdo UTF-8 normalizado: `6ade51579c6a207b7b9cda0d91f12055b4ddc3151867449c66c21249591fa6c8`
+
+````python
+"""Dados inteiramente fictícios usados pelos testes e pela revisão visual local."""
+
+
+CONVERSAS = {
+    'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'agente': 'Suh', 'regras': {
+        'suporte_idoso': True, 'email_obrigatorio': True, 'bpa_ativo': True,
+    }},
+    'periodo': {'chave': 'total', 'rotulo': 'Todo o histórico',
+                'inicio': '2026-07-29T23:55:00-03:00', 'fim': '2026-09-03T12:00:00-03:00',
+                'texto': '29/07/2026 23:55 até agora'},
+    'metricas': {'leads': 119, 'mensagens': 1864, 'funil': 31, 'avaliacoes': 17, 'nota_media': 4.53},
+    'conversas': [
+        {'id_cliente': 140, 'nome': 'Edcarlos', 'contato': '557194111866',
+         'contato_tipo': 'telefone', 'bloqueado_apos_repeticoes': False,
+         'email': 'edcarlos@example.com', 'profissao': 'Empresário', 'ids_conversa': [157, 159],
+         'perfis': ['adulto'], 'perfis_resumidos': ['adulto'],
+         'dependentes': [], 'foi_funil': True, 'avaliada': True,
+         'ultima_atividade': '2026-09-03T14:43:35Z', 'ultima_mensagem_id': 4,
+         'ultima_mensagem': 'Podemos começar? ☺️'},
+        {'id_cliente': 141, 'nome': 'Maria Souza', 'contato': '557599111222',
+         'contato_tipo': 'telefone', 'bloqueado_apos_repeticoes': False,
+         'email': 'maria@example.com', 'profissao': 'Professora', 'ids_conversa': [158],
+         'perfis': ['dependente', 'menor'], 'perfis_resumidos': ['dependente_menor'],
+         'dependentes': ['Lucas'], 'foi_funil': True, 'avaliada': False,
+         'ultima_atividade': '2026-09-03T13:31:17Z', 'ultima_mensagem_id': 141,
+         'ultima_mensagem': 'Quero agendar'},
+        {'id_cliente': 142, 'nome': 'Ariana', 'contato': '557791238060',
+         'contato_tipo': 'telefone', 'bloqueado_apos_repeticoes': False,
+         'email': '', 'profissao': 'Aposentada', 'ids_conversa': [150], 'perfis': ['idoso'],
+         'perfis_resumidos': ['idoso'],
+         'dependentes': [], 'foi_funil': False, 'avaliada': True,
+         'ultima_atividade': '2026-09-02T14:55:35Z', 'ultima_mensagem_id': 142,
+         'ultima_mensagem': 'Obrigada pelo atendimento'},
+        {'id_cliente': 143, 'nome': 'Joana Lima', 'contato': '557588000111',
+         'contato_tipo': 'telefone', 'bloqueado_apos_repeticoes': False,
+         'email': 'joana@example.com', 'profissao': 'Autônoma', 'ids_conversa': [149],
+         'perfis': ['dependente', 'adulto'], 'perfis_resumidos': ['dependente_adulto'],
+         'dependentes': ['Beatriz'], 'foi_funil': False, 'avaliada': False,
+         'ultima_atividade': '2026-09-01T11:41:00Z', 'ultima_mensagem_id': 143,
+         'ultima_mensagem': 'Às vezes'},
+        {'id_cliente': 144, 'nome': 'Cliente privado', 'contato': '@clienteprivado',
+         'contato_tipo': 'username', 'bloqueado_apos_repeticoes': True,
+         'email': '', 'profissao': '', 'ids_conversa': [160], 'perfis': [],
+         'perfis_resumidos': [], 'dependentes': [], 'foi_funil': False,
+         'avaliada': False, 'ultima_atividade': '2026-09-01T10:00:00Z',
+         'ultima_mensagem_id': 144, 'ultima_mensagem': 'Compartilhar contato'},
+    ],
+    'atualizado_em': '2026-09-03T15:00:00Z',
+}
+
+MENSAGENS = {
+    140: {'id_cliente': 140, 'mensagens': [
+        {'id_mensagem': 1, 'id_conversa': 157, 'id_etapa': 1, 'data': '2026-09-03T14:40:00Z', 'quem_enviou': 'cliente', 'tipo': 'text', 'texto': 'Olá', 'botoes': []},
+        {'id_mensagem': 2, 'id_conversa': 157, 'id_etapa': 3, 'data': '2026-09-03T14:40:04Z', 'quem_enviou': 'bot', 'tipo': 'interactive_button', 'texto': 'Esse atendimento é para você ou para um dependente?', 'botoes': ['Para mim', 'Para um dependente']},
+        {'id_mensagem': 3, 'id_conversa': 157, 'id_etapa': 3, 'data': '2026-09-03T14:40:20Z', 'quem_enviou': 'cliente', 'tipo': 'interactive', 'texto': 'Para mim', 'botoes': []},
+        {'id_mensagem': 4, 'id_conversa': 159, 'id_etapa': 12, 'data': '2026-09-03T14:43:35Z', 'quem_enviou': 'bot', 'tipo': 'interactive_button', 'texto': 'Vou fazer uma triagem rápida. Podemos começar? ☺️', 'botoes': ['Começar triagem']},
+    ]},
+}
+MENSAGENS[144] = {'id_cliente': 144, 'mensagens': [
+    {'id_mensagem': 144, 'id_conversa': 160, 'id_etapa': 2,
+     'data': '2026-09-01T10:00:00Z', 'quem_enviou': 'bot',
+     'tipo': 'contact_request', 'texto': 'Compartilhe seu contato oficial.',
+     'botoes': ['Compartilhar contato']},
+]}
+for _id in (141, 142, 143):
+    MENSAGENS[_id] = {'id_cliente': _id, 'mensagens': [
+        {'id_mensagem': _id, 'id_conversa': _id + 17, 'id_etapa': 7,
+         'data': '2026-09-03T13:31:17Z', 'quem_enviou': 'cliente',
+         'tipo': 'text', 'texto': 'Mensagem fictícia de revisão visual', 'botoes': []},
+    ]}
+
+NOMES_ETAPAS = [
+    'Saudação e nome do cliente', 'Compartilhamento do contato',
+    'Destino do atendimento', 'Confirmação do destino', 'Profissão do cliente',
+    'Nome do dependente', 'Idade do aluno', 'Oferta de aula', 'Oferta adiada',
+    'Retorno ao atendimento', 'E-mail', 'Introdução à triagem',
+    'Triagem · pergunta 1', 'Triagem · pergunta 2', 'Triagem · pergunta 3',
+    'Triagem · pergunta 4', 'Triagem · pergunta 5', 'Triagem · pergunta 6',
+    'Agendamento', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
+]
+RELATORIO = {
+    'unidade': {'nome': 'Supera Santo Antônio de Jesus'},
+    'periodo': CONVERSAS['periodo'], 'metricas': CONVERSAS['metricas'],
+    'tendencias': {'leads': 12.4, 'mensagens': 8.1, 'funil': -3.2, 'avaliacoes': 5.0, 'nota_media': 2.1},
+    'atividade': [
+        {'periodo': f'2026-08-{dia:02d}T12:00:00-03:00', 'leads': 7 + dia % 5, 'mensagens': 80 + dia * 3}
+        for dia in range(24, 31)
+    ],
+    'satisfacao': {'1': 0, '2': 0, '3': 1, '4': 6, '5': 10},
+    'perfis': {'idade_minima_dependente': 4, 'sem_classificacao': 12, 'linhas': [
+        {'rotulo': 'Dependentes de 4 a 17 anos', 'leads': 37, 'conversas': 37, 'funil': 24, 'taxa_funil': 64.9},
+        {'rotulo': 'Dependentes de 18 a 59 anos', 'leads': 3, 'conversas': 3, 'funil': 1, 'taxa_funil': 33.3},
+        {'rotulo': 'Dependentes com 60 anos ou mais', 'leads': 2, 'conversas': 2, 'funil': 0, 'taxa_funil': 0},
+        {'rotulo': 'Titulares de 18 a 59 anos', 'leads': 54, 'conversas': 56, 'funil': 6, 'taxa_funil': 11.1},
+        {'rotulo': 'Titulares com 60 anos ou mais', 'leads': 11, 'conversas': 11, 'funil': 0, 'taxa_funil': None},
+    ]},
+    'etapas': [{'id_etapa': i + 1, 'nome_etapa': nome, 'quantidade': (i * 7) % 19} for i, nome in enumerate(NOMES_ETAPAS)],
+    'atualizado_em': '2026-09-03T15:00:00Z',
+}
+
+CONTATOS = [
+    {'id_cliente': 140, 'nome': 'Edcarlos Silva',
+     'email': 'edcarlos@example.com', 'wa_id': '557194111866'},
+    {'id_cliente': 141, 'nome': None, 'email': None,
+     'wa_id': '557599111222'},
+]
+````
+
+## Passo 159G — `tests/unit/test_monitoramento_painel.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo. A cobertura prova isolamento por unidade, ausência de `user_id` na saída, precedência do WA ID, fallback visual, dupla prova de bloqueio, CSV e catálogo final.
+
+SHA-256 do conteúdo UTF-8 normalizado: `31b03c250421cb40550d76f2907826ab4a855193c3cdddf100c6bcfa3db1ef33`
+
+````python
+"""Contratos de leitura, isolamento e exportação do painel de monitoramento."""
+
+import csv
+from datetime import datetime, timedelta, timezone
+from io import StringIO
+import unittest
+from unittest.mock import patch
+
+from django.test import Client
+
+from monitoramento.apresentacao import (
+    botoes_para_mensagem,
+    consolidar_conversas,
+    montar_relatorio,
+    normalizar_telefone_google,
+)
+from monitoramento.periodos import resolver_periodo
+from monitoramento.services import _agrupar_perfis
+from core.repositories.monitoramento import painel as repositorio_painel
+from tests.fixtures.monitoramento_painel import CONTATOS, CONVERSAS, MENSAGENS, RELATORIO
+
+
+CABECALHO_OFICIAL_GOOGLE_CONTATOS = [
+    'Name Prefix', 'First Name', 'Middle Name', 'Last Name', 'Name Suffix',
+    'Phonetic First Name', 'Phonetic Middle Name', 'Phonetic Last Name',
+    'Nickname', 'File As', 'E-mail 1 - Label', 'E-mail 1 - Value',
+    'Phone 1 - Label', 'Phone 1 - Value', 'Address 1 - Label',
+    'Address 1 - Country', 'Address 1 - Street',
+    'Address 1 - Extended Address', 'Address 1 - City', 'Address 1 - Region',
+    'Address 1 - Postal Code', 'Address 1 - PO Box', 'Organization Name',
+    'Organization Title', 'Organization Department', 'Birthday',
+    'Event 1 - Label', 'Event 1 - Value', 'Relation 1 - Label',
+    'Relation 1 - Value', 'Website 1 - Label', 'Website 1 - Value',
+    'Custom Field 1 - Label', 'Custom Field 1 - Value', 'Notes', 'Labels',
+]
+
+
+class MonitoramentoPainelTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from tests.unit.test_monitoramento_login import LoginMonitoramentoTests
+        cls.cenario_classe = LoginMonitoramentoTests
+        cls.cenario_classe.setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.cenario_classe.tearDownClass()
+        super().tearDownClass()
+
+    def setUp(self):
+        self.cenario = self.cenario_classe(
+            methodName='test_formulario_oculta_senha_e_nao_oferece_cadastro_ou_recuperacao'
+        )
+        self.cenario.setUp()
+        self.cliente = self.cenario.cliente
+
+    def tearDown(self):
+        self.cenario.doCleanups()
+
+    def autenticar(self, usuario=None):
+        self.cliente.force_login(usuario or self.cenario.usuario_a)
+
+    def test_painel_exige_sessao_e_entrega_interface_somente_leitura(self):
+        self.assertEqual(self.cliente.get('/').status_code, 302)
+        for rota in ('/dados/conversas/', '/dados/relatorio/', '/contatos.csv'):
+            with self.subTest(rota=rota):
+                self.assertEqual(self.cliente.get(rota).status_code, 401)
+        self.autenticar()
+        resposta = self.cliente.get('/')
+        html = resposta.content.decode()
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn('Conversas', html)
+        self.assertIn('Relatórios', html)
+        self.assertIn('somente para monitoramento', html)
+        self.assertNotIn('Enviar mensagem', html)
+        self.assertIn("default-src 'self'", resposta.headers['Content-Security-Policy'])
+        self.assertIn('no-store', resposta.headers['Cache-Control'])
+
+    def test_endpoints_usam_unidade_do_usuario_autenticado(self):
+        for usuario, unidade in ((self.cenario.usuario_a, 10), (self.cenario.usuario_b, 20)):
+            with self.subTest(unidade=unidade):
+                self.cliente = Client()
+                self.autenticar(usuario)
+                with patch('monitoramento.views.carregar_conversas', return_value=CONVERSAS) as carregar:
+                    resposta = self.cliente.get('/dados/conversas/')
+                self.assertEqual(resposta.status_code, 200)
+                self.assertEqual(carregar.call_args.args[0].id_unidade, unidade)
+
+    def test_mensagens_de_cliente_inexistente_ou_de_outro_escopo_nao_vazam(self):
+        self.autenticar()
+        with patch('monitoramento.views.carregar_mensagens', return_value={'id_cliente': 999, 'mensagens': []}) as carregar:
+            resposta = self.cliente.get('/dados/conversas/999/')
+        self.assertEqual(resposta.status_code, 404)
+        self.assertEqual(carregar.call_args.args[0].id_unidade, 10)
+        self.assertNotIn('Unidade B', resposta.content.decode())
+
+    def test_periodo_invalido_e_metodos_de_escrita_sao_recusados(self):
+        self.autenticar()
+        with patch('monitoramento.views.carregar_conversas') as carregar:
+            self.assertEqual(self.cliente.get('/dados/conversas/?periodo=qualquer').status_code, 400)
+            carregar.assert_not_called()
+        for rota in ('/dados/conversas/', '/dados/relatorio/', '/contatos.csv'):
+            self.assertEqual(self.cliente.post(rota).status_code, 405)
+
+    def test_csv_google_completo_e_elegivel(self):
+        self.autenticar()
+        with patch('monitoramento.views.carregar_contatos', return_value=CONTATOS):
+            completo = self.cliente.get('/contatos.csv?tipo=todos')
+            elegivel = self.cliente.get('/contatos.csv?tipo=elegiveis')
+        self.assertFalse(completo.content.startswith(b'\xef\xbb\xbf'))
+        linhas = list(csv.reader(StringIO(completo.content.decode('utf-8'))))
+        self.assertEqual(linhas[0], CABECALHO_OFICIAL_GOOGLE_CONTATOS)
+        self.assertTrue(all(len(linha) == 36 for linha in linhas))
+        self.assertEqual(linhas[1][1], 'Edcarlos')
+        self.assertEqual(linhas[1][3], 'Silva')
+        self.assertEqual(
+            linhas[1][10:14],
+            ['Work', 'edcarlos@example.com', 'Mobile', '+557194111866'],
+        )
+        self.assertTrue(all(not valor for valor in linhas[1][14:34]))
+        self.assertEqual(
+            linhas[1][34],
+            'Contato exportado pelo monitoramento ESL Tech',
+        )
+        self.assertTrue(linhas[1][35])
+        self.assertEqual(linhas[2][10:12], ['', ''])
+        self.assertEqual(linhas[2][12:14], ['Mobile', '+557599111222'])
+        self.assertEqual(len(linhas), 3)
+        linhas_elegiveis = list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))
+        self.assertEqual(len(linhas_elegiveis), 2)
+        self.assertTrue(all(len(linha) == 36 for linha in linhas_elegiveis))
+        self.assertEqual(normalizar_telefone_google('(71) 94111-1866'), '+5571941111866')
+        self.assertEqual(normalizar_telefone_google('123'), '')
+
+        contato_invalido = [{
+            'nome': 'Contato Inválido', 'email': 'sem-arroba',
+            'wa_id': '557194111866',
+        }]
+        with patch('monitoramento.views.carregar_contatos', return_value=contato_invalido):
+            elegivel = self.cliente.get('/contatos.csv?tipo=elegiveis')
+        self.assertEqual(
+            len(list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))), 1
+        )
+
+    def test_botoes_historicos_vem_do_catalogo_oficial(self):
+        mensagem = {'quem_enviou': 'bot', 'tipo': 'contact_request', 'id_etapa': 2}
+        self.assertEqual(botoes_para_mensagem(mensagem), ['Compartilhar contato'])
+        mensagem.update(tipo='interactive_button', id_etapa=3)
+        self.assertEqual(botoes_para_mensagem(mensagem), ['Para mim', 'Para um dependente'])
+        mensagem['id_etapa'] = 13
+        self.assertEqual(botoes_para_mensagem(mensagem), ['Nunca', 'Às vezes', 'Frequentemente'])
+        mensagem['quem_enviou'] = 'cliente'
+        self.assertEqual(botoes_para_mensagem(mensagem), [])
+
+    def test_consolidacao_cria_tags_sem_misturar_unidades(self):
+        linhas = [
+            {'id_cliente': 1, 'id_conversa': 10, 'nome_cliente': 'Ana', 'wa_id': '5511', 'username_cliente': 'ana',
+             'status_dependente': True, 'idade_dependente': 12, 'foi_funil': False,
+             'avaliada': False, 'ultima_atividade': '2026-09-01',
+             'ultima_mensagem_id': 20, 'ultima_mensagem': 'Oi'},
+            {'id_cliente': 1, 'id_conversa': 11, 'nome_cliente': 'Ana', 'wa_id': '5511', 'username_cliente': 'ana',
+             'status_dependente': False, 'idade_titular': 65, 'foi_funil': True,
+             'avaliada': True, 'ultima_atividade': '2026-09-01',
+             'ultima_mensagem_id': 21, 'ultima_mensagem': 'Olá'},
+        ]
+        resultado = consolidar_conversas(linhas)
+        self.assertEqual(resultado[0]['ids_conversa'], [10, 11])
+        self.assertEqual(resultado[0]['perfis'], ['dependente', 'menor', 'idoso'])
+        self.assertEqual(resultado[0]['perfis_resumidos'], ['dependente_menor', 'idoso'])
+        self.assertEqual(resultado[0]['ultima_mensagem'], 'Olá')
+
+    def test_username_substitui_contato_sem_expor_user_id(self):
+        linha = {
+            'id_cliente': 9, 'id_conversa': 90, 'nome_cliente': 'Privado',
+            'wa_id': None, 'username_conversa': '@@cliente_privado',
+            'username_cliente': 'legado', 'user_id': 'NAO_PODE_VAZAR',
+            'status_dependente': None, 'turnos_sem_avanco': 4,
+            'bloqueado_meta': False, 'foi_funil': False, 'avaliada': False,
+            'ultima_atividade': '2026-09-03', 'ultima_mensagem_id': 90,
+            'ultima_mensagem': 'Oi',
+        }
+        resultado = consolidar_conversas([linha])[0]
+        self.assertEqual(resultado['contato'], '@cliente_privado')
+        self.assertEqual(resultado['contato_tipo'], 'username')
+        self.assertNotIn('user_id', resultado)
+        self.assertNotIn('NAO_PODE_VAZAR', repr(resultado))
+
+    def test_wa_id_prevalece_sobre_username_e_bloqueio_exige_dupla_prova(self):
+        base = {
+            'id_cliente': 10, 'nome_cliente': 'Cliente', 'wa_id': '5571999999999',
+            'username_conversa': 'privado', 'status_dependente': None,
+            'foi_funil': False, 'avaliada': False,
+            'ultima_atividade': '2026-09-03', 'ultima_mensagem': 'Oi',
+        }
+        linhas = [
+            dict(base, id_conversa=100, ultima_mensagem_id=1,
+                 turnos_sem_avanco=12, bloqueado_meta=False),
+            dict(base, id_conversa=101, ultima_mensagem_id=2,
+                 turnos_sem_avanco=11, bloqueado_meta=True),
+        ]
+        resultado = consolidar_conversas(linhas)[0]
+        self.assertEqual(resultado['contato'], '5571999999999')
+        self.assertEqual(resultado['contato_tipo'], 'telefone')
+        self.assertFalse(resultado['bloqueado_apos_repeticoes'])
+        linhas.append(dict(base, id_conversa=102, ultima_mensagem_id=3,
+                           turnos_sem_avanco=12, bloqueado_meta=True))
+        self.assertTrue(consolidar_conversas(linhas)[0]['bloqueado_apos_repeticoes'])
+
+    def test_perfis_resumidos_distinguem_dependentes_e_titulares(self):
+        cenarios = (
+            (1, True, 12, 'dependente_menor'),
+            (2, True, 35, 'dependente_adulto'),
+            (3, True, 65, 'dependente_idoso'),
+            (4, False, 35, 'adulto'),
+            (5, False, 65, 'idoso'),
+        )
+        linhas = []
+        for id_cliente, dependente, idade, esperado in cenarios:
+            linhas.append({
+                'id_cliente': id_cliente,
+                'id_conversa': id_cliente * 10,
+                'nome_cliente': f'Cliente {id_cliente}',
+                'wa_id': f'551{id_cliente}', 'username_cliente': None,
+                'status_dependente': dependente,
+                'idade_dependente': idade if dependente else None,
+                'idade_titular': None if dependente else idade,
+                'foi_funil': False,
+                'avaliada': False,
+                'ultima_atividade': f'2026-09-0{id_cliente}',
+                'ultima_mensagem_id': id_cliente,
+                'ultima_mensagem': esperado,
+            })
+
+        resultado = {item['id_cliente']: item for item in consolidar_conversas(linhas)}
+        for id_cliente, _dependente, _idade, esperado in cenarios:
+            self.assertEqual(resultado[id_cliente]['perfis_resumidos'], [esperado])
+
+    def test_periodos_finitos_possuem_comparacao_e_total_nao(self):
+        finito = resolver_periodo('7d')
+        total = resolver_periodo('total')
+        self.assertEqual(finito.fim_anterior, finito.inicio)
+        self.assertIsNotNone(finito.inicio_anterior)
+        self.assertIsNone(total.inicio)
+        self.assertIsNone(total.inicio_anterior)
+
+    def test_comparacao_aceita_periodo_atual_sem_avaliacoes(self):
+        relatorio = montar_relatorio(
+            {'leads': 2, 'mensagens': 4, 'funil': 1, 'avaliacoes': 0, 'nota_media': None},
+            {'leads': 1, 'mensagens': 2, 'funil': 0, 'avaliacoes': 1, 'nota_media': 5.0},
+            {}, {}, [], [],
+        )
+        self.assertIsNone(relatorio['tendencias']['nota_media'])
+
+    def test_perfil_so_conta_lead_totalmente_sem_classificacao(self):
+        perfis = _agrupar_perfis([
+            {'id_cliente': 1, 'status_dependente': None, 'idade_titular': 35,
+             'idade_dependente': None, 'foi_funil': False},
+            {'id_cliente': 1, 'status_dependente': False, 'idade_titular': 35,
+             'idade_dependente': None, 'foi_funil': True},
+            {'id_cliente': 2, 'status_dependente': None, 'idade_titular': 44,
+             'idade_dependente': None, 'foi_funil': False},
+        ], bpa_ativo=False, suporte_idoso=False)
+        titular_adulto = next(
+            item for item in perfis['linhas'] if item['chave'] == 'titular_adulto'
+        )
+        self.assertEqual(titular_adulto['leads'], 1)
+        self.assertEqual(perfis['sem_classificacao'], 1)
+
+    def test_relatorio_e_conversas_sao_serializados_sem_consultar_rds(self):
+        self.autenticar()
+        with patch('monitoramento.views.carregar_relatorio', return_value=RELATORIO):
+            resposta = self.cliente.get('/dados/relatorio/?periodo=7d')
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(len(resposta.json()['etapas']), 23)
+        with patch('monitoramento.views.carregar_mensagens', return_value=MENSAGENS[140]):
+            resposta = self.cliente.get('/dados/conversas/140/')
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.json()['mensagens'][1]['botoes'][0], 'Para mim')
+
+    def test_todas_as_consultas_recebem_escopo_e_parametros_completos(self):
+        class CursorContrato:
+            description = [('valor',)]
+
+            def __init__(self):
+                self.execucoes = []
+
+            def execute(self, sql, parametros):
+                self.execucoes.append((sql, parametros))
+                if sql.count('%s') != len(parametros):
+                    raise AssertionError(
+                        f'placeholders={sql.count("%s")} parametros={len(parametros)}'
+                    )
+
+            def fetchall(self):
+                return []
+
+            def fetchone(self):
+                return None
+
+        agora = datetime.now(timezone.utc)
+        inicio = agora - timedelta(days=7)
+        chamadas = (
+            lambda c: repositorio_painel.buscar_unidade(10, c),
+            lambda c: repositorio_painel.listar_conversas(10, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_mensagens(10, 99, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_metricas(10, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_perfis(10, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_satisfacao(10, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_etapas(10, inicio, agora, c),
+            lambda c: repositorio_painel.buscar_atividade(10, inicio, agora, c, 'dia'),
+            lambda c: repositorio_painel.listar_contatos(10, inicio, agora, c),
+        )
+        for chamada in chamadas:
+            with self.subTest(chamada=chamada):
+                cursor = CursorContrato()
+                chamada(cursor)
+                sql, parametros = cursor.execucoes[0]
+                self.assertIn(10, parametros)
+                self.assertIn('id_unidade', sql)
+
+        cursor = CursorContrato()
+        repositorio_painel.buscar_etapas(10, inicio, agora, cursor)
+        self.assertIn('BETWEEN 1 AND 23', cursor.execucoes[0][0])
+
+        cursor = CursorContrato()
+        repositorio_painel.listar_conversas(10, inicio, agora, cursor)
+        sql = cursor.execucoes[0][0]
+        self.assertIn('cl.wa_id', sql)
+        self.assertIn('c.username AS username_conversa', sql)
+        self.assertIn('cliente_bloqueado_meta', sql)
+        self.assertNotIn('cl.user_id', sql)
+````
+
+## Passo 159H — `tests/unit/test_valida_etapa11.py`
+
+Remover somente este caminho antigo: na baseline V1.1.0 ele cobre a introdução da triagem na etapa 11. A mesma regra, inclusive os aceites ampliados e a precedência das negativas, passa integralmente para a futura etapa 12 e é coberta no passo 159I.
+
+## Passo 159I — `tests/unit/test_valida_etapa12.py`
+
+Criar o arquivo com o conteúdo completo abaixo. A suíte renumerada conserva todos os aceites do botão e dos textos da V1.1.0, além das negativas e entradas inválidas.
+
+SHA-256 do conteúdo UTF-8 normalizado: `9dfb455807dc988b547c9d949af234f4647854cb6dd2620a4aadec11875755e5`
+
+````python
+from __future__ import annotations
+
+import unittest
+
+from callback.webhook.services.populating_fila_mensagens import (
+    extrair_conteudo_texto_mensagem,
+)
+from core.integrations.whatsapp.messages.etapa12_messages import (
+    BOTAO_ETAPA12_INICIAR_TRIAGEM,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa12 import (
+    validar_etapa12,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    EVENTO_TRIAGEM_INICIADA,
+)
+
+
+class ValidarEtapa12Tests(unittest.TestCase):
+    def test_rotulo_real_do_botao_inicia_a_triagem(self) -> None:
+        self.assertEqual(BOTAO_ETAPA12_INICIAR_TRIAGEM, "Começar triagem")
+        self.assertEqual(
+            validar_etapa12(BOTAO_ETAPA12_INICIAR_TRIAGEM),
+            EVENTO_TRIAGEM_INICIADA,
+        )
+
+    def test_confirmacoes_digitadas_iniciam_a_triagem(self) -> None:
+        confirmacoes = (
+            "Começar triagem",
+            "sim começar triagem",
+            "pode começar triagem",
+            "Iniciar triagem",
+            "Iniciar a triagem",
+            "sim começar",
+            "vamos começar",
+            "pode começar",
+            "sim",
+            "vamos",
+            "começar a triagem",
+            "bora",
+            "bora começar a triagem",
+            "vamos lá começar a triagem",
+            "podemos começar triagem",
+            "pode sim começar agora",
+            "quero iniciar a triagem",
+            "comece a triagem",
+            "inicie a triagem",
+            "claro que sim",
+            "manda ver",
+            "pode prosseguir",
+            "  SIM,   PODE COMEÇAR TRIAGEM!  ",
+        )
+
+        for resposta in confirmacoes:
+            with self.subTest(resposta=resposta):
+                self.assertEqual(
+                    validar_etapa12(resposta),
+                    EVENTO_TRIAGEM_INICIADA,
+                )
+
+    def test_botao_interativo_legado_e_texto_usam_a_mesma_regra(self) -> None:
+        mensagens = (
+            (
+                "interactive",
+                {
+                    "type": "interactive",
+                    "interactive": {
+                        "type": "button_reply",
+                        "button_reply": {
+                            "id": BOTAO_ETAPA12_INICIAR_TRIAGEM,
+                            "title": BOTAO_ETAPA12_INICIAR_TRIAGEM,
+                        },
+                    },
+                },
+            ),
+            (
+                "interactive",
+                {
+                    "type": "interactive",
+                    "interactive": {
+                        "type": "button_reply",
+                        "button_reply": {
+                            "id": BOTAO_ETAPA12_INICIAR_TRIAGEM,
+                        },
+                    },
+                },
+            ),
+            (
+                "button",
+                {
+                    "type": "button",
+                    "button": {
+                        "payload": BOTAO_ETAPA12_INICIAR_TRIAGEM,
+                        "text": BOTAO_ETAPA12_INICIAR_TRIAGEM,
+                    },
+                },
+            ),
+            (
+                "text",
+                {
+                    "type": "text",
+                    "text": {"body": BOTAO_ETAPA12_INICIAR_TRIAGEM},
+                },
+            ),
+        )
+
+        for tipo, mensagem in mensagens:
+            with self.subTest(tipo=tipo, mensagem=mensagem):
+                conteudo = extrair_conteudo_texto_mensagem(mensagem, tipo)
+                self.assertEqual(conteudo, BOTAO_ETAPA12_INICIAR_TRIAGEM)
+                self.assertEqual(
+                    validar_etapa12(conteudo),
+                    EVENTO_TRIAGEM_INICIADA,
+                )
+
+    def test_negativas_e_respostas_ambiguas_nao_iniciam_a_triagem(self) -> None:
+        respostas = (
+            "não",
+            "não quero começar",
+            "não começar triagem",
+            "sim, mas depois",
+            "vamos depois",
+            "talvez",
+            "começar depois",
+            "como funciona?",
+            "quero saber mais",
+            "quero tirar uma dúvida",
+            "",
+            None,
+            123,
+        )
+
+        for resposta in respostas:
+            with self.subTest(resposta=resposta):
+                self.assertIsNone(validar_etapa12(resposta))
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
 ## Gate integrado de aplicação
 
 Depois de materializar todos os arquivos anteriores, executar obrigatoriamente, sem credenciais externas:
 
 ```powershell
 python -m compileall -q callback core workers tests
-python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_valida_etapa8 tests.unit.test_saudacao_retorno tests.unit.test_suporte_idoso_email_obrigatorio tests.unit.test_worker_flow_runtime
-python -m unittest discover -s tests -p "test_*.py" -b
+python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_valida_etapa8 tests.unit.test_valida_etapa12 tests.unit.test_saudacao_retorno tests.unit.test_suporte_idoso_email_obrigatorio tests.unit.test_monitoramento_unidade tests.unit.test_monitoramento_login tests.unit.test_monitoramento_painel tests.unit.test_worker_flow_runtime
+python -m unittest discover -s tests -t . -p "test_*.py" -b
 python -m pip check
 python callback/manage.py check --deploy
 git diff --check
@@ -39317,23 +42008,17 @@ Os testes devem provar, no mínimo:
 5. Funil 19–23 lendo `conversa.profissao`, nunca `cliente.profissao`, username complementar, resposta histórica de e-mail da futura etapa 11 ligada à resposta `bot/sent` da etapa 12 e triagem 13–18 com pergunta/resposta em ordem; `NULL` aparece como “não tem” ou “não informado” conforme a classificação da conversa;
 6. DDL final completo, inclusive `cliente.profissao VARCHAR(100) NULL`, `unidade.suporte_idoso`, `unidade.email_obrigatorio`, o motivo `encaminhado_suporte_idoso`, constraints, FKs, índices, ausência de `ALTER TABLE` histórico nos scripts Python declarativos e ausência de novos `ADD COLUMN` dessas três funcionalidades na migração de `user_id`;
 7. ausência de nomes físicos legados nos módulos versionados do runtime e nos utilitários que consultam PostgreSQL ou o payload de bloqueio do Redis;
-8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro da V1.0.7.
-9. prova diferencial da baseline `2bc4188` somada aos deltas aprovados: depois de normalizar a renumeração `1 -> 1` e
-   `2..22 -> 3..23`, catálogo/mapa e botões das 22 etapas legadas permanecem
-   idênticos; as diferenças textuais posteriores à referência Git ficam fechadas
-   no teste: o CTA de suporte do idoso é uma adição da etapa atual 6/futura 7,
-   e o prefixo “Certo” e o botão “Começar triagem” são duas substituições da
-   etapa atual 11/futura 12. Todo outro texto legado e o payload do Funil WA-only sem username
-   permanecem idênticos; a prova fixa explicitamente o caminho da profissão
-   atual 4 para a futura 5 e confirma que o Funil continua projetando o snapshot
-   de `conversa.profissao`. Os testes funcionais existentes continuam provando
-   as duas escritas de profissão com o mesmo cursor, destinatário WA,
-   persistência, retry e turno.
-   A prova continua comparando os textos estáticos do catálogo. A saudação de
-   retorno é um prefixo dinâmico de runtime e só constitui diferença autorizada
-   quando todos os seus gates forem verdadeiros; fora desse cenário, o texto
-   enviado permanece byte a byte igual ao legado. A suíte dedicada do passo
-   159A prova e isola essa exceção sem afrouxar a comparação diferencial.
+8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro preservado na V1.1.0.
+9. prova diferencial da baseline V1.1.0 `3f75447`: depois de normalizar a
+   renumeração `1 -> 1` e `2..22 -> 3..23`, catálogo, mapa, mensagens e botões
+   das 22 etapas legadas permanecem equivalentes. As diferenças autorizadas são
+   somente a nova etapa 2, os contratos de identidade e a adaptação explícita
+   dos consumidores para 23 etapas. A prova conserva a profissão atual 4 na
+   futura 5, a oferta atual 7 na futura 8, o e-mail atual 10 na futura 11, a
+   introdução da triagem atual 11 na futura 12 e a triagem 12..17 em 13..18.
+   A saudação dinâmica, o aceite amplo de `Começar triagem`, os recursos do
+   monitoramento e o Google CSV já pertencem à baseline e precisam continuar
+   cobertos, sem serem tratados como deltas externos ao commit.
 10. proteção mínima da profissão: somente as oito respostas completas observadas
     são recusadas por igualdade após normalização e recebem
     `profissao_fora_contexto`; os oito controles legítimos permanecem válidos;
@@ -39351,13 +42036,22 @@ Os testes devem provar, no mínimo:
     precedência; a matriz de e-mail obrigatório/opcional, a limpeza para `NULL`,
     os tratamentos universais prioritários e o falso positivo “quero mais
     informações” permanecem cobertos após a renumeração.
+13. introdução da triagem: a futura etapa 12 aceita o clique em `Começar
+    triagem` e as formas textuais positivas mantidas na V1.1.0; negativas
+    explícitas prevalecem e respostas alheias continuam sem evento.
+14. monitoramento: todas as consultas continuam escopadas pela unidade do
+    usuário Django; o JSON nunca contém Meta `user_id`; WA ID prevalece,
+    `@username` aparece apenas sem telefone, o bloqueio exige contador e
+    denylist, `contact_request` é somente visual e o relatório possui 23 etapas.
+15. evento `system.user_changed_user_id`: sem fixture real assinado e contrato
+    oficial validado, retorna HTTP 200 sem fila e sem mutação de identidade.
 
 Na conferência das conversas ativas, preservar a sequência das perguntas já
 enviadas: introdução e triagem ocupam 11..17 antes da migração e 12..18 depois.
 Não misturar versões do catálogo na mesma conversa durante a implantação.
 
 Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL
-descartável que reflita exatamente a baseline V1.0.7 atualizada `2bc4188`,
+descartável que reflita exatamente a baseline V1.1.0 `3f75447`,
 materializar nele a migração de profissão já versionada na baseline e o delta
 `20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, e só então executar o
 SQL integral de `user_id` deste documento. Comparar catálogo, colunas, constraints,
@@ -39395,7 +42089,8 @@ WHERE table_schema = 'chatbot'
       ('cliente', 'profissao'),
       ('conversa', 'profissao'),
       ('unidade', 'suporte_idoso'),
-      ('unidade', 'email_obrigatorio')
+      ('unidade', 'email_obrigatorio'),
+      ('unidade', 'id_usuario_monitoramento')
   )
 ORDER BY table_name;
 ```
@@ -39411,6 +42106,10 @@ ORDER BY table_name;
 - Se os dois flags da unidade não aparecerem como `BOOLEAN NOT NULL` com
   defaults `FALSE`/`TRUE`, parar; a migração de `user_id` não tem autorização
   para criar ou corrigir o delta de 20260829.
+- Se `id_usuario_monitoramento` não for `INTEGER NULL` sem default, ou se sua
+  unicidade/FK para `chatbot.auth_user(id)` com `ON DELETE SET NULL` não estiver
+  válida, parar. A migração de `user_id` preserva o vínculo implantado em
+  20260902 e não corrige essa estrutura.
 
 Antes de abrir a transação de produção, confirmar os três serviços `inactive`, snapshot `Disponível`, ausência de itens `processing` e ausência de envio do Funil em curso. Depois do `COMMIT`, publicar exatamente o código validado, executar smokes de webhook/worker/Funil e inspecionar logs e `NRestarts` antes de encerrar o deploy.
 
@@ -39420,14 +42119,13 @@ O único risco conhecido aceito por este plano continua sendo a janela rara Meta
 
 # Fase final — Migração manual no DBeaver
 
-## Passo 160 (final) — `deploy/migrations/20260813_adicionar_user_id_whatsapp.sql` e comando manual integral
+## Passo 160 (final) — `deploy/migrations/20260904_adicionar_user_id_whatsapp.sql` e comando manual integral
 
 Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
 
 O preflight bancário aceita exclusivamente o estado pré-`user_id` composto pelo
-schema da baseline V1.0.7 atualizada `2bc4188`, com sua migração de profissão já
-materializada, mais o delta
-`20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, ainda com 22
+schema da baseline V1.1.0 `3f75447`, com as migrações de profissão,
+suporte/e-mail e vínculo de monitoramento já materializadas, ainda com 22
 etapas/25 transições. A
 pós-validação exige exatamente 23 etapas/27 transições. Toda a
 migração ocorre em uma única transação: qualquer erro desfaz inclusive o
@@ -39460,6 +42158,10 @@ Pré-condições obrigatórias:
 - aplicar e validar também
   `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
   sem os flags e o novo motivo de encerramento, o preflight deve abortar;
+- aplicar e validar
+  `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`
+  depois das migrations do Django; sem `auth_user`, coluna, unicidade e FK do
+  monitoramento, o preflight deve abortar;
 - parar webhook, worker-flow e worker-funil e confirmar os três como `inactive`;
 - criar snapshot do RDS após a parada e aguardar `Disponível`;
 - confirmar servidor, database e usuário corretos no DBeaver;
@@ -39471,7 +42173,7 @@ Pré-condições obrigatórias:
 
 Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
 
-SHA-256 do SQL UTF-8 normalizado: `3f6c3c8f2d301a1fd350850d60387f50728220225948cd225a1506f3b9bcffa3`
+SHA-256 do SQL UTF-8 normalizado: `5ba1d3f4d2d7be8439317dd0477867f503c7aebb542d18866570f11c7bf344db`
 
 ````sql
 BEGIN;
@@ -39479,7 +42181,21 @@ BEGIN;
 SET LOCAL lock_timeout = '15s';
 SET LOCAL statement_timeout = '0';
 
+
+-- A V1.1.0 já contém autenticação Django e o vínculo 1:1 do monitoramento.
+-- A migração de user_id prova e preserva esse contrato; ela não o recria.
+DO $dependencias_v110$
+BEGIN
+    IF TO_REGCLASS('chatbot.auth_user') IS NULL
+       OR TO_REGCLASS('chatbot.unidade') IS NULL THEN
+        RAISE EXCEPTION
+            'Migração recusada: auth_user e unidade da V1.1.0 devem existir.';
+    END IF;
+END
+$dependencias_v110$;
+
 LOCK TABLE
+    chatbot.auth_user,
     chatbot.unidade,
     chatbot.cliente,
     chatbot.etapa,
@@ -39494,7 +42210,7 @@ LOCK TABLE
     chatbot.funil_envios
 IN ACCESS EXCLUSIVE MODE;
 
--- Contrato canônico já implantado pela V1.0.7. A tabela temporária permite
+-- Contrato canônico já implantado pela V1.1.0. A tabela temporária permite
 -- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
 -- formatação textual manual e sem alterar chatbot.unidade.
 CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
@@ -39530,6 +42246,65 @@ DECLARE
     corpo_lock_atual TEXT;
     corpo_unlock_atual TEXT;
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'chatbot'
+          AND table_name = 'unidade'
+          AND column_name = 'id_usuario_monitoramento'
+          AND data_type = 'integer'
+          AND is_nullable = 'YES'
+          AND column_default IS NULL
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: coluna de monitoramento da V1.1.0 ausente ou incompatível.';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint AS restricao
+        WHERE restricao.conrelid = 'chatbot.unidade'::REGCLASS
+          AND restricao.conname = 'uq_unidade_usuario_monitoramento'
+          AND restricao.contype = 'u'
+          AND restricao.convalidated IS TRUE
+          AND restricao.conkey = ARRAY[(
+              SELECT atributo.attnum
+              FROM pg_attribute AS atributo
+              WHERE atributo.attrelid = 'chatbot.unidade'::REGCLASS
+                AND atributo.attname = 'id_usuario_monitoramento'
+                AND atributo.attnum > 0
+                AND atributo.attisdropped IS FALSE
+          )]::SMALLINT[]
+    ) OR NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint AS restricao
+        WHERE restricao.conrelid = 'chatbot.unidade'::REGCLASS
+          AND restricao.conname = 'unidade_id_usuario_monitoramento_fkey'
+          AND restricao.contype = 'f'
+          AND restricao.confrelid = 'chatbot.auth_user'::REGCLASS
+          AND restricao.confdeltype = 'n'
+          AND restricao.convalidated IS TRUE
+          AND restricao.conkey = ARRAY[(
+              SELECT atributo.attnum
+              FROM pg_attribute AS atributo
+              WHERE atributo.attrelid = 'chatbot.unidade'::REGCLASS
+                AND atributo.attname = 'id_usuario_monitoramento'
+                AND atributo.attnum > 0
+                AND atributo.attisdropped IS FALSE
+          )]::SMALLINT[]
+          AND restricao.confkey = ARRAY[(
+              SELECT atributo.attnum
+              FROM pg_attribute AS atributo
+              WHERE atributo.attrelid = 'chatbot.auth_user'::REGCLASS
+                AND atributo.attname = 'id'
+                AND atributo.attnum > 0
+                AND atributo.attisdropped IS FALSE
+          )]::SMALLINT[]
+    ) THEN
+        RAISE EXCEPTION
+            'Migração recusada: vínculo unidade/auth_user da V1.1.0 está incompatível.';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM (
@@ -39555,7 +42330,7 @@ BEGIN
           AND column_name = 'nome'
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à baseline 2bc4188.';
+            'Migração recusada: colunas de apresentação da unidade não correspondem à baseline 3f75447.';
     END IF;
 
     -- Os dois flags vieram do delta 20260829 e são parte obrigatória da
@@ -39587,7 +42362,7 @@ BEGIN
             'Migração recusada: suporte_idoso/email_obrigatorio divergem do delta 20260829.';
     END IF;
 
-    -- As duas colunas de profissão já pertencem à baseline V1.0.7 e precisam
+    -- As duas colunas de profissão já pertencem à baseline V1.1.0 e precisam
     -- estar materializadas no banco. A feature de user_id não possui autorização para
     -- criar, tipar, preencher ou apagar nenhuma delas.
     IF EXISTS (
@@ -39608,7 +42383,7 @@ BEGIN
            OR coluna.column_default IS NOT NULL
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: profissões de cliente/conversa não correspondem à baseline 2bc4188 materializada.';
+            'Migração recusada: profissões de cliente/conversa não correspondem à baseline 3f75447 materializada.';
     END IF;
 
     IF EXISTS (
@@ -39619,7 +42394,7 @@ BEGIN
            OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a baseline 2bc4188.';
+            'Migração recusada: dados de apresentação da unidade violam a baseline 3f75447.';
     END IF;
 
     IF EXISTS (
@@ -39703,7 +42478,7 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da baseline 2bc4188.';
+            'Migração recusada: constraints de apresentação da unidade divergem da baseline 3f75447.';
     END IF;
 
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
@@ -39818,7 +42593,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à baseline 2bc4188 e seus deltas aprovados (etapas=%/%; transições=%/%).',
+            'à baseline 3f75447 e seus deltas aprovados (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -39835,7 +42610,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à baseline 2bc4188.';
+            'Migração recusada: etapa final atual não corresponde à baseline 3f75447.';
     END IF;
 
     IF EXISTS (
@@ -39844,7 +42619,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da baseline 2bc4188.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da baseline 3f75447.';
     END IF;
 
     IF NOT EXISTS (
@@ -40057,7 +42832,8 @@ SELECT
     nome_agente,
     genero,
     suporte_idoso,
-    email_obrigatorio
+    email_obrigatorio,
+    id_usuario_monitoramento
 FROM chatbot.unidade;
 
 -- A migração não sincroniza profissão: ela prova diferencialmente que o valor
@@ -40738,6 +43514,21 @@ BEGIN
             'Pós-validação falhou: flags de suporte/e-mail foram alterados.';
     END IF;
 
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'chatbot'
+          AND table_name = 'unidade'
+          AND column_name = 'id_usuario_monitoramento'
+          AND data_type = 'integer'
+          AND is_nullable = 'YES'
+          AND column_default IS NULL
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: coluna de monitoramento foi alterada.';
+    END IF;
+
     IF EXISTS (
         SELECT 1
         FROM (
@@ -40813,6 +43604,7 @@ BEGIN
            OR depois.genero IS DISTINCT FROM antes.genero
            OR depois.suporte_idoso IS DISTINCT FROM antes.suporte_idoso
            OR depois.email_obrigatorio IS DISTINCT FROM antes.email_obrigatorio
+           OR depois.id_usuario_monitoramento IS DISTINCT FROM antes.id_usuario_monitoramento
     ) THEN
         RAISE EXCEPTION
             'Pós-validação falhou: apresentação da unidade mudou durante a migração de user_id.';
@@ -40912,6 +43704,8 @@ BEGIN
             ('unidade',                 'ck_unidade_nome_agente_nao_vazio',           'c'),
             ('unidade',                 'ck_unidade_genero',                          'c'),
             ('unidade',                 'ck_unidade_id_portfolio_nao_vazio',         'c'),
+            ('unidade',                 'uq_unidade_usuario_monitoramento',             'u'),
+            ('unidade',                 'unidade_id_usuario_monitoramento_fkey',        'f'),
             ('cliente',                 'cliente_wa_id_key',                         'u'),
             ('cliente',                 'ck_cliente_wa_id_nao_vazio',                'c'),
             ('cliente',                 'ck_cliente_username_nao_vazio',             'c'),
@@ -40952,10 +43746,40 @@ BEGIN
      AND constraint_atual.contype::TEXT = esperado.constraint_type
      AND constraint_atual.convalidated IS TRUE;
 
-    IF constraints_obrigatorias <> 36 THEN
+    IF constraints_obrigatorias <> 38 THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: esperado 36 constraints do contrato; obtido %.',
+            'Pós-validação falhou: esperado 38 constraints do contrato; obtido %.',
             constraints_obrigatorias;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint AS restricao
+        WHERE restricao.conrelid = 'chatbot.unidade'::REGCLASS
+          AND restricao.conname = 'unidade_id_usuario_monitoramento_fkey'
+          AND restricao.contype = 'f'
+          AND restricao.confrelid = 'chatbot.auth_user'::REGCLASS
+          AND restricao.confdeltype = 'n'
+          AND restricao.convalidated IS TRUE
+          AND restricao.conkey = ARRAY[(
+              SELECT atributo.attnum
+              FROM pg_attribute AS atributo
+              WHERE atributo.attrelid = 'chatbot.unidade'::REGCLASS
+                AND atributo.attname = 'id_usuario_monitoramento'
+                AND atributo.attnum > 0
+                AND atributo.attisdropped IS FALSE
+          )]::SMALLINT[]
+          AND restricao.confkey = ARRAY[(
+              SELECT atributo.attnum
+              FROM pg_attribute AS atributo
+              WHERE atributo.attrelid = 'chatbot.auth_user'::REGCLASS
+                AND atributo.attname = 'id'
+                AND atributo.attnum > 0
+                AND atributo.attisdropped IS FALSE
+          )]::SMALLINT[]
+    ) THEN
+        RAISE EXCEPTION
+            'Pós-validação falhou: FK de monitoramento não preserva auth_user com ON DELETE SET NULL.';
     END IF;
 
     IF NOT EXISTS (

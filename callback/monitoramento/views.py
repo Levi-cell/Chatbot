@@ -25,7 +25,9 @@ from .services import (
     carregar_relatorio,
 )
 from .apresentacao import (
+    CABECALHO_CSV_ESSENCIAL,
     CABECALHO_CSV_GOOGLE_CONTATOS,
+    montar_linha_csv_essencial,
     montar_linha_csv_google_contatos,
     normalizar_telefone_google,
     separar_nome,
@@ -209,6 +211,10 @@ def contatos_csv(request):
     periodo = _resolver_periodo_request(request)
     if periodo is None:
         return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    formato = request.GET.get('formato', 'google')
+    if formato not in ('google', 'essencial'):
+        return _headers_privados(JsonResponse({'erro': 'Formato inválido.'}, status=400))
+    essencial = formato == 'essencial'
     apenas_elegiveis = request.GET.get('tipo') == 'elegiveis'
     try:
         contatos = carregar_contatos(acesso, periodo)
@@ -216,8 +222,10 @@ def contatos_csv(request):
         logger.error('monitoramento_csv_banco_indisponivel')
         return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
     saida = StringIO(newline='')
-    escritor = csv.writer(saida, lineterminator='\r\n')
-    escritor.writerow(CABECALHO_CSV_GOOGLE_CONTATOS)
+    # O formato essencial facilita a abertura em planilhas configuradas em pt-BR.
+    # O Google CSV mantém seu separador, codificação e cabeçalhos originais.
+    escritor = csv.writer(saida, delimiter=';' if essencial else ',', lineterminator='\r\n')
+    escritor.writerow(CABECALHO_CSV_ESSENCIAL if essencial else CABECALHO_CSV_GOOGLE_CONTATOS)
     for contato in contatos:
         primeiro, sobrenome = separar_nome(contato.get('nome'))
         email = str(contato.get('email') or '').strip()
@@ -228,16 +236,24 @@ def contatos_csv(request):
             primeiro and validacao_email.valido and telefone
         ):
             continue
-        escritor.writerow(montar_linha_csv_google_contatos(
-            primeiro_nome=primeiro,
-            sobrenome=sobrenome,
-            email=email_exportado,
-            telefone=telefone,
-            nome_unidade=acesso.nome_unidade,
-        ))
-    resposta = HttpResponse(saida.getvalue(), content_type='text/csv; charset=utf-8')
+        dados_linha = {
+            'primeiro_nome': primeiro,
+            'sobrenome': sobrenome,
+            'email': email_exportado,
+            'telefone': telefone,
+        }
+        if essencial:
+            linha = montar_linha_csv_essencial(**dados_linha)
+        else:
+            linha = montar_linha_csv_google_contatos(
+                **dados_linha, nome_unidade=acesso.nome_unidade,
+            )
+        escritor.writerow(linha)
+    conteudo = saida.getvalue().encode('utf-8-sig' if essencial else 'utf-8')
+    resposta = HttpResponse(conteudo, content_type='text/csv; charset=utf-8')
+    prefixo = 'contatos_essenciais' if essencial else 'contatos'
     resposta['Content-Disposition'] = (
-        f'attachment; filename="contatos_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
+        f'attachment; filename="{prefixo}_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
     )
     return _headers_privados(resposta)
 
