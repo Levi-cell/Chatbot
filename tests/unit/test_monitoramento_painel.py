@@ -158,8 +158,8 @@ class MonitoramentoPainelTests(unittest.TestCase):
         linhas = list(csv.reader(StringIO(completo.content.decode('utf-8-sig')), delimiter=';'))
         self.assertEqual(linhas, [
             ['Nome', 'E-mail', 'Telefone'],
-            ['João da Silva', 'joao@example.com', '+557194111866'],
-            ['', '', '+557599111222'],
+            ['João da Silva', 'joao@example.com', '7194111866'],
+            ['', '', '7599111222'],
             ['Sem telefone', 'outro@example.com', ''],
             ["'=Nome; \"especial\"", "'=1+1", ''],
         ])
@@ -198,6 +198,10 @@ class MonitoramentoPainelTests(unittest.TestCase):
                             linhas = list(leitor)
                             self.assertEqual(len(linhas), 2 if tipo == 'elegiveis' else 3)
                             self.assertTrue(all(len(linha) == (3 if formato == 'essencial' else 36) for linha in linhas))
+                            self.assertEqual(
+                                linhas[1][2 if formato == 'essencial' else 13],
+                                '7194111866' if formato == 'essencial' else '+557194111866',
+                            )
                             self.assertIn(f'_{chave}_{tipo}.csv', resposta['Content-Disposition'])
 
     def test_export_essencial_recusa_acesso_invalido_e_parametros_invalidos(self):

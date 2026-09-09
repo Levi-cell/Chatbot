@@ -193,7 +193,9 @@ CABECALHO_CSV_ESSENCIAL = ('Nome', 'E-mail', 'Telefone')
 def montar_linha_csv_essencial(*, primeiro_nome, sobrenome, email, telefone):
     """Mantém o nome completo em uma coluna, sem acrescentar rótulos comerciais."""
     nome = ' '.join(parte for parte in (primeiro_nome, sobrenome) if parte)
-    return [proteger_celula_csv(nome), proteger_celula_csv(email), telefone]
+    # O telefone já está normalizado; remove só o código do Brasil, mantendo o DDD.
+    telefone_essencial = telefone.removeprefix('+55')
+    return [proteger_celula_csv(nome), proteger_celula_csv(email), telefone_essencial]
 
 
 def montar_linha_csv_google_contatos(

@@ -1131,6 +1131,8 @@ Implementação principal:
   apenas elegíveis, com somente Nome, E-mail e Telefone. Mantêm o nome completo
   em uma coluna, sem acrescentar rótulos ou datas, e reutilizam as mesmas regras
   de período, unidade, normalização e elegibilidade dos arquivos Google CSV.
+  Somente nesses dois CSVs essenciais, o telefone brasileiro é exibido sem o
+  prefixo internacional `+55`, preservando o DDD e o número.
 
 ## 20. Disponibilidade e recuperação automática
 

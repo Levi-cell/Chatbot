@@ -33,7 +33,7 @@ Se o cliente não responder
 
 Se o cliente responder
     -> worker_flow registra a mensagem recebida
-    -> repete a etapa atual sem interpretar a resposta
+    -> saúda com "Que bom te ver novamente" e repete a etapa atual sem interpretar a resposta
     -> persiste a resposta do bot e o contexto final
     -> followup_stage muda de 1 para 0
 ```
@@ -181,7 +181,7 @@ O reset pertence exclusivamente ao `worker_flow` depois da reação do cliente e
 |---:|---|---|
 | `NULL` | Estado legado equivalente a zero | Normalizar como `0` durante a leitura |
 | `0` | Nenhum follow-up ativo | Pode enviar o único lembrete após sete horas |
-| `1` | Lembrete já enviado; aguardando reação | Não enviar mais nada |
+| `1` | Retomada pendente por lembrete enviado ou marcação inicial da migração | Não enviar mais nada |
 | maior que `1` | Estado não produzido pela V1.1.1 | Não enviar; registrar anomalia |
 | negativo ou inválido | Corrupção de estado | Falhar fechado e alertar |
 
@@ -190,6 +190,11 @@ A única transição produzida pelo `worker_followup` é:
 ```text
 0 -> 1
 ```
+
+Na implantação inicial, a migração também marca `1` em todas as conversas antigas
+ativas, sem enviar lembrete. Registra a origem em `followup_legado`, com ID, stage
+anterior e data da marcação. Stage positivo indica retomada pendente; a comprovação
+de envio real depende do histórico e do recibo em `followup_envio`.
 
 A transição de retorno pertence ao `worker_flow`:
 
@@ -217,7 +222,7 @@ Regras obrigatórias:
 2. `last_message_from` deve continuar igual a `bot`;
 3. a mensagem de referência deve pertencer à mesma conversa;
 4. o histórico deve indicar `quem_enviou = 'bot'` e `status_envio = 'sent'`;
-5. exatamente sete horas já torna a conversa elegível;
+5. exatamente sete horas satisfaz o limiar de inatividade, mas a conversa só é elegível se também cumprir as demais condições, incluindo a janela do cliente;
 6. timestamps devem ser comparados como `TIMESTAMPTZ`;
 7. o relógio do PostgreSQL deve ser a referência comum;
 8. horário futuro, intervalo negativo ou contexto incompleto deve cancelar o envio e gerar diagnóstico.
@@ -237,6 +242,40 @@ Depois que o cliente responder e o `worker_flow` repetir a etapa com sucesso, `f
 Se o cliente ficar novamente sete horas sem responder essa etapa repetida, começa um novo ciclo e um novo único follow-up poderá ser enviado.
 
 Assim, o limite é de um follow-up por período contínuo sem reação, e não de um follow-up durante toda a vida da conversa.
+
+### 3.4 Última mensagem da conversa e última mensagem do cliente
+
+São duas referências distintas, verificadas em conjunto:
+
+- **Última mensagem da conversa:** deve ser um envio confirmado do bot, sem uma
+  nova resposta do cliente. Dela se contam as **sete horas de inatividade**.
+- **Última mensagem do cliente:** é a mensagem mais recente entre as recebidas
+  desse cliente no histórico da conversa, anterior à resposta do bot. Dela se
+  contam as **24 horas da janela de atendimento**; o envio do bot não reinicia
+  nem prolonga essa janela.
+
+Mesmo que a mensagem do cliente seja imediatamente anterior à do bot no histórico,
+não se presume que seus horários sejam próximos. Por exemplo: cliente escreveu há
+26 horas e o bot respondeu há oito horas, sem nenhuma mensagem posterior. A última
+mensagem da conversa é do bot e o limiar de sete horas foi cumprido, mas a conversa
+é **inelegível**, porque a última mensagem do cliente já ultrapassou 24 horas.
+
+Fora da janela de 24 horas, o WhatsApp exige template aprovado. Este worker não
+envia templates; ele simplesmente exclui a candidata.
+[Política oficial do WhatsApp, seção 2](https://whatsappbusiness.com/policy/).
+
+O prático reserva um minuto antes do fechamento da janela. Portanto, suas duas
+comparações de tempo são:
+
+```text
+agora_do_banco - horario_ultima_mensagem_bot >= 7 horas
+agora_do_banco - horario_ultima_mensagem_cliente < 23 horas e 59 minutos
+```
+
+Sem evidência da mensagem do cliente no histórico, o envio é recusado. As duas
+datas são verificadas na seleção e novamente sob lock, além das barreiras para
+mensagens pendentes na fila. A janela de 24 horas nunca é calculada a partir do
+bot nem substituída por `last_interaction_at`.
 
 ## 4. Mensagem aprovada
 
@@ -265,7 +304,7 @@ Uma conversa somente pode ser candidata se, na seleção inicial e novamente dep
 
 1. estiver ativa;
 2. possuir cliente e unidade válidos;
-3. possuir etapa atual válida;
+3. possuir etapa atual válida entre **1 e 17**, inclusive; a etapa 18 (agendamento) e todas as posteriores são inelegíveis;
 4. possuir configuração de envio válida para a unidade;
 5. não estiver encerrada nem em finalização;
 6. não estiver sob bloqueio comercial vigente;
@@ -276,7 +315,8 @@ Uma conversa somente pode ser candidata se, na seleção inicial e novamente dep
 11. não possuir mensagem posterior do cliente no histórico;
 12. não possuir mensagem inbound pendente ou em processamento;
 13. possuir destinatário atual resolvido com segurança na unidade correta;
-14. não estar sob lock atual de outro worker.
+14. não estar sob lock atual de outro worker;
+15. possuir última mensagem do cliente dentro da janela de 24 horas, respeitando a margem de um minuto descrita na seção 3.4; mensagem mais antiga ou ausente torna a conversa inelegível.
 
 A consulta inicial serve apenas para encontrar candidatas. Nenhum resultado autoriza o envio sem releitura depois da aquisição do lock.
 
@@ -303,6 +343,18 @@ A seleção deve:
 - evitar lock de tabela;
 - não manter uma transação ampla enquanto examina candidatas que não serão processadas;
 - permitir que cada conversa seja revalidada e processada isoladamente.
+
+O padrão é selecionar até 20 candidatas por lote, processá-las sequencialmente e
+aguardar 60 segundos antes do próximo lote. Cada conversa possui lock e
+transações próprios, sem commit conjunto do lote. Uma falha em uma conversa não
+desfaz os envios já persistidos das demais. Reduzir o lote para uma conversa não
+acrescenta atomicidade; apenas diminui a capacidade de processamento.
+
+Falhas individuais, inclusive ao abrir conexão ou liberar recursos, são registradas
+e não interrompem a visita às próximas candidatas do lote. O cursor avança; depois
+do fim da varredura, a candidata que falhou poderá reaparecer se ainda cumprir todas
+as condições, inclusive a janela Meta. Não existe garantia de retry no lote
+imediatamente seguinte. Falha na consulta do lote usa o backoff operacional.
 
 O índice `idx_conversa_followup` já existente pode apoiar a busca por stage zero. A consulta real deve ser validada com `EXPLAIN` durante a implementação. Um novo índice só deve ser criado se essa medição demonstrar necessidade.
 
@@ -582,6 +634,8 @@ A implementação deve demonstrar, no mínimo:
 23. Conversas do mesmo cliente em unidades diferentes permanecem isoladas.
 24. O histórico permite que o painel mostre e contabilize o follow-up.
 25. Reinício do processo não apaga nem reinicia o ciclo persistido.
+26. Etapas 1–17 podem ser selecionadas quando cumprirem as demais condições; etapas 18–22 são recusadas tanto na seleção quanto na releitura sob lock.
+27. Última mensagem da conversa enviada pelo bot há oito horas, mas última mensagem do cliente há 26 horas: não enviar follow-up. Sete horas do bot e 24 horas do cliente são relógios independentes.
 
 ---
 
@@ -595,7 +649,7 @@ O `worker_flow` continua sendo o único responsável por interpretar novas mensa
 |---|---|---|
 | `followup_stage = 0` e inatividade menor que 3 horas | Resposta normal | Preserva o fluxo atual sem saudação de retorno |
 | `followup_stage = 0` e inatividade igual ou superior a 3 horas | Retorno espontâneo | Preserva validação e transição, com a saudação atual da V1.1.0 |
-| `followup_stage > 0` | Reação depois de follow-up | Registra a entrada, ignora seu conteúdo para o negócio, repete a etapa atual e zera o ciclo no contexto final |
+| `followup_stage > 0` | Retorno após lembrete ou marcação inicial do legado | Registra a entrada, ignora seu conteúdo para o negócio, saúda, repete a etapa atual e zera o ciclo no contexto final |
 
 `NULL` legado é interpretado como `0`.
 
@@ -624,7 +678,9 @@ Mesmo que tenham passado mais de sete horas, stage zero não prova que um follow
 
 ## 3. Caminho B — `followup_stage > 0`
 
-Este caminho somente existe quando o cliente realmente enviou uma mensagem depois que o banco registrou um follow-up.
+Este caminho somente é executado quando o cliente envia uma mensagem e o banco
+confirma stage positivo, por lembrete real ou pela marcação inicial do legado.
+Não exige `followup_last_sent_at` preenchido: a migração não inventa um envio.
 
 Quando o stage confirmado for positivo, o `worker_flow` deve:
 
@@ -639,7 +695,7 @@ Quando o stage confirmado for positivo, o `worker_flow` deve:
 9. não modificar profissão, dependente, e-mail, triagem ou satisfação;
 10. não incrementar nem zerar `turnos_sem_avanco`;
 11. não executar efeitos de funil ou encerramento derivados da resposta;
-12. renderizar e enviar novamente a etapa atual;
+12. saudar com `Que bom te ver novamente, <nome>!` (ou sem nome, se ausente) e renderizar novamente a etapa atual;
 13. persistir a mensagem repetida e o contexto final;
 14. somente nessa persistência final alterar `followup_stage` para `0`.
 
@@ -652,20 +708,26 @@ Depois da repetição e do reset, a próxima mensagem do cliente volta a ser int
 Os dois caminhos são mutuamente exclusivos:
 
 - stage zero usa a regra atual de três horas;
-- stage positivo usa a repetição obrigatória da etapa.
+- stage positivo usa a saudação `Que bom te ver novamente` e a repetição obrigatória da etapa.
 
-A reação a um follow-up não deve receber também a saudação `Olá novamente, <nome>!`. O próprio lembrete já estabeleceu o retorno e a resposta do bot deve concentrar-se em recolocar a pergunta atual no contexto.
+A retomada com stage positivo não recebe também `Olá novamente, <nome>!`. A nova
+saudação independe das três horas e vale para lembretes reais e para o legado marcado.
+Usa exclusivamente o nome já persistido; a reação não é interpretada para extrair
+ou atualizar o nome. O texto pertence ao catálogo de mensagens, e o histórico deve
+registrar exatamente o corpo enviado, com prefixo, cabeçalho e botões preservados.
 
 Assim, a saída conceitual do caminho de follow-up é:
 
 ```text
+Que bom te ver novamente, <nome>!
+
 {mensagem existente da etapa atual}
 ```
 
-e não:
+Quando o cliente ainda não informou o nome:
 
 ```text
-Olá novamente, <nome>!
+Que bom te ver novamente!
 
 {mensagem existente da etapa atual}
 ```
@@ -870,6 +932,8 @@ A implementação deve demonstrar, no mínimo:
 20. Worker que perdeu `lock_version` não zera o ciclo.
 21. Depois do reset, a próxima mensagem do cliente é interpretada normalmente.
 22. Depois do reset, sete novas horas de silêncio podem iniciar outro ciclo.
+23. Todo retorno com stage positivo usa a nova saudação uma única vez, com nome persistido ou versão genérica; não acumula `Olá novamente`.
+24. Legado marcado com stage 1 e sem data de envio reapresenta a etapa e só reseta junto do histórico da resposta; retries não repetem a saudação.
 
 ---
 
@@ -877,12 +941,29 @@ A implementação deve demonstrar, no mínimo:
 
 ## 1. Sequência segura
 
+A migração inicial deve marcar `followup_stage = 1` em **todas as conversas
+antigas ainda ativas**, inclusive nas etapas 18–21. Conversas encerradas não são
+alteradas; conversas criadas depois da migração continuam com o padrão zero.
+As etapas 18–21 permitem a retomada reativa do legado, mas continuam inelegíveis
+para novos lembretes depois do reset.
+
+O script registra em `followup_legado` os IDs afetados, os stages anteriores e o
+horário da marcação, na mesma transação do UPDATE. Preserva `followup_last_sent_at`,
+histórico, etapa, contadores e finalização. Não envia template, mensagem livre nem
+cria recibo de envio. Nenhuma conversa é encerrada pela migração.
+
+A operação é única, com flow parado e follow-up desligado. Não é executada no boot
+do worker nem reaplicada em futuras atualizações. O setup para banco novo apenas
+cria as tabelas, sem marcar conversas. Ativas em etapa terminal ou com dados de
+finalização inconsistentes recusam toda a migração; recuperar o processamento
+pendente e revisar essas anomalias antes da aplicação, sem fechamento em massa.
+
 O deploy deve respeitar esta dependência:
 
 ```text
-1. instalar o código completo
+1. parar o flow, manter follow-up desligado e instalar o código completo
 2. instalar o arquivo chatbot-worker-followup.service sem iniciá-lo
-3. executar verificações e testes de configuração
+3. executar a migração única, conferir sua auditoria e testar a configuração
 4. atualizar/reiniciar chatbot-worker-flow.service
 5. comprovar que o worker_flow atualizado está ativo
 6. habilitar e iniciar chatbot-worker-followup.service
@@ -920,10 +1001,10 @@ O desenho completo deve manter permanentemente estas garantias:
 9. A reação é armazenada, mas não é usada para validação de negócio.
 10. A repetição causada pelo follow-up não altera `turnos_sem_avanco`.
 11. A saudação atual de três horas continua exclusiva do caminho com stage zero.
-12. `followup_stage` é a fonte de verdade; tempo sozinho não comprova envio.
+12. `followup_stage` decide a retomada; somente histórico/recibo comprova envio, pois a migração também marca stage positivo.
 13. Os dois workers usam o mesmo lock e condicionam suas transições ao `lock_version` possuído.
 14. Inbound já comprometido no banco tem prioridade sobre um follow-up ainda não despachado.
-15. Histórico, stage e campos da conversa refletem somente envios confirmados localmente.
+15. Histórico/recibo de envio representa mensagem confirmada localmente; a marcação inicial de stage é auditada separadamente sem inventar mensagem ou data de envio.
 16. Retry não reenvia quando existe comprovação local suficiente.
 17. A janela entre aceite da Meta e commit PostgreSQL permanece reconhecida, sem promessa de entrega exatamente uma vez.
 18. Follow-up é isolado por conversa e unidade.

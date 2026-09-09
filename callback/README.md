@@ -268,6 +268,7 @@ existência de contas. Contas inativas, administrativas ou sem unidade não entr
   Por padrão, o arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
   Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
   Com `formato=essencial`, entrega somente `Nome`, `E-mail` e `Telefone`, com
+  telefone brasileiro sem o prefixo internacional `+55` (preservando o DDD),
   nome completo na primeira coluna, separador `;` e UTF-8 com BOM para planilhas
   em pt-BR. Os quatro downloads usam o mesmo período e escopo autorizado.
 
