@@ -63,6 +63,11 @@ PostgreSQL: conversa em etapa elegível
     -> core/integrations/funil
     -> Funil de Vendas: oportunidade em Leads
 
+PostgreSQL: conversa elegível sem resposta ao bot por sete horas
+    -> workers/worker_followup
+    -> core/integrations/whatsapp
+    -> Meta/WhatsApp: um lembrete por ciclo
+
 Franqueado autenticado
     -> callback/monitoramento
     -> autorização pela unidade da sessão
@@ -175,18 +180,22 @@ DDL e funções PostgreSQL.
 
 ## Execução em desenvolvimento
 
-A aplicação não possui um processo central. Webhook, worker de atendimento e
-worker do Funil têm ciclos de vida independentes e se coordenam pelo PostgreSQL.
+A aplicação não possui um processo central. Webhook, worker de atendimento,
+worker do Funil e worker de follow-up têm ciclos de vida independentes e se
+coordenam pelo PostgreSQL.
 Inicie cada processo em seu próprio terminal:
 
 ```powershell
 python callback/manage.py runserver
 python -m workers.worker_flow.iniciar_flow_worker
 python -m workers.worker_funil.iniciar_worker_funil
+python -m workers.worker_followup.iniciar_worker_followup
 ```
 
-O terceiro processo encerra imediatamente enquanto
-`FUNIL_WORKER_ENABLED=False`.
+O Funil encerra imediatamente enquanto `FUNIL_WORKER_ENABLED=False`.
+O follow-up também exige `FOLLOWUP_WORKER_ENABLED=True` para executar seu laço.
+Antes de ativá-lo, aplique a migração e inicie o flow compatível, conforme
+[Ativação do follow-up](deploy/README.md#ativação-do-follow-up).
 
 Endpoint do webhook:
 

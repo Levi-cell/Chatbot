@@ -30,9 +30,9 @@ documentada antes da implementação.
 
 ## Modelo de execução da V1 e evolução para a V2
 
-Na V1, a implantação mantém uma instância do `worker_flow` e uma instância
-independente do `worker_funil`, além do webhook. Cada serviço possui seu próprio
-ciclo de vida. Não se trata de um único processo que executa os dois workers.
+Na V1, a implantação mantém uma instância do `worker_flow`, uma do `worker_funil`
+e, após a migração e ativação específica, uma do `worker_followup`, além do webhook.
+Cada serviço possui seu próprio ciclo de vida.
 
 "Uma única instância ativa na V1" não deve ser confundida com a regra "um worker
 por conversa". A primeira é uma decisão operacional desta versão; a segunda é
@@ -217,12 +217,14 @@ Cada worker controla a conexão e os commits de seu próprio domínio:
 ```text
 workers/worker_flow/response_flow/flow_worker.py
 workers/worker_funil/funil_worker.py
+workers/worker_followup/followup_worker.py
 ```
 
 Repositórios e funções auxiliares recebem o cursor aberto pelo orquestrador.
 Commits intermediários devem representar estados recuperáveis documentados nas
-regras de negócio. Um worker não reutiliza a conexão nem o lock de domínio do
-outro.
+regras de negócio. Um worker não reutiliza a conexão do outro. Flow e follow-up
+disputam o mesmo lock de conversa, com versão e expiração; somente seu proprietário
+pode persistir o resultado. O Funil mantém sua reserva independente por envio.
 
 ### Webhook
 
@@ -328,6 +330,24 @@ Responsabilidades:
 - rotear resposta ou tratamento;
 - persistir resposta e contexto;
 - marcar a fila como `sent` somente após a persistência necessária.
+
+### `worker_followup`
+
+Seleciona conversas elegíveis por inatividade no PostgreSQL, sem consumir a fila.
+Cada candidata tem conexão, lock de conversa e transação próprios. O envio usa
+`core/integrations/whatsapp`; elegibilidade, recibos e fencing ficam em
+`core/repositories/atendimento/followup.py`.
+
+A releitura após adquirir o lock verifica as etapas 1–17, sete horas sem resposta
+ao bot e a janela da última mensagem do cliente. Confirmação do lembrete, histórico
+e stage 1 são persistidos juntos. Uma falha individual não interrompe o lote.
+
+O retorno pertence ao `worker_flow`: `transacoes/retorno_followup.py` prepara o
+checkpoint da reação e persiste a repetição, sem controlar commits.
+`response_flow/repeticao_followup.py` seleciona os senders da etapa sem executar
+validadores, transições ou efeitos de negócio. O stage só é zerado junto da
+persistência da repetição confirmada. Essa exceção reativa está documentada nas
+regras de negócio e não altera o fluxo normal de stage zero.
 
 ### `worker_funil`
 

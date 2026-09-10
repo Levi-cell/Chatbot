@@ -172,3 +172,17 @@ Esta integração não deve:
 
 O núcleo transacional e os testes específicos estão descritos em
 [`tests/README.md`](../../../tests/README.md).
+
+## Lembrete de follow-up
+
+`messages/followup_messages.py` também monta a saudação de retomada com stage
+positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
+O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
+O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
+do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
+
+`messages/followup_messages.py` contém o único texto aprovado.
+`pywa_senders/followup.py` envia texto sem botões, sem saudação de retorno e sem
+id_mensagem_fila fictício. Usa sessão HTTP com timeout e sem retry automático;
+recebe destinatário e phone_id da unidade. `conta_wa` aceita sessão opcional sem
+alterar os clientes existentes. Stage e persistência pertencem ao worker/repositório.

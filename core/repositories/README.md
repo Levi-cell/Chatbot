@@ -149,3 +149,14 @@ DDL para esta pasta.
 
 O núcleo transacional e os testes específicos estão descritos em
 [`tests/README.md`](../../tests/README.md).
+
+## Registros de follow-up
+
+`atendimento/followup.py` concentra seleção, releitura, fencing e recibos de envio
+proativo e retomada. Recebe cursor; não abre conexão, não faz commit e não importa
+worker. O histórico permanece particionado; a unicidade do ciclo fica na tabela
+não particionada `followup_envio`, pela chave composta conversa + ID/data da âncora.
+`followup_retomada` permite reconstruir a reação ignorada em retries após o reset.
+`followup_legado` audita a marcação inicial de todas as conversas ativas com stage 1,
+preservando ID, stage anterior e horário da migração. Esse registro não é um envio.
+As tabelas são internas, sem ações no monitoramento ou no admin.

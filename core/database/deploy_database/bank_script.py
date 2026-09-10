@@ -1,7 +1,7 @@
 import logging
 
 from core.database.deploy_database.transacao_deploy import transacao_deploy
-
+from core.database.deploy_database.followup_script import criar_tabelas_followup
 
 logger = logging.getLogger("db.deploy_database")
 
@@ -569,6 +569,8 @@ def criar_tabelas():
         )
         WHERE status IN ('pending', 'processing');
         """)
+
+        criar_tabelas_followup(cursor)
 
     logger.info("banco_setup_ok | acao=criar_tabelas")
 

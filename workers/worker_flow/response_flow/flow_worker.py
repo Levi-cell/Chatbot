@@ -6,6 +6,18 @@ from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
 from core.repositories.atendimento.conversas import tentar_lock_conversa
+from core.repositories.atendimento.followup import (
+    LockConversaPerdido,
+    proteger_conversa,
+    reler_conversa,
+)
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+from workers.worker_flow.transacoes.retorno_followup import (
+    preparar_retorno_followup,
+    persistir_retorno_followup,
+)
 from core.repositories.atendimento.fila import (
     pegar_mensagens_da_fila,
     reagendar_mensagem_sem_erro,
@@ -14,7 +26,9 @@ from core.repositories.atendimento.fila import (
 from workers.tratamento_erros_externos.erro_conexao import handle_erro_conexao
 from workers.tratamento_erros_externos.erro_generico import handle_erro_generico
 from workers.tratamento_erros_externos.exceptions import BancoFalhouAposEnvioMeta
-from workers.tratamento_erros_externos.unidade_nao_encontrada import handle_unidade_nao_encontrada
+from workers.tratamento_erros_externos.unidade_nao_encontrada import (
+    handle_unidade_nao_encontrada,
+)
 from workers.worker_flow.response_flow.flow_sender import flow_sender
 from workers.worker_flow.suporte.cache_repair import (
     confirmar_cache_cliente_se_pendente,
@@ -170,11 +184,17 @@ def worker_flow():
                 conn_ciclo.commit()
                 continue
 
-            contexto_historico = valida_historico(
+            contexto_banco = reler_conversa(contexto_banco, lock_version, cursor_ciclo)
+            contexto_conversa = contexto_banco["conversa"]
+            contexto_historico = preparar_retorno_followup(
                 mensagem,
                 contexto_banco,
                 cursor_ciclo,
             )
+            if contexto_historico is None:
+                contexto_historico = valida_historico(
+                    mensagem, contexto_banco, cursor_ciclo
+                )
             conn_ciclo.commit()
             logger.debug(
                 "historico_contexto_ok | acao=commit id_mensagem=%s id_conversa=%s etapa_cliente=%s etapa_resposta=%s inserido=%s",
@@ -185,13 +205,22 @@ def worker_flow():
                 contexto_historico["mensagem_cliente_inserida"],
             )
 
-            contexto_envio = flow_sender(contexto_historico)
+            proteger_conversa(id_conversa, lock_version, cursor_ciclo, renovar=True)
+            conn_ciclo.commit()
+            if contexto_historico.get("retorno_followup"):
+                contexto_envio = enviar_repeticao_followup(contexto_historico)
+            else:
+                contexto_envio = flow_sender(contexto_historico)
 
             try:
-                contexto_final = atualizar_banco_com_contexto_final(
-                    contexto_historico,
-                    contexto_envio,
-                    cursor_ciclo,
+                proteger_conversa(id_conversa, lock_version, cursor_ciclo)
+                persistir = (
+                    persistir_retorno_followup
+                    if contexto_historico.get("retorno_followup")
+                    else atualizar_banco_com_contexto_final
+                )
+                contexto_final = persistir(
+                    contexto_historico, contexto_envio, cursor_ciclo
                 )
                 conn_ciclo.commit()
 
@@ -218,6 +247,7 @@ def worker_flow():
                 contexto_envio.get("tipo_tratamento"),
             )
 
+            proteger_conversa(id_conversa, lock_version, cursor_ciclo)
             resultado_encerramento = finalizar_mensagem_processada(
                 mensagem,
                 contexto_banco,
@@ -230,6 +260,15 @@ def worker_flow():
             registrar_cache_bloqueio_apos_commit(
                 mensagem,
                 resultado_encerramento,
+            )
+
+        except LockConversaPerdido:
+            if conn_ciclo:
+                conn_ciclo.rollback()
+            # Não reescreve uma fila que pode estar sendo processada pelo novo dono.
+            logger.warning(
+                "lock_perdido | acao=aguardar_recuperacao_fila id_conversa=%s",
+                estado_ciclo["id_conversa"],
             )
 
         except ErroEnvioMeta as erro:
@@ -255,6 +294,14 @@ def worker_flow():
                 conn_ciclo.commit()
 
         except BancoFalhouAposEnvioMeta as erro:
+            if isinstance(erro.__cause__, LockConversaPerdido):
+                conn_ciclo.rollback()
+                logger.critical(
+                    "meta_confirmou_com_lock_perdido | conversa=%s hash=%s risco=duplicidade",
+                    erro.id_conversa,
+                    erro.id_hash_msg_bot,
+                )
+                continue
             logger.critical(
                 "banco_falhou_apos_envio_meta | risco=resposta_duplicada acao=reagendar_sem_sent id_mensagem=%s id_conversa=%s etapa=%s id_hash_msg_bot=%s tratamento=%s tipo_tratamento=%s erro=%s",
                 erro.id_mensagem,

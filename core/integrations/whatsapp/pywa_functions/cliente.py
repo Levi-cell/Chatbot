@@ -8,20 +8,21 @@ from core.integrations.whatsapp.tools.config import (
     get_meta_graph_api_version,
 )
 
-
 _PREFIXO_MENSAGEM_BOT = ContextVar(
     "prefixo_mensagem_bot",
     default=None,
 )
 
 
-def conta_wa(phone_id, token=TOKEN_USUARIO_META):
+def conta_wa(phone_id, token=TOKEN_USUARIO_META, *, session=None):
     phone_id = _normalizar_phone_id(phone_id)
 
+    opcoes = {"session": session} if session is not None else {}
     cliente = WhatsApp(
         token=token,
         phone_id=phone_id,
         api_version=get_meta_graph_api_version(),
+        **opcoes,
     )
 
     if _PREFIXO_MENSAGEM_BOT.get():

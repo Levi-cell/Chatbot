@@ -2,10 +2,34 @@
 
 > Documento irmão de [worker_flow_worker_followup_plano_teorico.md](./worker_flow_worker_followup_plano_teorico.md).
 > Base de implementação: **V1.1.1**, commit `84735aeaa521cfcf3a8bb13b2a8eddeb126fa1df`.
-> Preparado em 08/09/2026. **Status: plano para implementação e homologação.**
+> Preparado em 08/09/2026. **Status: aplicado no projeto local em 09/09/2026; deploy pendente.**
 > Este documento contém o conteúdo final integral de **27 arquivos**, um por passo.
-> A preparação e os testes usaram uma cópia temporária isolada. Nenhum worker,
-> serviço da VM, banco de produção ou arquivo de runtime do projeto foi alterado.
+> As partes 1 e 2 foram aplicadas nessa ordem. A migração foi executada somente
+> em PostgreSQL temporário local para testes. Nenhum serviço da VM, banco de
+> produção ou envio real de mensagem foi acionado.
+
+## Registro da aplicação local
+
+A implementação foi aplicada sobre o commit local
+`432d9c13414eff1a36ed7796b44703d9bf864ef3`, preservando a alteração posterior
+dos CSVs essenciais sem `+55`. O `README.md` e o `PADROES_DE_ARQUITETURA.md`
+também passaram a descrever o novo worker e seu lock compartilhado com o flow.
+Os blocos completos abaixo e o manifesto refletem os arquivos locais aplicados.
+
+Validação em 09/09/2026:
+
+- Suíte geral: 192 testes aprovados; os nove testes PostgreSQL então existentes
+  ficaram separados para execução com banco real.
+- Integração PostgreSQL local: dez testes aprovados, incluindo um caso adicional
+  de retorno completo com fila, histórico, rollback e recuperação de ciclo posterior.
+- O SQL de migração foi executado integralmente em base descartável. Foram
+  confirmadas a marcação exclusiva das conversas ativas, a preservação dos demais
+  dados, a recusa de reaplicação e a reversão diante de conversa ativa terminal.
+- O PostgreSQL temporário foi encerrado após os testes. A Meta permaneceu simulada.
+
+O dado de teste para reaplicação passou a criar a conversa nova já na etapa 1,
+como ocorre no fluxo real; uma conversa sem etapa acionaria a guarda de integridade
+antes da verificação de reaplicação. Nenhuma regra de elegibilidade foi alterada.
 
 ## Relação com o teórico e versão de referência
 
@@ -3898,6 +3922,10 @@ from core.repositories.atendimento.conversas import (
     tentar_lock_conversa,
     unlock_conversa,
 )
+from workers.worker_flow.transacoes.retorno_followup import (
+    preparar_retorno_followup,
+    persistir_retorno_followup,
+)
 
 DSN = os.environ.get("FOLLOWUP_TEST_DSN")
 MIGRACAO = (
@@ -4127,6 +4155,103 @@ class FollowupPostgresTests(unittest.TestCase):
         )
         self.assertEqual(self.cursor.fetchone(), (0, self.agora, 0, 11))
 
+    def test_reacao_real_rollback_e_replay_preservam_ciclo_posterior(self):
+        mensagem = {
+            "id_mensagem": 10,
+            "id_hash": "wamid.reacao",
+            "data_recebimento": self.agora,
+            "cliente_telefone": "5511999999999",
+            "id_phone_unidade": "phone-teste",
+            "unidade_telefone": "5511888888888",
+            "tipo_mensagem": "text",
+            "conteudo_texto": "Pode começar",
+        }
+        envio = {
+            "enviou": True,
+            "id_hash_msg_bot": "wamid.repeticao",
+            "id_etapa_resultante": 11,
+            "tipo_mensagem": "text",
+            "mensagem_bot": "Que bom te ver novamente, Ana!\n\nPodemos começar?",
+        }
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.fila_mensagens
+                (id_mensagem, id_conversa, received_data_hora, cliente_telefone,
+                 conteudo_texto, tipo_mensagem, id_hash_msg, id_phone_unidade,
+                 unidade_telefone, status)
+            VALUES (10, 1, %s, '5511999999999', 'Pode começar', 'text',
+                    'wamid.reacao', 'phone-teste', '5511888888888', 'processing');
+            """,
+            (self.agora,),
+        )
+        for followup_em in (None, self.agora):
+            with self.subTest(legado=followup_em is None):
+                self.cursor.execute("SAVEPOINT ciclo_reacao")
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5",
+                    (followup_em,),
+                )
+                _, versao = tentar_lock_conversa(1, self.cursor)
+                contexto_banco = repo.reler_conversa(
+                    {"conversa": {"id_conversa": 1}, "id_cliente": 1, "id_unidade": 1},
+                    versao,
+                    self.cursor,
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+                self.assertEqual(self.cursor.fetchone()[0], 1)
+
+                # A falha após gravar a repetição deve reverter histórico e reset juntos.
+                self.cursor.execute("SAVEPOINT confirmacao")
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT confirmacao")
+                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+                self.assertEqual(self.cursor.fetchone()[0], 1)
+                self.cursor.execute(
+                    "SELECT concluida_em FROM chatbot.followup_retomada"
+                )
+                self.assertIsNone(self.cursor.fetchone()[0])
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 3)
+
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute(
+                    "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
+                )
+                self.assertEqual(self.cursor.fetchone(), (0, followup_em, 5, 11))
+                self.cursor.execute(
+                    "SELECT conteudo_texto FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
+                )
+                self.assertEqual(self.cursor.fetchone()[0], envio["mensagem_bot"])
+
+                # Simula recuperação da mesma fila após outro ciclo já ter começado.
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s",
+                    (self.agora + timedelta(hours=1),),
+                )
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                antes_replay = self.cursor.fetchone()[0]
+                contexto_banco = repo.reler_conversa(
+                    contexto_banco, versao, self.cursor
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                self.assertIsNotNone(contexto["resposta_bot_para_mensagem_atual"])
+                final = persistir_retorno_followup(
+                    contexto,
+                    {"enviou": False, "id_hash_msg_bot": "wamid.repeticao"},
+                    self.cursor,
+                )
+                self.assertTrue(final["resposta_ja_existia"])
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                self.assertEqual(self.cursor.fetchone()[0], antes_replay)
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 4)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT ciclo_reacao")
+
     def test_dois_processos_lock_recusa_e_fencing(self):
         # ROLLBACK remove apenas a fixture desta função. A conversa-base é confirmada.
         self.conn.rollback()
@@ -4208,7 +4333,8 @@ class MigracaoLegadoPostgresTests(unittest.TestCase):
         )
         self.cursor.execute("""
             INSERT INTO chatbot.cliente(id_cliente,waid_telefone) VALUES(5,'5511999999995');
-            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade) VALUES(5,5,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
+            VALUES(5,5,1,1);
         """)
         self.conn.commit()
         with self.assertRaises(psycopg.errors.DuplicateTable):
@@ -5413,6 +5539,8 @@ Implementação principal:
   apenas elegíveis, com somente Nome, E-mail e Telefone. Mantêm o nome completo
   em uma coluna, sem acrescentar rótulos ou datas, e reutilizam as mesmas regras
   de período, unidade, normalização e elegibilidade dos arquivos Google CSV.
+  Somente nesses dois CSVs essenciais, o telefone brasileiro é exibido sem o
+  prefixo internacional `+55`, preservando o DDD e o número.
 
 ## 20. Disponibilidade e recuperação automática
 
@@ -6339,6 +6467,10 @@ fila sem vínculo e dois proprietários do lock. Nunca aponta para DB_HOST/DB_NA
 Também executa o SQL integral de migração sobre uma base antiga descartável:
 marca somente ativas, audita os valores anteriores, preserva os demais dados,
 não produz histórico/envio, recusa reaplicação e reverte diante de legado terminal.
+O retorno completo também usa fila e histórico reais nesse banco descartável:
+rollback preserva stage positivo, a confirmação mantém a etapa e os contadores,
+e recuperar a mesma reação não reseta um ciclo posterior. Cobre tanto o lembrete
+confirmado quanto o legado sem data de envio.
 Meta permanece simulada; a confirmação de entrega real exige homologação manual.
 ````
 
@@ -6551,9 +6683,10 @@ escopo do prefixo sob erro e continuação do lote após falha. Os testes Postgr
 incluem seleção/releitura nas etapas 1–22 e execução integral da migração sobre
 legado descartável, mas ainda não foram executados. Os 27 blocos completos,
 seus hashes e a sintaxe Python/SQL foram conferidos.
-Os testes PostgreSQL estão entregues, mas **a execução deles permanece como gate de
-homologação**. Não há alegação de teste com dois processos reais de produção ou de
-medição de desempenho no RDS nesta preparação.
+Esses resultados descrevem a preparação anterior à aplicação. O gate PostgreSQL
+local foi concluído na aplicação de 09/09/2026, conforme o registro no início deste
+documento. Entrega real pela Meta e medição de desempenho com volume representativo
+continuam pertencendo à homologação; não foram realizadas no RDS.
 
 ## Executar a suíte sem serviços externos
 
@@ -6850,7 +6983,7 @@ arquivos temporários de validação ou o `VERSIONAMENTO.txt` local.
       "arquivo": "tests/integration/test_followup_postgres.py",
       "acao": "criar",
       "sha256_base_lf": null,
-      "sha256_proposto_lf": "c8d26c88047da493d2b71b8f1690b50036da6ca7877db86e8fee9dd2c3b68d30"
+      "sha256_proposto_lf": "0b1f2ebf50f45d2a3f22896b6a47779540c09aef5305242ba0030963efce85b9"
     },
     {
       "passo": 21,
@@ -6864,7 +6997,7 @@ arquivos temporários de validação ou o `VERSIONAMENTO.txt` local.
       "arquivo": "REGRAS_DE_NEGOCIO.md",
       "acao": "alterar",
       "sha256_base_lf": "64f457197d7eb0bcdd463dff378b49ecacea4ce1b77d2b4ec267d55f5cdb82ab",
-      "sha256_proposto_lf": "fa9c868ed5a9ea540b31b8ded0059daa1ce131c8503edc427aeba5a61948bf09"
+      "sha256_proposto_lf": "e0c4978aeed3d08a253b8c43c1d2efe59ebd393980b310a4c4cd743103496fcb"
     },
     {
       "passo": 23,
@@ -6892,7 +7025,7 @@ arquivos temporários de validação ou o `VERSIONAMENTO.txt` local.
       "arquivo": "tests/README.md",
       "acao": "alterar",
       "sha256_base_lf": "7a782e5b114ad5dc51e8390750395914eb57423619ab81f68e0117c55f8ec5c9",
-      "sha256_proposto_lf": "68607bb0a2e94aa29c0111c21465cfbaecf61fa2fef72766425961e48069300f"
+      "sha256_proposto_lf": "23e40376bba746d9953c3d573587e6315a3b8cc3b4da8f6d6519afb7beead5c7"
     },
     {
       "passo": 27,

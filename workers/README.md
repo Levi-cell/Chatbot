@@ -283,3 +283,31 @@ está em
 
 O núcleo transacional e os testes específicos estão descritos em
 [`tests/README.md`](../tests/README.md).
+
+## Worker de follow-up
+
+`worker_followup/iniciar_worker_followup.py` é o quarto serviço da VM. Seu laço
+seleciona candidatos pelo PostgreSQL e chama `followup_worker.py`, proprietário
+da conexão e dos commits proativos. Não faz dequeue nem chama validadores de etapas.
+`FOLLOWUP_WORKER_ENABLED` é falso por padrão em execução manual; a unit systemd
+o habilita explicitamente. Lote padrão: 20; intervalo entre lotes: 60 segundos.
+As candidatas são processadas uma por vez, com lock e transações independentes.
+Somente etapas 1–17 admitem novos lembretes; etapas 18–22 são inelegíveis.
+A paginação visita candidatos posteriores mesmo quando os primeiros falham.
+Uma falha individual não interrompe o lote. A candidata pode ser tentada novamente
+quando a paginação voltar ao início, depois de revalidar todas as condições; não
+há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janela Meta.
+
+No flow, o contexto é relido depois do lock. `transacoes/retorno_followup.py` registra
+a reação e recupera a prova de repetição. `response_flow/repeticao_followup.py`
+chama os senders normais da etapa, sem resolvers de negócio. A renovação do lock
+antes do envio acrescenta um checkpoint; persistência final e finalização da fila
+validam a posse antes de alterar dados. Repositórios não controlam commits.
+Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
+`Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!` sem nome salvo.
+O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
+na regra existente de três horas.
+
+Deploy: preparar banco e código, reiniciar flow compatível, então iniciar follow-up.
+Rollback: parar o proativo primeiro e manter flow compatível enquanto houver stage
+positivo ou retomadas pendentes. Desligar o serviço não limpa esses registros.

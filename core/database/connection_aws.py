@@ -4,7 +4,6 @@ import psycopg
 
 from core.config_env import env_int, env_optional, env_required
 
-
 logger = logging.getLogger("db.connection")
 
 setup = {
@@ -25,11 +24,16 @@ if _db_sslrootcert:
     setup["sslrootcert"] = _db_sslrootcert
 
 
-def get_conn(application_name=None):
+def get_conn(application_name=None, *, connect_timeout=None):
     connect_kwargs = dict(setup)
 
     if application_name:
         connect_kwargs["application_name"] = application_name
+
+    if connect_timeout is not None:
+        if type(connect_timeout) is not int or connect_timeout <= 0:
+            raise ValueError("connect_timeout deve ser inteiro positivo")
+        connect_kwargs["connect_timeout"] = connect_timeout
 
     conn = psycopg.connect(**connect_kwargs)
     logger.debug(
@@ -40,6 +44,7 @@ def get_conn(application_name=None):
         application_name,
     )
     return conn
+
 
 # conn.close automaticamente fecha qualquer cursor associado a ela.
 # Se fizer conn.close, nao precisa fazer cursor.close.

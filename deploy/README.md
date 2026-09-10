@@ -141,3 +141,29 @@ bloqueios no Redis remoto e remover o servidor Redis local da VM estao em
 [`regras_deploy/servicos_e_redis_remoto.md`](../regras_deploy/servicos_e_redis_remoto.md).
 
 Nao exponha a porta `6379` e nao use `FLUSHDB` ou `FLUSHALL` em producao.
+
+## Ativação do follow-up
+
+Esta alteração exige migração manual `migrations/followup_registros.sql` antes do
+flow novo. Instalação limpa utiliza `followup_script.py`, chamado por `bank_script`.
+As colunas followup_stage/last_sent_at já existentes não são recriadas. Com o flow
+parado e o follow-up desligado, a migração registra em followup_legado todas as
+conversas ativas e marca followup_stage = 1, inclusive nas etapas 18–21. O horário
+last_sent_at, o histórico, a etapa e a finalização permanecem como estavam.
+O script é único e transacional; não reaplicar nos próximos deploys. O setup limpo
+cria as três tabelas e não marca conversas. A marcação não comprova envio de mensagem.
+Conversa ativa terminal/inconsistente recusa toda a migração: concluir a recuperação
+pendente do flow e revisar a anomalia antes de tentar de novo, sem encerrar em massa.
+
+Instalar `systemd/chatbot-worker-followup.service` e executar daemon-reload não
+inicia envios. A unit habilita FOLLOWUP_WORKER_ENABLED; se essa chave já existir no
+EnvironmentFile, conferir a precedência antes da ativação. Nenhum segredo novo é necessário.
+Reiniciar primeiro chatbot-worker-flow.service. Somente após validar o flow e a
+consulta sem envio, habilitar e iniciar chatbot-worker-followup.service.
+
+`python -m utilitarios.verificar_followup` faz leitura e mostra IDs de uma amostra.
+Não é uma execução do worker e não envia mensagens. Um resultado vazio é válido.
+
+Para interromper os lembretes, parar e desabilitar a unit de follow-up. Isso mantém
+o flow apto a tratar retornos de lembretes ou do legado marcado. Não apagar recibos, resetar
+stages em massa nem reverter o flow incompatível enquanto existirem ciclos positivos.

@@ -78,6 +78,81 @@ def contexto_final():
 
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
+
+    def test_reacao_followup_desvia_validadores_e_persistencia_normal(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            cx = dict(contexto_historico(), retorno_followup=True)
+            stack.enter_context(
+                patch.object(flow_worker, "preparar_retorno_followup", return_value=cx)
+            )
+            normal_historico = stack.enter_context(
+                patch.object(flow_worker, "valida_historico")
+            )
+            normal_sender = stack.enter_context(
+                patch.object(flow_worker, "flow_sender")
+            )
+            normal_persistencia = stack.enter_context(
+                patch.object(flow_worker, "atualizar_banco_com_contexto_final")
+            )
+            repetir = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "enviar_repeticao_followup",
+                    return_value=contexto_envio(),
+                )
+            )
+            persistir = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "persistir_retorno_followup",
+                    return_value=contexto_final(),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    return_value={"atendimento_encerrado": False},
+                )
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        normal_historico.assert_not_called()
+        normal_sender.assert_not_called()
+        normal_persistencia.assert_not_called()
+        repetir.assert_called_once()
+        persistir.assert_called_once()
+        finalizar.assert_called_once()
+
+    def test_lock_perdido_nao_envia_nem_reescreve_fila(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "proteger_conversa",
+                    side_effect=flow_worker.LockConversaPerdido,
+                )
+            )
+            enviar = stack.enter_context(patch.object(flow_worker, "flow_sender"))
+            reagendar = stack.enter_context(
+                patch.object(flow_worker, "reagendar_mensagem_sem_erro")
+            )
+            finalizar = stack.enter_context(
+                patch.object(flow_worker, "finalizar_mensagem_processada")
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        enviar.assert_not_called()
+        reagendar.assert_not_called()
+        finalizar.assert_not_called()
+        self.assertEqual(conn.rollbacks, 1)
+
     def test_fila_vazia_aguarda_um_segundo_e_meio(self):
         with (
             patch.object(estado_ciclo.time, "sleep") as sleep,
@@ -86,25 +161,27 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             estado_ciclo.aguardar_fila_vazia()
 
         sleep.assert_called_once_with(1.5)
-        log_debug.assert_called_once_with(
-            "fila_vazia | acao=aguardar segundos=1.5"
-        )
+        log_debug.assert_called_once_with("fila_vazia | acao=aguardar segundos=1.5")
 
     def test_erro_operacional_psycopg3_reinicia_conexao(self):
         erro = flow_worker.psycopg.OperationalError("conexao indisponivel")
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[erro, PararWorker()],
-            ))
-            tratar_conexao = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_conexao",
-                return_value=10,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[erro, PararWorker()],
+                )
+            )
+            tratar_conexao = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_conexao",
+                    return_value=10,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -116,30 +193,38 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[conn, PararWorker()],
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "pegar_mensagens_da_fila",
-                return_value=None,
-            ))
-            close = stack.enter_context(patch.object(
-                conn,
-                "close",
-                wraps=conn.close,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[conn, PararWorker()],
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "pegar_mensagens_da_fila",
+                    return_value=None,
+                )
+            )
+            close = stack.enter_context(
+                patch.object(
+                    conn,
+                    "close",
+                    wraps=conn.close,
+                )
+            )
 
             def verificar_conexao_fechada():
                 self.assertTrue(conn.closed)
 
-            stack.enter_context(patch.object(
-                flow_worker,
-                "aguardar_fila_vazia",
-                side_effect=verificar_conexao_fechada,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "aguardar_fila_vazia",
+                    side_effect=verificar_conexao_fechada,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -149,94 +234,140 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
 
     def _patch_fluxo_base(self, stack, conn, eventos):
+        stack.enter_context(
+            patch.object(
+                flow_worker, "reler_conversa", side_effect=lambda contexto, *_: contexto
+            )
+        )
+        stack.enter_context(patch.object(flow_worker, "proteger_conversa"))
+        stack.enter_context(
+            patch.object(flow_worker, "preparar_retorno_followup", return_value=None)
+        )
         stack.enter_context(patch("builtins.print"))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "get_conn",
-            side_effect=[conn, PararWorker()],
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "pegar_mensagens_da_fila",
-            return_value=registro_fila(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "validar_banco_mensagem",
-            side_effect=lambda *_args: eventos.append("validar_banco") or contexto_banco(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "vincular_mensagem_fila_a_conversa",
-            side_effect=lambda *_args: eventos.append("vincular_conversa") or 1,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "confirmar_cache_cliente_se_pendente",
-            return_value=False,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "tentar_lock_conversa",
-            side_effect=lambda *_args: eventos.append("adquirir_lock") or (True, 4),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "reagendar_se_houver_mensagem_anterior",
-            side_effect=lambda *_args: eventos.append("verificar_ordem") or False,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "valida_historico",
-            side_effect=lambda *_args: eventos.append("persistir_cliente") or contexto_historico(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "flow_sender",
-            side_effect=lambda *_args: eventos.append("enviar_meta") or contexto_envio(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "liberar_lock_conversa_se_necessario",
-            side_effect=lambda *_args: eventos.append("liberar_lock") or True,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "handle_erro_generico",
-        ))
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=registro_fila(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "validar_banco_mensagem",
+                side_effect=lambda *_args: eventos.append("validar_banco")
+                or contexto_banco(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+                side_effect=lambda *_args: eventos.append("vincular_conversa") or 1,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "confirmar_cache_cliente_se_pendente",
+                return_value=False,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "tentar_lock_conversa",
+                side_effect=lambda *_args: eventos.append("adquirir_lock") or (True, 4),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "reagendar_se_houver_mensagem_anterior",
+                side_effect=lambda *_args: eventos.append("verificar_ordem") or False,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "valida_historico",
+                side_effect=lambda *_args: eventos.append("persistir_cliente")
+                or contexto_historico(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "flow_sender",
+                side_effect=lambda *_args: eventos.append("enviar_meta")
+                or contexto_envio(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "liberar_lock_conversa_se_necessario",
+                side_effect=lambda *_args: eventos.append("liberar_lock") or True,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "handle_erro_generico",
+            )
+        )
 
     def test_mensagem_anterior_reagenda_antes_de_validar_banco(self):
         conn = FakeConn(FakeCursor())
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[conn, PararWorker()],
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "pegar_mensagens_da_fila",
-                return_value=registro_fila(),
-            ))
-            barreira = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_se_houver_mensagem_anterior",
-                return_value=True,
-            ))
-            validar = stack.enter_context(patch.object(
-                flow_worker,
-                "validar_banco_mensagem",
-            ))
-            lock = stack.enter_context(patch.object(
-                flow_worker,
-                "tentar_lock_conversa",
-            ))
-            vincular = stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[conn, PararWorker()],
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "pegar_mensagens_da_fila",
+                    return_value=registro_fila(),
+                )
+            )
+            barreira = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_se_houver_mensagem_anterior",
+                    return_value=True,
+                )
+            )
+            validar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "validar_banco_mensagem",
+                )
+            )
+            lock = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "tentar_lock_conversa",
+                )
+            )
+            vincular = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -255,19 +386,24 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                side_effect=lambda *_args: eventos.append("persistir_bot") or contexto_final(),
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                side_effect=lambda *_args: (
-                    eventos.append("marcar_sent")
-                    or {"atendimento_encerrado": False}
-                ),
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    side_effect=lambda *_args: eventos.append("persistir_bot")
+                    or contexto_final(),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=lambda *_args: (
+                        eventos.append("marcar_sent")
+                        or {"atendimento_encerrado": False}
+                    ),
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -287,7 +423,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             ],
         )
         finalizar.assert_called_once()
-        self.assertEqual(conn.commits, 7)
+        self.assertEqual(conn.commits, 8)
         self.assertEqual(conn.rollbacks, 0)
         self.assertTrue(conn.closed)
 
@@ -310,31 +446,41 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "confirmar_cache_cliente_se_pendente",
-                side_effect=confirmar_cache,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-                side_effect=vincular_conversa,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "valida_historico",
-                side_effect=persistir_historico,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                return_value=contexto_final(),
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                return_value={"atendimento_encerrado": False},
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "confirmar_cache_cliente_se_pendente",
+                    side_effect=confirmar_cache,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                    side_effect=vincular_conversa,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "valida_historico",
+                    side_effect=persistir_historico,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    return_value=contexto_final(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    return_value={"atendimento_encerrado": False},
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -349,33 +495,45 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "tentar_lock_conversa",
-                return_value=(False, None),
-            ))
-            reagendar = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_mensagem_sem_erro",
-                return_value=1,
-            ))
-            vincular = stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-            ))
-            historico = stack.enter_context(patch.object(
-                flow_worker,
-                "valida_historico",
-            ))
-            enviar = stack.enter_context(patch.object(
-                flow_worker,
-                "flow_sender",
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "liberar_lock_conversa_se_necessario",
-                return_value=None,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "tentar_lock_conversa",
+                    return_value=(False, None),
+                )
+            )
+            reagendar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_mensagem_sem_erro",
+                    return_value=1,
+                )
+            )
+            vincular = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                )
+            )
+            historico = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "valida_historico",
+                )
+            )
+            enviar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "flow_sender",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "liberar_lock_conversa_se_necessario",
+                    return_value=None,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -398,32 +556,44 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-                return_value=0,
-            ))
-            tratar_erro = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_generico",
-            ))
-            reagendar = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_mensagem_sem_erro",
-                return_value=1,
-            ))
-            aviso = stack.enter_context(patch.object(
-                flow_worker.logger,
-                "critical",
-            ))
-            persistir_bot = stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                    return_value=0,
+                )
+            )
+            tratar_erro = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_generico",
+                )
+            )
+            reagendar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_mensagem_sem_erro",
+                    return_value=1,
+                )
+            )
+            aviso = stack.enter_context(
+                patch.object(
+                    flow_worker.logger,
+                    "critical",
+                )
+            )
+            persistir_bot = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -455,23 +625,29 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                side_effect=RuntimeError("banco caiu apos envio"),
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                side_effect=lambda *_args: (
-                    eventos.append("marcar_sent")
-                    or {"atendimento_encerrado": False}
-                ),
-            ))
-            tratar_erro = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_generico",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    side_effect=RuntimeError("banco caiu apos envio"),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=lambda *_args: (
+                        eventos.append("marcar_sent")
+                        or {"atendimento_encerrado": False}
+                    ),
+                )
+            )
+            tratar_erro = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_generico",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -480,7 +656,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         tratar_erro.assert_called_once()
         self.assertNotIn("marcar_sent", eventos)
         self.assertEqual(conn.rollbacks, 1)
-        self.assertEqual(conn.commits, 6)
+        self.assertEqual(conn.commits, 7)
         self.assertTrue(conn.closed)
 
 

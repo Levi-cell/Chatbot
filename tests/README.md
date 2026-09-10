@@ -71,3 +71,25 @@ CSV (Google e essencial, todos e elegíveis). Cobre todos os períodos, unidade
 autorizada, revogação de acesso, acentos, campos vazios e proteção contra fórmulas
 nos dados textuais. Seus payloads vivem em `fixtures/monitoramento_painel.py` e
 são fictícios.
+
+## Follow-up
+
+`unit/test_followup.py` cobre envio exato, reação, etapas e botões reais com HTTP
+substituído, recuperação, falta de lock, falhas e parâmetros SQL. O teste de runtime
+do flow cobre o novo caminho sem chamar validadores ou persistência de transição.
+Cobre saudação com e sem nome, texto enviado igual ao histórico, isolamento do
+prefixo sob exceção, retorno legado sem data de envio e falha sem interromper o lote.
+
+`integration/test_followup_postgres.py` exige explicitamente FOLLOWUP_TEST_DSN com
+host loopback e banco vazio chamado `test_chatbot_followup`. Ele cria e remove seu
+próprio schema chatbot, recusando schema preexistente. Sem essa variável é pulado.
+Executa DDL canônico, consultas reais, unicidade em histórico particionado, rollback,
+fila sem vínculo e dois proprietários do lock. Nunca aponta para DB_HOST/DB_NAME.
+Também executa o SQL integral de migração sobre uma base antiga descartável:
+marca somente ativas, audita os valores anteriores, preserva os demais dados,
+não produz histórico/envio, recusa reaplicação e reverte diante de legado terminal.
+O retorno completo também usa fila e histórico reais nesse banco descartável:
+rollback preserva stage positivo, a confirmação mantém a etapa e os contadores,
+e recuperar a mesma reação não reseta um ciclo posterior. Cobre tanto o lembrete
+confirmado quanto o legado sem data de envio.
+Meta permanece simulada; a confirmação de entrega real exige homologação manual.

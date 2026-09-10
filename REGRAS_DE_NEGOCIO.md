@@ -1224,3 +1224,49 @@ Antes de modificar o fluxo:
    fila;
 6. não tratar um comportamento esperado da V1 como bug apenas por ele parecer
    conservador ou incompleto.
+
+## Follow-up de inatividade e reação do cliente
+
+O worker proativo envia somente `Você viu a minha mensagem?` depois de sete horas
+sem reação à última resposta comum confirmada do bot. NULL equivale a stage zero.
+O envio exige conversa ativa em etapa 1–17, unidade válida e adimplente, ausência
+de bloqueios, de entrada posterior no histórico e de fila pending/processing do
+mesmo par cliente/unidade, mesmo se ainda não vinculada à conversa. Uma fila
+respondida mas ainda aberta também adia o proativo até sua finalização.
+
+O canal exige janela aberta desde a última mensagem do cliente; este envio em texto
+livre não usa template. A implementação reserva um minuto antes de completar 24h
+para evitar despacho na borda. Isso não altera o limiar de sete horas do bot.
+
+O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece até uma
+reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.
+A primeira entrada aceita com stage positivo é armazenada, mas seu conteúdo não é
+interpretado como resposta da etapa. A repetição começa com `Que bom te ver novamente,
+<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido. Essa saudação
+independe do tempo de retorno e não se soma a `Olá novamente`. Não há tratamento,
+transição, alteração de turnos_sem_avanco, funil ou encerramento.
+
+A migração inicial marca followup_stage = 1 para todas as conversas ativas antigas,
+incluindo etapas 18–21, e registra seus IDs, stages anteriores e a data da marcação
+em followup_legado. Não envia lembrete, não encerra conversas, não inventa recibo
+nem altera followup_last_sent_at. Stage positivo passa a indicar retomada pendente,
+por envio real ou marcação inicial; somente o histórico/recibo comprova envio.
+Novas conversas continuam com stage zero. O setup limpo não marca conversas.
+
+Histórico da repetição, marcação da retomada e reset para zero pertencem ao mesmo
+commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
+concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
+seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
+novo ciclo somente nas etapas 1–17 e com as demais condições de envio atendidas.
+Stage maior que um segue a mesma recuperação; negativo falha fechado.
+
+Essa desconsideração semântica é uma exceção deliberada à interpretação normal da
+entrada. Stage zero preserva os validadores, o mapa e a saudação reativa de três horas.
+O registro proativo não possui fila nem hash de cliente de origem e não prova que
+uma fila A/B/C foi respondida. Os recibos próprios identificam a conversa e a âncora
+do ciclo; registros de retomada identificam a entrada ignorada para recuperação.
+
+Os dois workers compartilham o lock de 110 segundos e seu fencing. Entrada aceita
+após o último teste pré-envio pode cruzar com a chamada da Meta: confirmamos o
+lembrete e o flow lê stage positivo quando obtiver o lock. A janela entre aceite
+externo e commit local continua sujeita à duplicidade rara já aceita na V1.
