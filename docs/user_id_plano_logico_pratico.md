@@ -1,10 +1,10 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
-> Documento de implementação preparado sobre a baseline funcional V1.1.0,
-> commit completo `3f75447eb64a1a01085cccbc4a676a6a052d8493`, auditada em 04/09/2026. A baseline já
+> Documento de implementação preparado sobre a baseline funcional V1.3.0,
+> commit completo `4f7f8a0f1c64cd24086179aca2886cb77a5f1332`, auditada em 12/09/2026. A baseline já
 > contém o aplicativo Django de monitoramento, autenticação nativa, vínculo
 > opcional 1:1 entre usuário e unidade, painel responsivo, relatórios, Google
-> CSV, tags de perfil, correção do aceite da triagem e a operação pelos três
+> CSV, tags de perfil, correção do aceite da triagem e a operação pelos quatro
 > serviços systemd. Este arquivo não altera o runtime; ele registra o estado
 > final completo a aplicar quando a Meta disponibilizar `user_id` no contrato
 > usado pelo projeto.
@@ -12,13 +12,18 @@
 > A baseline possui 22 etapas e 25 transições. A implementação futura acrescenta
 > somente a solicitação oficial de contato como nova etapa 2, renumera as etapas
 > atuais 2..22 para 3..23 e termina com 23 etapas e 27 transições. Todo recurso
-> entregue até a V1.1.0 deve atravessar essa renumeração sem regressão.
+> entregue até a V1.3.0 deve atravessar essa renumeração sem regressão.
+
+A V1.3.0 foi implantada no commit `50e59879c4c2aa6e0f6cf676adf50d40aec8ca03`.
+O commit de referência acima é o backup posterior com a documentação atualizada.
+Esta revisão alterou somente os dois planos; os arquivos abaixo são conteúdo
+para aplicação futura, validado em uma cópia temporária isolada.
 
 A lógica e os critérios autoritativos permanecem em
 [`user_id_plano_logico_teorico.md`](./user_id_plano_logico_teorico.md). Se houver
 qualquer divergência interpretativa, o plano teórico vence. Os blocos deste
 arquivo são a materialização integral do mesmo desenho sobre o commit
-`3f75447`.
+`4f7f8a0`.
 
 ## Baseline que deve ser preservada
 
@@ -26,12 +31,20 @@ arquivo são a materialização integral do mesmo desenho sobre o commit
   configurando somente as apresentações da etapa 1.
 - `cliente.profissao` guarda o valor canônico mais recente e
   `conversa.profissao` conserva o snapshot usado pelo Funil.
-- `unidade.suporte_idoso`, `unidade.email_obrigatorio` e `unidade.bpa_ativo`
+- `unidade.idade_minima_suporte`, `unidade.email_obrigatorio` e `unidade.bpa_ativo`
   continuam dirigindo os fluxos e a apresentação dinâmica do monitoramento.
-- A saudação de retorno depois de três horas, a proteção contextual da oferta e
-  a política de e-mail/suporte ao idoso permanecem intactas.
+- No caminho normal com followup_stage zero, permanece a saudação após três
+  horas. A retomada após follow-up usa Que bom te ver novamente, com nome quando
+  disponível. A proteção contextual da oferta permanece.
+- O suporte configurável vale somente para titular entre o limite inclusivo e
+  99 anos, com NULL desativado e opções 50/60/70/80/90. Menores, dependentes e
+  o tratamento universal de 100+ mantêm suas regras. A dispensa de e-mail do
+  titular 60+ independe do limite de suporte; as tags de perfil não mudam.
+- Relatórios conservam o indicador Encaminhados ao comercial, contado por
+  cliente distinto, unidade e data de encerramento. A configuração atual não
+  apaga encaminhamentos históricos. O painel compacto e responsivo permanece.
 - A introdução atual da triagem migra da etapa 11 para a etapa 12. O botão
-  `Começar triagem` e os aceites textuais já cobertos na V1.1.0 — como `sim`,
+  `Começar triagem` e os aceites textuais já cobertos na V1.3.0 — como `sim`,
   `vamos`, `começar a triagem`, `sim começar`, `pode começar` e equivalentes —
   continuam aceitos; negativas explícitas continuam prevalecendo.
 - O monitoramento mantém login e sessão do Django, autorização por
@@ -44,7 +57,7 @@ arquivo são a materialização integral do mesmo desenho sobre o commit
 
 A migração atual
 `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql` já deve
-estar materializada no banco da V1.1.0. Ela depende das migrations nativas do
+estar materializada no banco da V1.3.0. Ela depende das migrations nativas do
 Django, que criam `chatbot.auth_user`, e adiciona
 `unidade.id_usuario_monitoramento INT NULL`, unicidade e FK com
 `ON DELETE SET NULL`. A futura migração de `user_id` prova e preserva esse
@@ -55,13 +68,19 @@ Também continuam como pré-requisitos já aplicados:
 - `deploy/migrations/20260812_personalizar_agente_unidade.sql`;
 - `deploy/migrations/20260823_adicionar_profissao_cliente.sql`;
 - `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
-- `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`.
+- `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`;
+- `deploy/migrations/followup_registros.sql`;
+- `deploy/migrations/20260911_idade_minima_suporte.sql`.
+
+São antecedentes já aplicados: não executar novamente a marcação de conversas
+legadas nem a conversão booleana de suporte. O banco já deve ter o domínio
+INTEGER NULL/50/60/70/80/90 e os três registros persistentes de follow-up.
 
 ## Como usar este documento
 
 - Aplicar os passos na ordem apresentada e usar sempre o conteúdo integral, sem
   montar arquivos por trechos.
-- Confirmar `3f75447eb64a1a01085cccbc4a676a6a052d8493` como ancestral da árvore de implementação e gerar
+- Confirmar `4f7f8a0f1c64cd24086179aca2886cb77a5f1332` como ancestral da árvore de implementação e gerar
   um manifesto SHA-256 do estado inicial. Recusar uma baseline divergente e
   regenerar o plano a partir dela.
 - Incluir no manifesto os módulos executáveis, utilitários e fontes do portal
@@ -79,7 +98,7 @@ Também continuam como pré-requisitos já aplicados:
   `rollback()` existentes.
 - Arquivos sem passo explícito permanecem byte a byte como estão na baseline.
   O plano não autoriza restaurar arquivos antigos nem apagar funcionalidades da
-  V1.1.0.
+  V1.3.0.
 
 ## Garantias de arquitetura
 
@@ -133,9 +152,11 @@ Também continuam como pré-requisitos já aplicados:
 - O histórico representa a etapa 2 com o botão desabilitado
   `Compartilhar contato`. Catálogo, relatório de etapas e gráficos passam a
   trabalhar com 23 etapas.
-- O Google CSV exporta somente nome, e-mail e WA ID canônico. Cliente ainda
-  identificado apenas por username não ganha telefone inventado e não entra no
-  arquivo de elegíveis.
+- As quatro exportações são preservadas: todos/elegíveis no Google CSV e
+  todos/elegíveis no CSV essencial. Os dois essenciais têm apenas Nome, E-mail e
+  Telefone, retirando o prefixo brasileiro 55 conforme a V1.3.0. O Google CSV
+  mantém o telefone internacional. Username não vira telefone nem coluna de CSV;
+  sem WA ID canônico o contato não entra no arquivo de elegíveis.
 - A atualização periódica já existente no portal permanece: conversas a cada 10
   segundos e relatórios a cada 30 segundos, sempre por leitura autenticada.
 
@@ -165,14 +186,14 @@ fixture anonimizado e os testes devem entrar antes de qualquer mutação.
 
 ## Inventário preparado
 
-- Arquivos finais criados: 23
-- Arquivos finais substituídos: 149
+- Arquivos finais criados: 25
+- Arquivos finais substituídos: 162
 - Arquivos removidos: 10
-- Total de ações, incluindo a migração: 182
-- Os rótulos aditivos `34A`, `97A`, `150A` a `150L` e `159A` a `159I`
+- Total de ações, incluindo a migração: 197
+- Os rótulos aditivos `34A`, `97A`, `150A` a `150L` e `159A` a `159X`
   preservam a numeração estável dos passos seguintes.
 - Validação obrigatória: hashes de todos os blocos, materialização limpa sobre
-  `3f75447`, `compileall`, `git diff --check`, `pip check`, matriz final
+  `4f7f8a0`, `compileall`, `git diff --check`, `pip check`, matriz final
   de 23 etapas/27 transições, testes de identidade, anti-flood, apresentação,
   profissão, triagem e monitoramento.
 - PyWa alvo: `4.4.0`; a assinatura de `request_contact_info` e a Graph API
@@ -180,7 +201,108 @@ fixture anonimizado e os testes devem entrar antes de qualquer mutação.
 - A suíte offline usa fixtures, fakes e mocks. Smokes reais de Meta, Redis e RDS
   permanecem separados e controlados.
 
-# Fase 1 — Contratos e dependências
+
+## Follow-up preservado e exceção aprovada da etapa 2
+
+A nova numeração torna elegíveis as etapas 1–18, excluindo a etapa 19 de
+agendamento e as seguintes. O worker continua independente: lotes de até 20
+conversas, intervalo de 60 segundos, processamento e transação por conversa.
+O lembrete único por ciclo continua sendo “Você viu a minha mensagem?”.
+
+São exigidos stage zero, conversa ativa, última mensagem global do bot com
+envio confirmado há pelo menos sete horas e última mensagem do cliente dentro
+da janela da Meta. O código conserva a margem de 23h59 e os filtros de
+unidade, bloqueio, flood, fila pendente, checkpoint e recibo já existentes.
+Um último envio do bot há sete horas não torna elegível um cliente cuja última
+mensagem já ultrapassou 24 horas.
+
+Somente a etapa 2 admite consumir a primeira reação ao follow-up como resposta
+da etapa. A decisão usa prova oficial validada, nunca apenas o texto ou o
+formato visual do botão:
+
+| Primeira reação na etapa 2 | Resultado |
+| --- | --- |
+| Compartilhamento oficial válido e vinculado ao cliente/unidade | Reconciliar/promover o WA ID e avançar 2→3; usar o WA ID canônico no envio. |
+| Texto, número digitado, mídia, botão comum ou contato sem prova oficial válida | Permanecer na etapa 2 e repetir a solicitação oficial com saudação e orientação. |
+| Reprocessamento da mesma resposta já confirmada | Recuperar o resultado persistido sem novo envio, merge ou reset de um ciclo posterior. |
+
+O fixture de referência traz mensagem do tipo contacts, com origin igual a
+contact_request, WAMID, timestamp e phones[].wa_id. Não é um button_reply
+comum e não depende de text.body. Os validadores preservam a exigência de
+prova inequívoca, unidade correta e vínculo com o cliente privado. O envelope
+precisa ser confirmado em captura real antes da implantação futura.
+
+Na reação sem contato, o prefixo é “Que bom te ver novamente, {nome}!” ou
+“Que bom te ver novamente!” quando o nome não existe. Em seguida:
+
+> Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar
+> seu número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+O botão é enviado por request_contact_info. O reset do follow-up acompanha a
+persistência da resposta final e a conclusão do checkpoint na mesma transação.
+Falha anterior a essa confirmação não conclui a retomada. Fora da etapa 2,
+continua a repetição da etapa sem interpretar a primeira reação como resposta.
+
+No merge, a conversa provisória mantém ID, histórico e seu próprio ciclo,
+recebe o cliente canônico e somente então permite excluir o provisório depois
+das verificações de dependências. O ciclo da conversa antiga encerrada por
+ativou_privacidade não é copiado para a conversa reassociada.
+
+A migração renumera também followup_retomada.id_etapa. Preserva integralmente
+followup_envio, followup_legado, os stages, datas e demais campos dos checkpoints.
+Não marca novamente conversas antigas com stage 1 e não reinicia os ciclos.
+
+## Responsabilidades dos arquivos adicionais
+
+O repositório atendimento/followup mantém SQL e filtros de elegibilidade;
+retorno_followup prepara e conclui a retomada comum; contato_apos_followup
+concentra apenas a exceção aprovada, chamando os repositórios e a persistência
+normal. O orquestrador conserva seus commits e fencing. O sender de etapa 2
+usa o pedido oficial; validadores e mensagens não fazem reconciliação ou commit.
+Os testes adicionais exercitam migração, exceção, rollback e recuperação.
+
+## Validação desta revisão
+
+Foram materializados os arquivos numa cópia isolada da referência V1.3.0.
+Passaram 238 testes unitários com rede bloqueada e 24 testes de integração em
+PostgreSQL local descartável 17.11, com os envios Meta simulados. A produção
+usa PostgreSQL 18.3: a homologação nessa versão e os payloads reais da Graph
+API continuam sendo critérios da implantação futura. Nenhum teste desta revisão
+usou o RDS ou enviou mensagens a clientes.
+
+Os testes cobrem a configuração de idade, e-mail, triagem, monitoramento/CSV,
+follow-up comum, merge do provisório e a exceção oficial. Confirmam que rollback
+não deixa reset parcial e que replay não apaga um ciclo posterior. Isso não
+substitui o smoke real da API quando o recurso estiver disponível.
+
+## Aplicação e migração futura
+
+Materializar todos os arquivos em uma branch/cópia de desenvolvimento baseada
+na referência declarada. Se o projeto evoluir, reconciliar o delta antes de
+substituir arquivos. Cada bloco de quatro crases contém o arquivo completo;
+os hashes usam UTF-8, finais de linha LF e uma quebra de linha ao final.
+Os passos de remoção eliminam somente os módulos renumerados explicitamente
+indicados, depois de seus substitutos estarem presentes.
+
+O SQL do passo 160 é um arquivo completo para salvar e executar integralmente
+no DBeaver durante o deploy futuro. Mantém o nome histórico proposto para
+continuidade dos planos; não significa que a migração já tenha sido aplicada.
+A versão atual de produção não deve executar esse SQL durante a revisão do plano.
+
+Seguir a sequência da seção 16 do teórico: validar código e SQL em dev, confirmar
+pré-requisitos, parar primeiro o follow-up, interromper novas entradas e drenar
+o trabalho conforme a rotina operacional, confirmar os quatro serviços inativos,
+atualizar código/dependências, executar a migração e conferir seu COMMIT.
+Depois executar check --deploy e collectstatic com o ambiente dos serviços,
+subir webhook/flow/Funil compatíveis e iniciar o follow-up por último, após
+o diagnóstico somente leitura. Não repetir as migrações antigas de follow-up
+ou de idade. Não executar o DDL de instalação limpa sobre o banco existente.
+
+A versão PyWa fixada é 4.4.0, substituindo 3.8.0 via requirements.txt no virtualenv
+dos serviços. Confirmar sua assinatura request_contact_info antes de migrar.
+Nenhum novo kill switch ou SQL inverso é introduzido por esta revisão.
+A janela entre aceite da Meta e persistência local continua sendo o risco
+externo documentado: não há promessa de exatamente um envio nesse intervalo.
 
 ## Passo 1 — `requirements.txt`
 
@@ -212,21 +334,11 @@ tzdata==2025.3
 urllib3==2.6.3
 ````
 
-No deploy futuro, com os três serviços parados, executar no virtualenv usado
-pelos serviços o comando `pip install --upgrade -r requirements.txt`. Como o arquivo fixa
-`pywa==4.4.0`, o pip substitui a versão 3.8.0 já instalada; não é necessário um
-`pip uninstall` separado. Executar o gate de versão/assinatura desta fase antes
-de qualquer migração ou restart. Não se admite prosseguir se `pywa==4.4.0` e
-`request_contact_info` não forem comprovados no ambiente efetivamente usado
-pelos serviços.
-
-# Fase 2 — DDL declarativo, modelos e catálogo
-
 ## Passo 2 — `callback/webhook/admin.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `027f480bdfdbf1b5b695abf351653e477ae0e85d939bf5e9e124ec400b585c3d`
+SHA-256 do conteúdo UTF-8 normalizado: `1a186a3894cf1e031e50eb1611f9a920833807bd554e71348f2bc682b21be61d`
 
 ````python
 import logging
@@ -377,7 +489,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "cnpj",
         "telefone",
         "numero_comercial",
-        "suporte_idoso",
+        "idade_minima_suporte",
         "email_obrigatorio",
         "email_responsavel",
         "waba_id",
@@ -407,7 +519,7 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_filter = (
         "genero",
         "bpa_ativo",
-        "suporte_idoso",
+        "idade_minima_suporte",
         "email_obrigatorio",
         "status_pagamento",
     )
@@ -469,7 +581,7 @@ class UnidadeAdmin(admin.ModelAdmin):
                 super()._post_clean()
 
                 if (
-                    self.cleaned_data.get("suporte_idoso")
+                    self.cleaned_data.get("idade_minima_suporte") is not None
                     and not numero_comercial_whatsapp_valido(
                         self.cleaned_data.get("numero_comercial")
                     )
@@ -477,7 +589,7 @@ class UnidadeAdmin(admin.ModelAdmin):
                     self.add_error(
                         "numero_comercial",
                         "Informe um número comercial brasileiro válido "
-                        "antes de ativar o suporte ao idoso.",
+                        "antes de ativar o encaminhamento por idade.",
                     )
 
                 if change or self.errors:
@@ -1735,9 +1847,11 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `2461caa97949142667285689db6e9dc1348ab7264698319ea6f839f6959a188f`
+SHA-256 do conteúdo UTF-8 normalizado: `f087d76f07e879f1af2294c69ff015290d3fe6aaea9ee65d8cf7b92f98c7922b`
 
 ````python
+from core.validacoes.suporte_por_idade import IDADES_MINIMAS_SUPORTE
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -2029,12 +2143,17 @@ class Unidade(models.Model):
         blank=True,
         null=True,
     )
-    suporte_idoso = models.BooleanField(
-        "suporte ao idoso",
-        default=False,
+    idade_minima_suporte = models.IntegerField(
+        "encaminhar titular ao comercial a partir de",
+        blank=True,
+        null=True,
+        default=None,
+        choices=[(None, "Desativado")] + [
+            (idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE
+        ],
         help_text=(
-            "Encaminha titulares de 60 a 99 anos ao contato comercial e "
-            "encerra o atendimento sem bloqueio."
+            "Na etapa de idade, encaminha somente o titular a partir do limite "
+            "até 99 anos e encerra sem bloqueio. Não altera a regra de e-mail."
         ),
     )
     email_obrigatorio = models.BooleanField(
@@ -2285,13 +2404,13 @@ class CacheControle(models.Model):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `690852f710f3eb0f31760cb979b7b9dcc5faf74a377b01282859991acf83c8e6`
+SHA-256 do conteúdo UTF-8 normalizado: `a040561a65c1f01d8c0954abb80d5285fc0549819c1e867b9f389d46700101de`
 
 ````python
 import logging
 
 from core.database.deploy_database.transacao_deploy import transacao_deploy
-
+from core.database.deploy_database.followup_script import criar_tabelas_followup
 
 logger = logging.getLogger("db.deploy_database")
 
@@ -2486,7 +2605,11 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
-            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            idade_minima_suporte INTEGER DEFAULT NULL
+                CONSTRAINT ck_unidade_idade_minima_suporte CHECK (
+                    idade_minima_suporte IS NULL
+                    OR idade_minima_suporte IN (50, 60, 70, 80, 90)
+                ),
             email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
@@ -2975,6 +3098,8 @@ def criar_tabelas():
         WHERE status IN ('pending', 'processing');
         """)
 
+        criar_tabelas_followup(cursor)
+
     logger.info("banco_setup_ok | acao=criar_tabelas")
 
 
@@ -3438,7 +3563,7 @@ def criar_indices_turno_cliente():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d482654ab0a41af907690dc4ae28ea6b474864bcbe5c18507d1bf245debdb1da`
+SHA-256 do conteúdo UTF-8 normalizado: `9b9fd83d962af840bf51fc0aa25d32be979e7723e22cfb89e6ae9633e6765bc1`
 
 ````markdown
 # Banco de dados
@@ -3458,6 +3583,7 @@ core/database/
 └── deploy_database/
     ├── setup_database.py
     ├── bank_script.py
+    ├── followup_script.py
     ├── transacao_deploy.py
     ├── cache_control_script.py
     ├── etapa_transicao_script.py
@@ -3468,7 +3594,8 @@ core/database/
 
 ## Runtime e deploy
 
-- `connection_aws.py` fornece conexões para os orquestradores;
+- `connection_aws.py` fornece conexões para os orquestradores e aceita
+  `connect_timeout` opcional; o follow-up e seu diagnóstico usam 10 segundos;
 - `connection_check.py` valida acesso ao PostgreSQL;
 - `deploy_database/` cria schema, tabelas, índices e funções;
 - partições mensais são mantidas pelo comando manual
@@ -3502,6 +3629,7 @@ Ordem atual:
 healthcheck
 -> configuração única da role
 -> schema principal final
+   (inclui tabelas de follow-up por followup_script.py)
 -> controle de cache
 -> tabelas de flood
 -> índices de turno
@@ -3553,6 +3681,17 @@ conversa. `conversa.profissao` é o snapshot usado pelo Funil;
 21 registra a decisão de comentar, a etapa 22 coleta o comentário quando aceito
 e a recusa salta diretamente da etapa 21 para a 23. Encerramento e bloqueio de
 30 dias são exclusivos da política da etapa 23.
+Cada unidade possui `idade_minima_suporte INTEGER NULL DEFAULT NULL`, limitada
+por CHECK a NULL/50/60/70/80/90, e `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`.
+O limite encaminha apenas titulares a partir da idade escolhida até 99 anos;
+NULL desativa. A coleta de e-mail conserva a exceção universal do titular 60+.
+
+O SQL `deploy/migrations/20260911_idade_minima_suporte.sql` converte a coluna
+booleana anterior: TRUE vira 60 e FALSE vira NULL. É transacional, verifica
+as configurações por unidade e recusa reaplicação/schema parcial. Não altera
+conversas, históricos ou stages do follow-up. Instalação limpa usa o DDL atual;
+não deve executar novamente as migrações históricas sobre o schema final.
+Ver [procedimento coordenado](../../deploy/idade_minima_suporte.md).
 
 A migração incremental que insere a confirmação como etapa 3 e remapeia as
 referências existentes está em
@@ -3568,7 +3707,7 @@ não retrocede conversas que já passaram pela profissão.
 
 A migração que adiciona `cliente.profissao` está em
 `deploy/migrations/20260823_adicionar_profissao_cliente.sql` e já integra a
-baseline V1.1.0. No banco existente, ela precisa estar materializada antes de
+baseline V1.3.0. No banco existente, ela precisa estar materializada antes de
 `user_id`: mantém `conversa.profissao` como snapshot e preenche o cadastro com a
 profissão não vazia da conversa mais recente de cada cliente. A migração
 posterior de `user_id` apenas exige esse estado; ela não repete o `ADD COLUMN`
@@ -3602,6 +3741,41 @@ A migração atual é de aplicação única: coluna já existente causa erro em 
 de aceitar uma estrutura divergente. Em caso de erro, execute `ROLLBACK`.
 `ALTER TABLE`, transferência e remoção de legado ficam somente na migração;
 o DDL continua sendo exclusivamente a definição final para instalação nova.
+
+## Registros de follow-up
+
+O DDL de instalação limpa inclui três tabelas não particionadas, criadas por
+`deploy_database/followup_script.py` dentro da transação de `bank_script.py`:
+
+| Tabela | Responsabilidade |
+|---|---|
+| `followup_envio` | Recibo por conversa e ID/data da mensagem do bot que originou o ciclo; registra o histórico e o WAMID do lembrete confirmado. |
+| `followup_retomada` | Checkpoint da reação do cliente por conversa, fila e hash; preserva etapa, stage anterior e conclusão para retries. |
+| `followup_legado` | Auditoria das conversas ativas marcadas na migração, com stage anterior e data da marcação. |
+
+As FKs dessas tabelas apontam para a conversa com `ON DELETE CASCADE`; o
+histórico de mensagens continua particionado. Não há nova tabela Django nem
+ação administrativa para editar esses registros. `followup_stage` e
+`followup_last_sent_at` já pertencem à tabela `conversa`.
+
+Historicamente, na atualização de uma base anterior à V1.2.0 foi executado
+[followup_registros.sql](../../deploy/migrations/followup_registros.sql), com
+flow parado e follow-up desligado. O script inteiro é transacional: cria os
+registros, audita todas as conversas ativas e marca `followup_stage = 1`, inclusive
+nas então etapas 18–21 (agora 19–22). Não altera etapa, histórico, finalização ou datas anteriores e
+não envia mensagens. Legado ativo terminal/inconsistente cancela a migração.
+
+Na produção atual, essa migração já foi aplicada. Não a repita em deploys
+seguintes: a reaplicação falha em vez de remarcar conversas. O setup de banco
+vazio cria a estrutura sem marcar o legado. A role da aplicação precisa ter
+permissões de leitura e escrita nas novas tabelas, por propriedade ou grants.
+O [diagnóstico sem envio](../../utilitarios/README.md#diagnóstico-de-follow-up)
+confere as consultas; ele não comprova as permissões de escrita.
+
+Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo.
+Histórico da repetição, conclusão da retomada e reset do stage são confirmados
+juntos pelo flow. A chamada à Meta ocorre fora dessa atomicidade local;
+aceite externo seguido de falha no commit ainda pode gerar duplicidade.
 
 ## Atomicidade
 
@@ -3659,10 +3833,59 @@ gerenciador de segredos.
 - `tests/unit/test_monitoramento_login.py`;
 - `tests/unit/test_monitoramento_painel.py`;
 - `tests/unit/test_valida_etapa12.py`.
-A organização e o comando da suíte completa estão em `tests/README.md`.
-````
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_followup.py`;
+- `tests/integration/test_followup_postgres.py` (PostgreSQL local descartável).
 
-# Fase 3 — Webhook, identidade de entrada, segurança e cache
+A organização e o comando da suíte completa estão em `tests/README.md`.
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
 
 ## Passo 10 — `callback/webhook/services/alerta_flood_memoria.py`
 
@@ -7008,7 +7231,7 @@ def _normalizar_identidades(identidades_meta):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `af79ac9c1130dd51626c240ed07bc2d54e6432585ef399b96920311b77e57ecc`
+SHA-256 do conteúdo UTF-8 normalizado: `8212d49472750c59025418d91f54ddeb1686e9e8b792fcf32de5f61fdc0ac004`
 
 ````python
 import logging
@@ -7531,9 +7754,9 @@ def buscar_cliente_bloqueado_meta_banco(
         FROM chatbot.cliente_bloqueado_meta AS bloqueio
         WHERE bloqueio.phone_id_unidade = %s
           AND (
-              (%s IS NOT NULL AND bloqueio.id_cliente = %s)
-              OR (%s IS NOT NULL AND bloqueio.wa_id = %s)
-              OR (%s IS NOT NULL AND bloqueio.user_id = %s)
+              (%s::integer IS NOT NULL AND bloqueio.id_cliente = %s)
+              OR (%s::text IS NOT NULL AND bloqueio.wa_id = %s)
+              OR (%s::text IS NOT NULL AND bloqueio.user_id = %s)
           )
         ORDER BY bloqueio.id_bloqueio
         LIMIT 1;
@@ -7650,8 +7873,8 @@ def _consolidar_linhas_bloqueio_meta(
         WHERE id_unidade = %s
           AND (
               id_cliente = ANY(%s::bigint[])
-              OR (%s IS NOT NULL AND wa_id = %s)
-              OR (%s IS NOT NULL AND user_id = %s)
+              OR (%s::text IS NOT NULL AND wa_id = %s)
+              OR (%s::text IS NOT NULL AND user_id = %s)
           )
         ORDER BY
             CASE WHEN id_cliente = %s THEN 0 ELSE 1 END,
@@ -8275,8 +8498,6 @@ def _resolver_sujeito_turno(
         "chave_lock": f"{tipo_identidade}:{identidade}",
     }
 ````
-
-# Fase 4 — Repositórios, worker e reconciliação
 
 ## Passo 25 — `core/repositories/atendimento/clientes.py`
 
@@ -9647,7 +9868,7 @@ def deletar_mensagem_se_max_retry(id_mensagem, max_retry, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `dfe6e7b3c83d699026a640ca48ba5802891f21ac4aec2b9a01c7d7d27536e95b`
+SHA-256 do conteúdo UTF-8 normalizado: `085b8b0562d4dc5451afa93756bf59e9f9e7d99fadb5f1f08bbef7acb20f91ec`
 
 ````python
 import logging
@@ -9894,6 +10115,40 @@ def inserir_historico_mensagem_bot(
             f"(id_conversa={contexto_historico['id_conversa']})"
         )
     return resultado[0], resultado[1], bool(resultado[2])
+
+
+def buscar_confirmacao_compartilhamento(mensagem, id_cliente, id_unidade, cursor):
+    """Reconhece somente replay do mesmo contato já respondido na etapa 3.
+
+    A prova de entrada, os dois históricos e o cliente canônico devem coincidir.
+    Um contato novo fora da etapa 2 não ganha autorização por existir um telefone.
+    """
+    cursor.execute(
+        """
+        SELECT c.id_conversa
+        FROM chatbot.conversa c
+        JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.historico_mensagens entrada ON entrada.id_conversa = c.id_conversa
+        JOIN chatbot.historico_mensagens resposta ON resposta.id_conversa = c.id_conversa
+        WHERE c.id_cliente = %s AND c.id_unidade = %s AND c.status_ativa IS TRUE
+          AND cl.wa_id = %s AND u.phone_number_id = %s
+          AND entrada.quem_enviou = 'cliente' AND entrada.id_etapa = 2
+          AND entrada.tipo_mensagem = 'contacts' AND entrada.conteudo_texto = 'contact_request'
+          AND entrada.id_mensagem_fila = %s AND entrada.id_hash_msg = %s
+          AND entrada.wa_id = %s AND entrada.user_id = %s
+          AND resposta.quem_enviou = 'bot' AND resposta.status_envio = 'sent'
+          AND resposta.id_etapa = 3 AND resposta.wa_id = cl.wa_id
+          AND resposta.id_mensagem_fila = entrada.id_mensagem_fila
+          AND resposta.id_hash_cliente_origem = entrada.id_hash_msg
+        LIMIT 1;
+        """,
+        (id_cliente, id_unidade, mensagem["wa_id_compartilhado"],
+         mensagem["id_phone_unidade"], mensagem["id_mensagem"], mensagem["id_hash"],
+         mensagem["wa_id_compartilhado"], mensagem["user_id"]),
+    )
+    row = cursor.fetchone()
+    return row[0] if row else None
 ````
 
 ## Passo 30 — `core/repositories/atendimento/identidades.py`
@@ -10840,12 +11095,9 @@ def resolver_destinatario_sender(
 
 ## Passo 34A — `core/integrations/whatsapp/pywa_functions/cliente.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. O cliente
-continua sendo criado do mesmo modo; o proxy existe somente durante o escopo de
-uma saudação e intercepta os dois transportes textuais usados pelo plano,
-`send_message` e `request_contact_info`.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `694da243a08f26c5686d4537c12f1a006dfde1100e5e35cc7882a33578809269`
+SHA-256 do conteúdo UTF-8 normalizado: `56c1cd11dfbb6785ac03301fa422dce2b7ed8dcc34a9236265e0bbac7cf0f894`
 
 ````python
 from contextlib import contextmanager
@@ -10858,20 +11110,21 @@ from core.integrations.whatsapp.tools.config import (
     get_meta_graph_api_version,
 )
 
-
 _PREFIXO_MENSAGEM_BOT = ContextVar(
     "prefixo_mensagem_bot",
     default=None,
 )
 
 
-def conta_wa(phone_id, token=TOKEN_USUARIO_META):
+def conta_wa(phone_id, token=TOKEN_USUARIO_META, *, session=None):
     phone_id = _normalizar_phone_id(phone_id)
 
+    opcoes = {"session": session} if session is not None else {}
     cliente = WhatsApp(
         token=token,
         phone_id=phone_id,
         api_version=get_meta_graph_api_version(),
+        **opcoes,
     )
 
     if _PREFIXO_MENSAGEM_BOT.get():
@@ -11136,7 +11389,7 @@ def _anexar_identidades(contexto_envio, contexto_historico):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `51b3caef47a240a2b1deae1754e9c31442e9bc0823fa36eb8587c3317dee793e`
+SHA-256 do conteúdo UTF-8 normalizado: `3b8a5dbf7e0af5a6eebbf04c32157fc485a5ce050fc5a2a151fe0a8deed76772`
 
 ````python
 import logging
@@ -11149,6 +11402,21 @@ from core.logging_config import short_value
 from core.repositories.atendimento.conversas import (
     ConversaEmProcessamento,
     tentar_lock_conversa,
+)
+from core.repositories.atendimento.followup import (
+    LockConversaPerdido,
+    proteger_conversa,
+    reler_conversa,
+)
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+from workers.worker_flow.transacoes.contato_apos_followup import (
+    persistir_contato_apos_followup,
+)
+from workers.worker_flow.transacoes.retorno_followup import (
+    preparar_retorno_followup,
+    persistir_retorno_followup,
 )
 from core.repositories.atendimento.fila import (
     pegar_mensagens_da_fila,
@@ -11323,20 +11591,37 @@ def worker_flow():
                 conn_ciclo.commit()
                 continue
 
-            contexto_historico = valida_historico(
+            contexto_banco = reler_conversa(contexto_banco, lock_version, cursor_ciclo)
+            contexto_conversa = contexto_banco["conversa"]
+            contexto_historico = preparar_retorno_followup(
                 mensagem,
                 contexto_banco,
                 cursor_ciclo,
             )
+            if contexto_historico is None:
+                contexto_historico = valida_historico(
+                    mensagem, contexto_banco, cursor_ciclo
+                )
             conn_ciclo.commit()
 
-            contexto_envio = flow_sender(contexto_historico)
+            proteger_conversa(id_conversa, lock_version, cursor_ciclo, renovar=True)
+            conn_ciclo.commit()
+            if contexto_historico.get("retorno_followup"):
+                contexto_envio = enviar_repeticao_followup(contexto_historico)
+            else:
+                contexto_envio = flow_sender(contexto_historico)
 
             try:
-                contexto_final = atualizar_banco_com_contexto_final(
-                    contexto_historico,
-                    contexto_envio,
-                    cursor_ciclo,
+                proteger_conversa(id_conversa, lock_version, cursor_ciclo)
+                persistir = (
+                    persistir_retorno_followup
+                    if contexto_historico.get("retorno_followup")
+                    else atualizar_banco_com_contexto_final
+                )
+                if contexto_historico.get("contato_apos_followup"):
+                    persistir = persistir_contato_apos_followup
+                contexto_final = persistir(
+                    contexto_historico, contexto_envio, cursor_ciclo
                 )
                 conn_ciclo.commit()
             except Exception as erro:
@@ -11350,6 +11635,7 @@ def worker_flow():
                     ) from erro
                 raise
 
+            proteger_conversa(id_conversa, lock_version, cursor_ciclo)
             resultado_encerramento = finalizar_mensagem_processada(
                 mensagem,
                 contexto_banco,
@@ -11382,6 +11668,15 @@ def worker_flow():
             if conn_ciclo:
                 conn_ciclo.commit()
 
+        except LockConversaPerdido:
+            if conn_ciclo:
+                conn_ciclo.rollback()
+            # Não reescreve uma fila que pode estar sendo processada pelo novo dono.
+            logger.warning(
+                "lock_perdido | acao=aguardar_recuperacao_fila id_conversa=%s",
+                estado_ciclo["id_conversa"],
+            )
+
         except ErroEnvioMeta as erro:
             logger.warning(
                 "meta_envio_erro | acao=reagendar_sem_sent "
@@ -11406,6 +11701,14 @@ def worker_flow():
                 conn_ciclo.commit()
 
         except BancoFalhouAposEnvioMeta as erro:
+            if isinstance(erro.__cause__, LockConversaPerdido):
+                conn_ciclo.rollback()
+                logger.critical(
+                    "meta_confirmou_com_lock_perdido | conversa=%s hash=%s risco=duplicidade",
+                    erro.id_conversa,
+                    erro.id_hash_msg_bot,
+                )
+                continue
             logger.critical(
                 "banco_falhou_apos_envio_meta | risco=resposta_duplicada "
                 "acao=reagendar_sem_sent id_mensagem=%s id_conversa=%s "
@@ -11806,7 +12109,7 @@ def reconhecer_contato_oficial_persistido(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `09ad24f275500c1749f824e7f199e6a41c38eb278ac2ebab17920dabc14f17b4`
+SHA-256 do conteúdo UTF-8 normalizado: `cc9fa76b05f5e2aaeab9512500f08fe88ce2eee8748f8d79f2d38338466e54c2`
 
 ````python
 import logging
@@ -12739,7 +13042,7 @@ def _persistir_idade_encaminhamento_suporte_idoso(
     if (
         isinstance(idade, bool)
         or not isinstance(idade, int)
-        or not 60 <= idade <= 99
+        or not 50 <= idade <= 99
     ):
         raise ValueError(
             "Idade inválida no encaminhamento de suporte ao idoso "
@@ -12754,7 +13057,7 @@ def _persistir_idade_encaminhamento_suporte_idoso(
 
     logger.info(
         "idade_titular_persistida | acao=encaminhar_suporte_idoso "
-        "id_conversa=%s id_cliente=%s faixa=60_99",
+        "id_conversa=%s id_cliente=%s faixa=50_99",
         contexto_historico["id_conversa"],
         contexto_historico["id_cliente"],
     )
@@ -13178,10 +13481,15 @@ def _persistir_comentario_satisfacao_da_etapa22(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `dd58497cbaeda27d54e48e69c6a3ed82839640bbfa7d2e0c705b797695980bbc`
+SHA-256 do conteúdo UTF-8 normalizado: `e4efc03122bb06722667a81fb4bd8e0b5ebc4ed1cf02b9f2c124af2e9e4b1354`
 
 ````python
 import logging
+
+from core.validacoes.suporte_por_idade import (
+    IDADES_MINIMAS_SUPORTE,
+    validar_idade_minima_suporte,
+)
 
 from core.integrations.whatsapp.messages.etapa7_messages import (
     montar_mensagem_suporte_idoso_etapa7,
@@ -13287,11 +13595,17 @@ def _reconstruir_encerramento_etapa7(contexto_historico):
 
     if (
         not contexto_historico.get("status_dependente")
-        and 60 <= resultado.idade <= 99
+        and 50 <= resultado.idade <= 99
         and _resposta_bot_e_encaminhamento_suporte_idoso(
             contexto_historico
         )
     ):
+        # O texto prova o envio, mas não congela a configuração anterior.
+        idade_minima = validar_idade_minima_suporte(
+            contexto_historico["idade_minima_suporte"]
+        )
+        if idade_minima is None or resultado.idade < idade_minima:
+            return None
         return {
             "motivo": MOTIVO_SUPORTE_IDOSO,
             "motivo_encerramento": MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO,
@@ -13332,8 +13646,10 @@ def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
         return False
 
     conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
-    mensagem_esperada = montar_mensagem_suporte_idoso_etapa7().strip()
-    return conteudo.endswith(mensagem_esperada)
+    return any(
+        conteudo.endswith(montar_mensagem_suporte_idoso_etapa7(limite).strip())
+        for limite in IDADES_MINIMAS_SUPORTE
+    )
 
 
 def aplicar_encerramento_se_necessario(
@@ -13665,7 +13981,7 @@ def tratar_conversa_bloqueada(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `944c1a74e06f1f3d5394257491c72d51d953c2458dd4f620bac2c659c1e5da09`
+SHA-256 do conteúdo UTF-8 normalizado: `854b7531cd4bc1d43a70e83cfef496dfb59cec3363ee953c6a0640bc02fb59ed`
 
 ````python
 import logging
@@ -13695,6 +14011,7 @@ from core.repositories.atendimento.fila import (
     deletar_mensagem_por_id,
     existe_mensagem_anterior_alias_handoff,
 )
+from core.repositories.atendimento.historico import buscar_confirmacao_compartilhamento
 from core.repositories.atendimento.identidades import (
     buscar_identidades_para_contexto,
 )
@@ -13782,6 +14099,7 @@ def validar_banco_mensagem(mensagem, cursor):
         "username": identidades["username"],
         "conversa": contexto_conversa,
         "resultado_terminal": resolucao.get("resultado_terminal"),
+        "contato_oficial_validado": bool(resolucao.get("contato_oficial_validado")),
         "bloqueio_reconciliado": resolucao.get("bloqueio_reconciliado"),
     }
 
@@ -13839,6 +14157,27 @@ def _resolver_handoff(mensagem, id_unidade, cursor):
         id_unidade,
         cursor,
     )
+    # Recuperação após o commit 2 -> 3: aceitar apenas o MESMO item cujo
+    # histórico comprova resposta persistida; nunca um compartilhamento novo.
+    if cliente_origem_lido["wa_id"] == wa_id_compartilhado:
+        id_conversa_confirmada = buscar_confirmacao_compartilhamento(
+            mensagem, id_cliente_origem, id_unidade, cursor
+        )
+        if id_conversa_confirmada is not None:
+            if not conversa_atual or conversa_atual["id_conversa"] != id_conversa_confirmada:
+                raise RuntimeError("Replay de contato pertence a outra conversa")
+            contexto = valida_conversa(
+                id_cliente_origem, id_unidade, False, wa_id_compartilhado,
+                user_id, mensagem.get("username"), cursor,
+            )
+            return {
+                "id_cliente": id_cliente_origem,
+                "cliente_inserido": False,
+                "wa_id": wa_id_compartilhado,
+                "user_id": user_id,
+                "conversa": contexto,
+                "contato_oficial_validado": True,
+            }
     if (
         not conversa_atual
         or conversa_atual["id_etapa_atual"] != ETAPA_COMPARTILHAMENTO
@@ -14007,6 +14346,7 @@ def _resolver_handoff(mensagem, id_unidade, cursor):
         "wa_id": wa_id_compartilhado,
         "user_id": user_id,
         "conversa": contexto_conversa,
+        "contato_oficial_validado": True,
     }
 
 
@@ -14487,7 +14827,7 @@ def _garantir_ordem_primeira_prova(mensagem, wa_id, user_id, cursor):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cdbd638dadac7dfa9e17eb04f4fb0454ea851e753473eb4f9266fd80112da3ca`
+SHA-256 do conteúdo UTF-8 normalizado: `25c80e97868c3caa736ffcade168133e313b772414265fbd45c22dd570f9038a`
 
 ````python
 import logging
@@ -14600,6 +14940,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
     saudacao_retorno = None
     if (
         not resposta_bot_para_mensagem_atual
+        and not contexto_banco.get("omitir_saudacao_ausencia")
         and contexto_conversa.get("id_etapa_atual") not in {None, 1}
     ):
         nome_cliente, ultima_mensagem_bot_em = (
@@ -14914,8 +15255,6 @@ def _normalizar_linha_historico(registro):
 def _normalizar_resposta_bot(registro):
     return _normalizar_linha_historico(registro) if registro else None
 ````
-
-# Fase 5 — Etapas, mensagens, senders, validadores e triagem
 
 ## Passo 47 — `core/integrations/whatsapp/messages/etapa1_messages.py`
 
@@ -16128,7 +16467,7 @@ def montar_mensagem_etapa23():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6bd7107b0ff3efff8ae6811c18601e1833cacc1843d85e32f6f150462f7640fd`
+SHA-256 do conteúdo UTF-8 normalizado: `a81c9ce88c48e8d882c63ea6f3ffbebb1896bbdcbf6b00d79d0019e39ec3b316`
 
 ````python
 """Mensagens da etapa obrigatória de compartilhamento oficial do contato."""
@@ -16186,6 +16525,15 @@ def montar_mensagem_contexto_etapa2():
 
 def _montar_mensagem_tratamento(tratamento):
     return f"{tratamento}\n\nMas bora lá:\n\n{MENSAGEM_RETOMADA_ETAPA2}"
+
+
+def montar_mensagem_retorno_followup_etapa2():
+    """Orientação após reação sem compartilhamento oficial; saudação é prefixada."""
+    return (
+        "Ainda não recebi seu número pelo compartilhamento oficial. "
+        "Para compartilhar seu número com segurança e continuar o atendimento, "
+        "aperte no botão abaixo."
+    )
 ````
 
 ## Passo 64 — `core/integrations/whatsapp/messages/etapa3_messages.py`
@@ -16491,9 +16839,12 @@ def montar_mensagem_contexto_nome_invalido_etapa6():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `35e5dc7ac070192c2f3c0f57f77f5027858ee414f6be84cd8885f9cce792ba78`
+SHA-256 do conteúdo UTF-8 normalizado: `222da81c5058f773542a9a61e6ece6cb2506cf3026fbba329616950f4c2b14cf`
 
 ````python
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
+
 from core.integrations.whatsapp.messages.tratamentos_universais import (
     montar_mensagem_tratamento_reforco_escolar,
 )
@@ -16674,11 +17025,11 @@ def montar_botao_idade_acima_99_etapa7():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA7
 
 
-### TITULAR DE 60 A 99 ANOS COM SUPORTE ESPECIALIZADO ATIVO
+### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
 
 MENSAGEM_SUPORTE_IDOSO_ETAPA7 = (
     "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
-    "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
+    "realiza o suporte a clientes com {idade_minima} anos ou mais diretamente com a "
     "nossa equipe comercial.\n\n"
     "Vou te passar o contato para continuar o atendimento. Basta clicar "
     "no botão abaixo."
@@ -16687,8 +17038,11 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA7 = (
 BOTAO_SUPORTE_IDOSO_ETAPA7 = "Falar com Comercial"
 
 
-def montar_mensagem_suporte_idoso_etapa7():
-    return MENSAGEM_SUPORTE_IDOSO_ETAPA7
+def montar_mensagem_suporte_idoso_etapa7(idade_minima):
+    validar_idade_minima_suporte(idade_minima)
+    if idade_minima is None:
+        raise ValueError("Não há mensagem de suporte para política desativada")
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA7.format(idade_minima=idade_minima)
 
 
 def montar_botao_suporte_idoso_etapa7():
@@ -18729,7 +19083,7 @@ def _montar_botoes_pywa_etapa19():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `462f65b9521a1afb582fa3aac44fa4d6ae48f368c46b7a33901720b8f5de84f8`
+SHA-256 do conteúdo UTF-8 normalizado: `07f7532a9858c862ea622f650532572530fa951b88a0c4c7195602cdf6583db6`
 
 ````python
 """Sender PyWa da etapa obrigatória de compartilhamento do contato."""
@@ -18740,6 +19094,7 @@ from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.etapa2_messages import (
     montar_mensagem_contexto_etapa2,
     montar_mensagem_etapa2,
+    montar_mensagem_retorno_followup_etapa2,
     montar_mensagem_financeiro_etapa2,
     montar_mensagem_midia_etapa2,
     montar_mensagem_reforco_escolar_etapa2,
@@ -18889,6 +19244,15 @@ def _enviar_pedido_contato_etapa2(
             phone_id_unidade=phone_id_unidade,
             cliente_telefone=destinatario,
         ) from erro
+
+
+def enviar_etapa2_retorno_followup(destinatario, phone_id_unidade, id_conversa):
+    """Repete o componente oficial após reação ao lembrete sem contato válido."""
+    return _enviar_pedido_contato_etapa2(
+        destinatario, phone_id_unidade, id_conversa,
+        montar_mensagem_retorno_followup_etapa2(),
+        evento="enviar_etapa2_retorno_followup",
+    )
 ````
 
 ## Passo 84 — `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa20.py`
@@ -20122,7 +20486,7 @@ def _enviar_texto_etapa6(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `d3c97e89688dc76dd9aac9c4f0f4030cf3c63ee89591117c7f8b0dcfa0aa42f6`
+SHA-256 do conteúdo UTF-8 normalizado: `211e94702dfbfca893407235b0a0ac01ad3ca6cf197f566bfd04bd0dfd6794a0`
 
 ````python
 import logging
@@ -20395,8 +20759,9 @@ def enviar_etapa7_suporte_idoso(
     cliente_telefone,
     phone_id_unidade,
     numero_comercial,
+    idade_minima,
 ):
-    mensagem_bot = montar_mensagem_suporte_idoso_etapa7()
+    mensagem_bot = montar_mensagem_suporte_idoso_etapa7(idade_minima)
     botao_url = URLButton(
         title=montar_botao_suporte_idoso_etapa7(),
         url=montar_link_numero_comercial_whatsapp(numero_comercial),
@@ -21062,10 +21427,7 @@ def buscar_contexto_etapa1(id_unidade, cursor):
 
 ## Passo 97 — `core/repositories/fluxo/contextos/etapa10.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. O caminho já
-existe no estado pré-`user_id` como contexto da coleta atual de e-mail; essa
-regra é preservada no novo `etapa11.py` do passo 97A antes de o caminho 10
-receber o contexto da etapa atual 9 renumerada.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `46df6801c81049824fc27482f9e4e4d3d76ea5893efe63d9913de4ad506870ce`
 
@@ -21132,9 +21494,7 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
 
 ## Passo 97A — `core/repositories/fluxo/contextos/etapa11.py`
 
-Criar o arquivo com o conteúdo completo abaixo. Este é o contexto da coleta de
-e-mail atual 10 renumerada para 11; ele deve existir antes da substituição do
-caminho `etapa10.py` descrita no passo 97.
+Criar o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `09568a5f3098c6ad0e3e343d92fd865ebade24668560ddc0f17088cecef3857d`
 
@@ -21351,10 +21711,12 @@ regra de negócio; manter os dois caminhos deixaria um módulo órfão para a et
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `13a6cffb60f2b330728423b48c29560af6b0bea94987a8571a0e13c4ede13656`
+SHA-256 do conteúdo UTF-8 normalizado: `342b4b4c1ceb79b6c7fd5b4c7d906ffab3e862e4ae814d2342ab26634c7d221e`
 
 ````python
 import logging
+
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 
 
 logger = logging.getLogger("db.contexto_etapa7")
@@ -21366,7 +21728,7 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         SELECT
             u.numero_comercial,
             u.bpa_ativo,
-            u.suporte_idoso,
+            u.idade_minima_suporte,
             cl.nome,
             d.nome_dependente
         FROM chatbot.unidade u
@@ -21394,34 +21756,30 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
     (
         numero_comercial,
         bpa_ativo,
-        suporte_idoso,
+        idade_minima_suporte,
         nome_cliente,
         nome_dependente,
     ) = resultado
 
     logger.debug(
         "contexto_etapa7_consultado | id_conversa=%s id_unidade=%s "
-        "numero_comercial_configurado=%s bpa_ativo=%s suporte_idoso=%s "
+        "numero_comercial_configurado=%s bpa_ativo=%s idade_minima_suporte=%s "
         "cliente_nomeado=%s dependente_nomeado=%s",
         id_conversa,
         id_unidade,
         bool(numero_comercial),
         bool(bpa_ativo),
-        suporte_idoso,
+        idade_minima_suporte,
         bool(nome_cliente),
         bool(nome_dependente),
     )
 
-    if not isinstance(suporte_idoso, bool):
-        raise ValueError(
-            "Configuração suporte_idoso inválida "
-            f"(id_unidade={id_unidade}, valor={suporte_idoso!r})"
-        )
+    validar_idade_minima_suporte(idade_minima_suporte)
 
     return {
         "numero_comercial_unidade": numero_comercial,
         "bpa_ativo_unidade": bool(bpa_ativo),
-        "suporte_idoso_unidade": suporte_idoso,
+        "idade_minima_suporte": idade_minima_suporte,
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
     }
@@ -24900,10 +25258,12 @@ def _logar_tratamento_texto(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `777eca4f6b6f6437cfbfc38f8afa0c9d2d48fad5779f3cfaf95d6335ae9c2d27`
+SHA-256 do conteúdo UTF-8 normalizado: `0ba22503cc175d4898f6665991d50f5304466f1104298830c0f3ace8983408ee`
 
 ````python
 import logging
+
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa7 import (
     enviar_etapa7_cliente_contexto_idade_invalida,
@@ -24973,11 +25333,6 @@ def resolve_etapa7(contexto_historico):
         )
 
     bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
-    suporte_idoso = contexto_historico.get("suporte_idoso_unidade")
-    if not isinstance(suporte_idoso, bool):
-        raise ValueError(
-            "Configuração suporte_idoso ausente ou inválida no contexto"
-        )
     nome_dependente = contexto_historico.get("nome_dependente")
     nome_cliente = contexto_historico.get("nome_cliente")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
@@ -25051,13 +25406,24 @@ def resolve_etapa7(contexto_historico):
 
     idade = resultado_idade.idade
 
-    # A regra de 100+ já foi resolvida acima. O suporte especializado só
-    # alcança o próprio titular no intervalo aprovado de 60 a 99 anos.
-    if not status_dependente and idade >= 60 and suporte_idoso:
+    # A chave ausente é erro; None é a configuração explicitamente desativada.
+    if "idade_minima_suporte" not in contexto_historico:
+        raise ValueError("Política de suporte por idade ausente")
+    idade_minima = validar_idade_minima_suporte(
+        contexto_historico["idade_minima_suporte"]
+    )
+
+    # O tratamento universal de 100+ já ocorreu. Dependentes seguem seu fluxo.
+    if (
+        not status_dependente
+        and idade_minima is not None
+        and idade >= idade_minima
+    ):
         contexto_envio = enviar_etapa7_suporte_idoso(
             cliente_telefone,
             phone_id_unidade,
             contexto_historico.get("numero_comercial_unidade"),
+            idade_minima,
         )
         return _anexar_encerramento(
             contexto_envio,
@@ -27422,8 +27788,6 @@ EVENTO_COMENTARIO_SATISFACAO_RECUSADO = "comentario_satisfacao_recusado"
 EVENTO_COMENTARIO_SATISFACAO_RECEBIDO = "comentario_satisfacao_recebido"
 ````
 
-# Fase 6 — Funil e documentação operacional
-
 ## Passo 149 — `core/integrations/funil/oportunidades.py`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
@@ -27874,12 +28238,9 @@ def buscar_dados_lead_funil(id_conversa, cursor):
 
 ## Passo 150A — `utilitarios/reports_functions/weekly.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. O contrato
-visual e os relatórios semanal/total permanecem inalterados; somente a coluna
-física futura `cliente.wa_id` é projetada sob o alias interno legado
-`waid_telefone`, evitando uma mudança desnecessária no HTML gerado.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `51d97a7c8ee23ef06f1070075b8fab117921b6b1a689957d0eaa3d3be739b697`
+SHA-256 do conteúdo UTF-8 normalizado: `f49c868d01c22baa93b77e9ba88e107299d6d2f115216c25786aa13afbe2c061`
 
 ````python
 """Gera dashboards HTML e relatórios PDF semanais por unidade.
@@ -27914,12 +28275,26 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 SAIDA_PADRAO = RAIZ_PROJETO / "monitoramento"
 FUSO_RELATORIO = ZoneInfo("America/Sao_Paulo")
 DIAS_PADRAO = 7
 MAX_MENSAGENS_PADRAO = 100_000
+IDADE_ADULTA_MINIMA = 18
+IDADE_IDOSA_MINIMA = 60
+IDADE_MINIMA_DEPENDENTE_PADRAO = 5
+IDADE_MINIMA_DEPENDENTE_BPA = 4
+
+PERFIS_ATENDIMENTO = (
+    "dependente_infantil",
+    "dependente_adulto",
+    "dependente_idoso",
+    "titular_adulto",
+    "titular_idoso",
+)
 
 ROTULOS_TIPO_MENSAGEM = {
     "audio": "Áudio",
@@ -28076,6 +28451,184 @@ def _profissao_atual(linha: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _idade_inteira(valor: Any) -> int | None:
+    """Valida 1–99 anos sem converter booleanos ou truncar idades fracionárias."""
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        return None
+    return valor if 0 < valor < 100 else None
+
+
+def _classificar_perfil_atendimento(
+    *,
+    status_dependente: Any,
+    idade_titular: Any,
+    idade_dependente: Any,
+    idade_minima_dependente: int,
+) -> str | None:
+    """Classifica a pessoa atendida, mantendo ``NULL`` e legado como desconhecidos."""
+    if status_dependente is True:
+        idade = _idade_inteira(idade_dependente)
+        if idade is None or idade < idade_minima_dependente:
+            return None
+        if idade < IDADE_ADULTA_MINIMA:
+            return "dependente_infantil"
+        if idade < IDADE_IDOSA_MINIMA:
+            return "dependente_adulto"
+        return "dependente_idoso"
+
+    if status_dependente is False:
+        idade = _idade_inteira(idade_titular)
+        if idade is None or idade < IDADE_ADULTA_MINIMA:
+            return None
+        if idade < IDADE_IDOSA_MINIMA:
+            return "titular_adulto"
+        return "titular_idoso"
+
+    return None
+
+
+def _rotulos_perfis(idade_minima_dependente: int) -> dict[str, str]:
+    return {
+        "dependente_infantil": (
+            f"Dependentes de {idade_minima_dependente} a 17 anos"
+        ),
+        "dependente_adulto": "Dependentes de 18 a 59 anos",
+        "dependente_idoso": "Dependentes com 60 anos ou mais",
+        "titular_adulto": "Titulares de 18 a 59 anos",
+        "titular_idoso": "Titulares com 60 anos ou mais",
+    }
+
+
+def _montar_segmentacao_perfis(
+    perfis_conversa: Sequence[Mapping[str, Any]],
+    ids_conversas_funil: set[int],
+    *,
+    idade_minima_suporte: int | None,
+    bpa_ativo: bool,
+) -> dict[str, Any]:
+    """Agrega perfis por conversa sem confundi-los com o lead consolidado.
+
+    Um cliente conta uma vez em cada segmento no qual apareceu. A quantidade
+    de conversas permanece disponível porque um mesmo contato pode iniciar
+    atendimentos para pessoas diferentes durante o período.
+    """
+    validar_idade_minima_suporte(idade_minima_suporte)
+    idade_minima_dependente = (
+        IDADE_MINIMA_DEPENDENTE_BPA
+        if bpa_ativo
+        else IDADE_MINIMA_DEPENDENTE_PADRAO
+    )
+    rotulos = _rotulos_perfis(idade_minima_dependente)
+    acumuladores = {
+        chave: {
+            "ids_clientes": set(),
+            "ids_conversas": set(),
+            "ids_clientes_funil": set(),
+            "ids_conversas_funil": set(),
+        }
+        for chave in PERFIS_ATENDIMENTO
+    }
+    todos_clientes: set[int] = set()
+    clientes_classificados: set[int] = set()
+    clientes_por_perfil: dict[int, set[str]] = defaultdict(set)
+    conversas_classificadas: set[int] = set()
+    conversas_sem_classificacao: set[int] = set()
+    clientes_funil_sem_classificacao: set[int] = set()
+    clientes_funil_classificados: set[int] = set()
+
+    for perfil in perfis_conversa:
+        id_cliente = int(perfil["id_cliente"])
+        id_conversa = int(perfil["id_conversa"])
+        todos_clientes.add(id_cliente)
+        chave = _classificar_perfil_atendimento(
+            status_dependente=perfil.get("status_dependente"),
+            idade_titular=perfil.get("idade_titular"),
+            idade_dependente=perfil.get("idade_dependente"),
+            idade_minima_dependente=idade_minima_dependente,
+        )
+        if chave is None:
+            conversas_sem_classificacao.add(id_conversa)
+            if id_conversa in ids_conversas_funil:
+                clientes_funil_sem_classificacao.add(id_cliente)
+            continue
+
+        acumulador = acumuladores[chave]
+        acumulador["ids_clientes"].add(id_cliente)
+        acumulador["ids_conversas"].add(id_conversa)
+        clientes_classificados.add(id_cliente)
+        clientes_por_perfil[id_cliente].add(chave)
+        conversas_classificadas.add(id_conversa)
+        if id_conversa in ids_conversas_funil:
+            acumulador["ids_clientes_funil"].add(id_cliente)
+            acumulador["ids_conversas_funil"].add(id_conversa)
+            clientes_funil_classificados.add(id_cliente)
+
+    linhas: list[dict[str, Any]] = []
+    for chave in PERFIS_ATENDIMENTO:
+        acumulador = acumuladores[chave]
+        total_leads = len(acumulador["ids_clientes"])
+        total_conversas = len(acumulador["ids_conversas"])
+        funil_observado = len(acumulador["ids_clientes_funil"])
+        total_funil = funil_observado
+        linhas.append(
+            {
+                "chave": chave,
+                "rotulo": rotulos[chave],
+                "leads": total_leads,
+                "conversas": total_conversas,
+                "leads_funil": total_funil,
+                "leads_funil_observados": funil_observado,
+                "conversas_funil": (
+                    len(acumulador["ids_conversas_funil"])
+                ),
+                "conversas_funil_observadas": len(
+                    acumulador["ids_conversas_funil"]
+                ),
+                "taxa_funil": (
+                    round(total_funil / total_leads * 100, 1)
+                    if total_leads
+                    else 0.0
+                ),
+                "funil_nao_aplicavel": False,
+            }
+        )
+
+    total_conversas = len(perfis_conversa)
+    maior_volume = max(item["leads"] for item in linhas)
+    perfis_predominantes = [
+        item["rotulo"] for item in linhas
+        if maior_volume and item["leads"] == maior_volume
+    ]
+
+    return {
+        "linhas": linhas,
+        "idade_minima_dependente": idade_minima_dependente,
+        "leads_classificados": len(clientes_classificados),
+        "leads_sem_classificacao": len(todos_clientes - clientes_classificados),
+        "leads_multiperfil": sum(
+            len(perfis) > 1 for perfis in clientes_por_perfil.values()
+        ),
+        "conversas_classificadas": len(conversas_classificadas),
+        "conversas_sem_classificacao": len(conversas_sem_classificacao),
+        "conversas_funil_sem_classificacao": len(
+            conversas_sem_classificacao & ids_conversas_funil
+        ),
+        "leads_funil_apenas_sem_classificacao": len(
+            clientes_funil_sem_classificacao - clientes_funil_classificados
+        ),
+        "conversas_apenas_envio_funil": sum(
+            bool(perfil.get("apenas_envio_funil")) for perfil in perfis_conversa
+        ),
+        "cobertura_conversas": round(
+            len(conversas_classificadas) / total_conversas * 100, 1
+        )
+        if total_conversas
+        else 0.0,
+        "perfis_predominantes": perfis_predominantes,
+        "idade_minima_suporte": idade_minima_suporte,
+    }
+
+
 def _ordenar_data(valor: Any) -> datetime:
     if isinstance(valor, datetime):
         data = valor
@@ -28108,15 +28661,24 @@ def montar_snapshot(
             "id_unidade": id_unidade,
             "nome_unidade": str(linha["nome_unidade"]),
             "nome_agente": str(linha.get("nome_agente") or "Assistente"),
+            "idade_minima_suporte": validar_idade_minima_suporte(linha["idade_minima_suporte"]),
+            "bpa_ativo": bool(linha.get("bpa_ativo", False)),
             "conversas": [],
             "pesquisas": [],
         }
 
     funil_por_unidade: dict[int, set[int]] = defaultdict(set)
+    conversas_funil_por_unidade: dict[int, set[int]] = defaultdict(set)
     for linha in funil:
-        funil_por_unidade[int(linha["id_unidade"])].add(int(linha["id_cliente"]))
+        id_unidade = int(linha["id_unidade"])
+        funil_por_unidade[id_unidade].add(int(linha["id_cliente"]))
+        if linha.get("id_conversa") is not None:
+            conversas_funil_por_unidade[id_unidade].add(
+                int(linha["id_conversa"])
+            )
 
     grupos: dict[tuple[int, int], dict[str, Any]] = {}
+    perfis_conversa: dict[tuple[int, int, int], dict[str, Any]] = {}
     for linha in mensagens:
         id_unidade = int(linha["id_unidade"])
         id_cliente = int(linha["id_cliente"])
@@ -28144,6 +28706,19 @@ def montar_snapshot(
         id_conversa = int(linha["id_conversa"])
         if id_conversa not in grupo["ids_conversa"]:
             grupo["ids_conversa"].append(id_conversa)
+        perfis_conversa.setdefault(
+            (id_unidade, id_cliente, id_conversa),
+            {
+                "id_unidade": id_unidade,
+                "id_cliente": id_cliente,
+                "id_conversa": id_conversa,
+                "status_dependente": linha.get("status_dependente"),
+                "idade_titular": linha.get("idade_titular"),
+                "idade_dependente": linha.get("idade_dependente"),
+                "nome_dependente": linha.get("nome_dependente"),
+                "apenas_envio_funil": False,
+            },
+        )
 
         data_mensagem = linha.get("received_data_hora")
         data_ordenacao = _ordenar_data(data_mensagem)
@@ -28185,6 +28760,35 @@ def montar_snapshot(
         unidade["conversas"].sort(
             key=lambda grupo: _ordenar_data(grupo["ultima_atividade"]), reverse=True
         )
+
+    # Um retry pode confirmar o envio de uma conversa antiga enquanto o mesmo
+    # contato interage em outra. Preservamos o perfil do envio, sem acrescentar
+    # suas mensagens fora da janela ao dashboard de conversas.
+    for linha in funil:
+        id_unidade = int(linha["id_unidade"])
+        id_cliente = int(linha["id_cliente"])
+        if (id_unidade, id_cliente) not in grupos or linha.get("id_conversa") is None:
+            continue
+        id_conversa = int(linha["id_conversa"])
+        perfis_conversa.setdefault(
+            (id_unidade, id_cliente, id_conversa),
+            {
+                "id_unidade": id_unidade,
+                "id_cliente": id_cliente,
+                "id_conversa": id_conversa,
+                "status_dependente": linha.get("status_dependente"),
+                "idade_titular": linha.get("idade_titular"),
+                "idade_dependente": linha.get("idade_dependente"),
+                "nome_dependente": linha.get("nome_dependente"),
+                "apenas_envio_funil": True,
+            },
+        )
+
+    perfis_por_unidade: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for perfil in perfis_conversa.values():
+        perfis_por_unidade[int(perfil["id_unidade"])].append(perfil)
+    for id_unidade, unidade in unidades_por_id.items():
+        unidade["perfis_atendimento"] = perfis_por_unidade[id_unidade]
 
     for linha in pesquisas:
         id_unidade = int(linha["id_unidade"])
@@ -28239,6 +28843,15 @@ def montar_snapshot(
             "media_satisfacao": round(sum(notas) / len(notas), 2) if notas else None,
             "distribuicao_notas": distribuicao,
             "comentarios": sum(bool(item["comentario"]) for item in pesquisas_unidade),
+            "taxa_participacao_satisfacao": round(
+                len(leads_com_nota) / total_leads * 100, 1
+            ) if total_leads else 0.0,
+            "segmentacao_perfis": _montar_segmentacao_perfis(
+                perfis_por_unidade[id_unidade],
+                conversas_funil_por_unidade[id_unidade],
+                idade_minima_suporte=unidade["idade_minima_suporte"],
+                bpa_ativo=bool(unidade["bpa_ativo"]),
+            ),
         }
         pesquisas_unidade.sort(
             key=lambda item: _ordenar_data(item["criado_em"]), reverse=True
@@ -28313,7 +28926,12 @@ def coletar_snapshot(
         filtro, params_filtro = _filtro_unidades(ids_unidade)
         cursor.execute(
             f"""
-            SELECT u.id_unidade, u.nome_unidade, u.nome_agente
+            SELECT
+                u.id_unidade,
+                u.nome_unidade,
+                u.nome_agente,
+                u.idade_minima_suporte,
+                u.bpa_ativo
               FROM chatbot.unidade u
              WHERE TRUE {filtro}
              ORDER BY u.nome_unidade, u.id_unidade
@@ -28365,13 +28983,17 @@ def coletar_snapshot(
                 u.nome_unidade,
                 c.id_cliente,
                 cl.nome AS nome_cliente,
-                cl.wa_id AS waid_telefone,
+                cl.wa_id,
                 cl.email,
                 {expr_profissao_cliente} AS profissao_cliente,
                 {expr_profissao_conversa} AS profissao_conversa_recente,
                 c.id_conversa,
                 c.status_ativa,
+                c.status_dependente,
                 c.id_etapa_atual,
+                cl.idade AS idade_titular,
+                d.idade AS idade_dependente,
+                d.nome_dependente,
                 h.id_mensagem,
                 h.id_etapa,
                 h.received_data_hora,
@@ -28384,6 +29006,8 @@ def coletar_snapshot(
                AND c.id_cliente = cj.id_cliente
               JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+              LEFT JOIN chatbot.dependente d
+                ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
               JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
               {lateral_profissao}
              WHERE h.received_data_hora >= %s
@@ -28415,10 +29039,20 @@ def coletar_snapshot(
         filtro_funil, params_funil_filtro = _filtro_unidades(ids_unidade)
         cursor.execute(
             f"""
-            SELECT DISTINCT u.id_unidade, c.id_cliente
+            SELECT DISTINCT
+                u.id_unidade,
+                c.id_cliente,
+                c.id_conversa,
+                c.status_dependente,
+                cl.idade AS idade_titular,
+                d.idade AS idade_dependente,
+                d.nome_dependente
               FROM chatbot.funil_envios f
               JOIN chatbot.conversa c ON c.id_conversa = f.id_conversa
               JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+              LEFT JOIN chatbot.dependente d
+                ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
              WHERE f.status = 'sent'
                AND f.enviado_em >= %s
                AND f.enviado_em < %s
@@ -28436,7 +29070,7 @@ def coletar_snapshot(
                 c.id_cliente,
                 c.id_conversa,
                 cl.nome AS nome_cliente,
-                cl.wa_id AS waid_telefone,
+                cl.wa_id,
                 {expr_profissao_cliente} AS profissao_cliente,
                 {expr_profissao_conversa} AS profissao_conversa_recente,
                 p.nota,
@@ -28972,6 +29606,7 @@ def renderizar_pdf(
         from reportlab.platypus import (
             CondPageBreak,
             HRFlowable,
+            KeepTogether,
             LongTable,
             PageBreak,
             Paragraph,
@@ -28988,7 +29623,6 @@ def renderizar_pdf(
 
     fonte, fonte_bold = _registrar_fontes_pdf()
     verde = colors.HexColor("#008069")
-    verde_claro = colors.HexColor("#E8F7F3")
     cinza = colors.HexColor("#667781")
     cinza_claro = colors.HexColor("#F4F6F7")
     amarelo = colors.HexColor("#F4B400")
@@ -29000,8 +29634,8 @@ def renderizar_pdf(
             "Titulo",
             parent=estilos_base["Title"],
             fontName=fonte_bold,
-            fontSize=23,
-            leading=27,
+            fontSize=20,
+            leading=24,
             textColor=colors.white,
             alignment=TA_LEFT,
             spaceAfter=3 * mm,
@@ -29049,6 +29683,29 @@ def renderizar_pdf(
             alignment=TA_CENTER,
             textColor=texto,
         ),
+        "cabecalho_tabela": ParagraphStyle(
+            "CabecalhoTabela",
+            fontName=fonte_bold,
+            fontSize=8,
+            leading=11,
+            textColor=colors.white,
+        ),
+        "indicador": ParagraphStyle(
+            "Indicador",
+            fontName=fonte_bold,
+            fontSize=23,
+            leading=28,
+            alignment=TA_CENTER,
+            textColor=verde,
+        ),
+        "rotulo_indicador": ParagraphStyle(
+            "RotuloIndicador",
+            fontName=fonte,
+            fontSize=8,
+            leading=11,
+            alignment=TA_CENTER,
+            textColor=texto,
+        ),
         "comentario": ParagraphStyle(
             "Comentario",
             parent=estilos_base["BodyText"],
@@ -29069,6 +29726,9 @@ def renderizar_pdf(
     def p(valor: Any, estilo: str = "corpo") -> Any:
         texto_seguro = html_escape(str(valor if valor not in (None, "") else "—"))
         return Paragraph(texto_seguro.replace("\n", "<br/>"), estilos[estilo])
+
+    def percentual(valor: float) -> str:
+        return f"{valor:.1f}%".replace(".", ",")
 
     nome_unidade = str(unidade["nome_unidade"])
     metricas = unidade["metricas"]
@@ -29106,6 +29766,11 @@ def renderizar_pdf(
             8.5 * mm,
             f"Página {doc.page} • gerado {_data_local(gerado_em)}",
         )
+        canvas.setFont(fonte, 6.5)
+        canvas.drawString(
+            16 * mm, 4.5 * mm,
+            "Documento privado • dados pessoais • uso exclusivo de pessoas autorizadas da unidade.",
+        )
         canvas.restoreState()
 
     historia: list[Any] = []
@@ -29136,23 +29801,23 @@ def renderizar_pdf(
                 ("BOX", (1, 0), (1, 0), 0.5, colors.white),
                 ("LEFTPADDING", (0, 0), (-1, -1), 7 * mm),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 7 * mm),
-                ("TOPPADDING", (0, 0), (-1, -1), 7 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 7 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 4 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4 * mm),
                 ("ROUNDEDCORNERS", [5]),
             ]
         )
     )
-    historia.extend([capa, Spacer(1, 8 * mm)])
+    historia.extend([capa, Spacer(1, 3 * mm)])
 
     valores_cards = [
-        (metricas["leads_contato"], "Leads que entraram em contato"),
-        (metricas["leads_funil"], "Leads enviados ao funil"),
-        (metricas["leads_com_nota"], "Leads que deram nota"),
+        (metricas["leads_contato"], "Leads em contato"),
+        (metricas["leads_funil"], "Enviados ao funil"),
+        (metricas["leads_com_nota"], "Leads que avaliaram"),
         (
-            metricas["media_satisfacao"]
+            f"{metricas['media_satisfacao']:.2f}".replace(".", ",")
             if metricas["media_satisfacao"] is not None
             else "—",
-            "Nota média de satisfação",
+            "Nota média / 5",
         ),
     ]
     cards = []
@@ -29160,21 +29825,18 @@ def renderizar_pdf(
         cards.append(
             Table(
                 [
-                    [
-                        Paragraph(
-                            f"<font size='20' color='#008069'><b>{html_escape(str(valor))}</b></font>",
-                            estilos["centro"],
-                        )
-                    ],
-                    [p(rotulo, "centro")],
+                    [p(valor, "indicador")],
+                    [p(rotulo, "rotulo_indicador")],
                 ],
-                colWidths=[76 * mm],
+                colWidths=[38.75 * mm],
+                style=[("LEFTPADDING", (0, 0), (-1, -1), 0),
+                       ("RIGHTPADDING", (0, 0), (-1, -1), 0)],
             )
         )
     tabela_cards = Table(
-        [cards[:2], cards[2:]],
-        colWidths=[83.5 * mm, 83.5 * mm],
-        rowHeights=[31 * mm, 31 * mm],
+        [cards],
+        colWidths=[41.75 * mm] * 4,
+        rowHeights=[26 * mm],
     )
     tabela_cards.setStyle(
         TableStyle(
@@ -29183,8 +29845,8 @@ def renderizar_pdf(
                 ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#DCE4E7")),
                 ("INNERGRID", (0, 0), (-1, -1), 3, colors.white),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4 * mm),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4 * mm),
+                ("LEFTPADDING", (0, 0), (-1, -1), 1.5 * mm),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 1.5 * mm),
             ]
         )
     )
@@ -29199,7 +29861,8 @@ def renderizar_pdf(
             p(
                 f"Os indicadores abaixo usam {descricao_intervalo}. "
                 "Conversas técnicas do mesmo cliente foram consolidadas apenas quando "
-                "pertencem à mesma unidade."
+                "pertencem à mesma unidade. "
+                f"A taxa geral de envio ao funil foi de {percentual(metricas['taxa_funil'])}."
             ),
             Spacer(1, 3 * mm),
             tabela_cards,
@@ -29207,20 +29870,149 @@ def renderizar_pdf(
         ]
     )
 
+    segmentacao = metricas["segmentacao_perfis"]
+    linhas_perfis: list[list[Any]] = [
+        [
+            p("Perfil atendido", "cabecalho_tabela"),
+            p("Leads", "cabecalho_tabela"),
+            p("Conversas", "cabecalho_tabela"),
+            p("No funil", "cabecalho_tabela"),
+            p("Taxa de envio", "cabecalho_tabela"),
+        ]
+    ]
+    linhas_politica: list[int] = []
+    for perfil in segmentacao["linhas"]:
+        if perfil["funil_nao_aplicavel"]:
+            valor_funil = "Não se aplica*"
+            valor_taxa = "—"
+            linhas_politica.append(len(linhas_perfis))
+        else:
+            valor_funil = perfil["leads_funil"]
+            valor_taxa = percentual(perfil["taxa_funil"])
+        linhas_perfis.append(
+            [
+                p(perfil["rotulo"], "pequeno"),
+                p(perfil["leads"], "centro"),
+                p(perfil["conversas"], "centro"),
+                p(valor_funil, "centro"),
+                p(valor_taxa, "centro"),
+            ]
+        )
+
+    tabela_perfis = Table(
+        linhas_perfis,
+        colWidths=[67 * mm, 20 * mm, 24 * mm, 31 * mm, 25 * mm],
+        repeatRows=1,
+    )
+    estilo_perfis = [
+        ("BACKGROUND", (0, 0), (-1, 0), verde),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, cinza_claro]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 2.5 * mm),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5 * mm),
+    ]
+    for indice_linha in linhas_politica:
+        estilo_perfis.append(
+            (
+                "BACKGROUND",
+                (0, indice_linha),
+                (-1, indice_linha),
+                colors.HexColor("#FFF4D6"),
+            )
+        )
+    tabela_perfis.setStyle(TableStyle(estilo_perfis))
+
+    total_conversas_perfil = (
+        segmentacao["conversas_classificadas"]
+        + segmentacao["conversas_sem_classificacao"]
+    )
+    leituras_rapidas: list[str] = []
+    predominantes = segmentacao["perfis_predominantes"]
+    if len(predominantes) == 1:
+        leituras_rapidas.append(f"Maior volume: {predominantes[0]}.")
+    elif predominantes:
+        leituras_rapidas.append("Maior volume, em empate: " + "; ".join(predominantes) + ".")
+    if segmentacao["leads_multiperfil"]:
+        leituras_rapidas.append(
+            f"{segmentacao['leads_multiperfil']} lead(s) apareceram em mais de um "
+            "perfil de atendimento."
+        )
+    if segmentacao["conversas_sem_classificacao"]:
+        leituras_rapidas.append(
+            f"{segmentacao['conversas_sem_classificacao']} conversa(s) tinham "
+            "tipo/idade ausente ou inválido, ou idade fora das faixas atuais."
+        )
+    if not leituras_rapidas:
+        leituras_rapidas.append("Nenhum atendimento para classificar neste período.")
+
+    bloco_perfis = [
+        Paragraph("Perfil dos atendimentos", estilos["secao"]),
+        p(
+            "Leads representa clientes únicos dentro de cada perfil; Conversas "
+            "mostra a demanda técnica. Um cliente pode aparecer em mais de um "
+            "perfil quando iniciou atendimentos para pessoas diferentes, portanto "
+            "as linhas não devem ser somadas para obter o total geral."
+        ),
+        Spacer(1, 2 * mm),
+        tabela_perfis,
+        Spacer(1, 2.5 * mm),
+        p(
+            f"Cobertura etária: {segmentacao['conversas_classificadas']} de "
+            f"{total_conversas_perfil} conversa(s) ({percentual(segmentacao['cobertura_conversas'])}). "
+            f"A faixa infantil começa aos {segmentacao['idade_minima_dependente']} "
+            "anos conforme a configuração de BPA da unidade."
+        ),
+        p("Leitura rápida: " + " ".join(leituras_rapidas), "pequeno"),
+    ]
+    limite = segmentacao["idade_minima_suporte"]
+    politica_suporte = (
+        "Encaminhamento por idade: desativado."
+        if limite is None
+        else f"Encaminhamento ao comercial: titulares a partir de {limite} anos, na etapa de idade."
+    )
+    bloco_perfis.append(p(
+        politica_suporte + " As faixas etárias permanecem fixas. Os números e taxas "
+        "incluem os envios confirmados; a configuração atual não apaga o histórico "
+        "nem comprova qual regra vigorava na época.",
+        "pequeno",
+    ))
+    if segmentacao["conversas_funil_sem_classificacao"]:
+        bloco_perfis.append(p(
+            f"Envios fora das cinco faixas: {segmentacao['conversas_funil_sem_classificacao']} "
+            "conversa(s) sem classificação, cujos leads continuam considerados "
+            "no total geral de enviados.",
+            "pequeno",
+        ))
+    historia.append(KeepTogether(bloco_perfis))
+    if not metricas["leads_contato"]:
+        historia.extend([
+            Spacer(1, 4 * mm),
+            p("Nenhum lead entrou em contato neste período. Não há notas, "
+              "comentários ou relação de leads a apresentar."),
+        ])
+        documento.build(
+            historia, onFirstPage=cabecalho_rodape, onLaterPages=cabecalho_rodape,
+        )
+        return
+    historia.append(PageBreak())
+
     distribuicao = metricas["distribuicao_notas"]
     maximo = max([int(valor) for valor in distribuicao.values()] + [1])
-    linhas_notas: list[list[Any]] = [[p("Nota", "pequeno"), p("Distribuição", "pequeno"), p("Respostas", "pequeno")]]
+    linhas_notas: list[list[Any]] = [[p("Nota", "cabecalho_tabela"), p("Distribuição", "cabecalho_tabela"), p("Respostas", "cabecalho_tabela")]]
     for nota in range(5, 0, -1):
         quantidade = int(distribuicao[str(nota)])
-        largura_barra = max(1, int(34 * quantidade / maximo))
-        barra = Table([[""]], colWidths=[largura_barra * mm], rowHeights=[4 * mm])
-        barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), amarelo)]))
+        barra: Any = ""
+        if quantidade:
+            barra = Table([[""]], colWidths=[90 * quantidade / maximo * mm], rowHeights=[4 * mm], hAlign="LEFT")
+            barra.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), amarelo)]))
         linhas_notas.append([p(f"{nota} / 5"), barra, p(quantidade, "centro")])
     tabela_notas = Table(linhas_notas, colWidths=[23 * mm, 120 * mm, 24 * mm], repeatRows=1)
     tabela_notas.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), verde_claro),
+                ("BACKGROUND", (0, 0), (-1, 0), verde),
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 2.3 * mm),
@@ -29233,21 +30025,45 @@ def renderizar_pdf(
             Paragraph("Satisfação", estilos["secao"]),
             p(
                 f"Foram registradas {metricas['respostas_satisfacao']} nota(s) e "
-                f"{metricas['comentarios']} comentário(s) no período."
+                f"{metricas['comentarios']} comentário(s) no período. "
+                f"Participação: {percentual(metricas['taxa_participacao_satisfacao'])} "
+                "dos leads em contato deram pelo menos uma nota."
             ),
             Spacer(1, 2 * mm),
             tabela_notas,
-            PageBreak(),
-            Paragraph("Leads identificados no período", estilos["secao"]),
+            Spacer(1, 4 * mm),
+            Paragraph("Como interpretar os números", estilos["secao"]),
+            p(
+                "No funil significa envio confirmado no registro local de integração, "
+                "dentro do período; não significa agendamento ou venda. Cada faixa "
+                "considera o envio da própria conversa, nunca de outro atendimento "
+                "do mesmo contato.", "pequeno",
+            ),
+            p(
+                "A idade do titular usa o cadastro atual; a do dependente usa o "
+                "registro ligado à conversa. Idades e configurações de BPA/suporte "
+                "ao idoso refletem o banco na extração, não um retrato histórico "
+                "da época de cada atendimento. Idades fora de 1–99, ausentes e "
+                "fora das faixas exibidas ficam sem classificação.", "pequeno",
+            ),
+            p(
+                f"{segmentacao['leads_sem_classificacao']} lead(s) apenas sem "
+                f"classificação; {segmentacao['leads_funil_apenas_sem_classificacao']} "
+                "lead(s) enviados somente por conversas sem classificação. "
+                f"{segmentacao['conversas_apenas_envio_funil']} conversa(s) foram "
+                "incluídas nos perfis pelo envio confirmado, mesmo sem mensagem "
+                "na janela, sempre de clientes que entraram em contato no período.",
+                "pequeno",
+            ),
         ]
     )
 
     cabecalho_leads = [
-        p("Lead", "pequeno"),
-        p("Profissão atual", "pequeno"),
-        p("Conversa(s)", "pequeno"),
-        p("Última atividade", "pequeno"),
-        p("Funil", "pequeno"),
+        p("Lead", "cabecalho_tabela"),
+        p("Profissão atual", "cabecalho_tabela"),
+        p("Conversa(s)", "cabecalho_tabela"),
+        p("Última atividade", "cabecalho_tabela"),
+        p("Funil", "cabecalho_tabela"),
     ]
     linhas_leads: list[list[Any]] = [cabecalho_leads]
     for lead in unidade["conversas"]:
@@ -29278,13 +30094,13 @@ def renderizar_pdf(
                 ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#DCE4E7")),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, cinza_claro]),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("TOPPADDING", (0, 0), (-1, -1), 2.2 * mm),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.2 * mm),
+                ("TOPPADDING", (0, 0), (-1, -1), 1.8 * mm),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 1.8 * mm),
                 ("SPAN", (0, 1), (-1, 1)) if len(unidade["conversas"]) == 0 else ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.white),
             ]
         )
     )
-    historia.extend([tabela_leads, Spacer(1, 7 * mm), Paragraph("Comentários recebidos", estilos["secao"])])
+    historia.extend([Spacer(1, 4 * mm), Paragraph("Comentários recebidos", estilos["secao"])])
 
     comentarios = [item for item in unidade["pesquisas"] if item["comentario"]]
     if not comentarios:
@@ -29312,14 +30128,16 @@ def renderizar_pdf(
 
     historia.extend(
         [
-            Spacer(1, 8 * mm),
-            HRFlowable(width="100%", thickness=0.6, color=colors.HexColor("#CAD5D9")),
-            Spacer(1, 2 * mm),
+            PageBreak(),
+            Paragraph("Leads identificados no período", estilos["secao"]),
             p(
-                "Documento privado. Contém dados pessoais dos leads e deve ser "
-                "armazenado e compartilhado somente com pessoas autorizadas da unidade.",
+                "Relação consolidada por cliente da unidade. Os IDs abaixo remetem "
+                "às conversas do dashboard de histórico, que permanece separado "
+                "deste relatório de indicadores.",
                 "pequeno",
             ),
+            Spacer(1, 3 * mm),
+            tabela_leads,
         ]
     )
     documento.build(
@@ -29510,12 +30328,9 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ````
 
-
 ## Passo 150B — `utilitarios/monitoring/suspicious_conversations.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A heurística
-de monitoramento não muda; a consulta apenas passa a ler `cliente.wa_id` e
-mantém o alias de apresentação já consumido pelo relatório.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `5cae448e05f5b5d9ae6b98737f92bb61bf9125c4d9ac0f7f24e49ffbc72aeb58`
 
@@ -30523,15 +31338,9 @@ if __name__ == "__main__":
     raise SystemExit(main(argumentos))
 ````
 
-
 ## Passo 150C — `utilitarios/monitoring/blocked_users.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A consulta
-diagnóstica passa a projetar separadamente todos os aliases `wa_id` e
-`user_id` persistidos em cada linha de bloqueio; assim ela não quebra com a
-renomeação física e também não oculta bloqueios de contas em modo de
-privacidade. A opção CLI `--show-wa-id` é mantida por compatibilidade, embora
-agora exiba qualquer identidade Meta.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `72c61ee854a16a4f5a7afcdf492fa8747b02bcd4c85e637b34a28819187db7b7`
 
@@ -31312,12 +32121,9 @@ if __name__ == "__main__":
         raise SystemExit(main())
 ````
 
-
 ## Passo 150D — `utilitarios/cache_consulta.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. O utilitário
-passa a ler o payload tipado do cache futuro (`tipo_identidade` e
-`identidade`) em vez do campo legado `cliente_telefone`.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `7f12f276f9b94cb9a89efe91c756c68e40b83395af64edbdf9f02fe6c39e17a3`
 
@@ -31462,12 +32268,9 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ````
 
-
 ## Passo 150E — `utilitarios/montar_lead_teste.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Os dois
-payloads fictícios são preservados e somente as seis respostas da triagem são
-renumeradas de 12..17 para 13..18.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `4fe9cc7dfd65a669b3f5f84fd5f1602674e788f5c45eaccccd2e784613d56aef`
 
@@ -31545,12 +32348,9 @@ def _montar_dados_lead_teste(
     }
 ````
 
-
 ## Passo 150F — `utilitarios/operacoes_rotineiras.sql`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. As operações
-manuais permanecem idênticas; a consulta de histórico usa o nome físico futuro
-`cliente.wa_id`.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `8435654e2e6ed15083cd7347d5bf60c105cc26a1039900a7830d64bd1cc15e4e`
 
@@ -31731,12 +32531,11 @@ FROM chatbot.webhook_flood_evento;
 COMMIT;
 ````
 
-
 ## Passo 150G — `callback/monitoramento/apresentacao.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A apresentação mantém as transformações puras, desloca o catálogo para 23 etapas, representa `contact_request`, prioriza WA ID, usa username apenas como fallback visual e só marca o bloqueio com contador e denylist.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `a74217cbb388f6d0334bf5e98fe9c871cf82824a1dc1b256283b54cc04e6c961`
+SHA-256 do conteúdo UTF-8 normalizado: `2ff6f5ca404d49d9db832a00f726c1d9581c2d2639ce79d1e631620e36bc445b`
 
 ````python
 """Transformações puras dos dados do painel, sem acesso ao banco."""
@@ -31970,6 +32769,17 @@ def proteger_celula_csv(valor):
     return "'" + texto if texto.startswith(('=', '+', '-', '@')) else texto
 
 
+CABECALHO_CSV_ESSENCIAL = ('Nome', 'E-mail', 'Telefone')
+
+
+def montar_linha_csv_essencial(*, primeiro_nome, sobrenome, email, telefone):
+    """Mantém o nome completo em uma coluna, sem acrescentar rótulos comerciais."""
+    nome = ' '.join(parte for parte in (primeiro_nome, sobrenome) if parte)
+    # O telefone já está normalizado; remove só o código do Brasil, mantendo o DDD.
+    telefone_essencial = telefone.removeprefix('+55')
+    return [proteger_celula_csv(nome), proteger_celula_csv(email), telefone_essencial]
+
+
 def montar_linha_csv_google_contatos(
     *,
     primeiro_nome,
@@ -31992,7 +32802,12 @@ def montar_linha_csv_google_contatos(
     return [valores.get(coluna, '') for coluna in CABECALHO_CSV_GOOGLE_CONTATOS]
 
 
-def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade):
+def montar_relatorio(
+    metricas, anteriores, perfis, satisfacao, etapas, atividade,
+    *, encaminhados_comercial_por_idade,
+):
+    if type(encaminhados_comercial_por_idade) is not int or encaminhados_comercial_por_idade < 0:
+        raise ValueError('Total de encaminhamentos inválido')
     def variacao(atual, anterior):
         if atual is None or anterior is None:
             return None
@@ -32004,6 +32819,7 @@ def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade
         tendencias[chave] = variacao(metricas.get(chave, 0), anteriores.get(chave) if anteriores else None)
     return {
         'metricas': metricas,
+        'encaminhados_comercial_por_idade': encaminhados_comercial_por_idade,
         'tendencias': tendencias,
         'perfis': perfis,
         'satisfacao': satisfacao,
@@ -32014,9 +32830,9 @@ def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade
 
 ## Passo 150H — `callback/monitoramento/views.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A exportação passa a ler o nome físico final `wa_id`; autenticação, escopo da unidade, respostas privadas e os dois tipos de Google CSV permanecem iguais.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `29739043a60ed55c733c67b751a1eca8035bdb2f2194197d7c9bf636e5e05982`
+SHA-256 do conteúdo UTF-8 normalizado: `631238e403a3726fc9137a6cabbb089c05635bc3c37011207d07b1e804e6e511`
 
 ````python
 """Entrada do portal; credenciais sao verificadas pelo Django e nunca por SQL proprio."""
@@ -32046,7 +32862,9 @@ from .services import (
     carregar_relatorio,
 )
 from .apresentacao import (
+    CABECALHO_CSV_ESSENCIAL,
     CABECALHO_CSV_GOOGLE_CONTATOS,
+    montar_linha_csv_essencial,
     montar_linha_csv_google_contatos,
     normalizar_telefone_google,
     separar_nome,
@@ -32230,6 +33048,10 @@ def contatos_csv(request):
     periodo = _resolver_periodo_request(request)
     if periodo is None:
         return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    formato = request.GET.get('formato', 'google')
+    if formato not in ('google', 'essencial'):
+        return _headers_privados(JsonResponse({'erro': 'Formato inválido.'}, status=400))
+    essencial = formato == 'essencial'
     apenas_elegiveis = request.GET.get('tipo') == 'elegiveis'
     try:
         contatos = carregar_contatos(acesso, periodo)
@@ -32237,8 +33059,10 @@ def contatos_csv(request):
         logger.error('monitoramento_csv_banco_indisponivel')
         return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
     saida = StringIO(newline='')
-    escritor = csv.writer(saida, lineterminator='\r\n')
-    escritor.writerow(CABECALHO_CSV_GOOGLE_CONTATOS)
+    # O formato essencial facilita a abertura em planilhas configuradas em pt-BR.
+    # O Google CSV mantém seu separador, codificação e cabeçalhos originais.
+    escritor = csv.writer(saida, delimiter=';' if essencial else ',', lineterminator='\r\n')
+    escritor.writerow(CABECALHO_CSV_ESSENCIAL if essencial else CABECALHO_CSV_GOOGLE_CONTATOS)
     for contato in contatos:
         primeiro, sobrenome = separar_nome(contato.get('nome'))
         email = str(contato.get('email') or '').strip()
@@ -32249,16 +33073,24 @@ def contatos_csv(request):
             primeiro and validacao_email.valido and telefone
         ):
             continue
-        escritor.writerow(montar_linha_csv_google_contatos(
-            primeiro_nome=primeiro,
-            sobrenome=sobrenome,
-            email=email_exportado,
-            telefone=telefone,
-            nome_unidade=acesso.nome_unidade,
-        ))
-    resposta = HttpResponse(saida.getvalue(), content_type='text/csv; charset=utf-8')
+        dados_linha = {
+            'primeiro_nome': primeiro,
+            'sobrenome': sobrenome,
+            'email': email_exportado,
+            'telefone': telefone,
+        }
+        if essencial:
+            linha = montar_linha_csv_essencial(**dados_linha)
+        else:
+            linha = montar_linha_csv_google_contatos(
+                **dados_linha, nome_unidade=acesso.nome_unidade,
+            )
+        escritor.writerow(linha)
+    conteudo = saida.getvalue().encode('utf-8-sig' if essencial else 'utf-8')
+    resposta = HttpResponse(conteudo, content_type='text/csv; charset=utf-8')
+    prefixo = 'contatos_essenciais' if essencial else 'contatos'
     resposta['Content-Disposition'] = (
-        f'attachment; filename="contatos_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
+        f'attachment; filename="{prefixo}_{periodo.chave}_{"elegiveis" if apenas_elegiveis else "todos"}.csv"'
     )
     return _headers_privados(resposta)
 
@@ -32275,9 +33107,9 @@ def falha_csrf(request, reason='', template_name='403_csrf.html'):
 
 ## Passo 150I — `core/repositories/monitoramento/painel.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Toda consulta continua somente leitura e limitada à unidade autorizada. A projeção fornece WA ID, username e a dupla prova de bloqueio sem selecionar nem expor o Meta `user_id`.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `4cce90bc31eef190c056801d0481d942c199ad2a4f3d459b4459d7bb282bfb07`
+SHA-256 do conteúdo UTF-8 normalizado: `570970143b8fe6e0c5b530b2fce48bca76476b90c7dd654eafab548fdb781bb4`
 
 ````python
 """Consultas somente leitura do painel, sempre limitadas à unidade autorizada."""
@@ -32306,7 +33138,7 @@ def _periodo(coluna, inicio, fim, parametros):
 
 def buscar_unidade(id_unidade, cursor):
     cursor.execute("""
-        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.suporte_idoso,
+        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.idade_minima_suporte,
                u.email_obrigatorio, u.bpa_ativo,
                MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
           FROM chatbot.unidade u
@@ -32314,7 +33146,7 @@ def buscar_unidade(id_unidade, cursor):
           LEFT JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
          WHERE u.id_unidade = %s
          GROUP BY u.id_unidade, u.nome_unidade, u.nome_agente,
-                  u.suporte_idoso, u.email_obrigatorio, u.bpa_ativo
+                  u.idade_minima_suporte, u.email_obrigatorio, u.bpa_ativo
     """, (id_unidade,))
     return _linha(cursor)
 
@@ -32431,6 +33263,21 @@ def buscar_metricas(id_unidade, inicio, fim, cursor):
     return _linha(cursor)
 
 
+def contar_encaminhados_comercial_por_idade(id_unidade, inicio, fim, cursor):
+    """Conta o fato concluído, pela data de encerramento, sem inferir pela idade."""
+    parametros = [id_unidade]
+    filtro = _periodo('c.finalizou_em', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT COUNT(DISTINCT c.id_cliente)
+          FROM chatbot.conversa c
+         WHERE c.id_unidade = %s
+           AND c.status_ativa = FALSE
+           AND c.motivo_encerramento = 'encaminhado_suporte_idoso'
+           AND c.finalizou_em IS NOT NULL {filtro}
+    """, tuple(parametros))
+    return int(cursor.fetchone()[0])
+
+
 def buscar_perfis(id_unidade, inicio, fim, cursor):
     parametros = [id_unidade]
     filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
@@ -32527,9 +33374,9 @@ def listar_contatos(id_unidade, inicio, fim, cursor):
 
 ## Passo 150J — `callback/monitoramento/static/monitoramento/js/painel.js`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A interface apresenta `@username` somente sem telefone, mostra contato indisponível e bloqueio, renderiza as 23 etapas e conserva atualização periódica e responsividade.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f6a27b25da3803d2d90b465f98`
+SHA-256 do conteúdo UTF-8 normalizado: `eba359050f91972a953688a0c0468dd18ac9647b9772004a197ea2a2328248ce`
 
 ````javascript
 (() => {
@@ -32556,7 +33403,6 @@ SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f
     adulto:{curto:'18–59',completo:'Titular de 18 a 59 anos'},
     idoso:{curto:'60+',completo:'Titular com 60 anos ou mais'},
   };
-  function metricas(m){ids('totalLeads').textContent=numero.format(m.leads||0);ids('totalMensagens').textContent=numero.format(m.mensagens||0);ids('totalFunil').textContent=numero.format(m.funil||0);ids('notaMedia').textContent=m.nota_media==null?'—':Number(m.nota_media).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});}
   function visivel(i){if(estado.filtro==='continuacoes'&&i.ids_conversa.length<2)return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
   function mini(pai,texto,classe=''){pai.appendChild(criar('span','mini-tag '+classe,texto));}
   function renderLista(){
@@ -32626,14 +33472,14 @@ SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f
     if(estado.regras.email_obrigatorio||i.email)campos.push(['E-mail',i.email||'Obrigatório · não informado']);
     if(i.dependentes.length)campos.push(['Dependente(s)',i.dependentes.join(', ')]);
     campos.push(['Conversas técnicas',i.ids_conversa.join(', ')]);
-    campos.push(['Regras da unidade',[estado.regras.email_obrigatorio?'E-mail obrigatório':'E-mail opcional',estado.regras.suporte_idoso?'Suporte 60+ ativo':'Fluxo comum para 60+',estado.regras.bpa_ativo?'BPA ativo':'BPA inativo'].join(' · ')]);
+    campos.push(['Regras da unidade',[estado.regras.email_obrigatorio?'E-mail obrigatório':'E-mail opcional',politicaSuporte(estado.regras.idade_minima_suporte),estado.regras.bpa_ativo?'BPA ativo':'BPA inativo'].join(' · ')]);
     campos.forEach(([tituloCampo,valor])=>{const grupo=criar('div');grupo.append(criar('dt','',tituloCampo),criar('dd','',valor));dl.appendChild(grupo);});
     ids('painelDetalhes').replaceChildren(dl);
   }
   function marca(){const c=criar('div','marca-dagua');c.setAttribute('aria-hidden','true');const i=document.querySelector('.marca-app img').cloneNode();i.alt='';c.appendChild(i);return c;}
   function renderMensagens(ms,{manter=false}={}){const c=ids('mensagensChat'),final=c.scrollHeight-c.scrollTop-c.clientHeight<120,topo=c.scrollTop;c.replaceChildren(marca());let d='',conv=null;ms.forEach(m=>{const dt=new Date(m.data),nd=dia.format(dt);if(nd!==d){c.appendChild(criar('div','dia',nd));d=nd;}if(conv!==m.id_conversa){c.appendChild(criar('div','separador-conversa',(conv===null?'Início':'Continuação')+' do atendimento · conversa '+m.id_conversa));conv=m.id_conversa;}const l=criar('div','linha-mensagem '+(m.quem_enviou==='bot'?'bot':'cliente')),b=criar('div','bolha');if(m.tipo&&m.tipo!=='text')b.appendChild(criar('span','tipo-mensagem',m.tipo.replaceAll('_',' ')));b.appendChild(criar('div','texto-mensagem',m.texto));if(m.botoes?.length){const bs=criar('div','botoes-mensagem');m.botoes.forEach(x=>{const bt=criar('button','botao-mensagem',x);bt.type='button';bt.disabled=true;bt.setAttribute('aria-label',x+' (botão histórico)');bs.appendChild(bt);});b.appendChild(bs);}const mt=criar('div','meta-mensagem');mt.appendChild(criar('span','','Etapa '+(m.id_etapa??'—')+' · '+hora.format(dt)));if(m.quem_enviou==='bot')mt.appendChild(criar('span','ticks','✓✓'));b.appendChild(mt);l.appendChild(b);c.appendChild(l);});if(!ms.length)c.appendChild(criar('div','boas-vindas','Nenhuma mensagem visível no período.'));requestAnimationFrame(()=>{if(!manter||final)c.scrollTop=c.scrollHeight;else c.scrollTop=topo;});}
   async function abrir(idCliente,{silencioso=false}={}){const i=estado.conversas.find(c=>c.id_cliente===idCliente);if(!i)return;const periodo=estado.periodo;estado.selecionada=idCliente;renderLista();detalhes(i);ids('topoChat').hidden=false;document.querySelector('.app-conversas').classList.add('chat-aberto');const c=ids('mensagensChat');if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio carregando','Carregando histórico…'));try{const d=await json(urls.mensagens+idCliente+'/?periodo='+encodeURIComponent(periodo));if(estado.selecionada===idCliente&&estado.periodo===periodo)renderMensagens(d.mensagens,{manter:silencioso});}catch(e){if(estado.periodo!==periodo)return;if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio',e.message));else toast('Não foi possível atualizar a conversa agora.');}}
-  async function carregarConversas(silencioso=false){if(estado.carregandoConversas){estado.recarregarConversas=true;return;}estado.carregandoConversas=true;const periodo=estado.periodo,seq=++estado.sequenciaConversas;if(estado.secao==='conversas')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.conversas,periodo));if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;const velha=estado.conversas.find(c=>c.id_cliente===estado.selecionada);estado.conversas=d.conversas;estado.regras=d.unidade.regras;ids('nomeUnidade').textContent=d.unidade.nome;ids('periodoConversas').textContent='Agente '+d.unidade.agente+' · '+d.periodo.texto;metricas(d.metricas);renderLista();const nova=estado.conversas.find(c=>c.id_cliente===estado.selecionada);if(nova&&(!silencioso||!velha||nova.ultima_mensagem_id!==velha.ultima_mensagem_id||nova.ultima_atividade!==velha.ultima_atividade))await abrir(nova.id_cliente,{silencioso});else if(!estado.selecionada&&matchMedia('(min-width:721px)').matches&&estado.conversas[0])await abrir(estado.conversas[0].id_cliente);if(estado.secao==='conversas')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;if(estado.secao==='conversas')status('Falha ao atualizar','erro');if(!silencioso)ids('listaConversas').replaceChildren(criar('div','estado-vazio',e.message));else toast(e.message);}finally{estado.carregandoConversas=false;if(estado.recarregarConversas){estado.recarregarConversas=false;void carregarConversas(true);}}}
+  async function carregarConversas(silencioso=false){if(estado.carregandoConversas){estado.recarregarConversas=true;return;}estado.carregandoConversas=true;const periodo=estado.periodo,seq=++estado.sequenciaConversas;if(estado.secao==='conversas')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.conversas,periodo));if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;const velha=estado.conversas.find(c=>c.id_cliente===estado.selecionada);estado.conversas=d.conversas;estado.regras=d.unidade.regras;ids('nomeUnidade').textContent=d.unidade.nome;ids('periodoConversas').textContent='Agente '+d.unidade.agente+' · '+d.periodo.texto;renderLista();const nova=estado.conversas.find(c=>c.id_cliente===estado.selecionada);if(nova&&(!silencioso||!velha||nova.ultima_mensagem_id!==velha.ultima_mensagem_id||nova.ultima_atividade!==velha.ultima_atividade))await abrir(nova.id_cliente,{silencioso});else if(!estado.selecionada&&matchMedia('(min-width:721px)').matches&&estado.conversas[0])await abrir(estado.conversas[0].id_cliente);if(estado.secao==='conversas')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;if(estado.secao==='conversas')status('Falha ao atualizar','erro');if(!silencioso)ids('listaConversas').replaceChildren(criar('div','estado-vazio',e.message));else toast(e.message);}finally{estado.carregandoConversas=false;if(estado.recarregarConversas){estado.recarregarConversas=false;void carregarConversas(true);}}}
   function tend(v){if(v==null)return['Histórico completo',''];if(v===0)return['Sem variação ante o período anterior',''];return[(v>0?'↑ ':'↓ ')+Math.abs(v).toLocaleString('pt-BR')+'% ante o período anterior',v>0?'positiva':'negativa'];}
   function kpi(rotulo,valor,v){const c=criar('article','cartao kpi'),t=tend(v);c.append(criar('span','rotulo',rotulo),criar('strong','',valor),criar('span','tendencia '+t[1],t[0]));return c;}
   function titulo(t,d,l=''){const h=criar('header','titulo-cartao'),x=criar('div');x.append(criar('h2','',t),criar('p','',d));h.appendChild(x);if(l)h.appendChild(criar('span','legenda',l));return h;}
@@ -32721,8 +33567,46 @@ SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f
     return cartao;
   }
   function etapas(ds){const c=criar('article','cartao');c.appendChild(titulo('Onde os atendimentos estão','Etapa atual da conversa mais recente de cada contato ativo no período.',numero.format(ds.length)+' etapas'));const lista=criar('div','etapas-lista'),max=Math.max(1,...ds.map(e=>Number(e.quantidade)));ds.forEach(e=>{const l=criar('div','etapa-linha'),tr=criar('div','trilho'),i=criar('i');i.style.width=Number(e.quantidade)/max*100+'%';tr.appendChild(i);l.append(criar('span','etapa-numero',String(e.id_etapa)),criar('span','etapa-nome',e.nome_etapa),tr,criar('strong','',String(e.quantidade)));lista.appendChild(l);});c.appendChild(lista);return c;}
-  function exportacao(){const c=criar('article','cartao exportacao'),d=criar('div'),bs=criar('div','botoes-download');d.append(criar('h2','','Leve os contatos para o Google Contatos'),criar('p','','Arquivos no formato Google CSV. Elegíveis possuem nome, e-mail e telefone; campos ausentes ficam vazios no arquivo completo. Para mais de 3.000 contatos, escolha períodos menores antes de importar no Google.'));[['Baixar todos os contatos','todos','botao-download'],['Baixar apenas elegíveis','elegiveis','botao-download primario']].forEach(([t,tipo,cl])=>{const a=criar('a',cl,t);a.href=urls.csv+'?periodo='+estado.periodo+'&tipo='+tipo;bs.appendChild(a);});c.append(d,bs);return c;}
-  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
+  function exportacao(formato='google'){
+    const essencial=formato==='essencial';
+    const cartao=criar('article','cartao exportacao');
+    const descricao=criar('div');
+    const botoes=criar('div','botoes-download');
+    const titulo=essencial?'Baixe os dados essenciais':'Leve os contatos para o Google Contatos';
+    const explicacao=essencial
+      ?'CSV com apenas Nome, E-mail e Telefone do período selecionado. O nome completo fica em uma coluna. Elegíveis possuem os três dados; campos ausentes ficam vazios no arquivo completo.'
+      :'Arquivos no formato Google CSV. Elegíveis possuem nome, e-mail e telefone; campos ausentes ficam vazios no arquivo completo. Para mais de 3.000 contatos, escolha períodos menores antes de importar no Google.';
+
+    descricao.append(criar('h2','',titulo),criar('p','',explicacao));
+    [['Baixar todos os contatos','todos'],['Baixar apenas elegíveis','elegiveis']].forEach(([texto,tipo])=>{
+      const link=criar('a','botao-download'+(tipo==='elegiveis'?' primario':''),texto);
+      const parametros=new URLSearchParams({periodo:estado.periodo,tipo});
+      if(essencial)parametros.set('formato','essencial');
+      link.href=urls.csv+'?'+parametros;
+      link.setAttribute('aria-label',texto+' — '+(essencial?'CSV essencial':'Google CSV'));
+      botoes.appendChild(link);
+    });
+    cartao.append(descricao,botoes);
+    return cartao;
+  }
+  function politicaSuporte(limite){
+    return limite===null?'Encaminhamento por idade: desativado':'Encaminhamento ao comercial: '+limite+'+';
+  }
+  function encaminhamentos(d){
+    if(!Number.isSafeInteger(d.encaminhados_comercial_por_idade)||d.encaminhados_comercial_por_idade<0){
+      throw new Error('Não foi possível obter o total de encaminhamentos.');
+    }
+    const cartao=criar('article','cartao indicador-comercial');
+    const descricao=criar('div');
+    descricao.append(
+      criar('h2','','Encaminhados ao comercial'),
+      criar('p','','Leads únicos encaminhados por suporte de idade no período'),
+      criar('p','politica-suporte',politicaSuporte(d.unidade.idade_minima_suporte)),
+    );
+    cartao.append(descricao,criar('strong','total-comercial',numero.format(d.encaminhados_comercial_por_idade)));
+    return cartao;
+  }
+  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','Encaminhados ao comercial conta leads únicos pelo encerramento por suporte de idade no período, inclusive históricos. Não confirma clique, atendimento humano, matrícula ou venda; não inclui o tratamento de 100+. A data considerada é a do encaminhamento, e não a da mensagem recebida.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
   function renderRelatorio(d){
     ids('periodoRelatorios').textContent=d.periodo.texto;
     const relatorio=ids('conteudoRelatorio');
@@ -32749,15 +33633,17 @@ SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f
     gradeRelatorio.append(cartaoAtividade,satisfacao(d.satisfacao));
     relatorio.append(
       gradeKpis,
+      encaminhamentos(d),
       gradeRelatorio,
       perfis(d.perfis),
       etapas(d.etapas),
       exportacao(),
+      exportacao('essencial'),
       interpretar(metricasRelatorio),
     );
   }
   async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
-  function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
+  function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';window.scrollTo({top:0});secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
   document.querySelectorAll('[data-secao]').forEach(b=>b.addEventListener('click',()=>trocar(b.dataset.secao)));
   document.querySelectorAll('[data-periodo]').forEach(s=>s.addEventListener('change',()=>{estado.periodo=s.value;estado.selecionada=null;estado.sequenciaConversas++;estado.sequenciaRelatorio++;document.querySelectorAll('[data-periodo]').forEach(o=>o.value=s.value);estado.secao==='relatorios'?carregarRelatorio():carregarConversas();}));
   document.querySelectorAll('[data-filtro]').forEach(b=>b.addEventListener('click',()=>{estado.filtro=b.dataset.filtro;document.querySelectorAll('[data-filtro]').forEach(x=>x.classList.toggle('ativo',x===b));renderLista();}));
@@ -32769,19 +33655,34 @@ SHA-256 do conteúdo UTF-8 normalizado: `8639cfd038557f4eb36c303f698e79438ecd12f
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)(estado.secao==='conversas'?carregarConversas(true):carregarRelatorio(true));});
   setInterval(()=>{if(!document.hidden&&estado.secao==='conversas')carregarConversas(true);},10000);
   setInterval(()=>{if(!document.hidden&&estado.secao==='relatorios')carregarRelatorio(true);},30000);
+  // O espaço do chat acompanha o cabeçalho real, inclusive após girar o celular.
+  function ajustarAlturaPainel(){
+    const raiz=document.documentElement;
+    raiz.style.setProperty('--altura-cabecalho',document.querySelector('.cabecalho-app').offsetHeight+'px');
+    raiz.style.setProperty('--altura-aviso',document.querySelector('.faixa-consulta').offsetHeight+'px');
+  }
+  ajustarAlturaPainel();
+  if('ResizeObserver' in window){
+    const observador=new ResizeObserver(ajustarAlturaPainel);
+    observador.observe(document.querySelector('.cabecalho-app'));
+    observador.observe(document.querySelector('.faixa-consulta'));
+  }else{
+    window.addEventListener('resize',ajustarAlturaPainel);
+  }
   carregarConversas();
 })();
 ````
 
 ## Passo 150K — `callback/monitoramento/static/monitoramento/css/painel.css`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Os estilos acrescentam a etiqueta de bloqueio sem alterar os breakpoints e o layout responsivo consolidado na V1.1.0.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `937b78f091282d2ecee0dd399fb5ecdd6b1b111d76380cd31c545e0d8812d023`
+SHA-256 do conteúdo UTF-8 normalizado: `bc1bf7d693feb742547fa708d20e9920d17f98e23f420dbe2ba02abacc5b86c2`
 
 ````css
 :root{color-scheme:light;--verde-950:#122716;--verde-900:#1c321d;--verde-800:#274a2c;--verde-700:#37663d;--lima:#d9ff6b;--creme:#f5f1ef;--branco:#fff;--texto:#1c2a1d;--muted:#6f796e;--linha:#dde2d8;--painel:#f8f9f5;--erro:#a93636;--sombra:0 16px 45px rgba(20,43,23,.09);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif;font-synthesis:none}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{margin:0;min-height:100%;max-width:100%;background:var(--creme);color:var(--texto)}
 body{min-width:300px;overflow-x:clip}
 button,input,select{font:inherit}
@@ -32790,7 +33691,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{ou
 svg{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .skip-link{position:fixed;z-index:50;left:14px;top:-60px;padding:11px 14px;border-radius:8px;background:#fff;color:var(--verde-900)}
 .skip-link:focus{top:10px}
-.cabecalho-app{height:72px;padding:0 clamp(18px,3vw,44px);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:25px;background:var(--verde-900);color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 4px 16px #10231328}
+.cabecalho-app{height:64px;padding:0 clamp(18px,3vw,44px);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:25px;background:var(--verde-900);color:#fff;position:sticky;top:0;z-index:20;box-shadow:0 4px 16px #10231328}
 .marca-app{display:flex;align-items:center;min-width:0}
 .marca-app img{width:104px;height:auto;filter:brightness(0) invert(1)}
 .marca-app .divisor{height:30px;width:1px;background:#ffffff30;margin:0 18px}
@@ -32808,35 +33709,33 @@ svg{stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-l
 .estado-atualizacao.erro i{background:#ff908a}
 .botao-sair{border:1px solid #ffffff30;border-radius:8px;background:transparent;color:#fff;padding:8px 13px}
 .botao-sair:hover{background:#ffffff12}
-.faixa-consulta{min-height:44px;padding:8px clamp(18px,3vw,44px);display:flex;align-items:center;justify-content:center;gap:10px;background:#e8f0d0;border-bottom:1px solid #cfdaae;color:#3f522f}
+.faixa-consulta{min-height:32px;padding:5px clamp(18px,3vw,44px);display:flex;align-items:center;justify-content:center;gap:10px;background:#e8f0d0;border-bottom:1px solid #cfdaae;color:#3f522f}
 .faixa-consulta svg{width:17px;flex:0 0 17px}
 .faixa-consulta p{font-size:11px;margin:0;line-height:1.5}
 main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
-.secao-painel{min-width:0;padding:26px clamp(16px,3vw,42px) 34px}
-.barra-contexto{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px}
+.secao-painel{min-width:0;padding:12px clamp(16px,3vw,42px) 14px}
+#secaoConversas{display:flex;flex-direction:column;height:calc(100dvh - var(--altura-cabecalho,64px) - var(--altura-aviso,32px));min-height:300px}
+.barra-contexto{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:10px;flex-shrink:0}
 .sobrelinha{font-size:9px;font-weight:800;letter-spacing:.18em;color:var(--verde-700);margin:0 0 6px}
 .barra-contexto h1{font-size:28px;line-height:1.1;letter-spacing:-.04em;margin:0 0 5px}
 .barra-contexto>div>p:last-child{font-size:12px;color:var(--muted);margin:0}
 .seletor-periodo{display:flex;flex-direction:column;gap:5px;color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .seletor-periodo select{min-width:190px;height:42px;padding:0 34px 0 12px;border:1px solid var(--linha);border-radius:9px;color:var(--texto);background:#fff}
-.metricas-conversas{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
-.metricas-conversas article{min-height:72px;padding:13px 17px;border:1px solid var(--linha);border-radius:12px;background:#fff;display:flex;justify-content:space-between;align-items:center}
-.metricas-conversas span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
-.metricas-conversas strong{font-size:24px;color:var(--verde-800);letter-spacing:-.04em}
-.app-conversas{height:calc(100vh - 287px);min-height:570px;display:grid;grid-template-columns:minmax(310px,370px) 1fr;overflow:hidden;border:1px solid #d5dbd1;border-radius:17px;background:#fff;box-shadow:var(--sombra)}
+.app-conversas{flex:1;min-height:200px;display:grid;grid-template-columns:minmax(310px,370px) 1fr;overflow:hidden;border:1px solid #d5dbd1;border-radius:17px;background:#fff;box-shadow:var(--sombra)}
 .lista-conversas{min-width:0;min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--linha);background:#fff}
-.busca{position:relative;padding:14px 14px 8px}
-.busca svg{position:absolute;width:17px;left:27px;top:27px;color:#7a8677}
+.busca{position:relative;padding:8px 12px 4px}
+.busca svg{position:absolute;width:17px;left:25px;top:21px;color:#7a8677}
 .busca input{width:100%;height:42px;border:1px solid var(--linha);border-radius:9px;background:var(--painel);padding:0 12px 0 39px;color:var(--texto);outline:0}
 .busca input:focus{border-color:var(--verde-700);background:#fff}
-.filtros-conversas{display:flex;gap:6px;padding:2px 14px 12px;overflow-x:auto;scrollbar-width:none}
+.filtros-conversas{display:flex;gap:6px;padding:2px 12px 6px;overflow-x:auto;scrollbar-width:none}
 .filtros-conversas button{white-space:nowrap;padding:7px 11px;border:1px solid var(--linha);border-radius:999px;background:#fff;color:#667064;font-size:11px}
 .filtros-conversas button.ativo{border-color:var(--verde-700);background:var(--verde-800);color:#fff}
 .rolagem-lista{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain}
-.item-conversa{width:100%;padding:13px 14px;border:0;border-top:1px solid #edf0e9;background:#fff;display:grid;grid-template-columns:45px minmax(0,1fr);gap:11px;text-align:left;color:inherit}
+.item-conversa{width:100%;padding:7px 12px;border:0;border-top:1px solid #edf0e9;background:#fff;display:grid;grid-template-columns:40px minmax(0,1fr);gap:10px;align-items:center;text-align:left;color:inherit}
 .item-conversa:hover,.item-conversa.ativo{background:#f0f4e9}
 .item-conversa.ativo{box-shadow:inset 3px 0 var(--verde-700)}
 .avatar{width:45px;height:45px;border-radius:50%;background:var(--verde-700);color:#fff;display:grid;place-items:center;font-weight:750}
+.item-conversa .avatar{width:40px;height:40px}
 .item-corpo{min-width:0}
 .item-linha{display:flex;justify-content:space-between;gap:7px;align-items:flex-start}
 .item-linha strong{min-width:0;flex:1;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -32847,7 +33746,8 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .mini-tag.perfil-resumido.dependente-menor,.mini-tag.perfil-resumido.menor{background:#e1edff;color:#315f98}
 .mini-tag.perfil-resumido.dependente-adulto{background:#ddf1e4;color:#296b42}
 .mini-tag.perfil-resumido.dependente-idoso,.mini-tag.perfil-resumido.idoso{background:#e9e1ff;color:#614299}
-.item-previa{margin:3px 0 6px;font-size:11px;color:#748071;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item-previa{margin:3px 0 0;font-size:11px;color:#748071;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-tags:not(:empty){margin-top:4px}
 .mini-tags,.tags-contato{display:flex;flex-wrap:wrap;gap:4px}
 .mini-tag,.tag-contato{display:inline-flex;align-items:center;border-radius:999px;background:#edf2e8;color:#50614b;padding:2px 6px;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .mini-tag.funil,.tag-contato.funil{background:#dff4e3;color:#267242}
@@ -32858,17 +33758,18 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .estado-vazio{padding:42px 18px;text-align:center;color:var(--muted);font-size:12px}
 .carregando::before{content:"";display:block;width:24px;height:24px;margin:0 auto 13px;border:2px solid #d8dfd2;border-top-color:var(--verde-700);border-radius:50%;animation:girar .8s linear infinite}
 .janela-chat{min-width:0;min-height:0;position:relative;display:flex;flex-direction:column;background:#eef0e8;overflow:hidden}
-.topo-chat{min-height:70px;padding:10px 16px;display:flex;align-items:center;gap:12px;background:#fff;border-bottom:1px solid var(--linha);z-index:2}
+.topo-chat{min-height:60px;padding:6px 12px;display:flex;align-items:center;gap:12px;background:#fff;border-bottom:1px solid var(--linha);z-index:2}
 .voltar{display:none;border:0;background:transparent;font-size:28px;color:var(--verde-800)}
 .identidade-contato{min-width:0;flex:1}
 .identidade-contato h2{font-size:14px;margin:0 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .identidade-contato p{font-size:10px;color:var(--muted);margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .detalhes-botao{border:1px solid var(--linha);border-radius:8px;padding:7px 10px;background:#fff;color:#5c685b;font-size:10px}
 .detalhes-botao[aria-expanded=true]{background:var(--verde-800);color:#fff}
-.painel-detalhes{padding:10px 18px;background:#fbfcf9;border-bottom:1px solid var(--linha);font-size:11px;color:#606b5e;z-index:2}
+.painel-detalhes{flex:0 1 auto;max-height:40%;overflow:auto;padding:10px 18px;background:#fbfcf9;border-bottom:1px solid var(--linha);font-size:11px;color:#606b5e;z-index:2}
 .painel-detalhes dl{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .painel-detalhes dt{font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#8a9388}
 .painel-detalhes dd{margin:2px 0 0;overflow-wrap:anywhere}
+.topo-chat,.rodape-chat{flex-shrink:0}
 .mensagens{flex:1;min-height:0;overflow-y:auto;position:relative;padding:22px clamp(18px,5vw,70px);background-color:#eef0e8;background-image:radial-gradient(#63755a12 1px,transparent 1px);background-size:18px 18px;overscroll-behavior:contain}
 .marca-dagua{position:fixed;pointer-events:none;opacity:.035;width:260px;left:calc(50% + 135px);top:50%;transform:translate(-50%,-50%) rotate(-8deg)}
 .marca-dagua img{width:100%;filter:grayscale(1)}
@@ -32889,41 +33790,41 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .botao-mensagem{min-height:31px;border:0;border-top:1px solid #bed2b3;background:transparent;color:#39704a;font-size:11px;text-align:center}
 .meta-mensagem{display:flex;justify-content:flex-end;align-items:center;gap:4px;margin-top:3px;color:#73806f;font-size:8px}
 .ticks{color:#4e8eb1;font-size:10px}
-.rodape-chat{padding:7px 16px;text-align:center;background:#fff;border-top:1px solid var(--linha);color:#8a9388;font-size:8px}
+.rodape-chat{padding:4px 12px;text-align:center;background:#fff;border-top:1px solid var(--linha);color:#8a9388;font-size:8px}
 .ir-final{position:absolute;right:20px;bottom:42px;z-index:4;width:39px;height:39px;border:1px solid var(--linha);border-radius:50%;background:#fff;color:var(--verde-800);box-shadow:0 5px 17px #1c321d30}
 .secao-relatorios{padding-bottom:60px}
-.conteudo-relatorio{min-width:0;display:grid;gap:14px}
+.conteudo-relatorio{min-width:0;display:grid;gap:10px}
 .conteudo-relatorio>*{min-width:0;max-width:100%}
-.cartao{min-width:0;max-width:100%;border:1px solid var(--linha);border-radius:14px;background:#fff;padding:20px;box-shadow:0 5px 20px #1c321d08}
+.cartao{min-width:0;max-width:100%;border:1px solid var(--linha);border-radius:14px;background:#fff;padding:14px;box-shadow:0 5px 20px #1c321d08}
 .carregando-relatorio{text-align:center;color:var(--muted);padding:60px}
 .grade-kpis{min-width:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.kpi{min-height:126px;position:relative;overflow:hidden}
+.kpi{min-height:98px;position:relative;overflow:hidden}
 .kpi::after{content:"";position:absolute;right:-28px;bottom:-40px;width:90px;height:90px;border-radius:50%;background:#d9ff6b38}
 .kpi .rotulo{font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
-.kpi strong{display:block;margin:10px 0 6px;font-size:30px;color:var(--verde-900);letter-spacing:-.05em}
+.kpi strong{display:block;margin:4px 0;font-size:30px;color:var(--verde-900);letter-spacing:-.05em}
 .tendencia{font-size:10px;color:#687266}
 .tendencia.positiva{color:#2c7b45}
 .tendencia.negativa{color:#ae4444}
-.grade-relatorio{min-width:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:14px}
-.titulo-cartao{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:18px}
+.grade-relatorio{min-width:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr);gap:10px}
+.titulo-cartao{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px}
 .titulo-cartao h2{font-size:16px;margin:0 0 4px}
 .titulo-cartao p{font-size:10px;color:var(--muted);margin:0;line-height:1.5}
 .legenda{font-size:9px;color:var(--muted);white-space:nowrap}
 .grafico-atividade{width:100%;max-width:100%;min-width:0}
 .grafico-resumo{display:none;min-height:28px;margin:0 0 8px;padding:7px 9px;border-radius:7px;background:#f0f4e9;color:#536050;font-size:9px}
 .grafico-rolagem{width:100%;max-width:100%;min-width:0;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin}
-.grafico-barras{height:230px;width:max-content;min-width:100%;display:flex;align-items:flex-end;gap:5px;padding:18px 4px 30px;border-bottom:1px solid var(--linha)}
+.grafico-barras{height:200px;width:max-content;min-width:100%;display:flex;align-items:flex-end;gap:5px;padding:18px 4px 30px;border-bottom:1px solid var(--linha)}
 .coluna-grafico{appearance:none;height:100%;min-width:19px;flex:1 0 19px;display:flex;align-items:flex-end;justify-content:center;gap:2px;position:relative;padding:0;border:0;background:transparent;color:inherit}
 .coluna-grafico i{display:block;width:7px;min-height:2px;border-radius:3px 3px 0 0;background:var(--verde-700)}
 .coluna-grafico i.barra-mensagens{position:static;padding:0;background:#c6e662}
 .coluna-grafico .rotulo-data{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%) rotate(-35deg);font-size:7px;color:#7d8879;white-space:nowrap}
-.barras-satisfacao{display:grid;gap:12px}
+.barras-satisfacao{display:grid;gap:10px}
 .barra-linha{display:grid;grid-template-columns:35px 1fr 30px;align-items:center;gap:8px;font-size:10px}
 .trilho{height:8px;border-radius:999px;background:#edf0e9;overflow:hidden}
 .trilho i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--verde-700),#96bd50)}
 .tabela-perfis{width:100%;border-collapse:collapse;font-size:11px}
 .tabela-perfis th{text-align:left;padding:9px 8px;color:var(--muted);font-size:8px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--linha)}
-.tabela-perfis td{padding:11px 8px;border-bottom:1px solid #edf0e9}
+.tabela-perfis td{padding:8px;border-bottom:1px solid #edf0e9}
 .tabela-perfis td:not(:first-child),.tabela-perfis th:not(:first-child){text-align:right}
 .etapas-lista{display:grid;gap:8px}
 .etapa-linha{display:grid;grid-template-columns:25px minmax(160px,1fr) 2fr 30px;gap:8px;align-items:center;font-size:9px}
@@ -32933,10 +33834,10 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .exportacao h2{margin:0 0 5px;font-size:17px}
 .exportacao p{margin:0;color:#c2cec0;font-size:10px;max-width:690px}
 .botoes-download{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-.botao-download{display:inline-flex;min-height:40px;align-items:center;padding:0 13px;border:1px solid #ffffff30;border-radius:8px;color:#fff;text-decoration:none;font-size:10px}
+.botao-download{display:inline-flex;min-height:44px;align-items:center;padding:0 13px;border:1px solid #ffffff30;border-radius:8px;color:#fff;text-decoration:none;font-size:10px}
 .botao-download.primario{background:var(--lima);border-color:var(--lima);color:var(--verde-950);font-weight:700}
 .como-interpretar{background:#f0f4e9}
-.como-interpretar h2{font-size:15px;margin:0 0 12px}
+.como-interpretar h2{font-size:15px;margin:0 0 8px}
 .como-interpretar ul{margin:0;padding-left:18px;color:#5f6b5c;font-size:10px;line-height:1.7}
 .toast{position:fixed;z-index:100;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(90vw,430px);padding:11px 15px;border-radius:9px;background:#202b21;color:#fff;box-shadow:0 8px 30px #0004;font-size:11px}
 @keyframes girar{to{transform:rotate(360deg)}
@@ -32956,7 +33857,7 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .filtros-conversas button{padding:6px 8px;font-size:10px}
 .marca-dagua{position:absolute;left:50%}
 }
-@media(max-width:720px){.cabecalho-app{height:auto;min-height:62px;padding:0 16px 10px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:62px auto;gap:0 10px}
+@media(max-width:720px){.cabecalho-app{height:auto;min-height:50px;padding:0 16px 6px;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:50px auto;gap:0 10px}
 .marca-app img{width:82px}
 .marca-app .divisor{height:25px;margin:0 10px}
 .marca-app strong{font-size:11px}
@@ -32965,18 +33866,14 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .seletor-secao{grid-row:2;grid-column:1/-1;width:100%;margin:0;transform:none}
 .seletor-secao button{flex:1;justify-content:center;height:38px;padding:0 10px;font-size:11px}
 .acoes-cabecalho{grid-row:1;grid-column:2}
-.faixa-consulta{margin-top:0;padding:8px 16px;align-items:flex-start}
+.faixa-consulta{margin-top:0;padding:5px 16px;align-items:flex-start}
 .faixa-consulta p{font-size:9px}
-.secao-painel{padding:20px 0 0}
+.secao-painel{padding:10px 0 0}
 .barra-contexto{padding:0 16px;align-items:flex-end}
 .barra-contexto h1{font-size:24px}
 .barra-contexto>div>p:last-child{font-size:10px}
 .seletor-periodo select{min-width:150px;width:150px;height:39px;font-size:10px}
-.metricas-conversas{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 16px;overflow:visible}
-.metricas-conversas article{min-height:65px;padding:10px;display:block}
-.metricas-conversas span{font-size:8px}
-.metricas-conversas strong{display:block;font-size:20px;margin-top:4px}
-.app-conversas{height:calc(100dvh - 295px);min-height:420px;border-radius:0;border-left:0;border-right:0;display:block}
+.app-conversas{border-radius:0;border-left:0;border-right:0;display:block}
 .lista-conversas{height:100%;border:0}
 .janela-chat{display:none;height:100%}
 .chat-aberto .lista-conversas{display:none}
@@ -32989,24 +33886,24 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .mensagens{padding:16px 10px}
 .marca-dagua{position:absolute;left:50%;width:210px}
 .bolha{max-width:88%}
-.secao-relatorios{padding:20px 13px 40px}
+.secao-relatorios{padding:10px 13px 24px}
 .secao-relatorios .barra-contexto{padding:0 3px}
 .grade-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-.kpi{min-height:110px;padding:15px}
+.kpi{min-height:98px;padding:12px}
 .kpi strong{font-size:25px}
-.cartao{padding:16px}
+.cartao{padding:12px}
 .grade-relatorio{display:block}
-.grade-relatorio>.cartao+ .cartao{margin-top:14px}
+.grade-relatorio>.cartao+ .cartao{margin-top:10px}
 .tabela-perfis{font-size:9px}
 .tabela-perfis th,.tabela-perfis td{padding:9px 4px}
 .etapa-linha{grid-template-columns:24px minmax(105px,1.2fr) 1fr 25px}
 .exportacao{display:block}
-.botoes-download{justify-content:flex-start;margin-top:16px}
+.botoes-download{justify-content:flex-start;margin-top:10px}
 .botao-download{flex:1;justify-content:center}
 .estado-vazio{padding:30px 15px}
 .grafico-resumo{display:block}
 }
-@media(max-width:560px){.barra-contexto{flex-direction:column;align-items:stretch;gap:12px}
+@media(max-width:560px){.barra-contexto{flex-direction:column;align-items:stretch;gap:8px}
 .seletor-periodo{width:100%;margin-top:0}
 .seletor-periodo select{width:100%;min-width:0}
 .tabela-perfis,.tabela-perfis tbody,.tabela-perfis tr,.tabela-perfis td{display:block;width:100%}
@@ -33023,8 +33920,6 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .etapa-linha>strong{grid-column:3;grid-row:1/3;align-self:center;text-align:right}
 }
 @media(max-width:390px){
-.metricas-conversas{margin-top:10px}
-.app-conversas{height:calc(100svh - 360px)}
 .grade-kpis{grid-template-columns:1fr 1fr}
 .titulo-cartao{display:block}
 .legenda{display:block;margin-top:7px}
@@ -33044,23 +33939,32 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .botao-sair{padding:6px 9px;font-size:10px}
 .faixa-consulta{min-height:32px;padding:5px 12px}
 .faixa-consulta p{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:8px;line-height:1.3}
-.secao-painel{padding-top:14px}
+.secao-painel{padding-top:8px}
 .barra-contexto{flex-direction:row;align-items:flex-end;gap:12px}
 .seletor-periodo{width:auto;margin:0}
 .seletor-periodo select{width:min(190px,32vw);min-width:140px;height:36px}
-.app-conversas{height:calc(100dvh - 140px);min-height:280px}
 }
 @media(orientation:landscape) and (max-height:440px) and (max-width:560px){.marca-app div span{display:none}
 }
+@media(pointer:coarse){.seletor-secao button,.botao-sair,.detalhes-botao,.voltar,.filtros-conversas button,.seletor-periodo select,.busca input{min-height:44px}
+.detalhes-botao,.voltar,.ir-final{min-width:44px;min-height:44px}
+}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}
 }
+
+.indicador-comercial{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px}
+.indicador-comercial>div{flex:1 1 230px;min-width:0;overflow-wrap:anywhere}
+.indicador-comercial h2{margin:0 0 5px;font-size:16px}
+.indicador-comercial p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.indicador-comercial .politica-suporte{margin-top:4px}
+.total-comercial{font-size:28px;line-height:1.2;overflow-wrap:anywhere;max-width:100%;color:var(--verde-800)}
 ````
 
 ## Passo 150L — `callback/README.md`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A documentação do Django passa a registrar a identidade tipada, o tratamento conservador de eventos `system`, o portal sem exposição de `user_id`, o fallback visual e o catálogo final.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6caf79870c5da8953085c0c82670a8deb8ce96979cf6c91fd686ffbf6a69e639`
+SHA-256 do conteúdo UTF-8 normalizado: `1212145c75fa6babe0d116823ddf855d7cc1251a3488ddf64fa02ea740363159`
 
 ````markdown
 # Aplicativos Django: webhook e monitoramento
@@ -33096,7 +34000,7 @@ callback/
 │   ├── urls.py           rotas públicas e privadas do monitoramento
 │   ├── monitoramento_guard.py  autorização da sessão e dos recursos
 │   ├── periodos.py       janelas de consulta aceitas pelo servidor
-│   ├── apresentacao.py   consolidação, perfis, botões e Google CSV
+│   ├── apresentacao.py   consolidação, perfis, botões e CSV Google/essencial
 │   ├── services.py       orquestra leituras da unidade autorizada
 │   ├── templates/monitoramento/  login, painel e acesso negado
 │   └── static/monitoramento/     estilos, interação e logo ESL Tech
@@ -33155,6 +34059,9 @@ Content-Type
 ```
 
 O webhook não envia etapas, não avança conversa e não executa dequeue.
+O follow-up é disparado pelo worker próprio após consulta de inatividade; não
+exige um evento recebido nem cria uma entrada fictícia na fila. A reação real
+do cliente passa pelas mesmas barreiras de assinatura, bloqueio, flood e turno.
 
 Eventos contendo apenas `statuses` retornam 200 sem processamento. Eventos
 `system`, inclusive `user_changed_user_id`, não alteram identidade: até existir
@@ -33280,8 +34187,10 @@ usado para apresentar o agente nos inícios padrão, de mídia, financeiro e de
 tratamento de reforço escolar da etapa 1.
 
 `waba_id` e `phone_number_id` ficam somente leitura após a criação. O Admin
-também expõe `suporte_idoso` e `email_obrigatorio`; ativar suporte ao idoso
-exige um `numero_comercial` brasileiro válido.
+também expõe `idade_minima_suporte` e `email_obrigatorio`. O seletor de suporte
+aceita Desativado, 50+, 60+, 70+, 80+ e 90+; ativar exige um `numero_comercial`
+brasileiro válido, inclusive ao editar ou remover o número de uma unidade ativa.
+Somente o titular é alcançado; o limite não altera a dispensa de e-mail dos 60+.
 
 No Admin, criação/exclusão de unidade e desbloqueio individual seguem
 Meta-first. Se a Meta falhar, a alteração local correspondente não é
@@ -33333,8 +34242,12 @@ existência de contas. Contas inativas, administrativas ou sem unidade não entr
 - `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
 - `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
 - `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
-  O arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
+  Por padrão, o arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
   Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
+  Com `formato=essencial`, entrega somente `Nome`, `E-mail` e `Telefone`, com
+  telefone brasileiro sem o prefixo internacional `+55` (preservando o DDD),
+  nome completo na primeira coluna, separador `;` e UTF-8 com BOM para planilhas
+  em pt-BR. Os quatro downloads usam o mesmo período e escopo autorizado.
 
 O login bem-sucedido retorna a `/`. A página e cada endpoint de dados chamam
 `exigir_acesso_monitoramento`; nenhum deles aceita unidade escolhida em URL,
@@ -33345,8 +34258,8 @@ Admin.
 
 O navegador atualiza a seção de conversas a cada 10 segundos e a de relatórios
 a cada 30 segundos, somente enquanto a página está visível. Voltar à aba força
-uma nova leitura. Não há WebSocket, tarefa periódica no servidor nem quarto
-serviço: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
+uma nova leitura. Não há WebSocket nem tarefa periódica no servidor para o
+painel: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
 Mensagens são carregadas somente quando um contato é aberto.
 
 O painel nunca envia `user_id` ao navegador ou ao CSV. Ele mostra o WA ID
@@ -33356,6 +34269,18 @@ exibe `Contato não compartilhado`. A etiqueta de bloqueio por 12 repetições
 exige simultaneamente o contador da conversa e a denylist persistida na mesma
 unidade. O histórico representa o `contact_request` da etapa 2 com o controle
 desabilitado `Compartilhar contato`.
+
+O follow-up confirmado aparece como mensagem de texto do bot na conversa e
+participa da contagem de mensagens no período. Não há cartão exclusivo,
+controle de disparo nem edição de stage no monitoramento. A lista mostra os
+perfis junto da data: `DP -18`, `DP 18–59`, `DP 60+`, `18–59` e `60+`, conforme
+os dados disponíveis; o cabeçalho da conversa mantém a descrição completa.
+
+Conversas prioriza a lista e o histórico, sem repetir os quatro indicadores do
+relatório. O layout compacto preserva as fontes e ajusta o espaço do chat pela
+altura real do cabeçalho e do aviso, inclusive ao girar o celular. Em telas
+estreitas, lista e conversa alternam com o botão de voltar. Os downloads
+essenciais ficam logo abaixo dos downloads para Google Contatos em Relatórios.
 
 O padrão é todo o histórico até o instante da requisição. Também existem os
 períodos 24 horas, 7 e 30 dias, 2, 3 e 6 meses e 1 ano. Os períodos finitos são
@@ -33367,10 +34292,19 @@ payload original dos botões, o painel apresenta como referência os botões do
 catálogo final de 23 etapas, sempre desabilitados.
 
 O painel é somente leitura. Os filtros, a pesquisa, os seletores de período e os
-downloads não alteram registros. As regras `suporte_idoso`, `email_obrigatorio`
+downloads não alteram registros. As regras `idade_minima_suporte`, `email_obrigatorio`
 e `bpa_ativo` vêm da unidade. O CSV completo preserva campos ausentes vazios; o
 CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
-internacional e usa cabeçalhos do Google Contatos.
+internacional. Essa regra vale tanto para Google CSV quanto para CSV essencial;
+nenhum dos formatos acrescenta etiquetas comerciais ou datas ao nome.
+
+O card **Encaminhados ao comercial** fica somente em Relatórios, abaixo dos
+quatro indicadores. Conta clientes distintos por unidade com encerramento
+`encaminhado_suporte_idoso` no período (`finalizou_em`, intervalo semiaberto).
+Inclui históricos, sem filtrar pela política atual, sem duplicar conversas e sem
+misturar os casos 100+. Não comprova clique, atendimento humano ou matrícula.
+Tags 18–59, 60+ e de dependentes continuam fixas. Quantidades e taxas do Funil
+mantêm todos os envios registrados mesmo quando a configuração atual mudou.
 
 Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
 no portal. Contas e senhas continuam administradas pelo proprietário no Django
@@ -33396,13 +34330,60 @@ separação não foi implementada. Os relatórios em `utilitarios` seguem manuai
 
 Esses arquivos cobrem o núcleo transacional; consulte também
 [`tests/README.md`](../tests/README.md).
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
 ````
 
 ## Passo 151 — `PADROES_DE_ARQUITETURA.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `3654ee1cd0ac27a48168fac2b501987aedbff66913292367234a02689315782b`
+SHA-256 do conteúdo UTF-8 normalizado: `7ce6c9a91f828b15ed99bcacbbc3dcb651b2d543f5397bb0a0e781b6e2eaf149`
 
 ````markdown
 # Padrões de arquitetura do Chatbot
@@ -33437,9 +34418,9 @@ documentada antes da implementação.
 
 ## Modelo de execução da V1 e evolução para a V2
 
-Na V1, a implantação deverá manter uma única instância ativa do worker. Essa
-escolha atende ao volume inicial esperado, simplifica a operação e reduz o custo
-de infraestrutura enquanto o sistema atende poucas unidades.
+Na V1, a implantação mantém uma instância do `worker_flow`, uma do `worker_funil`
+e, após a migração e ativação específica, uma do `worker_followup`, além do webhook.
+Cada serviço possui seu próprio ciclo de vida.
 
 "Uma única instância ativa na V1" não deve ser confundida com a regra "um worker
 por conversa". A primeira é uma decisão operacional desta versão; a segunda é
@@ -33463,7 +34444,7 @@ Worker 2 -> conversa do cliente A ao mesmo tempo
 Assim, vários workers poderão atender clientes diferentes em paralelo, mas cada
 conversa ficará sob responsabilidade de apenas um worker por vez.
 
-Embora a V1 execute apenas uma instância, seu ciclo já deve preservar as
+Embora a V1 execute apenas uma instância de cada worker, seus ciclos preservam as
 proteções necessárias para concorrência e recuperação:
 
 - dequeue atômico com `FOR UPDATE SKIP LOCKED`;
@@ -33494,6 +34475,8 @@ core/repositories -> SQL e persistência
 core/database     -> conexão, DDL e preparação do banco
 core/cache        -> Redis, fallback e autocura detectável
 core/integrations -> comunicação com serviços externos
+core/triagem      -> catálogo puro compartilhado de perguntas
+core/validacoes   -> validação pura compartilhada de e-mail e domínio de suporte por idade
 utilitarios       -> diagnóstico, monitoramento e manutenção manuais
 tests             -> testes, mocks, fakes e contratos
 ```
@@ -33611,12 +34594,14 @@ Cada worker controla a conexão e os commits de seu próprio domínio:
 ```text
 workers/worker_flow/response_flow/flow_worker.py
 workers/worker_funil/funil_worker.py
+workers/worker_followup/followup_worker.py
 ```
 
 Repositórios e funções auxiliares recebem o cursor aberto pelo orquestrador.
 Commits intermediários devem representar estados recuperáveis documentados nas
-regras de negócio. Um worker não reutiliza a conexão nem o lock de domínio do
-outro.
+regras de negócio. Um worker não reutiliza a conexão do outro. Flow e follow-up
+disputam o mesmo lock de conversa, com versão e expiração; somente seu proprietário
+pode persistir o resultado. O Funil mantém sua reserva independente por envio.
 
 ### Webhook
 
@@ -33678,7 +34663,7 @@ O worker é o único dono da promoção/reconciliação. O gate autoritativo oco
 `validar_banco_mensagem()` antes da primeira mutação e diferencia o remetente do
 cartão compartilhado. Clientes e conversas envolvidos são bloqueados em ordem
 determinística. Um lock que ainda não ultrapassou o limiar de 110 segundos preservado na
-baseline V1.1.0 gera rollback e requeue sem erro; um lock stale segue a recuperação
+baseline V1.3.0 gera rollback e requeue sem erro; um lock stale segue a recuperação
 versionada já existente.
 
 O resultado terminal `bloqueio_reconciliado` pertence à mesma transação do
@@ -33784,7 +34769,27 @@ Responsabilidades:
 - validar histórico;
 - rotear resposta ou tratamento;
 - persistir resposta e contexto;
+- reconhecer a reação com stage positivo ou marcador anterior e repetir a etapa
+  sem resolver transições, zerando o stage na persistência final;
 - marcar a fila como `sent` somente após a persistência necessária.
+
+### `worker_followup`
+
+Seleciona conversas elegíveis por inatividade no PostgreSQL, sem consumir a fila.
+Cada candidata tem conexão, lock de conversa e transação próprios. O envio usa
+`core/integrations/whatsapp`; elegibilidade, recibos e fencing ficam em
+`core/repositories/atendimento/followup.py`.
+
+A releitura após adquirir o lock verifica as etapas 1–18, sete horas sem resposta
+ao bot e a janela da última mensagem do cliente. Confirmação do lembrete, histórico
+e stage 1 são persistidos juntos. Uma falha individual não interrompe o lote.
+
+O retorno pertence ao `worker_flow`: `transacoes/retorno_followup.py` prepara o
+checkpoint da reação e persiste a repetição, sem controlar commits.
+`response_flow/repeticao_followup.py` seleciona os senders da etapa sem executar
+validadores, transições ou efeitos de negócio. O stage só é zerado junto da
+persistência da repetição confirmada. Essa exceção reativa está documentada nas
+regras de negócio e não altera o fluxo normal de stage zero.
 
 ### `worker_funil`
 
@@ -34203,8 +35208,9 @@ desenvolvimento já delimitadas.
 - documentar apenas os nomes das variáveis, nunca seus valores secretos;
 - manter `.env` fora do Git;
 - IDs públicos e limites podem ser constantes quando não forem segredos;
-- mudanças de configuração não devem alterar fluxo, fila, histórico ou regra de
-  negócio;
+- configurações de infraestrutura não devem alterar silenciosamente regras de
+  negócio; políticas explícitas da unidade, como `idade_minima_suporte` e
+  `email_obrigatorio`, são lidas e aplicadas pelos contextos e resolvers próprios;
 - testes devem usar valores fictícios e nunca credenciais reais.
 
 ## Testes
@@ -34217,8 +35223,11 @@ Estrutura atual:
 tests/
 ├── helpers.py
 ├── payloads.py
-└── unit/
-    └── test_*.py
+├── fixtures/
+├── unit/
+│   └── test_*.py
+└── integration/
+    └── test_followup_postgres.py
 ```
 
 Regras:
@@ -34231,6 +35240,11 @@ Regras:
 - alterações estruturais devem possuir testes que impeçam regressão da
   organização quando isso for relevante;
 - a suíte completa deve permanecer executável por descoberta.
+
+A integração PostgreSQL exige `FOLLOWUP_TEST_DSN` apontando para loopback e um
+banco descartável chamado `test_chatbot_followup`, sem schema `chatbot` prévio.
+Sem essa variável, é pulada. Não usa as credenciais de produção do `.env`; Meta
+continua simulada. Consulte o [guia de testes](tests/README.md#follow-up).
 
 Comando padrão:
 
@@ -34249,7 +35263,9 @@ Fluxos críticos que não podem perder cobertura:
 - `last_message_from` semântico;
 - fallback e autocura de cache;
 - transações de worker e webhook;
-- bloqueio/desbloqueio Meta-first.
+- elegibilidade proativa, recibos, migração do legado e retorno sem avanço de etapa;
+- intenção local antes dos bloqueios automáticos e desbloqueio administrativo
+  Meta-first.
 
 ## Nomes e organização de arquivos
 
@@ -34356,13 +35372,60 @@ Este documento deve ser atualizado quando:
 
 Mudanças neste documento não substituem testes nem alteram automaticamente as
 regras de negócio.
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
 ````
 
 ## Passo 152 — `REGRAS_DE_NEGOCIO.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `293dd2583f828bc1aa9cbe07604392ae59b9a99a4df6ecbc47518170925fdc2c`
+SHA-256 do conteúdo UTF-8 normalizado: `cf169a298f75821d9a75c7f15089bb7d83b6776e7de7e691cb05fe29f517edb8`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -34622,7 +35685,7 @@ Implementação principal:
 ## 5. Ordenação e exclusão mútua
 
 - Uma conversa deve ser processada por apenas um worker por vez.
-- O lock da conversa preserva exatamente o predicado preservado na V1.1.0: só poderá ser
+- O lock da conversa preserva exatamente o predicado preservado na V1.3.0: só poderá ser
   retomado quando `processing_started_at < NOW() - INTERVAL '110.0 seconds'`.
 - `lock_version` impede que um worker antigo libere o lock adquirido por um
   worker mais novo.
@@ -34693,6 +35756,32 @@ Implementação principal:
   ou mais usa a versão adulta com o nome persistido. O limite de entrada de 4
   anos em unidade com BPA e de 5 anos sem BPA continua pertencendo à validação
   de idade anterior à triagem.
+- Cada unidade possui `idade_minima_suporte` (NULL/50/60/70/80/90, padrão NULL)
+  e `email_obrigatorio` (padrão TRUE). A migração da política anterior conserva
+  TRUE como 60 e FALSE como NULL; novas unidades começam sem suporte ativado.
+- Na etapa 7, mídia, reforço escolar e financeiro precedem a validação de idade.
+  Pessoas de 100+ conservam o encaminhamento próprio para titular ou dependente,
+  independentemente do suporte. Depois, titulares com idade válida maior ou igual
+  ao limite recebem o contato comercial e encerram na etapa 7 com
+  `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio ou Funil.
+  A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
+- O proprietário configura o limite no Admin. Habilitar ou manter a política
+  requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
+- Retry reconhece as cinco variantes oficiais e o prefixo de saudação. O texto
+  identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
+  usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
+  avanço sem resposta correspondente. A reação ao follow-up repete a etapa, exceto o contato oficial validado na etapa 2.
+- Na etapa 11, mídia, reforço escolar e financeiro continuam precedendo a
+  coleta de e-mail. A exigência efetiva é a configuração da unidade, exceto
+  para o titular de 60 a 99 anos, cujo e-mail é universalmente opcional quando
+  o atendimento não tiver sido encerrado pelo suporte ao idoso. Dependentes
+  seguem exclusivamente a configuração da unidade.
+- Quando o e-mail é obrigatório, somente um endereço estruturalmente válido
+  avança. Quando é opcional, um endereço válido é salvo; ausência declarada ou
+  qualquer outra resposta comum aceita limpa `cliente.email` para `NULL` e
+  avança sem tratamento de e-mail. A classificação da resposta permanece
+  vinculada à conversa para que o Funil exiba `não tem` ou `não informado` sem
+  inventar um endereço.
 - A etapa 20 registra uma nota de satisfação de 1 a 5. Na etapa 21, o cliente
   escolhe se deseja comentar: a aceitação segue para a etapa 22 e a recusa
   salta diretamente para a etapa 23. A etapa 22 coleta o comentário. Nota e
@@ -34733,7 +35822,7 @@ Implementação principal:
   `conversa.profissao`, que continua sendo o snapshot daquele atendimento.
 - Lock fresco em qualquer conversa envolvida cancela o merge inteiro e reagenda
   o item por 5 segundos sem consumir retry. Lock stale segue exatamente o limiar
-  de 110 segundos preservado na V1.1.0 e incrementa `lock_version`; o dono antigo não pode
+  de 110 segundos preservado na V1.3.0 e incrementa `lock_version`; o dono antigo não pode
   liberar a versão nova.
 - Se o cliente canônico ainda possui bloqueio comercial vigente, a conversa nova
   fecha com `bloqueio_reconciliado`, o item atual é removido atomicamente e nada
@@ -34818,19 +35907,27 @@ Depois que uma mensagem da fila for aceita pelo worker:
 
 ## 8. Histórico e idempotência da resposta do bot
 
-A resposta do bot é vinculada à mensagem original por:
+A resposta do bot a uma mensagem enfileirada é vinculada à entrada original por:
 
 - `id_conversa`;
 - `id_mensagem_fila`;
 - `id_hash_cliente_origem`.
+
+O lembrete proativo não responde a uma entrada enfileirada: deixa os dois campos
+de origem nulos e usa recibo próprio por conversa e âncora do ciclo. Ele não
+serve como prova de resposta para liberar um turno A/B/C.
 
 Se `resposta_bot_para_mensagem_atual` já existir:
 
 - a Meta não deverá ser chamada novamente;
 - o histórico do bot não deverá ser duplicado;
 - o contexto da conversa deverá ser reparado a partir dos dados persistidos;
-- `last_message_from` deverá terminar como `bot`;
+- no retry normal, `last_message_from` deverá terminar como `bot`;
 - a fila poderá seguir para `sent`.
+
+O replay de uma retomada de follow-up já concluída reutiliza a resposta persistida
+sem alterar a interação atual ou zerar um ciclo posterior. Essa recuperação fica
+em `workers/worker_flow/transacoes/retorno_followup.py`.
 
 As proteções `if resposta_bot_atual`, presentes nos fluxos normais e de
 tratamento, são regras essenciais de idempotência da V1.
@@ -34850,6 +35947,10 @@ Implementação principal:
 - Retry com resposta do bot existente mantém ou repara o campo para `bot`.
 - O campo representa o último lado com mensagem persistida para o estado atual;
   ele não é apenas uma marcação de que a conversa já foi iniciada.
+
+Recuperar uma retomada de follow-up já concluída não sobrescreve o estado de
+uma interação posterior. A confirmação do lembrete proativo também registra
+o bot como último lado, junto do histórico e do recibo de envio.
 
 ## 10. Etapas da conversa
 
@@ -35089,7 +36190,10 @@ tratamento futuro que reapresente conteúdo da etapa.
 
 Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
 na mesma conversa pelo menos três horas após o último envio confirmado do bot
-deverá fazer a resposta começar com `Olá novamente, {nome}!`.
+deverá fazer a resposta começar com `Olá novamente, {nome}!` no caminho normal
+com `followup_stage = 0`. Stage positivo ou retomada já registrada segue o
+[contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com a
+saudação própria e repetição da etapa.
 
 O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
 evento atual do cliente com a última linha `sent` do bot no histórico da mesma
@@ -35167,15 +36271,17 @@ Implementação principal:
 
 ## 13. Commits e estados intermediários do worker
 
-O worker possui checkpoints duráveis separados:
+O worker de atendimento possui checkpoints duráveis separados:
 
 1. claim da fila como `processing`;
-2. cliente, conversa e vínculo da mensagem;
-3. lock da conversa;
-4. histórico do cliente e `last_message_from = 'cliente'`;
-5. histórico do bot, etapa e `last_message_from = 'bot'`;
-6. fila marcada como `sent`;
-7. unlock da conversa.
+2. espera por mensagem anterior, quando necessária;
+3. validação do cliente e da conversa no banco;
+4. aquisição do lock da conversa;
+5. vínculo, releitura e histórico do cliente, incluindo o marcador de retomada quando aplicável;
+6. renovação do lock antes do envio;
+7. histórico e contexto do bot; na retomada, conclusão do marcador e reset do stage;
+8. fila marcada como `sent`, depois de conferir novamente a posse do lock;
+9. unlock da conversa.
 
 Uma queda entre checkpoints normalmente deixa informações suficientes para que
 o timeout e o retry reconheçam o estado intermediário. O objetivo é evitar a
@@ -35436,7 +36542,7 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 - Se o Redis falhar depois de a Meta responder, o banco deverá permanecer sem
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
 - Exclusão em massa de unidades é proibida.
-- `suporte_idoso` e `email_obrigatorio` são editáveis no Admin; a ativação do
+- `idade_minima_suporte` e `email_obrigatorio` são editáveis no Admin; a ativação do
   suporte exige um número comercial válido. `waba_id` e `phone_number_id` ficam
   somente leitura depois da criação.
 
@@ -35533,9 +36639,16 @@ Implementação principal:
   segundos quando a página está visível. Voltar à aba força uma leitura. Esse
   polling usa o mesmo serviço Django/Gunicorn do webhook e não cria worker ou
   serviço systemd adicional.
-- As opções `suporte_idoso`, `email_obrigatorio` e `bpa_ativo` são lidas da
-  unidade. Elas controlam as informações e interpretações exibidas, inclusive a
-  idade mínima do dependente e os casos em que envio ao Funil não se aplica.
+- As opções `idade_minima_suporte`, `email_obrigatorio` e `bpa_ativo` são lidas
+  da unidade. O limite é apresentado como política; não modifica tags 18–59/60+
+  ou de dependentes nem esconde envios ao Funil registrados em qualquer faixa.
+- Relatórios possui o card Encaminhados ao comercial, abaixo dos quatro KPIs.
+  Conta clientes distintos da unidade com conversa encerrada por
+  `encaminhado_suporte_idoso`, usando `finalizou_em >= início` e `< fim` do período.
+  Inclui os registros históricos independentemente da configuração atual e da
+  conversa mais recente; não inclui outros motivos nem o tratamento de 100+.
+  Não comprova clique, atendimento humano, matrícula, venda ou envio ao Funil.
+  Falha de consulta não é zero. O card não é duplicado na seção Conversas.
 - O painel nunca expõe o `user_id` privado da Meta, nem no HTML, JSON ou CSV.
   Quando existe WA ID canônico, o campo de contato mostra esse telefone. Enquanto
   o cliente provisório ainda não compartilhou o contato oficial, o mesmo espaço
@@ -35560,11 +36673,19 @@ Implementação principal:
 - O histórico armazena texto e tipo da mensagem, mas não o payload exato dos
   botões enviados. Para mensagens interativas, o painel mostra os botões do
   catálogo atual daquela etapa como referência visual, sempre desabilitados.
+- Os quatro indicadores agregados ficam na seção Relatórios. A seção Conversas
+  prioriza a visualização da lista e do histórico, mantendo filtros e período.
 - O CSV completo inclui todos os contatos ativos no período e deixa campos
   ausentes vazios. O CSV elegível exige nome, e-mail estruturalmente válido e
   telefone normalizado. Ambos usam
   cabeçalhos compatíveis com importação no Google Contatos e nunca alteram o
   banco.
+- Há também duas exportações de dados essenciais, para todos os contatos ou
+  apenas elegíveis, com somente Nome, E-mail e Telefone. Mantêm o nome completo
+  em uma coluna, sem acrescentar rótulos ou datas, e reutilizam as mesmas regras
+  de período, unidade, normalização e elegibilidade dos arquivos Google CSV.
+  Somente nesses dois CSVs essenciais, o telefone brasileiro é exibido sem o
+  prefixo internacional `+55`, preservando o DDD e o número.
 
 ## 20. Disponibilidade e recuperação automática
 
@@ -35581,6 +36702,8 @@ serviço:
   continua o loop;
 - o worker do Funil isola erros por lead e reinicia falhas globais com espera
   linear de 5 a 60 segundos;
+- o worker de follow-up isola erros por candidata e usa espera exponencial de
+  5 até 300 segundos quando a consulta do lote falha;
 - `flow_worker.py` mantém o loop de consumo e os tratamentos por tipo de exceção;
 - se `worker_flow()` escapar com uma exceção, `iniciar_flow_worker.py` registra a falha,
   aguarda 5 segundos e inicia outro loop;
@@ -35591,9 +36714,10 @@ serviço:
 - caches degradam para fallback ou negam uma operação administrativa que
   produziria inconsistência.
 
-Na produção atual, webhook, worker de atendimento e worker do Funil são serviços
-systemd independentes, todos com `Restart=always` e espera de 5 segundos. As
-camadas de recuperação são complementares:
+Na produção atual, webhook, worker de atendimento, worker do Funil e worker de
+follow-up são quatro serviços systemd independentes. Os três primeiros usam
+`Restart=always`; follow-up usa `Restart=on-failure`. Todos têm `RestartSec=5s`.
+As camadas de recuperação são complementares:
 
 ```text
 operação individual falha
@@ -35619,6 +36743,9 @@ Implementação principal:
 - `deploy/systemd/chatbot-webhook.service`
 - `deploy/systemd/chatbot-worker-flow.service`
 - `deploy/systemd/chatbot-worker-funil.service`
+- `workers/worker_followup/iniciar_worker_followup.py`
+- `workers/worker_followup/followup_worker.py`
+- `deploy/systemd/chatbot-worker-followup.service`
 
 ## 21. Matriz de aderência conferida no código
 
@@ -35641,7 +36768,8 @@ Implementação principal:
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 19–23, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Supervisão dos três processos | Implementada | Os serviços systemd usam `Restart=always`; Nginx encaminha os endpoints públicos ao Django/Gunicorn. |
+| Follow-up antes do agendamento | Implementada | Um lembrete por ciclo nas etapas 1–18, após sete horas sem resposta e dentro da janela do cliente; retomada repete a etapa, com exceção do contato oficial validado na etapa 2. |
+| Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
 
@@ -35656,13 +36784,116 @@ Antes de modificar o fluxo:
    fila;
 6. não tratar um comportamento esperado da V1 como bug apenas por ele parecer
    conservador ou incompleto.
+
+## Follow-up de inatividade e reação do cliente
+
+Implementado na V1.2.0. As instruções de operação vivem nos
+[workers](workers/README.md#worker-de-follow-up) e no
+[deploy](deploy/README.md#ativação-do-follow-up); não dependem dos planos de implementação.
+
+O worker proativo envia somente `Você viu a minha mensagem?` depois de sete horas
+sem reação à última resposta comum confirmada do bot. NULL equivale a stage zero.
+O envio exige conversa ativa em etapa 1–18, unidade válida e adimplente, ausência
+de bloqueios, de entrada posterior no histórico e de fila pending/processing do
+mesmo par cliente/unidade, mesmo se ainda não vinculada à conversa. Uma fila
+respondida mas ainda aberta também adia o proativo até sua finalização.
+
+O canal exige janela aberta desde a última mensagem do cliente; este envio em texto
+livre não usa template. A implementação reserva um minuto antes de completar 24h
+para evitar despacho na borda. Isso não altera o limiar de sete horas do bot.
+
+São dois relógios distintos: a última mensagem de toda a conversa precisa ser
+do bot há pelo menos sete horas, e a mensagem mais recente do cliente, anterior
+a ela, precisa estar dentro de 23h59. Bot há oito horas com cliente há 25 horas
+é inelegível; bot há oito horas com cliente há nove horas pode ser elegível.
+
+O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece até uma
+reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.
+A primeira entrada aceita com stage positivo é armazenada, mas seu conteúdo não é
+interpretado como resposta da etapa, exceto o contato oficial validado na etapa 2
+(ver contrato de identidades ao final). A repetição começa com `Que bom te ver novamente,
+<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido. Essa saudação
+independe do tempo de retorno e não se soma a `Olá novamente`. Não há tratamento,
+transição, alteração de turnos_sem_avanco, funil ou encerramento.
+
+A migração inicial, já aplicada ANTES de user_id, marcou followup_stage = 1 para todas as conversas ativas antigas,
+incluindo as então etapas 18–21 (agora 19–22), e registra seus IDs, stages anteriores e a data da marcação
+em followup_legado. Não envia lembrete, não encerra conversas, não inventa recibo
+nem altera followup_last_sent_at. Stage positivo passa a indicar retomada pendente,
+por envio real ou marcação inicial; somente o histórico/recibo comprova envio.
+Novas conversas continuam com stage zero. O setup limpo não marca conversas.
+
+Histórico da repetição, marcação da retomada e reset para zero pertencem ao mesmo
+commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
+concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
+seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
+novo ciclo somente nas etapas 1–18 e com as demais condições de envio atendidas.
+Stage maior que um segue a mesma recuperação; negativo falha fechado.
+
+Essa desconsideração semântica é uma exceção deliberada à interpretação normal da
+entrada. Stage zero preserva os validadores, o mapa e a saudação reativa de três horas.
+O registro proativo não possui fila nem hash de cliente de origem e não prova que
+uma fila A/B/C foi respondida. Os recibos próprios identificam a conversa e a âncora
+do ciclo; registros de retomada identificam a entrada ignorada para recuperação.
+
+Os dois workers compartilham o lock de 110 segundos e seu fencing. Entrada aceita
+após o último teste pré-envio pode cruzar com a chamada da Meta: confirmamos o
+lembrete e o flow lê stage positivo quando obtiver o lock. A janela entre aceite
+externo e commit local continua sujeita à duplicidade rara já aceita na V1.
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
 ````
 
 ## Passo 153 — `ROTINA_IMPLEMENTACAO_ETAPAS.md`
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `3a32bf0af963bbc5df17ad4322eea681c3e8b940d993742384591e2f03a701c0`
+SHA-256 do conteúdo UTF-8 normalizado: `a34bba28e4fcc935808b381f986f122c60ba48b444987ad65bbed8882891198f`
 
 ````markdown
 # Rotina de implementação de novas etapas
@@ -36237,6 +37468,23 @@ testes
 Uma aresta ativa apontando para resolver ou sender inexistente deixa a conversa
 em um estado sem atendimento.
 
+### 11. Conferir a repetição após follow-up
+
+Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
+selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
+dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
+podem ser extraídos da reação que será ignorada. O catálogo atual repete 1–21.
+
+Esse caminho não chama validador, resolver, mapa de transições ou efeitos de
+negócio. A saudação `Que bom te ver novamente` é aplicada ao conteúdo e aos
+botões existentes, e o flow persiste a repetição junto do reset do stage.
+Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
+
+Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
+atual é 1–18, antes do agendamento. Mudanças no mapa precisam revisar
+explicitamente esse limite, o catálogo de repetição, as regras e os testes.
+O comportamento normal com stage zero conserva a saudação de três horas.
+
 ## Subfluxo da integração WhatsApp
 
 ```text
@@ -36275,6 +37523,10 @@ core/integrations/whatsapp/
 | persistência final | Não | Não | Não | Sim |
 
 ## Subfluxo do response_flow
+
+O diagrama abaixo é o caminho normal. Antes dele, `flow_worker.py` relê a
+conversa sob lock e consulta a retomada: stage positivo ou marcador da entrada
+pode desviar para `repeticao_followup.py` e `transacoes/retorno_followup.py`.
 
 ```text
 valida_historico
@@ -36413,6 +37665,7 @@ Uma etapa está concluída somente quando:
 [ ] Django check passa
 [ ] compileall passa
 [ ] documentação continua coerente
+[ ] repetição de follow-up preserva conteúdo, botões, etapa e idempotência
 ```
 
 ## O que não fazer
@@ -36444,9 +37697,54 @@ Ao receber uma solicitação de nova etapa:
 
 Se uma nova regra não se encaixar neste padrão, ela deve ser discutida antes de
 introduzir exceção arquitetural.
-````
 
-# Fase 7 — Testes automatizados
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
 
 ## Passo 155 — `tests/unit/test_fluxo_turno_abc.py`
 
@@ -36918,7 +38216,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `f3aa1f936c506b8ee2ce480e7b840141a730b5a297c0425472423cbbb82747d7`
+SHA-256 do conteúdo UTF-8 normalizado: `ae2129b96f4acbd6028f873a96b6804c45c32f3c167363d9ac6c9fc3a379e993`
 
 ````python
 import ast
@@ -36978,40 +38276,9 @@ DISPLAY_PHONE = "557536310000"
 WA_ID = "5575999999999"
 USER_ID = "BR.13491208655302741918"
 
-ALTERACOES_EDITORIAIS_AUTORIZADAS_V107 = {
-    11: (
-        (
-            "Antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
-            "para conhecer melhor o seu perfil e suas necessidades. "
-            "É bem simples e leva poucos minutos. Podemos começar? ☺️",
-            "Certo, antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
-            "para conhecer melhor o seu perfil e suas necessidades. "
-            "É bem simples e leva poucos minutos. Podemos começar? ☺️",
-        ),
-        (
-            "Iniciar triagem",
-            "Começar triagem",
-        ),
-    ),
-}
-
-ADICOES_EDITORIAIS_AUTORIZADAS_V107 = {
-    6: (
-        (
-            "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
-            "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
-            "nossa equipe comercial.\n\n"
-            "Vou te passar o contato para continuar o atendimento. Basta clicar "
-            "no botão abaixo."
-        ),
-        "Falar com Comercial",
-    ),
-}
-
-
-def _ler_arquivo_da_v107(caminho):
+def _ler_arquivo_da_v130(caminho):
     processo = subprocess.run(
-        ["git", "show", f"3f75447:{caminho}"],
+        ["git", "show", f"4f7f8a0f1c64cd24086179aca2886cb77a5f1332:{caminho}"],
         cwd=ROOT,
         check=True,
         stdout=subprocess.PIPE,
@@ -37030,7 +38297,7 @@ def _literal_atribuido(fonte, nome):
             for alvo in no.targets
         ):
             return ast.literal_eval(no.value)
-    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.1.0")
+    raise AssertionError(f"Atribuição {nome} ausente na baseline V1.3.0")
 
 
 def _strings_executaveis(fonte):
@@ -37061,12 +38328,12 @@ def _strings_executaveis(fonte):
     )
 
 
-def _executar_modulo_v107(caminho):
+def _executar_modulo_v130(caminho):
     namespace = {
-        "__name__": f"baseline_v107_{Path(caminho).stem}",
+        "__name__": f"baseline_v130_{Path(caminho).stem}",
         "__file__": str(ROOT / caminho),
     }
-    fonte = _ler_arquivo_da_v107(caminho)
+    fonte = _ler_arquivo_da_v130(caminho)
     exec(compile(fonte, caminho, "exec"), namespace)
     return namespace
 
@@ -37135,10 +38402,10 @@ def contexto_historico_base(
     }
 
 
-class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
+class CompatibilidadeV130WaOnlyTests(unittest.TestCase):
     def test_catalogo_e_mapa_legados_so_mudam_pela_renumeracao(self):
-        etapas_v107 = _literal_atribuido(
-            _ler_arquivo_da_v107(
+        etapas_v130 = _literal_atribuido(
+            _ler_arquivo_da_v130(
                 "core/database/deploy_database/povoar_etapas.py"
             ),
             "ETAPAS",
@@ -37160,21 +38427,21 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             ) in ETAPAS
             if id_etapa != 2
         )
-        self.assertEqual(etapas_futuras_normalizadas, etapas_v107)
+        self.assertEqual(etapas_futuras_normalizadas, etapas_v130)
 
-        transicoes_v107 = _literal_atribuido(
-            _ler_arquivo_da_v107(
+        transicoes_v130 = _literal_atribuido(
+            _ler_arquivo_da_v130(
                 "core/database/deploy_database/etapa_transicao_script.py"
             ),
             "TRANSICOES_INICIAIS",
         )
         self.assertIn(
             (4, "profissao_dependente_valida", 5),
-            transicoes_v107,
+            transicoes_v130,
         )
         self.assertIn(
             (4, "profissao_titular_valida", 6),
-            transicoes_v107,
+            transicoes_v130,
         )
         self.assertIn(
             (5, "profissao_dependente_valida", 6),
@@ -37205,68 +38472,22 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
 
         self.assertEqual(
             tuple(transicoes_futuras_normalizadas),
-            transicoes_v107,
+            transicoes_v130,
         )
 
-    def test_textos_e_botoes_legados_so_tem_deltas_autorizados(self):
-        self.assertEqual(
-            set(ALTERACOES_EDITORIAIS_AUTORIZADAS_V107),
-            {11},
-        )
-        self.assertTrue(
-            all(
-                len(alteracoes) == 2
-                for alteracoes in ALTERACOES_EDITORIAIS_AUTORIZADAS_V107.values()
-            )
-        )
-        self.assertEqual(set(ADICOES_EDITORIAIS_AUTORIZADAS_V107), {6})
-
-        for etapa_v107 in range(1, 23):
-            etapa_futura = 1 if etapa_v107 == 1 else etapa_v107 + 1
-            caminho_v107 = (
-                "core/integrations/whatsapp/messages/"
-                f"etapa{etapa_v107}_messages.py"
-            )
-            caminho_futuro = ROOT / (
-                "core/integrations/whatsapp/messages/"
-                f"etapa{etapa_futura}_messages.py"
-            )
-
-            with self.subTest(
-                etapa_v107=etapa_v107,
-                etapa_futura=etapa_futura,
-            ):
-                strings_esperadas = _strings_executaveis(
-                    _ler_arquivo_da_v107(caminho_v107)
-                )
-                for texto_v107, texto_autorizado in (
-                    ALTERACOES_EDITORIAIS_AUTORIZADAS_V107.get(
-                        etapa_v107,
-                        (),
-                    )
-                ):
-                    self.assertEqual(strings_esperadas[texto_v107], 1)
-                    strings_esperadas.subtract({texto_v107: 1})
-                    if not strings_esperadas[texto_v107]:
-                        del strings_esperadas[texto_v107]
-                    strings_esperadas.update({texto_autorizado: 1})
-
-                strings_esperadas.update(
-                    ADICOES_EDITORIAIS_AUTORIZADAS_V107.get(
-                        etapa_v107,
-                        (),
-                    )
-                )
-
+    def test_textos_e_botoes_legados_equivalem_a_v130(self):
+        for etapa_atual in range(1, 23):
+            etapa_futura = 1 if etapa_atual == 1 else etapa_atual + 1
+            origem = f"core/integrations/whatsapp/messages/etapa{etapa_atual}_messages.py"
+            destino = ROOT / f"core/integrations/whatsapp/messages/etapa{etapa_futura}_messages.py"
+            with self.subTest(etapa=etapa_atual):
                 self.assertEqual(
-                    _strings_executaveis(
-                        caminho_futuro.read_text(encoding="utf-8-sig")
-                    ),
-                    strings_esperadas,
+                    _strings_executaveis(destino.read_text(encoding="utf-8-sig")),
+                    _strings_executaveis(_ler_arquivo_da_v130(origem)),
                 )
 
-    def test_funil_wa_only_sem_username_preserva_payload_v107(self):
-        dados_v107 = {
+    def test_funil_wa_only_sem_username_preserva_payload_v130(self):
+        dados_v130 = {
             "id_conversa": 10,
             "id_unidade": 1,
             "nome_unidade": "Supera Teste",
@@ -37284,14 +38505,14 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
             ],
         }
         dados_futuros = {
-            **dados_v107,
+            **dados_v130,
             "username": None,
             "triagem_respostas": [
                 {**item, "id_etapa": item["id_etapa"] + 1}
-                for item in dados_v107["triagem_respostas"]
+                for item in dados_v130["triagem_respostas"]
             ],
         }
-        baseline = _executar_modulo_v107(
+        baseline = _executar_modulo_v130(
             "core/integrations/funil/oportunidades.py"
         )
         baseline["montar_pergunta_triagem"] = (
@@ -37306,10 +38527,10 @@ class CompatibilidadeV107WaOnlyTests(unittest.TestCase):
 
         self.assertEqual(
             oportunidades.montar_payload_oportunidade(dados_futuros),
-            baseline["montar_payload_oportunidade"](dados_v107),
+            baseline["montar_payload_oportunidade"](dados_v130),
         )
         fontes_snapshot = (
-            _ler_arquivo_da_v107(
+            _ler_arquivo_da_v130(
                 "core/repositories/funil/leads.py"
             ),
             inspect.getsource(leads.buscar_dados_lead_funil),
@@ -39243,7 +40464,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `7fce4dd553f6e91e9b69d4ead33c5529bc8bc42ae38ad02431db901f43590d4e`
+SHA-256 do conteúdo UTF-8 normalizado: `c95d892a2c81ff66dc50d0b0557acc67382f7641f24dd13f30849ad2ff2460b9`
 
 ````python
 import inspect
@@ -39378,6 +40599,81 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             post_flow.TIPO_EVENTO_DESCONHECIDO,
         )
 
+
+    def test_reacao_followup_desvia_validadores_e_persistencia_normal(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            cx = dict(contexto_historico(), retorno_followup=True)
+            stack.enter_context(
+                patch.object(flow_worker, "preparar_retorno_followup", return_value=cx)
+            )
+            normal_historico = stack.enter_context(
+                patch.object(flow_worker, "valida_historico")
+            )
+            normal_sender = stack.enter_context(
+                patch.object(flow_worker, "flow_sender")
+            )
+            normal_persistencia = stack.enter_context(
+                patch.object(flow_worker, "atualizar_banco_com_contexto_final")
+            )
+            repetir = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "enviar_repeticao_followup",
+                    return_value=contexto_envio(),
+                )
+            )
+            persistir = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "persistir_retorno_followup",
+                    return_value=contexto_final(),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    return_value={"atendimento_encerrado": False},
+                )
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        normal_historico.assert_not_called()
+        normal_sender.assert_not_called()
+        normal_persistencia.assert_not_called()
+        repetir.assert_called_once()
+        persistir.assert_called_once()
+        finalizar.assert_called_once()
+
+    def test_lock_perdido_nao_envia_nem_reescreve_fila(self):
+        conn = FakeConn(FakeCursor())
+        eventos = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, eventos)
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "proteger_conversa",
+                    side_effect=flow_worker.LockConversaPerdido,
+                )
+            )
+            enviar = stack.enter_context(patch.object(flow_worker, "flow_sender"))
+            reagendar = stack.enter_context(
+                patch.object(flow_worker, "reagendar_mensagem_sem_erro")
+            )
+            finalizar = stack.enter_context(
+                patch.object(flow_worker, "finalizar_mensagem_processada")
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        enviar.assert_not_called()
+        reagendar.assert_not_called()
+        finalizar.assert_not_called()
+        self.assertEqual(conn.rollbacks, 1)
+
     def test_fila_vazia_aguarda_um_segundo_e_meio(self):
         with (
             patch.object(estado_ciclo.time, "sleep") as sleep,
@@ -39386,25 +40682,27 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             estado_ciclo.aguardar_fila_vazia()
 
         sleep.assert_called_once_with(1.5)
-        log_debug.assert_called_once_with(
-            "fila_vazia | acao=aguardar segundos=1.5"
-        )
+        log_debug.assert_called_once_with("fila_vazia | acao=aguardar segundos=1.5")
 
     def test_erro_operacional_psycopg3_reinicia_conexao(self):
         erro = flow_worker.psycopg.OperationalError("conexao indisponivel")
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[erro, PararWorker()],
-            ))
-            tratar_conexao = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_conexao",
-                return_value=10,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[erro, PararWorker()],
+                )
+            )
+            tratar_conexao = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_conexao",
+                    return_value=10,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39416,30 +40714,38 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[conn, PararWorker()],
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "pegar_mensagens_da_fila",
-                return_value=None,
-            ))
-            close = stack.enter_context(patch.object(
-                conn,
-                "close",
-                wraps=conn.close,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[conn, PararWorker()],
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "pegar_mensagens_da_fila",
+                    return_value=None,
+                )
+            )
+            close = stack.enter_context(
+                patch.object(
+                    conn,
+                    "close",
+                    wraps=conn.close,
+                )
+            )
 
             def verificar_conexao_fechada():
                 self.assertTrue(conn.closed)
 
-            stack.enter_context(patch.object(
-                flow_worker,
-                "aguardar_fila_vazia",
-                side_effect=verificar_conexao_fechada,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "aguardar_fila_vazia",
+                    side_effect=verificar_conexao_fechada,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39449,94 +40755,140 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
 
     def _patch_fluxo_base(self, stack, conn, eventos):
+        stack.enter_context(
+            patch.object(
+                flow_worker, "reler_conversa", side_effect=lambda contexto, *_: contexto
+            )
+        )
+        stack.enter_context(patch.object(flow_worker, "proteger_conversa"))
+        stack.enter_context(
+            patch.object(flow_worker, "preparar_retorno_followup", return_value=None)
+        )
         stack.enter_context(patch("builtins.print"))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "get_conn",
-            side_effect=[conn, PararWorker()],
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "pegar_mensagens_da_fila",
-            return_value=registro_fila(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "validar_banco_mensagem",
-            side_effect=lambda *_args: eventos.append("validar_banco") or contexto_banco(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "vincular_mensagem_fila_a_conversa",
-            side_effect=lambda *_args: eventos.append("vincular_conversa") or 1,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "confirmar_cache_cliente_se_pendente",
-            return_value=False,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "tentar_lock_conversa",
-            side_effect=lambda *_args: eventos.append("adquirir_lock") or (True, 4),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "reagendar_se_houver_mensagem_anterior",
-            side_effect=lambda *_args: eventos.append("verificar_ordem") or False,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "valida_historico",
-            side_effect=lambda *_args: eventos.append("persistir_cliente") or contexto_historico(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "flow_sender",
-            side_effect=lambda *_args: eventos.append("enviar_meta") or contexto_envio(),
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "liberar_lock_conversa_se_necessario",
-            side_effect=lambda *_args: eventos.append("liberar_lock") or True,
-        ))
-        stack.enter_context(patch.object(
-            flow_worker,
-            "handle_erro_generico",
-        ))
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "get_conn",
+                side_effect=[conn, PararWorker()],
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "pegar_mensagens_da_fila",
+                return_value=registro_fila(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "validar_banco_mensagem",
+                side_effect=lambda *_args: eventos.append("validar_banco")
+                or contexto_banco(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "vincular_mensagem_fila_a_conversa",
+                side_effect=lambda *_args: eventos.append("vincular_conversa") or 1,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "confirmar_cache_cliente_se_pendente",
+                return_value=False,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "tentar_lock_conversa",
+                side_effect=lambda *_args: eventos.append("adquirir_lock") or (True, 4),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "reagendar_se_houver_mensagem_anterior",
+                side_effect=lambda *_args: eventos.append("verificar_ordem") or False,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "valida_historico",
+                side_effect=lambda *_args: eventos.append("persistir_cliente")
+                or contexto_historico(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "flow_sender",
+                side_effect=lambda *_args: eventos.append("enviar_meta")
+                or contexto_envio(),
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "liberar_lock_conversa_se_necessario",
+                side_effect=lambda *_args: eventos.append("liberar_lock") or True,
+            )
+        )
+        stack.enter_context(
+            patch.object(
+                flow_worker,
+                "handle_erro_generico",
+            )
+        )
 
     def test_mensagem_anterior_reagenda_antes_de_validar_banco(self):
         conn = FakeConn(FakeCursor())
 
         with ExitStack() as stack:
             stack.enter_context(patch("builtins.print"))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "get_conn",
-                side_effect=[conn, PararWorker()],
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "pegar_mensagens_da_fila",
-                return_value=registro_fila(),
-            ))
-            barreira = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_se_houver_mensagem_anterior",
-                return_value=True,
-            ))
-            validar = stack.enter_context(patch.object(
-                flow_worker,
-                "validar_banco_mensagem",
-            ))
-            lock = stack.enter_context(patch.object(
-                flow_worker,
-                "tentar_lock_conversa",
-            ))
-            vincular = stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "get_conn",
+                    side_effect=[conn, PararWorker()],
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "pegar_mensagens_da_fila",
+                    return_value=registro_fila(),
+                )
+            )
+            barreira = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_se_houver_mensagem_anterior",
+                    return_value=True,
+                )
+            )
+            validar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "validar_banco_mensagem",
+                )
+            )
+            lock = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "tentar_lock_conversa",
+                )
+            )
+            vincular = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39610,19 +40962,24 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                side_effect=lambda *_args: eventos.append("persistir_bot") or contexto_final(),
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                side_effect=lambda *_args: (
-                    eventos.append("marcar_sent")
-                    or {"atendimento_encerrado": False}
-                ),
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    side_effect=lambda *_args: eventos.append("persistir_bot")
+                    or contexto_final(),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=lambda *_args: (
+                        eventos.append("marcar_sent")
+                        or {"atendimento_encerrado": False}
+                    ),
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39642,7 +40999,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             ],
         )
         finalizar.assert_called_once()
-        self.assertEqual(conn.commits, 7)
+        self.assertEqual(conn.commits, 8)
         self.assertEqual(conn.rollbacks, 0)
         self.assertTrue(conn.closed)
 
@@ -39665,31 +41022,41 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "confirmar_cache_cliente_se_pendente",
-                side_effect=confirmar_cache,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-                side_effect=vincular_conversa,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "valida_historico",
-                side_effect=persistir_historico,
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                return_value=contexto_final(),
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                return_value={"atendimento_encerrado": False},
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "confirmar_cache_cliente_se_pendente",
+                    side_effect=confirmar_cache,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                    side_effect=vincular_conversa,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "valida_historico",
+                    side_effect=persistir_historico,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    return_value=contexto_final(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    return_value={"atendimento_encerrado": False},
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39704,33 +41071,45 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "tentar_lock_conversa",
-                return_value=(False, None),
-            ))
-            reagendar = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_mensagem_sem_erro",
-                return_value=1,
-            ))
-            vincular = stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-            ))
-            historico = stack.enter_context(patch.object(
-                flow_worker,
-                "valida_historico",
-            ))
-            enviar = stack.enter_context(patch.object(
-                flow_worker,
-                "flow_sender",
-            ))
-            stack.enter_context(patch.object(
-                flow_worker,
-                "liberar_lock_conversa_se_necessario",
-                return_value=None,
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "tentar_lock_conversa",
+                    return_value=(False, None),
+                )
+            )
+            reagendar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_mensagem_sem_erro",
+                    return_value=1,
+                )
+            )
+            vincular = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                )
+            )
+            historico = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "valida_historico",
+                )
+            )
+            enviar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "flow_sender",
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "liberar_lock_conversa_se_necessario",
+                    return_value=None,
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39753,32 +41132,44 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "vincular_mensagem_fila_a_conversa",
-                return_value=0,
-            ))
-            tratar_erro = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_generico",
-            ))
-            reagendar = stack.enter_context(patch.object(
-                flow_worker,
-                "reagendar_mensagem_sem_erro",
-                return_value=1,
-            ))
-            aviso = stack.enter_context(patch.object(
-                flow_worker.logger,
-                "critical",
-            ))
-            persistir_bot = stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "vincular_mensagem_fila_a_conversa",
+                    return_value=0,
+                )
+            )
+            tratar_erro = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_generico",
+                )
+            )
+            reagendar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "reagendar_mensagem_sem_erro",
+                    return_value=1,
+                )
+            )
+            aviso = stack.enter_context(
+                patch.object(
+                    flow_worker.logger,
+                    "critical",
+                )
+            )
+            persistir_bot = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39810,23 +41201,29 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
 
         with ExitStack() as stack:
             self._patch_fluxo_base(stack, conn, eventos)
-            stack.enter_context(patch.object(
-                flow_worker,
-                "atualizar_banco_com_contexto_final",
-                side_effect=RuntimeError("banco caiu apos envio"),
-            ))
-            finalizar = stack.enter_context(patch.object(
-                flow_worker,
-                "finalizar_mensagem_processada",
-                side_effect=lambda *_args: (
-                    eventos.append("marcar_sent")
-                    or {"atendimento_encerrado": False}
-                ),
-            ))
-            tratar_erro = stack.enter_context(patch.object(
-                flow_worker,
-                "handle_erro_generico",
-            ))
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "atualizar_banco_com_contexto_final",
+                    side_effect=RuntimeError("banco caiu apos envio"),
+                )
+            )
+            finalizar = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=lambda *_args: (
+                        eventos.append("marcar_sent")
+                        or {"atendimento_encerrado": False}
+                    ),
+                )
+            )
+            tratar_erro = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_generico",
+                )
+            )
 
             with self.assertRaises(PararWorker):
                 flow_worker.worker_flow()
@@ -39835,7 +41232,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         tratar_erro.assert_called_once()
         self.assertNotIn("marcar_sent", eventos)
         self.assertEqual(conn.rollbacks, 1)
-        self.assertEqual(conn.commits, 6)
+        self.assertEqual(conn.commits, 7)
         self.assertTrue(conn.closed)
 
 
@@ -40189,10 +41586,7 @@ if __name__ == "__main__":
 
 ## Passo 159 — `tests/unit/test_validador_profissao.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Esta suíte é a transposição
-literal da proteção pré-`user_id`: muda apenas a numeração atual 4 para a futura
-5 e os imports correspondentes, sem ampliar a lista, criar palavras-chave ou
-introduzir regex semântica.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `e1782be211d3474163ee3705ca1b525ac0447389d125e6f0143811e5fbb889d8`
 
@@ -40315,10 +41709,7 @@ if __name__ == "__main__":
 
 ## Passo 159A — `tests/unit/test_saudacao_retorno.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A suíte já
-faz parte da baseline atual e prova o limiar temporal,
-o isolamento pela conversa, os dois caminhos de resposta, a barreira de retry e
-os dois métodos de transporte textual usados no estado final.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `50e5be683cd370df18587520050d19a61d8a84f5a83bf2653b0faaa890a33556`
 
@@ -40579,14 +41970,11 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
-# Fase 8 — Validação antes da migração
 ## Passo 159B — `tests/unit/test_suporte_idoso_email_obrigatorio.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Esta suíte
-preserva a matriz atual de `suporte_idoso` e `email_obrigatorio`, movendo
-somente os IDs físicos afetados pela nova etapa oficial de contato.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `c18f9efff974bed083db027ac4e9b88fedbc8bfcde8f80d8ec8d191f6eea1059`
+SHA-256 do conteúdo UTF-8 normalizado: `586517224aaa2c6f476d4e6b036d462d53718b384ff64a5f9ac1567cc0a4d51b`
 
 ````python
 import unittest
@@ -40623,7 +42011,7 @@ from workers.worker_flow.transacoes import (
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 
 
-def contexto_etapa7(idade, *, dependente=False, suporte=False):
+def contexto_etapa7(idade, *, dependente=False, suporte=None):
     return {
         "id_conversa": 10,
         "id_cliente": 5,
@@ -40635,7 +42023,7 @@ def contexto_etapa7(idade, *, dependente=False, suporte=False):
         "transicoes_permitidas": {"idade_valida": 8},
         "status_dependente": dependente,
         "bpa_ativo_unidade": False,
-        "suporte_idoso_unidade": suporte,
+        "idade_minima_suporte": suporte,
         "numero_comercial_unidade": "(71) 99999-9999",
         "nome_cliente": "Maria",
         "nome_dependente": "João" if dependente else None,
@@ -40920,12 +42308,12 @@ class ResolverEtapa11Tests(unittest.TestCase):
 class SuporteIdosoTests(unittest.TestCase):
     def test_fronteiras_e_dependente_preservam_a_ordem_aprovada(self):
         for idade, dependente, suporte, caminho in (
-            (59, False, True, "normal"),
-            (65, False, False, "normal"),
-            (60, False, True, "suporte"),
-            (99, False, True, "suporte"),
-            (100, False, True, "cem_mais"),
-            (70, True, True, "normal_dependente"),
+            (59, False, 60, "normal"),
+            (65, False, None, "normal"),
+            (60, False, 60, "suporte"),
+            (99, False, 60, "suporte"),
+            (100, False, 60, "cem_mais"),
+            (70, True, 60, "normal_dependente"),
         ):
             with self.subTest(
                 idade=idade,
@@ -40972,7 +42360,7 @@ class SuporteIdosoTests(unittest.TestCase):
                 )
 
     def test_destino_ou_politica_ausente_falha_fechado(self):
-        for campo in ("status_dependente", "suporte_idoso_unidade"):
+        for campo in ("status_dependente", "idade_minima_suporte"):
             with self.subTest(campo=campo):
                 contexto = contexto_etapa7(65, suporte=True)
                 contexto.pop(campo)
@@ -40982,7 +42370,7 @@ class SuporteIdosoTests(unittest.TestCase):
 
     def test_efeito_terminal_persiste_idade_do_titular(self):
         cursor = object()
-        contexto = contexto_etapa7(65, suporte=True)
+        contexto = contexto_etapa7(65, suporte=60)
         envio = contexto_envio(7)
         envio.update(
             {
@@ -41008,7 +42396,7 @@ class SuporteIdosoTests(unittest.TestCase):
         self.assertTrue(resultado["encaminhamento_suporte_idoso"])
 
     def test_encerramento_e_replay_usam_motivo_novo_sem_bloqueio(self):
-        contexto = contexto_etapa7(65, suporte=True)
+        contexto = contexto_etapa7(65, suporte=60)
         envio = contexto_envio(7)
         envio.update(
             {
@@ -41031,7 +42419,7 @@ class SuporteIdosoTests(unittest.TestCase):
             "tipo_mensagem": "interactive_cta_url",
             "conteudo_texto": (
                 "Que bom te ver aqui novamente, Maria!\n\n"
-                + montar_mensagem_suporte_idoso_etapa7()
+                + montar_mensagem_suporte_idoso_etapa7(60)
             ),
         }
         replay = encerramento_atendimento.resolver_intencao_encerramento(
@@ -41168,10 +42556,11 @@ class PersistenciaEmailEFunilTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         for conteudo in (ddl, migracao):
-            self.assertIn("suporte_idoso", conteudo)
             self.assertIn("email_obrigatorio", conteudo)
             self.assertIn("encaminhado_suporte_idoso", conteudo)
 
+        self.assertIn("idade_minima_suporte", ddl)
+        self.assertIn("suporte_idoso", migracao)
         self.assertNotIn("UPDATE chatbot.unidade", migracao)
         self.assertNotIn("INSERT INTO chatbot.unidade", migracao)
 
@@ -41194,9 +42583,7 @@ passo 159D; não se apaga nenhum caso de teste.
 
 ## Passo 159D — `tests/unit/test_valida_etapa8.py`
 
-Criar o arquivo com o conteúdo completo abaixo. A suíte conserva a proteção
-atual contra o falso positivo “quero mais informações” e muda apenas o módulo e
-o nome público do validador de 7 para 8.
+Criar o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `bd295cb7300d855774859cd6475d2e45e932eaa897d56fb4d9fa788bae1051a3`
 
@@ -41288,24 +42675,22 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
-
-
 ## Passo 159E — `tests/README.md`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. O catálogo da suíte inclui a futura etapa 12 e os contratos do monitoramento adaptados a 23 etapas.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `398224e489299019d851c964d0589ffcefe4bc489e5b85ff6289638f18835026`
+SHA-256 do conteúdo UTF-8 normalizado: `62a1bc1f661b1be4bef8570c8b81f9c977b837155e7bef8392bfa58426e52044`
 
 ````markdown
 # Testes do projeto
 
-Esta pasta reúne a suíte unitária e de contrato do projeto. Além do núcleo
+Esta pasta reúne testes unitários, de contrato e de integração SQL. Além do núcleo
 transacional, ela cobre regras e utilitários já implementados:
 
 - cenário completo de turno A/B/C;
 - retry, requeue, ordem da fila e fencing por `lock_version`;
 - persistência idempotente, avanço e não avanço de etapa;
-- checkpoints, commits, rollback e conclusão da fila no worker.
+- checkpoints, commits, rollback e conclusão da fila no worker;
 - suporte ao idoso e obrigatoriedade do e-mail;
 - validação da oferta, início da triagem, profissão e saudação após inatividade;
 - montagem dos relatórios semanais e totais;
@@ -41313,7 +42698,8 @@ transacional, ela cobre regras e utilitários já implementados:
 - vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
 - login nativo, par username/senha, sessão, CSRF e revogação do acesso ao portal;
 - painel somente leitura, períodos, consultas por unidade, botões históricos,
-  indicadores e arquivos Google CSV.
+  indicadores, Google CSV e CSV essencial sem o prefixo brasileiro `+55`;
+- follow-up proativo, retomada reativa, elegibilidade, migração e locks entre workers.
 
 Para executar a suíte completa a partir da raiz:
 
@@ -41330,7 +42716,7 @@ tests/unit/test_persistencia_essencial.py
 tests/unit/test_worker_flow_runtime.py
 tests/unit/test_suporte_idoso_email_obrigatorio.py
 tests/unit/test_saudacao_retorno.py
-tests/unit/test_valida_etapa7.py
+tests/unit/test_valida_etapa8.py
 tests/unit/test_valida_etapa12.py
 tests/unit/test_validador_profissao.py
 tests/unit/test_gerar_monitoramento_unidades.py
@@ -41339,14 +42725,19 @@ tests/unit/test_sondas_funil.py
 tests/unit/test_monitoramento_unidade.py
 tests/unit/test_monitoramento_login.py
 tests/unit/test_monitoramento_painel.py
+tests/unit/test_followup.py
+tests/integration/test_followup_postgres.py
 ```
 
-Os testes usam fakes e mocks para fronteiras externas: a descoberta da suíte não
-deve chamar Meta, Funil, Redis, RDS nem outro serviço real. Um utilitário manual
-não deve ser executado como forma de testar sua importação.
+Por padrão, os testes usam fakes e mocks para fronteiras externas, sem chamar
+Meta, Funil, Redis ou RDS. As integrações PostgreSQL só executam quando sua variável específica é
+fornecida: FOLLOWUP_TEST_DSN, SUPORTE_IDADE_TEST_DSN ou USER_ID_TEST_DSN. Um utilitário manual não deve
+ser executado como forma de testar sua importação.
 
-Novos testes pertencem a `tests/unit/`; dados e classes auxiliares exclusivos de
-teste ficam em `tests/`, nunca nos módulos de produção.
+Testes unitários pertencem a `tests/unit/`; contratos com PostgreSQL real ficam
+em `tests/integration/` e exigem ambiente descartável explícito. Dados e classes
+auxiliares exclusivos de teste ficam em `tests/`, nunca nos módulos de produção.
+Sem a variável correspondente, a descoberta pula aquela integração PostgreSQL.
 
 O teste de monitoramento executa o SQL de autorização em SQLite em memória,
 adaptando apenas os placeholders, com um cliente compartilhado por duas
@@ -41367,14 +42758,81 @@ durante o teste e restaura-a ao terminar; não cria usuários nem tabelas no RDS
 propagação obrigatória da unidade autorizada, quantidade de parâmetros dos SQLs,
 consolidação de perfis, 23 etapas, fallback visual de username sem exposição
 de `user_id`, bloqueio comprovado após 12 repetições, `contact_request`,
-períodos comparáveis e as duas variantes do CSV. Seus payloads vivem em `fixtures/monitoramento_painel.py` e são fictícios.
+períodos comparáveis e os quatro downloads
+CSV (Google e essencial, todos e elegíveis). Cobre todos os períodos, unidade
+autorizada, revogação de acesso, acentos, campos vazios e proteção contra fórmulas
+nos dados textuais. Seus payloads vivem em `fixtures/monitoramento_painel.py` e
+são fictícios.
+O teste distingue a remoção de `+55` no essencial da preservação do telefone
+internacional no Google CSV; não remove o DDD nem altera os dados de origem.
+
+## Follow-up
+
+`unit/test_followup.py` cobre envio exato, reação, etapas e botões reais com HTTP
+substituído, recuperação, falta de lock, falhas e parâmetros SQL. O teste de runtime
+do flow cobre a repetição comum sem chamar validadores ou persistência de
+transição. A exceção oficial da etapa 2 usa o caminho normal de avanço e tem
+cobertura própria na integração user_id.
+Cobre saudação com e sem nome, texto enviado igual ao histórico, isolamento do
+prefixo sob exceção, retorno legado sem data de envio e falha sem interromper o lote.
+
+`integration/test_followup_postgres.py` exige explicitamente FOLLOWUP_TEST_DSN com
+host loopback e banco vazio chamado `test_chatbot_followup`. Ele cria e remove seu
+próprio schema chatbot, recusando schema preexistente. Sem essa variável é pulado.
+Executa DDL canônico, consultas reais, unicidade em histórico particionado, rollback,
+fila sem vínculo e dois proprietários do lock. Nunca aponta para DB_HOST/DB_NAME.
+Também executa o SQL integral de migração sobre uma base antiga descartável:
+marca somente ativas, audita os valores anteriores, preserva os demais dados,
+não produz histórico/envio, recusa reaplicação e reverte diante de legado terminal.
+O retorno completo também usa fila e histórico reais nesse banco descartável:
+rollback preserva stage positivo, a confirmação mantém a etapa e os contadores,
+e recuperar a mesma reação não reseta um ciclo posterior. Cobre tanto o lembrete
+confirmado quanto o legado sem data de envio.
+Meta permanece simulada; a confirmação de entrega real exige homologação manual.
+
+## Suporte por idade
+
+`unit/test_suporte_por_idade.py` cobre as seis configurações, fronteiras,
+Admin, contato comercial, mensagem, recuperação com limite atual e contagem
+real em SQLite dos encaminhamentos por unidade, data e motivo. As suítes de
+e-mail, turno, follow-up, CSV e relatórios continuam como regressão.
+
+`integration/test_suporte_por_idade_postgres.py` executa migração, domínio,
+recusa de reaplicação, falha com rollback e DDL de instalação limpa. Também
+verifica tabela ocupada, falha durante a reversão, preservação das conversas
+e consultas reais de contexto/relatório no schema completo após a migração. Exige
+`SUPORTE_IDADE_TEST_DSN`, host loopback e banco vazio `test_chatbot_suporte_idade`.
+Recusa schema chatbot preexistente; não usa DB_HOST/DB_NAME. Sem a variável, é
+pulado. Ver o [procedimento](../deploy/idade_minima_suporte.md) para homologação.
+
+## Compatibilidade user_id sobre a V1.3.0
+
+A suíte unitária preserva regressões de idade, e-mail, 23 etapas, 27 transições,
+quatro CSVs, bloqueios e follow-up. No contato oficial da etapa 2 há avanço; nas
+demais reações o pedido é repetido. Somente a repetição comum ignora a semântica.
+
+integration/test_user_id_v130_postgres.py materializa o DDL do commit de referência
+4f7f8a0f1c64cd24086179aca2886cb77a5f1332, executa a migração completa de user_id e
+valida preservação de limites de idade, ciclo legado, etapas e checkpoints.
+Exercita reconciliação com cliente antigo, exclusão segura do provisório, avanço
+2 -> 3, rollback conjunto de resposta/reset, replay que preserva ciclo posterior,
+resposta textual que repete o botão e janela Meta/fila por user_id.
+
+Exige USER_ID_TEST_DSN apontando explicitamente para loopback, porta temporária
+não padrão e banco vazio test_chatbot_user_id. Recusa schema preexistente e remove
+somente o schema criado pelo próprio teste. Não usa variáveis DB_HOST/DB_NAME nem
+conexão do RDS. Sem essa variável, pula o teste. Execute a descoberta com
+PYTHON_DOTENV_DISABLED=1. Não execute utilitários de produção para testar importação.
+
+Os testes históricos das migrações de follow-up e idade continuam separados;
+passarem não autoriza reaplicá-las sobre um banco já migrado para user_id.
 ````
 
 ## Passo 159F — `tests/fixtures/monitoramento_painel.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. Os dados fictícios representam WA ID, fallback por username, bloqueio por repetição, `contact_request` e 23 etapas.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `6ade51579c6a207b7b9cda0d91f12055b4ddc3151867449c66c21249591fa6c8`
+SHA-256 do conteúdo UTF-8 normalizado: `66d4bfb9d7b218ef96705a815a94746273ec59eab2bd022e9247d21e4f8e487b`
 
 ````python
 """Dados inteiramente fictícios usados pelos testes e pela revisão visual local."""
@@ -41382,7 +42840,7 @@ SHA-256 do conteúdo UTF-8 normalizado: `6ade51579c6a207b7b9cda0d91f12055b4ddc31
 
 CONVERSAS = {
     'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'agente': 'Suh', 'regras': {
-        'suporte_idoso': True, 'email_obrigatorio': True, 'bpa_ativo': True,
+        'idade_minima_suporte': 60, 'email_obrigatorio': True, 'bpa_ativo': True,
     }},
     'periodo': {'chave': 'total', 'rotulo': 'Todo o histórico',
                 'inicio': '2026-07-29T23:55:00-03:00', 'fim': '2026-09-03T12:00:00-03:00',
@@ -41458,7 +42916,8 @@ NOMES_ETAPAS = [
     'Agendamento', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
 ]
 RELATORIO = {
-    'unidade': {'nome': 'Supera Santo Antônio de Jesus'},
+    'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'idade_minima_suporte': 60},
+    'encaminhados_comercial_por_idade': 8,
     'periodo': CONVERSAS['periodo'], 'metricas': CONVERSAS['metricas'],
     'tendencias': {'leads': 12.4, 'mensagens': 8.1, 'funil': -3.2, 'avaliacoes': 5.0, 'nota_media': 2.1},
     'atividade': [
@@ -41471,7 +42930,7 @@ RELATORIO = {
         {'rotulo': 'Dependentes de 18 a 59 anos', 'leads': 3, 'conversas': 3, 'funil': 1, 'taxa_funil': 33.3},
         {'rotulo': 'Dependentes com 60 anos ou mais', 'leads': 2, 'conversas': 2, 'funil': 0, 'taxa_funil': 0},
         {'rotulo': 'Titulares de 18 a 59 anos', 'leads': 54, 'conversas': 56, 'funil': 6, 'taxa_funil': 11.1},
-        {'rotulo': 'Titulares com 60 anos ou mais', 'leads': 11, 'conversas': 11, 'funil': 0, 'taxa_funil': None},
+        {'rotulo': 'Titulares com 60 anos ou mais', 'leads': 11, 'conversas': 11, 'funil': 0, 'taxa_funil': 0},
     ]},
     'etapas': [{'id_etapa': i + 1, 'nome_etapa': nome, 'quantidade': (i * 7) % 19} for i, nome in enumerate(NOMES_ETAPAS)],
     'atualizado_em': '2026-09-03T15:00:00Z',
@@ -41487,9 +42946,9 @@ CONTATOS = [
 
 ## Passo 159G — `tests/unit/test_monitoramento_painel.py`
 
-Substituir integralmente o arquivo com o conteúdo completo abaixo. A cobertura prova isolamento por unidade, ausência de `user_id` na saída, precedência do WA ID, fallback visual, dupla prova de bloqueio, CSV e catálogo final.
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `31b03c250421cb40550d76f2907826ab4a855193c3cdddf100c6bcfa3db1ef33`
+SHA-256 do conteúdo UTF-8 normalizado: `0a79b1d28b5df8d75b3052d40549c1e314faf1ceb14c5bfa1ca3871072f98e6f`
 
 ````python
 """Contratos de leitura, isolamento e exportação do painel de monitoramento."""
@@ -41508,7 +42967,7 @@ from monitoramento.apresentacao import (
     montar_relatorio,
     normalizar_telefone_google,
 )
-from monitoramento.periodos import resolver_periodo
+from monitoramento.periodos import PERIODOS, resolver_periodo
 from monitoramento.services import _agrupar_perfis
 from core.repositories.monitoramento import painel as repositorio_painel
 from tests.fixtures.monitoramento_painel import CONTATOS, CONVERSAS, MENSAGENS, RELATORIO
@@ -41637,6 +43096,80 @@ class MonitoramentoPainelTests(unittest.TestCase):
             len(list(csv.reader(StringIO(elegivel.content.decode('utf-8'))))), 1
         )
 
+    def test_csv_essencial_preserva_nome_completo_acentos_e_campos_vazios(self):
+        self.autenticar()
+        contatos = [
+            {'nome': ' João da Silva ', 'email': 'joao@example.com', 'wa_id': '557194111866'},
+            {'nome': None, 'email': None, 'wa_id': '557599111222'},
+            {'nome': 'Sem telefone', 'email': 'outro@example.com', 'wa_id': None},
+            {'nome': '=Nome; "especial"', 'email': '=1+1', 'wa_id': '123'},
+        ]
+        with patch('monitoramento.views.carregar_contatos', return_value=contatos):
+            completo = self.cliente.get('/contatos.csv?formato=essencial&tipo=todos')
+            elegivel = self.cliente.get('/contatos.csv?formato=essencial&tipo=elegiveis')
+        self.assertTrue(completo.content.startswith(b'\xef\xbb\xbf'))
+        linhas = list(csv.reader(StringIO(completo.content.decode('utf-8-sig')), delimiter=';'))
+        self.assertEqual(linhas, [
+            ['Nome', 'E-mail', 'Telefone'],
+            ['João da Silva', 'joao@example.com', '7194111866'],
+            ['', '', '7599111222'],
+            ['Sem telefone', 'outro@example.com', ''],
+            ["'=Nome; \"especial\"", "'=1+1", ''],
+        ])
+        self.assertEqual(
+            list(csv.reader(StringIO(elegivel.content.decode('utf-8-sig')), delimiter=';')),
+            linhas[:2],
+        )
+        self.assertIn('contatos_essenciais_total_todos.csv', completo['Content-Disposition'])
+        self.assertIn('no-store', completo['Cache-Control'])
+
+    def test_quatro_exports_respeitam_todos_periodos_e_unidade_autorizada(self):
+        agora = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+        for usuario, unidade in ((self.cenario.usuario_a, 10), (self.cenario.usuario_b, 20)):
+            self.cliente = Client()
+            self.autenticar(usuario)
+            for chave in ('total', *PERIODOS):
+                periodo = resolver_periodo(chave, agora=agora)
+                for formato in ('google', 'essencial'):
+                    for tipo in ('todos', 'elegiveis'):
+                        with self.subTest(unidade=unidade, periodo=chave, formato=formato, tipo=tipo):
+                            with patch('monitoramento.views.resolver_periodo', return_value=periodo) as resolver, \
+                                 patch('monitoramento.views.carregar_contatos', return_value=CONTATOS) as carregar:
+                                resposta = self.cliente.get('/contatos.csv', {
+                                    'formato': formato, 'tipo': tipo, 'periodo': chave,
+                                    'id_unidade': 999,
+                                })
+                            self.assertEqual(resposta.status_code, 200)
+                            resolver.assert_called_once_with(chave)
+                            acesso, recebido = carregar.call_args.args
+                            self.assertEqual(acesso.id_unidade, unidade)
+                            self.assertEqual(recebido, periodo)
+                            leitor = csv.reader(
+                                StringIO(resposta.content.decode('utf-8-sig')),
+                                delimiter=';' if formato == 'essencial' else ',',
+                            )
+                            linhas = list(leitor)
+                            self.assertEqual(len(linhas), 2 if tipo == 'elegiveis' else 3)
+                            self.assertTrue(all(len(linha) == (3 if formato == 'essencial' else 36) for linha in linhas))
+                            self.assertEqual(
+                                linhas[1][2 if formato == 'essencial' else 13],
+                                '7194111866' if formato == 'essencial' else '+557194111866',
+                            )
+                            self.assertIn(f'_{chave}_{tipo}.csv', resposta['Content-Disposition'])
+
+    def test_export_essencial_recusa_acesso_invalido_e_parametros_invalidos(self):
+        rota = '/contatos.csv?formato=essencial'
+        with patch('monitoramento.views.carregar_contatos') as carregar:
+            self.assertEqual(self.cliente.get(rota).status_code, 401)
+            self.autenticar()
+            self.assertEqual(self.cliente.get(rota + '&periodo=invalido').status_code, 400)
+            self.assertEqual(self.cliente.get('/contatos.csv?formato=invalido').status_code, 400)
+            self.assertEqual(self.cliente.post(rota).status_code, 405)
+            with self.cenario.banco.cursor() as cursor:
+                cursor.execute('UPDATE unidade SET id_usuario_monitoramento = NULL WHERE id_unidade = 10')
+            self.assertEqual(self.cliente.get(rota).status_code, 403)
+            carregar.assert_not_called()
+
     def test_botoes_historicos_vem_do_catalogo_oficial(self):
         mensagem = {'quem_enviou': 'bot', 'tipo': 'contact_request', 'id_etapa': 2}
         self.assertEqual(botoes_para_mensagem(mensagem), ['Compartilhar contato'])
@@ -41742,7 +43275,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
         relatorio = montar_relatorio(
             {'leads': 2, 'mensagens': 4, 'funil': 1, 'avaliacoes': 0, 'nota_media': None},
             {'leads': 1, 'mensagens': 2, 'funil': 0, 'avaliacoes': 1, 'nota_media': 5.0},
-            {}, {}, [], [],
+            {}, {}, [], [], encaminhados_comercial_por_idade=0,
         )
         self.assertIsNone(relatorio['tendencias']['nota_media'])
 
@@ -41754,7 +43287,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
              'idade_dependente': None, 'foi_funil': True},
             {'id_cliente': 2, 'status_dependente': None, 'idade_titular': 44,
              'idade_dependente': None, 'foi_funil': False},
-        ], bpa_ativo=False, suporte_idoso=False)
+        ], bpa_ativo=False)
         titular_adulto = next(
             item for item in perfis['linhas'] if item['chave'] == 'titular_adulto'
         )
@@ -41828,11 +43361,11 @@ class MonitoramentoPainelTests(unittest.TestCase):
 
 ## Passo 159H — `tests/unit/test_valida_etapa11.py`
 
-Remover somente este caminho antigo: na baseline V1.1.0 ele cobre a introdução da triagem na etapa 11. A mesma regra, inclusive os aceites ampliados e a precedência das negativas, passa integralmente para a futura etapa 12 e é coberta no passo 159I.
+Remover somente este caminho antigo: na baseline V1.3.0 ele cobre a introdução da triagem na etapa 11. A mesma regra, inclusive os aceites ampliados e a precedência das negativas, passa integralmente para a futura etapa 12 e é coberta no passo 159I.
 
 ## Passo 159I — `tests/unit/test_valida_etapa12.py`
 
-Criar o arquivo com o conteúdo completo abaixo. A suíte renumerada conserva todos os aceites do botão e dos textos da V1.1.0, além das negativas e entradas inválidas.
+Criar o arquivo com o conteúdo completo abaixo.
 
 SHA-256 do conteúdo UTF-8 normalizado: `9dfb455807dc988b547c9d949af234f4647854cb6dd2620a4aadec11875755e5`
 
@@ -41978,202 +43511,4275 @@ if __name__ == "__main__":
     unittest.main()
 ````
 
-## Gate integrado de aplicação
+## Passo 159J — `core/repositories/atendimento/followup.py`
 
-Depois de materializar todos os arquivos anteriores, executar obrigatoriamente, sem credenciais externas:
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `134933a8f703c8cb492ffd43a03e8a64ec30845e298463a616590ed391ac4c5e`
+
+````python
+"""Consultas de follow-up e fencing; commit/rollback pertencem ao orquestrador."""
+
+
+class LockConversaPerdido(RuntimeError):
+    """O processamento deixou de possuir a versão válida do lock."""
+
+
+def proteger_conversa(id_conversa, lock_version, cursor, *, renovar=False):
+    cursor.execute(
+        """
+        SELECT id_conversa FROM chatbot.conversa
+        WHERE id_conversa = %s AND processing IS TRUE AND lock_version = %s
+          AND processing_started_at > clock_timestamp() - INTERVAL '110 seconds'
+        FOR UPDATE;
+    """,
+        (id_conversa, lock_version),
+    )
+    if cursor.fetchone() is None:
+        raise LockConversaPerdido(
+            f"Lock perdido: conversa={id_conversa}, versao={lock_version}"
+        )
+    if renovar:
+        cursor.execute(
+            """
+            UPDATE chatbot.conversa SET processing_started_at = clock_timestamp()
+            WHERE id_conversa = %s AND lock_version = %s AND processing IS TRUE;
+        """,
+            (id_conversa, lock_version),
+        )
+
+
+def reler_conversa(contexto_banco, lock_version, cursor):
+    anterior = contexto_banco["conversa"]
+    proteger_conversa(anterior["id_conversa"], lock_version, cursor)
+    cursor.execute(
+        """
+        SELECT id_etapa_atual, status_ativa, status_dependente, last_message_from,
+               followup_stage, followup_last_sent_at, lead_no_funil, finalizou_em
+        FROM chatbot.conversa
+        WHERE id_conversa = %s AND id_cliente = %s AND id_unidade = %s;
+    """,
+        (
+            anterior["id_conversa"],
+            contexto_banco["id_cliente"],
+            contexto_banco["id_unidade"],
+        ),
+    )
+    row = cursor.fetchone()
+    if row is None or row[1] is not True or row[7] is not None:
+        raise LockConversaPerdido(
+            "Conversa deixou de ser ativa para este cliente/unidade"
+        )
+    campos = (
+        "id_etapa_atual",
+        "status_ativa",
+        "status_dependente",
+        "last_message_from",
+        "followup_stage",
+        "followup_last_sent_at",
+        "lead_no_funil",
+        "finalizou_em",
+    )
+    conversa = dict(anterior, **dict(zip(campos, row)), lock_version=lock_version)
+    stage = conversa["followup_stage"] or 0
+    if stage < 0:
+        raise ValueError("followup_stage negativo; requer saneamento explícito")
+    return dict(contexto_banco, conversa=conversa)
+
+
+def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
+    cursor.execute(
+        """
+        SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, u.nome_agente,
+               u.genero, u.link_agendamento, u.link_instagram,
+               c.status_dependente, e.encerra_automaticamente
+        FROM chatbot.conversa c
+        JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
+        LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
+        WHERE c.id_conversa = %s AND c.id_unidade = %s AND c.status_ativa IS TRUE;
+    """,
+        (id_conversa, id_unidade),
+    )
+    row = cursor.fetchone()
+    if not row or row[-1]:
+        raise ValueError("Etapa inexistente, encerrada ou terminal para repetição")
+    return dict(
+        id_conversa=id_conversa,
+        **dict(zip(
+            (
+                "nome_cliente",
+                "nome_dependente",
+                "idade_dependente",
+                "nome_unidade",
+                "nome_agente",
+                "genero",
+                "link_agendamento",
+                "link_instagram",
+                "status_dependente",
+                "terminal",
+            ),
+            row,
+        ))
+    )
+
+
+def buscar_retomada(id_conversa, mensagem, cursor):
+    cursor.execute(
+        """
+        SELECT id_etapa, stage_anterior, followup_em, concluida_em
+        FROM chatbot.followup_retomada
+        WHERE id_conversa = %s AND id_mensagem_fila = %s AND id_hash_cliente = %s;
+    """,
+        (id_conversa, mensagem["id_mensagem"], mensagem["id_hash"]),
+    )
+    row = cursor.fetchone()
+    return (
+        dict(zip(("id_etapa", "stage_anterior", "followup_em", "concluida_em"), row))
+        if row
+        else None
+    )
+
+
+def registrar_retomada(conversa, mensagem, cursor):
+    cursor.execute(
+        """
+        INSERT INTO chatbot.followup_retomada
+            (id_conversa, id_mensagem_fila, id_hash_cliente, id_etapa, stage_anterior, followup_em)
+        VALUES (%s, %s, %s, %s, %s, %s);
+    """,
+        (
+            conversa["id_conversa"],
+            mensagem["id_mensagem"],
+            mensagem["id_hash"],
+            conversa["id_etapa_atual"],
+            conversa["followup_stage"],
+            conversa["followup_last_sent_at"],
+        ),
+    )
+
+
+def concluir_retomada(contexto, data_bot, cursor):
+    proteger_conversa(contexto["id_conversa"], contexto["lock_version"], cursor)
+    cursor.execute(
+        """
+        UPDATE chatbot.conversa
+        SET followup_stage = 0, last_message_from = 'bot', last_interaction_at = %s
+        WHERE id_conversa = %s AND lock_version = %s AND processing IS TRUE
+          AND status_ativa IS TRUE AND finalizou_em IS NULL AND id_etapa_atual = %s
+          AND followup_stage = %s AND followup_last_sent_at IS NOT DISTINCT FROM %s;
+    """,
+        (
+            data_bot,
+            contexto["id_conversa"],
+            contexto["lock_version"],
+            contexto["id_etapa_atual"],
+            contexto["stage_anterior"],
+            contexto["followup_em"],
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise LockConversaPerdido(
+            "Ciclo de follow-up mudou antes da confirmação da repetição"
+        )
+    msg = contexto["mensagem_cliente_atual"]
+    cursor.execute(
+        """
+        UPDATE chatbot.followup_retomada SET concluida_em = %s
+        WHERE id_conversa = %s AND id_mensagem_fila = %s AND id_hash_cliente = %s
+          AND concluida_em IS NULL;
+    """,
+        (
+            data_bot,
+            contexto["id_conversa"],
+            msg["id_mensagem_fila"],
+            msg["id_hash_msg"],
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise ValueError("Registro da retomada ausente ou já concluído")
+
+
+# O SELECT é reexecutado com a posse do lock imediatamente antes do despacho.
+# Pendências são filtradas pelo par cliente/unidade, inclusive sem id_conversa.
+CONSULTA_ELEGIVEIS = """
+    SELECT c.id_conversa, c.id_cliente, c.id_unidade, c.id_etapa_atual,
+           cl.wa_id, u.phone_number_id, u.telefone,
+           b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em, identidade.user_id, c.username
+    FROM chatbot.conversa c
+    JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
+    JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
+    LEFT JOIN chatbot.user_id_cliente identidade
+      ON identidade.id_cliente = c.id_cliente AND identidade.id_unidade = c.id_unidade
+    JOIN LATERAL (
+        SELECT h.id_mensagem, h.received_data_hora
+        FROM chatbot.historico_mensagens h
+        WHERE h.id_conversa = c.id_conversa AND h.quem_enviou = 'bot' AND h.status_envio = 'sent'
+        ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1
+    ) b ON TRUE
+    WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
+      AND c.id_etapa_atual BETWEEN 1 AND 18 AND e.encerra_automaticamente IS FALSE
+      AND COALESCE(c.followup_stage, 0) = 0 AND c.last_message_from = 'bot'
+      AND c.last_interaction_at = b.received_data_hora
+      AND b.received_data_hora <= clock_timestamp() - INTERVAL '7 hours'
+      AND c.turnos_sem_avanco < 12 AND u.status_pagamento IS TRUE
+      AND (NULLIF(TRIM(cl.wa_id), '') IS NOT NULL
+           OR (c.id_etapa_atual IN (1, 2)
+               AND NULLIF(TRIM(identidade.user_id), '') IS NOT NULL))
+      AND NULLIF(TRIM(u.phone_number_id), '') IS NOT NULL
+      AND NULLIF(TRIM(u.telefone), '') IS NOT NULL
+
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.conversa anterior
+          JOIN chatbot.etapa terminal ON terminal.id_etapa = anterior.id_etapa_atual
+          WHERE anterior.id_cliente = c.id_cliente AND anterior.id_unidade = c.id_unidade
+            AND anterior.status_ativa IS FALSE AND terminal.bloqueio_dias > 0
+            AND anterior.finalizou_em > clock_timestamp() - terminal.bloqueio_dias * INTERVAL '1 day'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.webhook_flood_evento f
+          WHERE (f.wa_id = cl.wa_id OR f.user_id = identidade.user_id)
+            AND f.phone_id_unidade = u.phone_number_id
+            AND f.received_at >= clock_timestamp() - INTERVAL '5 seconds'
+          GROUP BY f.phone_id_unidade HAVING COUNT(DISTINCT f.id_hash_msg) >= 15
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.cliente_bloqueado_meta x
+          WHERE x.id_unidade = c.id_unidade
+            AND (x.id_cliente = c.id_cliente OR x.wa_id = cl.wa_id
+                 OR x.user_id = identidade.user_id)
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.fila_mensagens f
+          WHERE (f.id_conversa = c.id_conversa OR
+                 ((f.wa_id = cl.wa_id OR f.user_id = identidade.user_id)
+                   AND f.id_phone_unidade = u.phone_number_id))
+            AND f.status IN ('pending', 'processing')
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.historico_mensagens h
+          WHERE h.id_conversa = c.id_conversa AND h.quem_enviou = 'cliente'
+            AND h.received_data_hora >= b.received_data_hora
+      )
+      AND EXISTS (
+          SELECT 1 FROM chatbot.historico_mensagens h
+          WHERE h.id_conversa = c.id_conversa AND h.quem_enviou = 'cliente'
+            AND h.received_data_hora > clock_timestamp() - INTERVAL '24 hours' + INTERVAL '1 minute'
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.followup_envio f WHERE f.id_conversa = c.id_conversa
+            AND ((f.id_ancora = b.id_mensagem AND f.ancora_em = b.received_data_hora)
+              OR (f.id_historico_bot = b.id_mensagem AND f.enviado_em = b.received_data_hora))
+      )
+      AND NOT EXISTS (
+          SELECT 1 FROM chatbot.followup_retomada r
+          WHERE r.id_conversa = c.id_conversa AND r.concluida_em IS NULL
+            AND EXISTS (SELECT 1 FROM chatbot.fila_mensagens f
+                        WHERE f.id_mensagem = r.id_mensagem_fila
+                          AND f.id_hash_msg = r.id_hash_cliente
+                          AND f.status IN ('pending', 'processing'))
+      )
+"""
+
+COLUNAS_ELEGIVEL = (
+    "id_conversa",
+    "id_cliente",
+    "id_unidade",
+    "id_etapa",
+    "wa_id",
+    "id_phone_unidade",
+    "unidade_telefone",
+    "id_ancora",
+    "ancora_em",
+    "user_id",
+    "username",
+)
+
+
+def listar_elegiveis(cursor, limite=20, depois=None):
+    parametros = []
+    sql = CONSULTA_ELEGIVEIS
+    if depois is not None:
+        sql += " AND (b.received_data_hora, c.id_conversa) > (%s, %s)"
+        parametros.extend(depois)
+    sql += " ORDER BY b.received_data_hora, c.id_conversa LIMIT %s;"
+    parametros.append(limite)
+    cursor.execute(sql, parametros)
+    return [dict(zip(COLUNAS_ELEGIVEL, row)) for row in cursor.fetchall()]
+
+
+def reler_elegivel(id_conversa, cursor):
+    cursor.execute(CONSULTA_ELEGIVEIS + " AND c.id_conversa = %s;", (id_conversa,))
+    row = cursor.fetchone()
+    return dict(zip(COLUNAS_ELEGIVEL, row)) if row else None
+
+
+def persistir_followup(dados, envio, lock_version, cursor):
+    proteger_conversa(dados["id_conversa"], lock_version, cursor)
+    if not envio.get("id_hash_msg_bot") or not envio.get("enviou"):
+        raise ValueError("Follow-up sem confirmação da Meta")
+    cursor.execute(
+        """
+        INSERT INTO chatbot.historico_mensagens
+            (id_conversa, id_etapa, received_data_hora, wa_id, user_id, username, conteudo_texto,
+             tipo_mensagem, id_hash_msg, id_mensagem_fila, id_hash_cliente_origem,
+             id_phone_unidade, unidade_telefone, quem_enviou, status_envio)
+        VALUES (%s, %s, clock_timestamp(), %s, %s, %s, %s, 'text', %s, NULL, NULL, %s, %s, 'bot', 'sent')
+        RETURNING id_mensagem, received_data_hora;
+    """,
+        (
+            dados["id_conversa"],
+            dados["id_etapa"],
+            dados["wa_id"],
+            dados["user_id"],
+            dados["username"],
+            envio["mensagem_bot"],
+            envio["id_hash_msg_bot"],
+            dados["id_phone_unidade"],
+            dados["unidade_telefone"],
+        ),
+    )
+    id_bot, data_bot = cursor.fetchone()
+    cursor.execute(
+        """
+        INSERT INTO chatbot.followup_envio
+            (id_conversa, id_ancora, ancora_em, id_historico_bot, enviado_em, id_hash_msg)
+        VALUES (%s, %s, %s, %s, %s, %s);
+    """,
+        (
+            dados["id_conversa"],
+            dados["id_ancora"],
+            dados["ancora_em"],
+            id_bot,
+            data_bot,
+            envio["id_hash_msg_bot"],
+        ),
+    )
+    # Uma entrada nova na fila após o despacho não invalida a confirmação da Meta.
+    # O flow aguardará este lock e lerá stage 1 ao consumir aquela entrada.
+    cursor.execute(
+        """
+        UPDATE chatbot.conversa
+        SET followup_stage = 1, followup_last_sent_at = %s,
+            last_message_from = 'bot', last_interaction_at = %s
+        WHERE id_conversa = %s AND lock_version = %s AND processing IS TRUE
+          AND status_ativa IS TRUE AND finalizou_em IS NULL AND id_etapa_atual = %s
+          AND COALESCE(followup_stage, 0) = 0 AND last_message_from = 'bot'
+          AND last_interaction_at = %s;
+    """,
+        (
+            data_bot,
+            data_bot,
+            dados["id_conversa"],
+            lock_version,
+            dados["id_etapa"],
+            dados["ancora_em"],
+        ),
+    )
+    if cursor.rowcount != 1:
+        raise LockConversaPerdido("Contexto mudou depois do despacho do follow-up")
+    return id_bot, data_bot
+
+
+def configurar_consulta_followup(cursor, *, sessao=False):
+    if sessao:
+        cursor.execute("SET statement_timeout = '15s'")
+        cursor.execute("SET lock_timeout = '5s'")
+    else:
+        cursor.execute("SET LOCAL statement_timeout = '15s'")
+
+
+def consultar_diagnostico(cursor):
+    cursor.execute("SET TRANSACTION READ ONLY")
+    configurar_consulta_followup(cursor)
+    cursor.execute(
+        "SELECT to_regclass('chatbot.followup_envio'), to_regclass('chatbot.followup_retomada'), to_regclass('chatbot.followup_legado')"
+    )
+    if not all(cursor.fetchone()):
+        raise ValueError("SCHEMA_FOLLOWUP_AUSENTE")
+    cursor.execute("""
+        SELECT COUNT(*) FILTER (WHERE followup_stage > 0),
+               COUNT(*) FILTER (WHERE followup_stage < 0),
+               COUNT(*) FILTER (WHERE followup_stage > 1),
+               COUNT(*) FILTER (WHERE last_interaction_at > clock_timestamp())
+        FROM chatbot.conversa;
+    """)
+    positivos, negativos, legados, futuros = cursor.fetchone()
+    cursor.execute("SELECT COUNT(*) FROM chatbot.followup_legado")
+    marcadas_na_migracao = cursor.fetchone()[0]
+    candidatos = listar_elegiveis(cursor, 10)
+    return {
+        "ciclos_aguardando_reacao": positivos,
+        "conversas_marcadas_na_migracao": marcadas_na_migracao,
+        "stages_negativos": negativos,
+        "stages_maiores_que_um": legados,
+        "horarios_futuros": futuros,
+        "amostra_elegiveis": [
+            {k: item[k] for k in ("id_conversa", "id_unidade", "id_etapa")}
+            for item in candidatos
+        ],
+    }
+````
+
+## Passo 159K — `workers/worker_followup/followup_worker.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `06238366a6c18f454067073be026d52edb3dbd49f504199b98d13a176998b647`
+
+````python
+"""Propriedade transacional do ciclo proativo; não consome fila nem etapas."""
+
+import logging
+from datetime import timedelta
+from time import monotonic
+
+from core.database.connection_aws import get_conn
+from core.integrations.whatsapp.identidade import selecionar_destinatario
+from core.repositories.atendimento.conversas import (
+    tentar_lock_conversa,
+    unlock_conversa,
+)
+from core.repositories.atendimento.followup import (
+    configurar_consulta_followup,
+    listar_elegiveis,
+    persistir_followup,
+    proteger_conversa,
+    reler_elegivel,
+)
+from core.integrations.whatsapp.pywa_functions.pywa_senders.followup import (
+    enviar_followup,
+)
+
+logger = logging.getLogger("worker.followup")
+
+
+def obter_lote(limite, depois=None):
+    with get_conn(application_name="worker_followup_scan", connect_timeout=10) as conn:
+        with conn.cursor() as cursor:
+            configurar_consulta_followup(cursor)
+            return listar_elegiveis(cursor, limite, depois)
+
+
+def processar_candidato(candidato, parar):
+    inicio = monotonic()
+    conn = get_conn(application_name="worker_followup", connect_timeout=10)
+    versao = None
+    envio = None
+    id_conversa = candidato["id_conversa"]
+    try:
+        with conn.cursor() as cursor:
+            configurar_consulta_followup(cursor, sessao=True)
+            lock_ok, versao_obtida = tentar_lock_conversa(id_conversa, cursor)
+            conn.commit()
+            if not lock_ok:
+                logger.debug(
+                    "followup_descartado | conversa=%s motivo=lock_ocupado", id_conversa
+                )
+                return False
+            versao = versao_obtida
+            proteger_conversa(id_conversa, versao, cursor, renovar=True)
+            dados = reler_elegivel(id_conversa, cursor)
+            conn.commit()
+            if dados is None or parar.is_set():
+                logger.debug(
+                    "followup_descartado | conversa=%s motivo=%s versao=%s",
+                    id_conversa,
+                    "parada_solicitada" if parar.is_set() else "guard_revalidacao",
+                    versao,
+                )
+                return False
+            logger.info(
+                "followup_despacho | conversa=%s cliente_id=%s unidade=%s etapa=%s "
+                "stage_anterior=0 stage_proposto=1 ancora_id=%s ancora_em=%s vence_em=%s versao=%s",
+                id_conversa,
+                dados["id_cliente"],
+                dados["id_unidade"],
+                dados["id_etapa"],
+                dados["id_ancora"],
+                dados["ancora_em"],
+                dados["ancora_em"] + timedelta(hours=7),
+                versao,
+            )
+            # Releitura já inclui histórico, fila, bloqueios, unidade e janela Meta.
+            destinatario = selecionar_destinatario(
+                dados["wa_id"], dados["user_id"],
+                permitir_fallback_user_id=dados["id_etapa"] in (1, 2),
+            )
+            envio = enviar_followup(destinatario, dados["id_phone_unidade"])
+            id_bot, _ = persistir_followup(dados, envio, versao, cursor)
+            conn.commit()
+            logger.info(
+                "followup_confirmado | conversa=%s unidade=%s etapa=%s stage=1 versao=%s historico=%s",
+                id_conversa,
+                dados["id_unidade"],
+                dados["id_etapa"],
+                versao,
+                id_bot,
+            )
+            return True
+    except Exception:
+        conn.rollback()
+        if envio and envio.get("enviou"):
+            logger.critical(
+                "followup_commit_falhou | conversa=%s versao=%s id_hash_msg=%s risco=duplicidade",
+                id_conversa,
+                versao,
+                envio.get("id_hash_msg_bot"),
+                exc_info=True,
+            )
+        else:
+            logger.exception(
+                "followup_falhou | conversa=%s versao=%s stage_preservado=true",
+                id_conversa,
+                versao,
+            )
+        return False
+    finally:
+        try:
+            if versao is not None:
+                with conn.cursor() as cursor:
+                    unlock_conversa(id_conversa, versao, cursor)
+                conn.commit()
+        except Exception:
+            conn.rollback()
+            logger.exception(
+                "followup_unlock_falhou | conversa=%s versao=%s", id_conversa, versao
+            )
+        finally:
+            conn.close()
+            logger.debug(
+                "followup_ciclo_final | conversa=%s duracao_ms=%.0f",
+                id_conversa,
+                (monotonic() - inicio) * 1000,
+            )
+
+
+def executar_worker(config, parar):
+    depois = None
+    falhas_scan = 0
+    while not parar.is_set():
+        try:
+            candidatos = obter_lote(config.lote, depois)
+            falhas_scan = 0
+            for candidato in candidatos:
+                if parar.is_set():
+                    break
+                try:
+                    processar_candidato(candidato, parar)
+                except Exception:
+                    # Inclui falhas de conexão/limpeza fora do try do processamento.
+                    logger.exception(
+                        "followup_candidata_falhou | conversa=%s acao=seguir_lote",
+                        candidato["id_conversa"],
+                    )
+                depois = (candidato["ancora_em"], candidato["id_conversa"])
+            if len(candidatos) < config.lote:
+                depois = None
+            # Limite por rodada também evita tempestade de retry sem resposta confirmada.
+            parar.wait(config.intervalo)
+        except Exception:
+            falhas_scan += 1
+            espera = min(300, 5 * (2 ** min(falhas_scan - 1, 6)))
+            logger.exception("followup_scan_falhou | retry_em=%s", espera)
+            parar.wait(espera)
+````
+
+## Passo 159L — `workers/worker_flow/transacoes/retorno_followup.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `81f1a1895e4e891969faadb8e746d41201ce5e099ca9d4c4a7dedd902c769935`
+
+````python
+"""Checkpoint de reação e persistência da repetição; nunca controla commits."""
+
+import logging
+
+from core.repositories.atendimento.conversas import atualizar_conversa_mensagem_cliente
+from core.repositories.atendimento.followup import (
+    buscar_contexto_repeticao,
+    buscar_retomada,
+    concluir_retomada,
+    registrar_retomada,
+)
+from core.repositories.atendimento.historico import (
+    buscar_resposta_bot_por_mensagem_cliente,
+    inserir_historico_mensagem_cliente,
+    inserir_historico_mensagem_bot,
+)
+
+logger = logging.getLogger("worker.retorno_followup")
+
+
+def preparar_retorno_followup(mensagem, contexto_banco, cursor):
+    conversa = contexto_banco["conversa"]
+    id_conversa = conversa["id_conversa"]
+    stage = conversa.get("followup_stage") or 0
+    if stage < 0:
+        raise ValueError("followup_stage negativo")
+    retomada = buscar_retomada(id_conversa, mensagem, cursor)
+    if stage == 0 and retomada is None:
+        return None
+    resposta = buscar_resposta_bot_por_mensagem_cliente(
+        id_conversa,
+        mensagem["id_mensagem"],
+        mensagem["id_hash"],
+        cursor,
+    )
+    # Uma resposta de turno normal já persistida tem prioridade sobre stage atual.
+    if resposta and retomada is None:
+        return None
+    if retomada and retomada["concluida_em"] is not None and not resposta:
+        raise ValueError(
+            "Retomada concluída sem histórico correspondente; não reenviar"
+        )
+    if resposta and retomada["concluida_em"] is None:
+        raise ValueError("Resposta sem confirmação atômica da retomada")
+    if (
+        retomada
+        and not resposta
+        and (
+            stage != retomada["stage_anterior"]
+            or conversa.get("followup_last_sent_at") != retomada["followup_em"]
+            or conversa.get("id_etapa_atual") != retomada["id_etapa"]
+        )
+    ):
+        raise ValueError("Retomada pendente pertence a outro contexto")
+
+    dados = None
+    if not resposta:
+        etapa = conversa.get("id_etapa_atual")
+        if type(etapa) is not int or not 1 <= etapa <= 22:
+            raise ValueError("Retorno de follow-up sem etapa repetível")
+        dados = buscar_contexto_repeticao(
+            id_conversa, contexto_banco["id_unidade"], cursor
+        )
+        if retomada is None:
+            registrar_retomada(conversa, mensagem, cursor)
+            retomada = {
+                "id_etapa": etapa,
+                "stage_anterior": stage,
+                "followup_em": conversa.get("followup_last_sent_at"),
+                "concluida_em": None,
+            }
+
+    # Exceção exclusiva: a prova oficial da etapa 2 já foi validada e
+    # reconciliada pelo banco. Não interpretar números digitados como prova.
+    if (
+        contexto_banco.get("contato_oficial_validado")
+        and retomada["id_etapa"] == 2
+    ):
+        from workers.worker_flow.transacoes.contato_apos_followup import (
+            preparar_contato_apos_followup,
+        )
+        return preparar_contato_apos_followup(
+            mensagem, contexto_banco, retomada, cursor
+        )
+
+    id_cliente_hist, recebido_em, etapa_cliente, inserido = (
+        inserir_historico_mensagem_cliente(
+            mensagem,
+            id_conversa,
+            retomada["id_etapa"],
+            cursor,
+        )
+    )
+    msg = {
+        "id_mensagem": id_cliente_hist,
+        "id_conversa": id_conversa,
+        "id_etapa": etapa_cliente,
+        "received_data_hora": recebido_em,
+        "wa_id": mensagem.get("wa_id"),
+        "user_id": mensagem.get("user_id"),
+        "username": mensagem.get("username"),
+        "conteudo_texto": mensagem["conteudo_texto"],
+        "tipo_mensagem": mensagem["tipo_mensagem"],
+        "id_hash_msg": mensagem["id_hash"],
+        "id_mensagem_fila": mensagem["id_mensagem"],
+        "id_phone_unidade": mensagem["id_phone_unidade"],
+        "unidade_telefone": mensagem["unidade_telefone"],
+    }
+    if not resposta:
+        atualizar_conversa_mensagem_cliente(id_conversa, recebido_em, cursor)
+    resposta_normalizada = None
+    if resposta:
+        resposta_normalizada = {
+            "id_mensagem": resposta[0],
+            "received_data_hora": resposta[3],
+            "id_hash_msg": resposta[9],
+        }
+    logger.info(
+        "resposta_followup | conversa=%s unidade=%s stage=%s etapa=%s versao=%s recuperada=%s",
+        id_conversa,
+        contexto_banco["id_unidade"],
+        retomada["stage_anterior"],
+        retomada["id_etapa"],
+        conversa["lock_version"],
+        bool(resposta),
+    )
+    return {
+        "retorno_followup": True,
+        "wa_id": contexto_banco["wa_id"],
+        "user_id": contexto_banco["user_id"],
+        "username": contexto_banco["username"],
+        "id_conversa": id_conversa,
+        "id_cliente": contexto_banco["id_cliente"],
+        "id_unidade": contexto_banco["id_unidade"],
+        "lock_version": conversa["lock_version"],
+        "id_etapa_atual": retomada["id_etapa"],
+        "id_etapa_cliente": etapa_cliente,
+        "id_etapa_resposta": retomada["id_etapa"],
+        "stage_anterior": retomada["stage_anterior"],
+        "followup_em": retomada["followup_em"],
+        "dados_repeticao": dados,
+        "mensagem_cliente_atual": msg,
+        "mensagem_cliente_inserida": inserido,
+        "resposta_bot_para_mensagem_atual": resposta_normalizada,
+    }
+
+
+def persistir_retorno_followup(contexto, envio, cursor):
+    resposta = contexto.get("resposta_bot_para_mensagem_atual")
+    if resposta:
+        # Replay não zera um possível ciclo novo nem altera last_interaction_at.
+        id_bot, data_bot, inserido = (
+            resposta["id_mensagem"],
+            resposta["received_data_hora"],
+            False,
+        )
+    else:
+        if (
+            not envio.get("enviou")
+            or envio.get("id_etapa_resultante") != contexto["id_etapa_atual"]
+        ):
+            raise ValueError("Repetição não confirmada ou mudou de etapa")
+        id_bot, data_bot, inserido = inserir_historico_mensagem_bot(
+            contexto, envio, cursor
+        )
+        concluir_retomada(contexto, data_bot, cursor)
+    return {
+        "historico_bot_inserido": inserido,
+        "resposta_ja_existia": bool(resposta),
+        "id_hash_msg_bot": envio["id_hash_msg_bot"],
+        "id_historico_bot": id_bot,
+        "data_historico_bot": data_bot,
+        "id_etapa_resultante": contexto["id_etapa_atual"],
+        "movimento_conversa": "sem_avanco",
+        "atualizar_conversa": False,
+        "atualizar_last_from_bot": not bool(resposta),
+        "intencao_encerramento": None,
+    }
+````
+
+## Passo 159M — `workers/worker_flow/response_flow/repeticao_followup.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `3839e5a11db7fd99b86269af422b63476568d15540e9b8041d0c4c3db69aaca6`
+
+````python
+"""Repete conteúdo de etapa sem interpretar a reação nem resolver transições."""
+
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_texto_com_cabecalho,
+)
+from core.integrations.whatsapp.messages.followup_messages import (
+    montar_saudacao_retomada_followup,
+)
+from core.integrations.whatsapp.pywa_functions.cliente import (
+    aplicar_prefixo_mensagem_bot,
+    usar_prefixo_mensagem_bot,
+)
+from core.integrations.whatsapp.pywa_functions.pywa_senders import (
+    etapa1,
+    etapa2,
+    etapa3,
+    etapa4,
+    etapa5,
+    etapa6,
+    etapa7,
+    etapa8,
+    etapa9,
+    etapa10,
+    etapa11,
+    etapa12,
+    etapa13,
+    etapa14,
+    etapa15,
+    etapa16,
+    etapa17,
+    etapa18,
+    etapa19,
+    etapa20,
+    etapa21,
+    etapa22,
+)
+
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_1_NOME_CLIENTE,
+    ETAPA_2_COMPARTILHAMENTO_CONTATO,
+    ETAPA_3_DESTINO_ATENDIMENTO,
+    ETAPA_4_CONFIRMACAO_DESTINO,
+    ETAPA_5_PROFISSAO,
+    ETAPA_6_NOME_DEPENDENTE,
+    ETAPA_7_IDADE_ALUNO,
+    ETAPA_8_OFERTA_AULA,
+    ETAPA_9_OFERTA_ADIADA,
+    ETAPA_10_RETORNO_OFERTA,
+    ETAPA_11_EMAIL,
+    ETAPA_12_INTRODUCAO_TRIAGEM,
+    ETAPA_13_TRIAGEM_PERGUNTA_1,
+    ETAPA_14_TRIAGEM_PERGUNTA_2,
+    ETAPA_15_TRIAGEM_PERGUNTA_3,
+    ETAPA_16_TRIAGEM_PERGUNTA_4,
+    ETAPA_17_TRIAGEM_PERGUNTA_5,
+    ETAPA_18_TRIAGEM_PERGUNTA_6,
+    ETAPA_19_AGENDAMENTO,
+    ETAPA_20_PESQUISA_SATISFACAO,
+    ETAPA_21_DECISAO_COMENTARIO,
+    ETAPA_22_COMENTARIO_SATISFACAO,
+)
+
+SENDERS_SIMPLES = {
+    ETAPA_5_PROFISSAO: etapa5.enviar_etapa5,
+    ETAPA_6_NOME_DEPENDENTE: etapa6.enviar_etapa6,
+    ETAPA_11_EMAIL: etapa11.enviar_etapa11,
+    ETAPA_12_INTRODUCAO_TRIAGEM: etapa12.enviar_etapa12,
+    ETAPA_21_DECISAO_COMENTARIO: etapa21.enviar_etapa21,
+    ETAPA_22_COMENTARIO_SATISFACAO: etapa22.enviar_etapa22,
+}
+SENDERS_TRIAGEM = {
+    ETAPA_13_TRIAGEM_PERGUNTA_1: (
+        etapa13.enviar_etapa13_cliente,
+        etapa13.enviar_etapa13_dependente,
+    ),
+    ETAPA_14_TRIAGEM_PERGUNTA_2: (
+        etapa14.enviar_etapa14_cliente,
+        etapa14.enviar_etapa14_dependente,
+    ),
+    ETAPA_15_TRIAGEM_PERGUNTA_3: (
+        etapa15.enviar_etapa15_cliente,
+        etapa15.enviar_etapa15_dependente,
+    ),
+    ETAPA_16_TRIAGEM_PERGUNTA_4: (
+        etapa16.enviar_etapa16_cliente,
+        etapa16.enviar_etapa16_dependente,
+    ),
+    ETAPA_17_TRIAGEM_PERGUNTA_5: (
+        etapa17.enviar_etapa17_cliente,
+        etapa17.enviar_etapa17_dependente,
+    ),
+    ETAPA_18_TRIAGEM_PERGUNTA_6: (
+        etapa18.enviar_etapa18_cliente,
+        etapa18.enviar_etapa18_dependente,
+    ),
+}
+
+
+from workers.worker_flow.response_flow.destinatario_sender import (
+    resolver_destinatario_sender,
+)
+
+
+def _texto(dados, chave):
+    valor = dados.get(chave)
+    if not isinstance(valor, str) or not valor.strip():
+        raise ValueError(f"Dado persistido ausente para repetição: {chave}")
+    return valor.strip()
+
+
+def _selecionar_sender(etapa, dados):
+    if etapa == ETAPA_2_COMPARTILHAMENTO_CONTATO:
+        return etapa2.enviar_etapa2_retorno_followup, (dados["id_conversa"],)
+    dependente = dados.get("status_dependente")
+    if not isinstance(dependente, bool):
+        raise ValueError("Destino de atendimento ausente para repetição")
+    if etapa in SENDERS_SIMPLES:
+        return SENDERS_SIMPLES[etapa], ()
+    if etapa in SENDERS_TRIAGEM:
+        titular, dp = SENDERS_TRIAGEM[etapa]
+        if not dependente:
+            return titular, ()
+        idade = dados.get("idade_dependente")
+        if type(idade) is not int or not 4 <= idade < 100:
+            raise ValueError("Idade do dependente inválida para triagem")
+        return dp, (_texto(dados, "nome_dependente"), idade)
+    if etapa == ETAPA_1_NOME_CLIENTE:
+        return etapa1.enviar_etapa1, tuple(
+            _texto(dados, k) for k in ("nome_unidade", "nome_agente", "genero")
+        )
+    if etapa == ETAPA_3_DESTINO_ATENDIMENTO:
+        return etapa3.enviar_etapa3, (_texto(dados, "nome_cliente"),)
+    if etapa == ETAPA_4_CONFIRMACAO_DESTINO:
+        return etapa4.enviar_etapa4, (dependente,)
+    if etapa == ETAPA_7_IDADE_ALUNO:
+        return (
+            (etapa7.enviar_etapa7_dependente, (_texto(dados, "nome_dependente"),))
+            if dependente
+            else (etapa7.enviar_etapa7_cliente, ())
+        )
+    if etapa == ETAPA_8_OFERTA_AULA:
+        return (
+            (etapa8.enviar_etapa8_dependente, (_texto(dados, "nome_dependente"),))
+            if dependente
+            else (etapa8.enviar_etapa8_cliente, (_texto(dados, "nome_cliente"),))
+        )
+    if etapa == ETAPA_9_OFERTA_ADIADA:
+        return etapa9.enviar_etapa9, (dados.get("link_instagram"),)
+    if etapa == ETAPA_10_RETORNO_OFERTA:
+        nome = _texto(dados, "nome_cliente")
+        return (
+            (etapa10.enviar_etapa10_dependente, (nome, _texto(dados, "nome_dependente")))
+            if dependente
+            else (etapa10.enviar_etapa10_cliente, (nome,))
+        )
+    if etapa == ETAPA_19_AGENDAMENTO:
+        return etapa19.enviar_etapa19, (_texto(dados, "link_agendamento"),)
+    if etapa == ETAPA_20_PESQUISA_SATISFACAO:
+        return etapa20.enviar_etapa20, (_texto(dados, "nome_cliente"),)
+    raise ValueError(f"Etapa não repetível: {etapa}")
+
+
+def enviar_repeticao_followup(contexto):
+    resposta = contexto.get("resposta_bot_para_mensagem_atual")
+    if resposta:
+        return {
+            "enviou": False,
+            "resposta_ja_existia": True,
+            "id_hash_msg_bot": resposta["id_hash_msg"],
+            "id_etapa_resultante": contexto["id_etapa_atual"],
+        }
+    sender, extras = _selecionar_sender(
+        contexto["id_etapa_atual"], contexto["dados_repeticao"]
+    )
+    mensagem = contexto["mensagem_cliente_atual"]
+    saudacao = montar_saudacao_retomada_followup(
+        contexto["dados_repeticao"].get("nome_cliente")
+    )
+    with usar_prefixo_mensagem_bot(saudacao):
+        envio = sender(
+            resolver_destinatario_sender(contexto, permitir_user_id=True),
+            mensagem["id_phone_unidade"], *extras
+        )
+    # O cabeçalho já foi ao WhatsApp no corpo. O histórico recebe o mesmo texto.
+    texto = envio["mensagem_bot"]
+    if envio.get("cabecalho_mensagem"):
+        texto = montar_texto_com_cabecalho(texto, envio["cabecalho_mensagem"])
+    texto = aplicar_prefixo_mensagem_bot(texto, saudacao)
+    return {
+        "enviou": envio["enviou"],
+        "resposta_ja_existia": False,
+        "id_hash_msg_bot": envio["id_hash_msg_bot"],
+        "mensagem_bot": texto,
+        "wa_id": contexto["wa_id"],
+        "user_id": contexto["user_id"],
+        "username": contexto["username"],
+        "tipo_mensagem": envio["tipo_mensagem"],
+        "id_etapa_resultante": contexto["id_etapa_atual"],
+    }
+````
+
+## Passo 159N — `tests/unit/test_suporte_por_idade.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `0eec85db2ad92f142240c33941d4ad236211c8327b93a83cf3faf67579862898`
+
+````python
+"""Fronteiras da política, recuperação atual e encaminhamentos registrados."""
+
+from contextlib import ExitStack
+from datetime import datetime, timedelta, timezone
+import sqlite3
+from types import SimpleNamespace
+import unittest
+from unittest.mock import MagicMock, patch
+
+from django.contrib.admin.sites import AdminSite
+from django.test import RequestFactory
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
+from core.repositories.monitoramento import painel as repositorio
+from core.integrations.whatsapp.messages.etapa7_messages import montar_mensagem_suporte_idoso_etapa7
+from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa7 as sender
+from monitoramento import services
+from monitoramento.apresentacao import montar_relatorio, classificar_faixa
+from monitoramento.periodos import PERIODOS, resolver_periodo
+from webhook.admin import UnidadeAdmin
+from webhook.models import Unidade
+from tests.helpers import FakeCursor
+from tests.unit.test_suporte_idoso_email_obrigatorio import contexto_etapa7, contexto_envio
+from workers.worker_flow.response_flow.etapas import resolver_etapa7
+from workers.worker_flow.transacoes import efeitos_transicao, encerramento_atendimento
+
+
+LIMITES = (None, 50, 60, 70, 80, 90)
+
+
+class SuportePorIdadeTests(unittest.TestCase):
+    def test_dominio_contexto_e_formulario_modelo(self):
+        campo = Unidade._meta.get_field('idade_minima_suporte')
+        for limite in LIMITES:
+            with self.subTest(limite=limite):
+                self.assertEqual(validar_idade_minima_suporte(limite), limite)
+                self.assertEqual(campo.clean(limite, Unidade()), limite)
+                contexto = buscar_contexto_etapa7(10, 1, FakeCursor(
+                    fetchone_result=('5571999999999', False, limite, 'Maria', None)
+                ))
+                self.assertEqual(contexto['idade_minima_suporte'], limite)
+        self.assertEqual(list(campo.formfield().choices), [(None, 'Desativado')] + [
+            (idade, f'{idade}+') for idade in LIMITES[1:]
+        ])
+        for invalido in (True, False, 0, -1, 49, 55, 100, '60', 60.0):
+            with self.subTest(invalido=invalido), self.assertRaises(ValueError):
+                validar_idade_minima_suporte(invalido)
+        with self.assertRaises(ValueError):
+            buscar_contexto_etapa7(10, 1, FakeCursor(
+                fetchone_result=(None, False, True, None, None)
+            ))
+
+    def test_admin_exige_contato_ao_ativar_e_ao_remover_numero(self):
+        admin = UnidadeAdmin(Unidade, AdminSite())
+        request = RequestFactory().get('/admin/')
+        request.user = SimpleNamespace(has_perm=lambda *_: True)
+        instance = Unidade(id_unidade=1)
+        with patch.object(admin, '_validar_cache_unidades_form'), patch.object(
+            admin, '_preparar_meta_antes_de_salvar'
+        ) as meta:
+            form_class = admin.get_form(request, instance, change=True,
+                                        fields=['idade_minima_suporte', 'numero_comercial'])
+            for limite in LIMITES:
+                for telefone in ('', '123', '(71) 99999-9999'):
+                    with self.subTest(limite=limite, telefone=telefone):
+                        form = form_class(data={
+                            'idade_minima_suporte': '' if limite is None else str(limite),
+                            'numero_comercial': telefone,
+                        }, instance=instance)
+                        esperado = limite is None or telefone == '(71) 99999-9999'
+                        self.assertEqual(form.is_valid(), esperado, form.errors)
+                        if not esperado:
+                            self.assertIn('numero_comercial', form.errors)
+            for invalido in ('55', '100', 'True'):
+                form = form_class(data={'idade_minima_suporte': invalido,
+                                        'numero_comercial': '(71) 99999-9999'}, instance=instance)
+                self.assertFalse(form.is_valid())
+            meta.assert_not_called()
+
+    def test_matriz_titulares_dependentes_e_100_mais(self):
+        caminhos = {
+            'suporte': 'enviar_etapa7_suporte_idoso',
+            'cem': 'enviar_etapa7_idade_acima_99',
+            'menor': 'enviar_etapa7_cliente_menor_18',
+            'crianca': 'enviar_etapa7_dependente_menor_5',
+            'titular': 'enviar_etapa8_cliente',
+            'dependente': 'enviar_etapa8_dependente',
+        }
+        for limite in LIMITES:
+            idades = {4, 5, 17, 18, 49, 50, 59, 60, 69, 70, 79, 80, 89, 90, 99, 100}
+            for idade in sorted(idades):
+                for dependente in (False, True):
+                    for bpa in (False, True):
+                        contexto = contexto_etapa7(idade, suporte=limite, dependente=dependente)
+                        contexto['bpa_ativo_unidade'] = bpa
+                        esperado = (
+                            'cem' if idade >= 100 else
+                            'suporte' if not dependente and limite is not None and idade >= limite else
+                            'menor' if not dependente and idade < 18 else
+                            'crianca' if dependente and idade < (4 if bpa else 5) else
+                            'dependente' if dependente else 'titular'
+                        )
+                        with self.subTest(limite=limite, idade=idade, dependente=dependente, bpa=bpa), ExitStack() as stack:
+                            mocks = {nome: stack.enter_context(patch.object(
+                                resolver_etapa7, funcao,
+                                return_value=contexto_envio(8 if nome in ('titular', 'dependente') else 7),
+                            )) for nome, funcao in caminhos.items()}
+                            resultado = resolver_etapa7.resolve_etapa7(contexto)
+                            self.assertEqual([n for n,m in mocks.items() if m.called], [esperado])
+                            if esperado == 'suporte':
+                                self.assertEqual(mocks['suporte'].call_args.args[-1], limite)
+                                self.assertEqual(resultado['id_etapa_resultante'], 7)
+                                self.assertNotIn('evento_transicao', resultado)
+                                self.assertEqual(resultado['idade_aluno'], idade)
+
+    def test_chave_ausente_erro_nao_desativa_silenciosamente(self):
+        contexto = contexto_etapa7(65)
+        del contexto['idade_minima_suporte']
+        with self.assertRaises(ValueError), patch.object(sender, 'conta_wa') as conta:
+            resolver_etapa7.resolve_etapa7(contexto)
+        conta.assert_not_called()
+
+    def test_mensagem_sender_preservam_contrato_e_60_legado(self):
+        legado = (
+            'Entendi. Para oferecer um atendimento mais adequado, esta unidade '
+            'realiza o suporte a clientes com 60 anos ou mais diretamente com a '
+            'nossa equipe comercial.\n\n'
+            'Vou te passar o contato para continuar o atendimento. Basta clicar '
+            'no botão abaixo.'
+        )
+        self.assertEqual(montar_mensagem_suporte_idoso_etapa7(60), legado)
+        for limite in LIMITES[1:]:
+            with self.subTest(limite=limite), patch.object(sender, 'conta_wa') as conta:
+                conta.return_value.send_message.return_value = SimpleNamespace(id='wamid.teste')
+                envio = sender.enviar_etapa7_suporte_idoso('5571888888888', 'phone', '5571999999999', limite)
+                enviado = conta.return_value.send_message.call_args.kwargs
+                self.assertEqual(enviado['text'], envio['mensagem_bot'])
+                self.assertIn(f'com {limite} anos', enviado['text'])
+                self.assertEqual(enviado['buttons'].url, 'https://wa.me/5571999999999')
+                self.assertEqual(enviado['buttons'].title, 'Falar com Comercial')
+                self.assertEqual(envio['tipo_mensagem'], 'interactive_cta_url')
+        with self.assertRaises(ValueError):
+            montar_mensagem_suporte_idoso_etapa7(None)
+
+    def test_persistencia_50_a_99_e_encerramento_sem_bloqueio(self):
+        for idade in (50, 59, 60, 99):
+            contexto = contexto_etapa7(idade, suporte=50)
+            envio = contexto_envio(6)
+            envio.update(encerrar_atendimento=True, motivo_encerramento='encaminhado_suporte_idoso', idade_aluno=idade)
+            cursor = object()
+            with patch.object(efeitos_transicao, 'atualizar_idade_cliente') as salvar:
+                efeitos_transicao.atualizar_banco_conforme_transicao_de_etapa(contexto, envio, cursor)
+            salvar.assert_called_once_with(5, idade, cursor)
+            intencao = encerramento_atendimento.resolver_intencao_encerramento(contexto, envio, cursor)
+            self.assertEqual(intencao['bloqueio_dias'], 0)
+            self.assertFalse(intencao['excluir_dependente'])
+
+    def test_recuperacao_reconhece_variantes_mas_usa_limite_atual(self):
+        for antigo in LIMITES[1:]:
+            for atual, idade, encerra in ((70, 65, False), (70, 75, True), (None, 95, False), (50, 55, True)):
+                contexto = contexto_etapa7(idade, suporte=atual)
+                contexto['resposta_bot_para_mensagem_atual'] = {
+                    'tipo_mensagem': 'interactive_cta_url',
+                    'conteudo_texto': 'Olá novamente, Maria!\n\n' + montar_mensagem_suporte_idoso_etapa7(antigo),
+                }
+                with self.subTest(antigo=antigo, atual=atual, idade=idade):
+                    intencao = encerramento_atendimento.resolver_intencao_encerramento(
+                        contexto, {'resposta_ja_existia': True, 'id_etapa_resultante': 6}, object()
+                    )
+                    self.assertEqual(intencao is not None, encerra)
+        for texto, tipo in (('Procure o comercial', 'interactive_cta_url'),
+                            (montar_mensagem_suporte_idoso_etapa7(50), 'text')):
+            contexto['idade_minima_suporte'] = 50
+            contexto['resposta_bot_para_mensagem_atual'] = {'tipo_mensagem': tipo, 'conteudo_texto': texto}
+            self.assertIsNone(encerramento_atendimento.resolver_intencao_encerramento(
+                contexto, {'resposta_ja_existia': True}, object()
+            ))
+
+
+class EncaminhamentosRelatorioTests(unittest.TestCase):
+    def test_sql_deduplica_por_unidade_data_e_motivo_sem_depender_da_ultima_conversa(self):
+        conn = sqlite3.connect(':memory:')
+        self.addCleanup(conn.close)
+        conn.execute("ATTACH DATABASE ':memory:' AS chatbot")
+        conn.execute('''CREATE TABLE chatbot.conversa (
+            id_conversa INTEGER, id_unidade INTEGER, id_cliente INTEGER,
+            status_ativa BOOLEAN, motivo_encerramento TEXT, finalizou_em TEXT
+        )''')
+        motivo = 'encaminhado_suporte_idoso'
+        conn.executemany('INSERT INTO chatbot.conversa VALUES (?, ?, ?, ?, ?, ?)', [
+            (1, 10, 1, False, motivo, '2026-09-01'),
+            (2, 10, 1, False, motivo, '2026-09-02'),
+            (3, 10, 1, True, None, None),
+            (4, 10, 2, False, motivo, '2026-08-31'),
+            (5, 10, 3, False, motivo, '2026-10-01'),
+            (6, 20, 4, False, motivo, '2026-09-05'),
+            (7, 10, 5, False, 'idade_invalida', '2026-09-05'),
+            (8, 10, 6, True, motivo, '2026-09-05'),
+            (9, 10, 7, False, motivo, None),
+        ])
+
+        class CursorSQLite:
+            def execute(self, sql, params): self.cursor = conn.execute(sql.replace('%s', '?'), params)
+            def fetchone(self): return self.cursor.fetchone()
+
+        cursor = CursorSQLite()
+        self.assertEqual(repositorio.contar_encaminhados_comercial_por_idade(10, '2026-09-01', '2026-10-01', cursor), 1)
+        self.assertEqual(repositorio.contar_encaminhados_comercial_por_idade(10, None, '2026-10-01', cursor), 2)
+        self.assertEqual(repositorio.contar_encaminhados_comercial_por_idade(20, '2026-09-01', '2026-10-01', cursor), 1)
+        self.assertEqual(repositorio.contar_encaminhados_comercial_por_idade(30, None, '2026-10-01', cursor), 0)
+
+    def test_servico_propaga_unidade_periodos_politica_e_falha(self):
+        fim = datetime(2026, 9, 11, tzinfo=timezone.utc)
+        for chave in PERIODOS:
+            periodo = resolver_periodo(chave, agora=fim)
+            with self.subTest(periodo=chave), ExitStack() as stack:
+                stack.enter_context(patch.object(services, 'connection', MagicMock()))
+                stack.enter_context(patch.object(repositorio, 'buscar_unidade', return_value={
+                    'nome_unidade': 'Teste', 'bpa_ativo': False, 'idade_minima_suporte': None,
+                    'inicio_historico': fim - timedelta(days=300),
+                }))
+                stack.enter_context(patch.object(repositorio, 'buscar_metricas', return_value={}))
+                for nome in ('buscar_perfis', 'buscar_satisfacao', 'buscar_etapas', 'buscar_atividade'):
+                    stack.enter_context(patch.object(repositorio, nome, return_value=[]))
+                contar = stack.enter_context(patch.object(repositorio, 'contar_encaminhados_comercial_por_idade', return_value=3))
+                payload = services.carregar_relatorio(SimpleNamespace(id_unidade=10), periodo)
+                self.assertEqual(contar.call_args.args[:3], (10, periodo.inicio, periodo.fim))
+                self.assertEqual(payload['encaminhados_comercial_por_idade'], 3)
+                self.assertIsNone(payload['unidade']['idade_minima_suporte'])
+                contar.side_effect = RuntimeError('banco indisponível')
+                with self.assertRaises(RuntimeError):
+                    services.carregar_relatorio(SimpleNamespace(id_unidade=10), periodo)
+
+    def test_card_nao_inventa_zero_e_tags_permanecem_fixas(self):
+        for invalido in (None, True, -1, '1'):
+            with self.assertRaises(ValueError):
+                montar_relatorio({}, None, {}, {}, [], [], encaminhados_comercial_por_idade=invalido)
+        self.assertEqual(classificar_faixa(59), 'adulto')
+        self.assertEqual(classificar_faixa(60), 'idoso')
+        perfis = services._agrupar_perfis([
+            {'id_cliente': 1, 'status_dependente': False, 'idade_titular': 65, 'foi_funil': True},
+        ], bpa_ativo=False)
+        idoso = next(p for p in perfis['linhas'] if p['chave'] == 'titular_idoso')
+        self.assertEqual(idoso['funil'], 1)
+        self.assertEqual(idoso['taxa_funil'], 100.0)
+
+
+if __name__ == '__main__':
+    unittest.main()
+````
+
+## Passo 159O — `tests/unit/test_followup.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `42c8c0d65b58d1f12ebbfa899ec146898aa87428c1aae1e0ef54674eb4680ed1`
+
+````python
+import unittest
+from contextlib import ExitStack
+from datetime import datetime, timezone
+from threading import Event
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+from core.repositories.atendimento import followup as repo
+from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as sender
+from workers.worker_followup import followup_worker as worker
+from workers.worker_flow.response_flow import repeticao_followup as repeticao
+from workers.worker_flow.transacoes import retorno_followup as retorno
+
+AGORA = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+
+
+def banco(stage=1):
+    return {
+        "wa_id": "5511999999999",
+        "user_id": None,
+        "username": None,
+        "id_cliente": 2,
+        "id_unidade": 3,
+        "conversa": {
+            "id_conversa": 1,
+            "id_etapa_atual": 11,
+            "status_ativa": True,
+            "followup_stage": stage,
+            "followup_last_sent_at": AGORA,
+            "lock_version": 4,
+        },
+    }
+
+
+def mensagem(tipo="text"):
+    return {
+        "wa_id": "5511999999999",
+        "user_id": None,
+        "username": None,
+        "id_mensagem": 5,
+        "id_hash": "wamid.entrada",
+        "wa_id": "5511999999999",
+        "id_phone_unidade": "123456",
+        "unidade_telefone": "5511888888888",
+        "conteudo_texto": "Começar triagem",
+        "tipo_mensagem": tipo,
+        "received_data_hora": AGORA,
+    }
+
+
+def dados():
+    return {
+        "wa_id": "5511999999999",
+        "user_id": None,
+        "username": None,
+        "id_conversa": 1,
+        "nome_cliente": "Ana",
+        "nome_dependente": "Bia",
+        "idade_dependente": 12,
+        "nome_unidade": "Unidade Teste",
+        "nome_agente": "Suh",
+        "genero": "feminino",
+        "link_agendamento": "https://example.com/agendar",
+        "link_instagram": "https://example.com/rede",
+        "status_dependente": False,
+    }
+
+
+def contexto():
+    return {
+        "wa_id": "5511999999999",
+        "user_id": None,
+        "username": None,
+        "id_conversa": 1,
+        "id_unidade": 3,
+        "id_etapa_atual": 11,
+        "lock_version": 4,
+        "stage_anterior": 1,
+        "followup_em": AGORA,
+        "dados_repeticao": dados(),
+        "mensagem_cliente_atual": {
+            "id_mensagem_fila": 5,
+            "id_hash_msg": "wamid.entrada",
+            "wa_id": "5511999999999",
+            "id_phone_unidade": "123456",
+        },
+        "resposta_bot_para_mensagem_atual": None,
+    }
+
+
+def candidato():
+    return {
+        "wa_id": "5511999999999",
+        "user_id": None,
+        "username": None,
+        "id_conversa": 1,
+        "id_cliente": 2,
+        "id_unidade": 3,
+        "id_etapa": 11,
+        "wa_id": "5511999999999",
+        "id_phone_unidade": "123456",
+        "unidade_telefone": "5511888888888",
+        "id_ancora": 8,
+        "ancora_em": AGORA,
+    }
+
+
+class RetornoTests(unittest.TestCase):
+    def preparar(
+        self, stage=1, tipo="text", retomada=None, resposta=None, enviado_em=AGORA
+    ):
+        with ExitStack() as stack:
+            mocks = {}
+            valores = {
+                "buscar_retomada": retomada,
+                "buscar_resposta_bot_por_mensagem_cliente": resposta,
+                "buscar_contexto_repeticao": dados(),
+                "registrar_retomada": None,
+                "inserir_historico_mensagem_cliente": (
+                    6,
+                    AGORA,
+                    11,
+                    not bool(resposta),
+                ),
+                "atualizar_conversa_mensagem_cliente": None,
+            }
+            for nome, valor in valores.items():
+                mocks[nome] = stack.enter_context(
+                    patch.object(retorno, nome, return_value=valor)
+                )
+            cx_banco = banco(stage)
+            cx_banco["conversa"]["followup_last_sent_at"] = enviado_em
+            result = retorno.preparar_retorno_followup(
+                mensagem(tipo), cx_banco, MagicMock()
+            )
+        return result, mocks
+
+    def test_zero_preserva_caminho_normal(self):
+        result, mocks = self.preparar(stage=0)
+        self.assertIsNone(result)
+        mocks["inserir_historico_mensagem_cliente"].assert_not_called()
+
+    def test_reacoes_nao_passam_por_validacao(self):
+        for stage in (1, 2, 3, 9):
+            for tipo in ("text", "interactive", "image", "audio", "unsupported"):
+                with self.subTest(stage=stage, tipo=tipo):
+                    result, mocks = self.preparar(stage=stage, tipo=tipo)
+                    self.assertEqual(result["id_etapa_resposta"], 11)
+                    self.assertTrue(result["retorno_followup"])
+                    self.assertNotIn("transicoes_permitidas", result)
+                    self.assertNotIn("saudacao_retorno", result)
+                    self.assertEqual(
+                        result["mensagem_cliente_atual"]["tipo_mensagem"], tipo
+                    )
+                    mocks["registrar_retomada"].assert_called_once()
+
+    def test_stage_negativo_falha(self):
+        with self.assertRaises(ValueError):
+            self.preparar(stage=-1)
+
+    def test_legado_com_stage_positivo_sem_data_de_envio_reapresenta_etapa(self):
+        result, mocks = self.preparar(enviado_em=None)
+        self.assertTrue(result["retorno_followup"])
+        self.assertIsNone(result["followup_em"])
+        self.assertEqual(result["id_etapa_resposta"], 11)
+        mocks["registrar_retomada"].assert_called_once()
+
+    def test_retry_nao_zera_ciclo_posterior(self):
+        registro = {
+            "id_etapa": 11,
+            "stage_anterior": 1,
+            "followup_em": AGORA,
+            "concluida_em": AGORA,
+        }
+        resposta = (
+            7,
+            1,
+            11,
+            AGORA,
+            "",
+            "",
+            "",
+            "",
+            "",
+            "wamid.bot",
+            5,
+            "",
+            "",
+            "",
+            "bot",
+            "sent",
+        )
+        result, mocks = self.preparar(stage=1, retomada=registro, resposta=resposta)
+        mocks["buscar_contexto_repeticao"].assert_not_called()
+        mocks["atualizar_conversa_mensagem_cliente"].assert_not_called()
+        with patch.object(retorno, "concluir_retomada") as concluir, patch.object(
+            retorno, "inserir_historico_mensagem_bot"
+        ) as inserir:
+            final = retorno.persistir_retorno_followup(
+                result, {"id_hash_msg_bot": "wamid.bot"}, MagicMock()
+            )
+        concluir.assert_not_called()
+        inserir.assert_not_called()
+        self.assertIsNone(final["intencao_encerramento"])
+
+    def test_resposta_normal_existente_tem_prioridade(self):
+        result, mocks = self.preparar(resposta=(1,))
+        self.assertIsNone(result)
+        mocks["registrar_retomada"].assert_not_called()
+
+    def test_concluida_sem_historico_nao_reenvia(self):
+        with self.assertRaises(ValueError):
+            self.preparar(stage=0, retomada={"concluida_em": AGORA})
+
+    def test_retorno_so_reseta_apos_historico(self):
+        eventos = []
+        envio = {
+            "enviou": True,
+            "id_etapa_resultante": 11,
+            "id_hash_msg_bot": "wamid.bot",
+        }
+        with patch.object(
+            retorno,
+            "inserir_historico_mensagem_bot",
+            side_effect=lambda *_: eventos.append("historico") or (7, AGORA, True),
+        ), patch.object(
+            retorno, "concluir_retomada", side_effect=lambda *_: eventos.append("reset")
+        ):
+            final = retorno.persistir_retorno_followup(contexto(), envio, MagicMock())
+        self.assertEqual(eventos, ["historico", "reset"])
+        self.assertNotIn("turnos_sem_avanco", final)
+        self.assertNotIn("efeitos_transicao", final)
+        self.assertIsNone(final["intencao_encerramento"])
+
+    def test_falha_historico_nao_chega_ao_reset(self):
+        envio = {"enviou": True, "id_etapa_resultante": 11}
+        with patch.object(
+            retorno, "inserir_historico_mensagem_bot", side_effect=RuntimeError
+        ), patch.object(retorno, "concluir_retomada") as concluir:
+            with self.assertRaises(RuntimeError):
+                retorno.persistir_retorno_followup(contexto(), envio, MagicMock())
+            concluir.assert_not_called()
+
+
+class RepeticaoTests(unittest.TestCase):
+    def test_todas_etapas_repetiveis_usam_senders_existentes(self):
+        # Executa catálogos e senders reais; substitui somente o cliente HTTP.
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        for dependente in (False, True):
+            for etapa in range(1, 23):
+                with self.subTest(etapa=etapa, dependente=dependente):
+                    cx = contexto()
+                    cx["id_etapa_atual"] = etapa
+                    cx["dados_repeticao"]["status_dependente"] = dependente
+                    fake = MagicMock()
+                    fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
+                    fake.request_contact_info.return_value = SimpleNamespace(id="wamid.bot")
+                    with patch.object(cliente, "WhatsApp", return_value=fake):
+                        envio = repeticao.enviar_repeticao_followup(cx)
+                    metodo = fake.request_contact_info if etapa == 2 else fake.send_message
+                    metodo.assert_called_once()
+                    self.assertEqual(envio["id_etapa_resultante"], etapa)
+                    self.assertEqual(
+                        envio["mensagem_bot"],
+                        metodo.call_args.kwargs["text"],
+                    )
+                    self.assertNotIn("evento_transicao", envio)
+                    self.assertNotIn("tratamento", envio)
+                    self.assertNotIn("Olá novamente", envio["mensagem_bot"])
+                    self.assertTrue(
+                        envio["mensagem_bot"].startswith(
+                            "Que bom te ver novamente, Ana!\n\n"
+                        )
+                    )
+                    self.assertEqual(
+                        envio["mensagem_bot"].count("Que bom te ver novamente"), 1
+                    )
+
+    def test_sem_nome_usa_saudacao_generica_e_preserva_texto_enviado(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        for nome in (None, "", "   "):
+            with self.subTest(nome=nome):
+                cx = contexto()
+                cx["id_etapa_atual"] = 1
+                cx["dados_repeticao"]["nome_cliente"] = nome
+                fake = MagicMock()
+                fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
+                with patch.object(cliente, "WhatsApp", return_value=fake):
+                    with cliente.usar_prefixo_mensagem_bot(
+                        "Olá novamente, Nome antigo!\n\n"
+                    ):
+                        envio = repeticao.enviar_repeticao_followup(cx)
+                self.assertTrue(
+                    envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                )
+                self.assertEqual(
+                    envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
+                )
+                self.assertNotIn("Olá novamente", envio["mensagem_bot"])
+
+    def test_falha_sender_restaura_prefixo_anterior(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        with patch.object(
+            repeticao,
+            "_selecionar_sender",
+            return_value=(MagicMock(side_effect=RuntimeError("Meta")), ()),
+        ):
+            with cliente.usar_prefixo_mensagem_bot("prefixo anterior: "):
+                with self.assertRaises(RuntimeError):
+                    repeticao.enviar_repeticao_followup(contexto())
+                self.assertEqual(
+                    cliente.aplicar_prefixo_mensagem_bot("teste"),
+                    "prefixo anterior: teste",
+                )
+
+    def test_retry_nao_chama_sender(self):
+        cx = contexto()
+        cx["resposta_bot_para_mensagem_atual"] = {"id_hash_msg": "wamid.bot"}
+        with patch.object(repeticao, "_selecionar_sender") as selecionar:
+            envio = repeticao.enviar_repeticao_followup(cx)
+        selecionar.assert_not_called()
+        self.assertFalse(envio["enviou"])
+
+    def test_terminal_e_dado_ausente_falham_antes_da_meta(self):
+        for etapa in (None, 0, 23, 24):
+            with self.assertRaises(ValueError):
+                repeticao._selecionar_sender(etapa, dados())
+        cx = dados()
+        cx["nome_dependente"] = None
+        cx["status_dependente"] = True
+        with self.assertRaises(ValueError):
+            repeticao._selecionar_sender(13, cx)
+
+
+class ProativoTests(unittest.TestCase):
+    def test_texto_exato_e_numero_da_unidade(self):
+        wa = MagicMock()
+        wa.send_message.return_value = SimpleNamespace(id="wamid.bot")
+        with patch.object(sender, "conta_wa", return_value=wa) as conta, patch.object(
+            sender.httpx, "Client"
+        ):
+            result = sender.enviar_followup("5511999999999", "unidade-3")
+        self.assertEqual(conta.call_args.args, ("unidade-3",))
+        wa.send_message.assert_called_once_with(
+            to="5511999999999", text="Você viu a minha mensagem?"
+        )
+        self.assertEqual(result["mensagem_bot"], "Você viu a minha mensagem?")
+
+    def _processar(
+        self, *, elegivel=True, lock=True, erro_envio=None, erro_banco=None, parar=False
+    ):
+        conn = MagicMock()
+        stop = Event()
+        if parar:
+            stop.set()
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(worker, "get_conn", return_value=conn))
+            stack.enter_context(
+                patch.object(worker, "tentar_lock_conversa", return_value=(lock, 4))
+            )
+            stack.enter_context(patch.object(worker, "proteger_conversa"))
+            reler = stack.enter_context(
+                patch.object(
+                    worker,
+                    "reler_elegivel",
+                    return_value=candidato() if elegivel else None,
+                )
+            )
+            enviar = stack.enter_context(
+                patch.object(
+                    worker,
+                    "enviar_followup",
+                    return_value={"enviou": True, "id_hash_msg_bot": "wamid.bot"},
+                    side_effect=erro_envio,
+                )
+            )
+            persistir = stack.enter_context(
+                patch.object(
+                    worker,
+                    "persistir_followup",
+                    return_value=(9, AGORA),
+                    side_effect=erro_banco,
+                )
+            )
+            unlock = stack.enter_context(patch.object(worker, "unlock_conversa"))
+            result = worker.processar_candidato(candidato(), stop)
+        return result, conn, enviar, persistir, reler, unlock
+
+    def test_confirmacao_commit_e_unlock(self):
+        ok, conn, enviar, persistir, _, unlock = self._processar()
+        self.assertTrue(ok)
+        enviar.assert_called_once()
+        persistir.assert_called_once()
+        unlock.assert_called_once()
+        conn.close.assert_called_once()
+        conn.rollback.assert_not_called()
+
+    def test_cliente_chegou_antes_do_envio(self):
+        ok, _, enviar, persistir, _, _ = self._processar(elegivel=False)
+        self.assertFalse(ok)
+        enviar.assert_not_called()
+        persistir.assert_not_called()
+
+    def test_lock_recusado_nao_envia_nem_libera_lock_alheio(self):
+        ok, _, enviar, _, reler, unlock = self._processar(lock=False)
+        self.assertFalse(ok)
+        enviar.assert_not_called()
+        reler.assert_not_called()
+        unlock.assert_not_called()
+
+    def test_falha_sender_nao_persiste_stage(self):
+        ok, conn, _, persistir, _, _ = self._processar(erro_envio=RuntimeError("Meta"))
+        self.assertFalse(ok)
+        conn.rollback.assert_called_once()
+        persistir.assert_not_called()
+
+    def test_falha_persistencia_reverte(self):
+        ok, conn, _, _, _, _ = self._processar(erro_banco=RuntimeError("banco"))
+        self.assertFalse(ok)
+        conn.rollback.assert_called_once()
+
+    def test_sigterm_impede_proximo_despacho(self):
+        _, _, enviar, _, _, _ = self._processar(parar=True)
+        enviar.assert_not_called()
+
+
+class LoteTests(unittest.TestCase):
+    def test_falha_nao_interrompe_lote_e_volta_apos_fim_da_varredura(self):
+        config = SimpleNamespace(lote=2, intervalo=60)
+        parar = MagicMock()
+        parar.is_set.return_value = False
+        ids_processados = []
+        primeiro = candidato()
+        segundo = dict(primeiro, id_conversa=2)
+        terceiro = dict(primeiro, id_conversa=3)
+
+        def processar(item, _parar):
+            ids_processados.append(item["id_conversa"])
+            if len(ids_processados) == 1:
+                raise RuntimeError("Conexão falhou antes do despacho")
+            return True
+
+        def esperar(_intervalo):
+            if len(ids_processados) == 4:
+                parar.is_set.return_value = True
+
+        parar.wait.side_effect = esperar
+        with patch.object(
+            worker,
+            "obter_lote",
+            side_effect=[[primeiro, segundo], [terceiro], [primeiro]],
+        ) as obter, patch.object(worker, "processar_candidato", side_effect=processar):
+            worker.executar_worker(config, parar)
+        self.assertEqual(ids_processados, [1, 2, 3, 1])
+        self.assertEqual(
+            [c.args for c in obter.call_args_list],
+            [(2, None), (2, (AGORA, 2)), (2, None)],
+        )
+        self.assertEqual(
+            [c.args for c in parar.wait.call_args_list], [(60,), (60,), (60,)]
+        )
+
+
+class SQLTests(unittest.TestCase):
+    def test_fencing_recusa_dono_antigo(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        with self.assertRaises(repo.LockConversaPerdido):
+            repo.proteger_conversa(1, 3, cursor)
+        self.assertIn("FOR UPDATE", cursor.execute.call_args.args[0])
+
+    def test_reset_condicional_sem_limpar_data_auditoria(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = (1,)
+        cursor.rowcount = 1
+        repo.concluir_retomada(contexto(), AGORA, cursor)
+        sql, params = cursor.execute.call_args_list[1].args
+        self.assertNotIn("followup_last_sent_at =", sql.split("WHERE")[0])
+        self.assertIn("followup_stage = 0", sql)
+        self.assertIn("lock_version = %s", sql)
+        self.assertEqual(sql.count("%s"), len(params))
+
+    def test_parametros_proativo_e_paginacao(self):
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [(1,), (9, AGORA)]
+        cursor.rowcount = 1
+        repo.persistir_followup(
+            candidato(),
+            {
+                "enviou": True,
+                "id_hash_msg_bot": "wamid.bot",
+                "mensagem_bot": "Você viu a minha mensagem?",
+            },
+            4,
+            cursor,
+        )
+        for chamada in cursor.execute.call_args_list:
+            sql, params = chamada.args
+            self.assertEqual(sql.count("%s"), len(params))
+        insert = cursor.execute.call_args_list[1].args[0]
+        self.assertIn("NULL, NULL", insert)
+        cursor.reset_mock()
+        cursor.fetchall.return_value = []
+        repo.listar_elegiveis(cursor, 20, (AGORA, 1))
+        sql, params = cursor.execute.call_args.args
+        self.assertEqual(sql.count("%s"), len(params))
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
+## Passo 159P — `workers/worker_flow/transacoes/contato_apos_followup.py`
+
+Criar o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `e7d595a77bdf39d9243b966f6fabca21580d2367a662b13f1793b7907b8b7f46`
+
+````python
+"""Exceção autorizada: contato oficial na etapa 2 como reação ao follow-up.
+
+A prova é validada/reconciliada antes deste módulo. Histórico da resposta,
+transição 2 -> 3 e conclusão do ciclo são confirmados no mesmo commit do flow.
+Nenhuma função deste arquivo abre conexão, envia mensagem ou controla commit.
+"""
+
+from core.integrations.whatsapp.messages.followup_messages import (
+    montar_saudacao_retomada_followup,
+)
+from core.repositories.atendimento.followup import concluir_retomada
+from workers.worker_flow.transacoes.persistencia_resposta import (
+    atualizar_banco_com_contexto_final,
+)
+from workers.worker_flow.valida_historico import valida_historico
+
+
+def preparar_contato_apos_followup(mensagem, contexto_banco, retomada, cursor):
+    if not contexto_banco.get("contato_oficial_validado") or retomada["id_etapa"] != 2:
+        raise ValueError("Exceção exige prova oficial validada na etapa 2")
+    contexto = valida_historico(
+        mensagem, dict(contexto_banco, omitir_saudacao_ausencia=True), cursor
+    )
+    if contexto["id_etapa_cliente"] != 2:
+        raise ValueError("Contato de retomada não pertence à etapa 2")
+    resposta = contexto.get("resposta_bot_para_mensagem_atual")
+    if resposta and resposta["id_etapa"] != 3:
+        raise ValueError("Contato oficial recuperado sem resposta da etapa 3")
+    contexto.update(
+        contato_apos_followup=True,
+        lock_version=contexto_banco["conversa"]["lock_version"],
+        stage_anterior=retomada["stage_anterior"],
+        followup_em=retomada["followup_em"],
+        saudacao_retorno=montar_saudacao_retomada_followup(contexto.get("nome_cliente")),
+    )
+    return contexto
+
+
+def persistir_contato_apos_followup(contexto, envio, cursor):
+    if not contexto.get("contato_apos_followup") or envio.get("id_etapa_resultante") != 3:
+        raise ValueError("Exceção de contato não confirmou a transição 2 -> 3")
+    resposta = contexto.get("resposta_bot_para_mensagem_atual")
+    if resposta:
+        # O checkpoint concluído foi conferido na preparação. Replay apenas
+        # permite finalizar a fila: não reseta um novo ciclo nem regrava relógios.
+        return {
+            "historico_bot_inserido": False,
+            "resposta_ja_existia": True,
+            "id_hash_msg_bot": resposta["id_hash_msg"],
+            "id_historico_bot": resposta["id_mensagem"],
+            "data_historico_bot": resposta["received_data_hora"],
+            "id_etapa_resultante": 3,
+            "movimento_conversa": "sem_avanco",
+            "atualizar_conversa": False,
+            "atualizar_last_from_bot": False,
+            "intencao_encerramento": None,
+        }
+    if not envio.get("enviou"):
+        raise ValueError("Contato sem resposta confirmada pela Meta")
+    resultado = atualizar_banco_com_contexto_final(contexto, envio, cursor)
+    # A transição já foi persistida nesta mesma transação. O checkpoint continua
+    # registrando origem 2; a guarda do UPDATE exige agora o destino 3.
+    concluir_retomada(
+        dict(contexto, id_etapa_atual=3), resultado["data_historico_bot"], cursor
+    )
+    return resultado
+````
+
+## Passo 159Q — `tests/integration/test_user_id_v130_postgres.py`
+
+Criar o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `cd812b8e2818dfc36f0e931ccf52eaf60f932070d2fa34a17a3d6780386bbdc8`
+
+````python
+"""Migração V1.3.0 e identidade/follow-up em PostgreSQL local descartável.
+
+Não carrega .env. Requer USER_ID_TEST_DSN com host loopback, porta explícita
+não padrão e banco test_chatbot_user_id vazio. O schema criado pelo teste é
+removido no final; nenhuma conexão da aplicação é utilizada.
+"""
+
+import os
+import subprocess
+import unittest
+from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import patch
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+BASE = "4f7f8a0f1c64cd24086179aca2886cb77a5f1332"
+ROOT = Path(__file__).resolve().parents[2]
+DSN = os.environ.get("USER_ID_TEST_DSN")
+
+
+def executar_ddl_base(cursor):
+    @contextmanager
+    def transacao_local(*args):
+        yield cursor
+
+    passos = {
+        "bank_script.py": ("criar_tabelas", "criar_funcao_dequeue_message", "criar_funcoes_lock"),
+        "cache_control_script.py": ("criar_cache_controle",),
+        "floodscript.py": ("criar_tabelas_bloqueio_flood",),
+        "turno_cliente_script.py": ("criar_indices_turno_cliente",),
+        "povoar_etapas.py": ("insere_etapa_once",),
+        "etapa_transicao_script.py": ("criar_e_povoar_transicoes_etapa",),
+    }
+    for nome, funcoes in passos.items():
+        fonte = subprocess.check_output(
+            ["git", "show", f"{BASE}:core/database/deploy_database/{nome}"], cwd=ROOT
+        ).decode("utf-8")
+        namespace = {"__name__": "baseline_teste"}
+        exec(compile(fonte, nome, "exec"), namespace)
+        namespace["transacao_deploy"] = transacao_local
+        for funcao in funcoes:
+            namespace[funcao]()
+
+
+@unittest.skipUnless(DSN, "Defina USER_ID_TEST_DSN para banco local descartável vazio")
+class UserIdV130PostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        params = conninfo_to_dict(DSN)
+        if (params.get("host") not in ("127.0.0.1", "::1", "localhost")
+                or params.get("dbname") != "test_chatbot_user_id"
+                or not params.get("port") or params["port"] == "5432"
+                or params.get("service")
+                or (params.get("hostaddr") and params["hostaddr"] not in ("127.0.0.1", "::1"))):
+            raise RuntimeError("Teste exige loopback, porta temporária e banco exclusivo")
+        cls.conn = psycopg.connect(DSN, connect_timeout=5)
+        cls.cur = cls.conn.cursor()
+        cls.cur.execute("SELECT to_regnamespace('chatbot')")
+        if cls.cur.fetchone()[0] is not None:
+            cls.conn.close()
+            raise RuntimeError("Schema chatbot já existe; recusa alteração de banco não vazio")
+        cls.cur.execute("CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user(id SERIAL PRIMARY KEY)")
+        executar_ddl_base(cls.cur)
+        cls.cur.execute("""
+            INSERT INTO chatbot.unidade
+              (id_unidade,nome_unidade,nome_agente,genero,cnpj,email_responsavel,
+               telefone,waba_id,phone_number_id,idade_minima_suporte,link_agendamento)
+            VALUES (1,'Teste isolado','Suh','feminino','teste','teste@example.com',
+                    '5511888888888','waba-teste','phone-teste',70,'https://example.com/agendar');
+            INSERT INTO chatbot.cliente(id_cliente,waid_telefone,nome)
+            VALUES(1,'5511999999999','Nome anterior');
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,
+                    followup_stage,followup_last_sent_at,last_interaction_at,last_message_from)
+            VALUES(1,1,1,11,1,NOW()-INTERVAL '1 day',NOW()-INTERVAL '1 day','bot');
+            INSERT INTO chatbot.followup_legado(id_conversa,stage_anterior)
+            VALUES(1,0);
+            INSERT INTO chatbot.followup_retomada
+                (id_conversa,id_mensagem_fila,id_hash_cliente,id_etapa,stage_anterior,
+                 followup_em,concluida_em)
+            VALUES(1,999,'wamid.legado',11,1,NOW()-INTERVAL '2 days',NOW()-INTERVAL '1 day');
+        """)
+        cls.conn.commit()
+        cls.cur.execute((ROOT / "deploy/migrations/20260904_adicionar_user_id_whatsapp.sql").read_text(encoding="utf-8"))
+        cls.conn.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.rollback()
+        cls.cur.execute("DROP SCHEMA chatbot CASCADE")
+        cls.conn.commit()
+        cls.conn.close()
+
+    def tearDown(self):
+        self.conn.rollback()
+
+    def test_migracao_preserva_configuracao_ciclo_e_checkpoints(self):
+        self.cur.execute("SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1")
+        self.assertEqual(self.cur.fetchone(), (70,))
+        self.cur.execute("SELECT id_etapa_atual,followup_stage,wa_id FROM chatbot.conversa WHERE id_conversa=1")
+        self.assertEqual(self.cur.fetchone(), (12,1,'5511999999999'))
+        self.cur.execute("SELECT id_etapa,stage_anterior FROM chatbot.followup_retomada")
+        self.assertEqual(self.cur.fetchone(), (12,1))
+        self.cur.execute("SELECT COUNT(*) FROM chatbot.etapa")
+        self.assertEqual(self.cur.fetchone(), (23,))
+        self.cur.execute("SELECT COUNT(*) FROM chatbot.etapa_transicao")
+        self.assertEqual(self.cur.fetchone(), (27,))
+        self.cur.execute("SELECT COUNT(*) FROM chatbot.followup_legado")
+        self.assertEqual(self.cur.fetchone(), (1,))
+
+    def criar_contato_privado(self):
+        from workers.worker_flow.suporte.estado_ciclo import montar_mensagem_fila
+        self.cur.execute("""
+            INSERT INTO chatbot.cliente(id_cliente,nome,username) VALUES(2,'Nome informado','perfil');
+            INSERT INTO chatbot.user_id_cliente(id_cliente,id_unidade,user_id)
+            VALUES(2,1,'BR.provisorio');
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,
+              user_id,username,followup_stage,followup_last_sent_at,last_message_from,last_interaction_at)
+            VALUES(2,2,1,2,'BR.provisorio','perfil',1,NOW()-INTERVAL '1 hour','bot',NOW()-INTERVAL '1 hour');
+            INSERT INTO chatbot.fila_mensagens(wa_id,user_id,username,conteudo_texto,
+              tipo_mensagem,id_phone_unidade,unidade_telefone,id_hash_msg,received_data_hora)
+            VALUES('5511999999999','BR.provisorio','perfil','contact_request',
+              'contacts','phone-teste','5511888888888','wamid.contato',clock_timestamp())
+            RETURNING id_mensagem,wa_id,user_id,username,conteudo_texto,tipo_mensagem,
+              id_phone_unidade,unidade_telefone,received_data_hora,id_hash_msg,retry_count;
+        """)
+        while self.cur.description is None and self.cur.nextset():
+            pass
+        return montar_mensagem_fila(self.cur.fetchone())
+
+    def resolver_identidade(self, mensagem):
+        from workers.worker_flow import valida_banco
+        with patch.object(valida_banco,'obter_id_unidade_redis_ou_plsql',return_value=1), patch.object(
+            valida_banco,'buscar_cliente_cache',return_value=None
+        ):
+            return valida_banco.validar_banco_mensagem(mensagem,self.cur)
+
+    def test_contato_oficial_avanca_preserva_conversa_e_nao_reseta_ciclo_em_replay(self):
+        from core.repositories.atendimento.conversas import tentar_lock_conversa
+        from core.repositories.atendimento.followup import reler_conversa
+        from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa3
+        from workers.worker_flow.transacoes.retorno_followup import preparar_retorno_followup
+        from workers.worker_flow.transacoes.contato_apos_followup import persistir_contato_apos_followup
+        from workers.worker_flow.response_flow.flow_sender import flow_sender
+        from unittest.mock import MagicMock
+        mensagem = self.criar_contato_privado()
+        banco = self.resolver_identidade(mensagem)
+        self.assertTrue(banco['contato_oficial_validado'])
+        self.assertEqual((banco['id_cliente'],banco['conversa']['id_conversa']),(1,2))
+        self.cur.execute('SELECT COUNT(*) FROM chatbot.cliente WHERE id_cliente=2')
+        self.assertEqual(self.cur.fetchone(),(0,))
+        self.cur.execute('SELECT status_ativa,followup_stage,motivo_encerramento FROM chatbot.conversa WHERE id_conversa=1')
+        self.assertEqual(self.cur.fetchone(),(False,1,'ativou_privacidade'))
+        ok,versao = tentar_lock_conversa(2,self.cur)
+        self.assertTrue(ok)
+        banco = reler_conversa(banco,versao,self.cur)
+        contexto = preparar_retorno_followup(mensagem,banco,self.cur)
+        self.assertTrue(contexto['contato_apos_followup'])
+        self.assertNotIn('retorno_followup',contexto)
+        fake = MagicMock()
+        fake.send_message.return_value = {'messages':[{'id':'wamid.resposta.contato'}]}
+        with patch.object(etapa3,'conta_wa',return_value=fake):
+            envio = flow_sender(contexto)
+        self.assertEqual(envio['id_etapa_resultante'],3)
+        self.assertEqual(fake.send_message.call_args.kwargs['to'],'5511999999999')
+        self.cur.execute('SAVEPOINT antes_resposta')
+        persistir_contato_apos_followup(contexto,envio,self.cur)
+        self.cur.execute('SELECT id_etapa_atual,followup_stage FROM chatbot.conversa WHERE id_conversa=2')
+        self.assertEqual(self.cur.fetchone(),(3,0))
+        self.cur.execute('ROLLBACK TO SAVEPOINT antes_resposta')
+        self.cur.execute('SELECT id_etapa_atual,followup_stage FROM chatbot.conversa WHERE id_conversa=2')
+        self.assertEqual(self.cur.fetchone(),(2,1))
+        self.cur.execute('SELECT concluida_em FROM chatbot.followup_retomada WHERE id_conversa=2')
+        self.assertIsNone(self.cur.fetchone()[0])
+        persistir_contato_apos_followup(contexto,envio,self.cur)
+        self.cur.execute("UPDATE chatbot.conversa SET followup_stage=1,followup_last_sent_at=clock_timestamp() WHERE id_conversa=2")
+        banco_replay = reler_conversa(self.resolver_identidade(mensagem),versao,self.cur)
+        contexto_replay = preparar_retorno_followup(mensagem,banco_replay,self.cur)
+        with patch.object(etapa3,'conta_wa') as conta:
+            envio_replay = flow_sender(contexto_replay)
+            resultado = persistir_contato_apos_followup(contexto_replay,envio_replay,self.cur)
+        conta.assert_not_called()
+        self.assertFalse(resultado['atualizar_last_from_bot'])
+        self.cur.execute('SELECT followup_stage FROM chatbot.conversa WHERE id_conversa=2')
+        self.assertEqual(self.cur.fetchone(),(1,))
+
+    def test_texto_apos_followup_repete_pedido_oficial_sem_avancar(self):
+        from core.repositories.atendimento.conversas import tentar_lock_conversa
+        from core.repositories.atendimento.followup import reler_conversa
+        from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa2
+        from workers.worker_flow.transacoes.retorno_followup import preparar_retorno_followup,persistir_retorno_followup
+        from workers.worker_flow.response_flow.repeticao_followup import enviar_repeticao_followup
+        from unittest.mock import MagicMock
+        mensagem = self.criar_contato_privado()
+        mensagem.update(wa_id=None,wa_id_compartilhado=None,tipo_mensagem='text',conteudo_texto='5511999999999')
+        self.cur.execute("UPDATE chatbot.fila_mensagens SET wa_id=NULL,tipo_mensagem='text',conteudo_texto='5511999999999'")
+        banco = self.resolver_identidade(mensagem)
+        ok,versao = tentar_lock_conversa(2,self.cur)
+        contexto = preparar_retorno_followup(mensagem,reler_conversa(banco,versao,self.cur),self.cur)
+        self.assertTrue(contexto['retorno_followup'])
+        fake = MagicMock()
+        fake.request_contact_info.return_value = {'messages':[{'id':'wamid.repete.contato'}]}
+        with patch.object(etapa2,'conta_wa',return_value=fake):
+            envio = enviar_repeticao_followup(contexto)
+        self.assertEqual(fake.request_contact_info.call_args.kwargs['to'],'BR.provisorio')
+        self.assertIn('compartilhar seu número com segurança',envio['mensagem_bot'])
+        self.assertIn('Que bom te ver novamente, Nome informado!',envio['mensagem_bot'])
+        persistir_retorno_followup(contexto,envio,self.cur)
+        self.cur.execute('SELECT id_etapa_atual,followup_stage,id_cliente FROM chatbot.conversa WHERE id_conversa=2')
+        self.assertEqual(self.cur.fetchone(),(2,0,2))
+        self.cur.execute('SELECT wa_id FROM chatbot.cliente WHERE id_cliente=2')
+        self.assertIsNone(self.cur.fetchone()[0])
+
+    def test_elegibilidade_privada_janela_meta_e_fila_por_alias(self):
+        from core.repositories.atendimento import followup
+        self.criar_contato_privado()
+        self.cur.execute("""
+            DELETE FROM chatbot.fila_mensagens;
+            UPDATE chatbot.conversa SET followup_stage=0,last_interaction_at=clock_timestamp()-INTERVAL '7 hours 1 minute' WHERE id_conversa=2;
+            INSERT INTO chatbot.historico_mensagens
+              (id_conversa,id_etapa,received_data_hora,user_id,conteudo_texto,tipo_mensagem,
+               id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou,status_envio)
+            VALUES(2,2,clock_timestamp()-INTERVAL '8 hours','BR.provisorio','Nome informado','text',
+                 'wamid.nome','phone-teste','5511888888888','cliente',NULL);
+            INSERT INTO chatbot.historico_mensagens
+              (id_conversa,id_etapa,received_data_hora,user_id,conteudo_texto,tipo_mensagem,
+               id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou,status_envio)
+            SELECT 2,2,last_interaction_at,'BR.provisorio','Compartilhe','contact_request',
+                   'wamid.pedido','phone-teste','5511888888888','bot','sent'
+            FROM chatbot.conversa WHERE id_conversa=2;
+        """)
+        self.assertEqual(followup.reler_elegivel(2,self.cur)['user_id'],'BR.provisorio')
+        self.cur.execute("UPDATE chatbot.historico_mensagens SET received_data_hora=clock_timestamp()-INTERVAL '24 hours' WHERE id_conversa=2 AND quem_enviou='cliente'")
+        self.assertIsNone(followup.reler_elegivel(2,self.cur))
+        self.cur.execute("UPDATE chatbot.historico_mensagens SET received_data_hora=clock_timestamp()-INTERVAL '8 hours' WHERE id_conversa=2 AND quem_enviou='cliente'")
+        self.cur.execute("INSERT INTO chatbot.fila_mensagens(user_id,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,received_data_hora) VALUES('BR.provisorio','oi','text','wamid.pendente','phone-teste','5511888888888',clock_timestamp())")
+        self.assertIsNone(followup.reler_elegivel(2,self.cur))
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
+## Passo 159R — `tests/integration/test_followup_postgres.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `5d8c3d7313eea40dcb907a8782843838a0b219887b51fe6aabb8140e5f62046b`
+
+````python
+"""Contrato PostgreSQL real. Exige banco local vazio chamado test_chatbot_followup."""
+
+import os
+import unittest
+from contextlib import contextmanager
+from datetime import timedelta
+from pathlib import Path
+from unittest.mock import patch
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database import bank_script, floodscript
+from core.repositories.atendimento import followup as repo
+from core.repositories.atendimento.conversas import (
+    tentar_lock_conversa,
+    unlock_conversa,
+)
+from workers.worker_flow.transacoes.retorno_followup import (
+    preparar_retorno_followup,
+    persistir_retorno_followup,
+)
+
+DSN = os.environ.get("FOLLOWUP_TEST_DSN")
+MIGRACAO = (
+    Path(__file__).resolve().parents[2] / "deploy/migrations/followup_registros.sql"
+)
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class FollowupPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        parametros = conninfo_to_dict(DSN)
+        if (
+            parametros.get("host") not in {"127.0.0.1", "::1", "localhost"}
+            or parametros.get("dbname") != "test_chatbot_followup"
+        ):
+            raise RuntimeError(
+                "Teste exige host loopback e dbname=test_chatbot_followup"
+            )
+        cls.conn = psycopg.connect(DSN, connect_timeout=5)
+        cls.cursor = cls.conn.cursor()
+        cls.cursor.execute("SELECT to_regnamespace('chatbot')")
+        if cls.cursor.fetchone()[0] is not None:
+            cls.conn.close()
+            raise RuntimeError(
+                "Banco de teste não está vazio: schema chatbot já existe"
+            )
+        cls.cursor.execute(
+            "CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY);"
+        )
+
+        @contextmanager
+        def transacao_local(*_):
+            yield cls.cursor
+
+        with patch.object(bank_script, "transacao_deploy", transacao_local):
+            bank_script.criar_tabelas()
+            bank_script.criar_funcoes_lock()
+        with patch.object(floodscript, "transacao_deploy", transacao_local):
+            floodscript.criar_tabelas_bloqueio_flood()
+        cls.cursor.execute("""
+            INSERT INTO chatbot.etapa(id_etapa, nome_etapa)
+            SELECT etapa, 'Etapa de teste ' || etapa::text FROM generate_series(1, 23) AS etapa;
+            INSERT INTO chatbot.cliente(id_cliente, wa_id, nome) VALUES (1, '5511999999999', 'Ana');
+            INSERT INTO chatbot.unidade
+                (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel,
+                 telefone, waba_id, phone_number_id, link_agendamento)
+            VALUES (1, 'Unidade Teste', 'Suh', 'feminino', 'teste', 'teste@example.com',
+                    '5511888888888', 'waba-teste', 'phone-teste', 'https://example.com/agendar');
+            INSERT INTO chatbot.conversa(id_conversa, id_cliente, id_unidade, id_etapa_atual, wa_id)
+            VALUES (1, 1, 1, 11, '5511999999999');
+        """)
+        cls.conn.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.rollback()
+        cls.cursor.execute("DROP SCHEMA chatbot CASCADE")
+        cls.conn.commit()
+        cls.conn.close()
+
+    def setUp(self):
+        self.conn.rollback()
+        self.cursor.execute("SELECT clock_timestamp()")
+        self.agora = self.cursor.fetchone()[0]
+        self.ancora = self.agora - timedelta(hours=7, seconds=1)
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.historico_mensagens
+                (id_conversa, id_etapa, received_data_hora, wa_id, conteudo_texto,
+                 tipo_mensagem, id_hash_msg, id_phone_unidade, unidade_telefone, quem_enviou, status_envio)
+            VALUES (1, 11, %s, '5511999999999', 'mensagem', 'text', 'wamid.cliente',
+                    'phone-teste', '5511888888888', 'cliente', NULL),
+                   (1, 11, %s, '5511999999999', 'Podemos começar?', 'text', 'wamid.bot',
+                    'phone-teste', '5511888888888', 'bot', 'sent');
+        """,
+            (self.ancora - timedelta(minutes=1), self.ancora),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_message_from = 'bot', last_interaction_at = %s WHERE id_conversa = 1",
+            (self.ancora,),
+        )
+
+    def tearDown(self):
+        self.conn.rollback()
+
+    def test_sete_horas_um_envio_e_reinicio_nao_duplica(self):
+        dados = repo.reler_elegivel(1, self.cursor)
+        self.assertIsNotNone(dados)
+        ok, versao = tentar_lock_conversa(1, self.cursor)
+        self.assertTrue(ok)
+        envio = {
+            "enviou": True,
+            "mensagem_bot": "Você viu a minha mensagem?",
+            "id_hash_msg_bot": "wamid.followup",
+        }
+        id_bot, data = repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "SELECT followup_stage, followup_last_sent_at FROM chatbot.conversa WHERE id_conversa=1"
+        )
+        self.assertEqual(self.cursor.fetchone(), (1, data))
+        self.cursor.execute(
+            "SELECT id_mensagem_fila, id_hash_cliente_origem FROM chatbot.historico_mensagens WHERE id_mensagem=%s AND received_data_hora=%s",
+            (id_bot, data),
+        )
+        self.assertEqual(self.cursor.fetchone(), (None, None))
+
+    def test_antes_de_sete_horas_e_fora_da_janela_meta(self):
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='bot'",
+            (self.agora - timedelta(hours=6),),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_interaction_at=%s",
+            (self.agora - timedelta(hours=6),),
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='bot'",
+            (self.ancora,),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_interaction_at=%s", (self.ancora,)
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='cliente'",
+            (self.agora - timedelta(hours=24),),
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_fila_sem_vinculo_bloqueia_so_o_par_correto(self):
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.fila_mensagens
+                (received_data_hora, wa_id, conteudo_texto, tipo_mensagem,
+                 id_hash_msg, id_phone_unidade, unidade_telefone)
+            VALUES (%s, '5511999999999', 'Olá', 'text', 'fila-test', 'outra-unidade', 'outro-numero');
+        """,
+            (self.agora,),
+        )
+        self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "UPDATE chatbot.fila_mensagens SET id_phone_unidade='phone-teste'"
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_bloqueios_stage_e_unidade_impedem_despacho(self):
+        # Mesmo ativas e não terminais, as etapas a partir do agendamento são excluídas.
+        for etapa in range(1, 24):
+            with self.subTest(etapa=etapa):
+                self.cursor.execute("SAVEPOINT faixa_etapa")
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET id_etapa_atual=%s", (etapa,)
+                )
+                self.assertEqual(
+                    repo.reler_elegivel(1, self.cursor) is not None, etapa < 19
+                )
+                self.assertEqual(
+                    bool(repo.listar_elegiveis(self.cursor, 20)), etapa < 19
+                )
+                self.cursor.execute("ROLLBACK TO SAVEPOINT faixa_etapa")
+        for sql in (
+            "UPDATE chatbot.conversa SET followup_stage=1",
+            "UPDATE chatbot.conversa SET followup_stage=2",
+            "UPDATE chatbot.conversa SET followup_stage=-1",
+            "UPDATE chatbot.conversa SET turnos_sem_avanco=12",
+            "UPDATE chatbot.conversa SET status_ativa=FALSE",
+            "UPDATE chatbot.unidade SET status_pagamento=FALSE",
+            "INSERT INTO chatbot.cliente_bloqueado_meta(wa_id,phone_id_unidade,id_unidade) VALUES ('5511999999999','phone-teste',1)",
+        ):
+            with self.subTest(sql=sql):
+                self.cursor.execute("SAVEPOINT variacao")
+                self.cursor.execute(sql)
+                self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+                self.cursor.execute("ROLLBACK TO SAVEPOINT variacao")
+
+    def test_unicidade_da_ancora_e_rollback_do_historico(self):
+        dados = repo.reler_elegivel(1, self.cursor)
+        _, versao = tentar_lock_conversa(1, self.cursor)
+        envio = {
+            "enviou": True,
+            "mensagem_bot": "Você viu a minha mensagem?",
+            "id_hash_msg_bot": "wamid.followup",
+        }
+        repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.cursor.execute("SAVEPOINT duplicado")
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.cursor.execute("ROLLBACK TO SAVEPOINT duplicado")
+        self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
+        self.assertEqual(self.cursor.fetchone()[0], 1)
+
+    def test_reset_e_marcador_sao_atomicos(self):
+        _, versao = tentar_lock_conversa(1, self.cursor)
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s",
+            (self.agora,),
+        )
+        contexto = {
+            "id_conversa": 1,
+            "lock_version": versao,
+            "id_etapa_atual": 11,
+            "stage_anterior": 1,
+            "followup_em": self.agora,
+            "mensagem_cliente_atual": {
+                "id_mensagem_fila": 10,
+                "id_hash_msg": "wamid.reacao",
+            },
+        }
+        self.cursor.execute("SAVEPOINT sem_marcador")
+        with self.assertRaises(ValueError):
+            repo.concluir_retomada(contexto, self.agora, self.cursor)
+        self.cursor.execute("ROLLBACK TO SAVEPOINT sem_marcador")
+        self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+        self.assertEqual(self.cursor.fetchone()[0], 1)
+        self.cursor.execute(
+            "INSERT INTO chatbot.followup_retomada(id_conversa,id_mensagem_fila,id_hash_cliente,id_etapa,stage_anterior,followup_em) VALUES(1,10,'wamid.reacao',11,1,%s)",
+            (self.agora,),
+        )
+        repo.concluir_retomada(contexto, self.agora, self.cursor)
+        self.cursor.execute(
+            "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0, self.agora, 0, 11))
+
+    def test_reacao_real_rollback_e_replay_preservam_ciclo_posterior(self):
+        mensagem = {
+            "id_mensagem": 10,
+            "id_hash": "wamid.reacao",
+            "data_recebimento": self.agora,
+            "wa_id": "5511999999999",
+            "id_phone_unidade": "phone-teste",
+            "unidade_telefone": "5511888888888",
+            "tipo_mensagem": "text",
+            "conteudo_texto": "Pode começar",
+        }
+        envio = {
+            "enviou": True,
+            "id_hash_msg_bot": "wamid.repeticao",
+            "wa_id": "5511999999999",
+            "user_id": None,
+            "username": None,
+            "id_etapa_resultante": 11,
+            "tipo_mensagem": "text",
+            "mensagem_bot": "Que bom te ver novamente, Ana!\n\nPodemos começar?",
+        }
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.fila_mensagens
+                (id_mensagem, id_conversa, received_data_hora, wa_id,
+                 conteudo_texto, tipo_mensagem, id_hash_msg, id_phone_unidade,
+                 unidade_telefone, status)
+            VALUES (10, 1, %s, '5511999999999', 'Pode começar', 'text',
+                    'wamid.reacao', 'phone-teste', '5511888888888', 'processing');
+            """,
+            (self.agora,),
+        )
+        for followup_em in (None, self.agora):
+            with self.subTest(legado=followup_em is None):
+                self.cursor.execute("SAVEPOINT ciclo_reacao")
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5",
+                    (followup_em,),
+                )
+                _, versao = tentar_lock_conversa(1, self.cursor)
+                contexto_banco = repo.reler_conversa(
+                    {"conversa": {"id_conversa": 1}, "id_cliente": 1, "id_unidade": 1, "wa_id": "5511999999999", "user_id": None, "username": None},
+                    versao,
+                    self.cursor,
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+                self.assertEqual(self.cursor.fetchone()[0], 1)
+
+                # A falha após gravar a repetição deve reverter histórico e reset juntos.
+                self.cursor.execute("SAVEPOINT confirmacao")
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT confirmacao")
+                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+                self.assertEqual(self.cursor.fetchone()[0], 1)
+                self.cursor.execute(
+                    "SELECT concluida_em FROM chatbot.followup_retomada"
+                )
+                self.assertIsNone(self.cursor.fetchone()[0])
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 3)
+
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute(
+                    "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
+                )
+                self.assertEqual(self.cursor.fetchone(), (0, followup_em, 5, 11))
+                self.cursor.execute(
+                    "SELECT conteudo_texto FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
+                )
+                self.assertEqual(self.cursor.fetchone()[0], envio["mensagem_bot"])
+
+                # Simula recuperação da mesma fila após outro ciclo já ter começado.
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s",
+                    (self.agora + timedelta(hours=1),),
+                )
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                antes_replay = self.cursor.fetchone()[0]
+                contexto_banco = repo.reler_conversa(
+                    contexto_banco, versao, self.cursor
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                self.assertIsNotNone(contexto["resposta_bot_para_mensagem_atual"])
+                final = persistir_retorno_followup(
+                    contexto,
+                    {"enviou": False, "id_hash_msg_bot": "wamid.repeticao"},
+                    self.cursor,
+                )
+                self.assertTrue(final["resposta_ja_existia"])
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                self.assertEqual(self.cursor.fetchone()[0], antes_replay)
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 4)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT ciclo_reacao")
+
+    def test_dois_processos_lock_recusa_e_fencing(self):
+        # ROLLBACK remove apenas a fixture desta função. A conversa-base é confirmada.
+        self.conn.rollback()
+        ok, antiga = tentar_lock_conversa(1, self.cursor)
+        self.assertTrue(ok)
+        self.conn.commit()
+        try:
+            with psycopg.connect(DSN, connect_timeout=5) as outro:
+                with outro.cursor() as cursor:
+                    self.assertFalse(tentar_lock_conversa(1, cursor)[0])
+                    cursor.execute(
+                        "UPDATE chatbot.conversa SET processing_started_at=clock_timestamp()-INTERVAL '111 seconds' WHERE id_conversa=1"
+                    )
+                    ok, nova = tentar_lock_conversa(1, cursor)
+                    self.assertTrue(ok)
+                    self.assertGreater(nova, antiga)
+            with self.assertRaises(repo.LockConversaPerdido):
+                repo.proteger_conversa(1, antiga, self.cursor)
+            self.assertFalse(unlock_conversa(1, antiga, self.cursor))
+        finally:
+            self.conn.rollback()
+            self.cursor.execute(
+                "UPDATE chatbot.conversa SET processing=FALSE, processing_started_at=NULL WHERE id_conversa=1"
+            )
+            self.conn.commit()
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class MigracaoLegadoPostgresTests(unittest.TestCase):
+    def setUp(self):
+        # Reutiliza a base real e as verificações de banco vazio/loopback.
+        FollowupPostgresTests.setUpClass.__func__(type(self))
+        self.addCleanup(self.limpar_banco)
+        self.cursor.execute(
+            "DROP TABLE chatbot.followup_envio, chatbot.followup_retomada, chatbot.followup_legado"
+        )
+        self.cursor.execute("""
+            INSERT INTO chatbot.cliente(id_cliente, wa_id, nome)
+            VALUES (2,'5511999999992','Bia'), (3,'5511999999993','Caio'), (4,'5511999999994','Davi');
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,status_ativa,followup_stage,wa_id)
+            VALUES (2,2,1,18,TRUE,NULL,'5511999999992'), (3,3,1,11,FALSE,0,'5511999999993'), (4,4,1,11,TRUE,2,'5511999999994');
+        """)
+        self.conn.commit()
+
+    def limpar_banco(self):
+        FollowupPostgresTests.tearDownClass.__func__(type(self))
+
+    def executar_migracao(self):
+        self.cursor.execute(MIGRACAO.read_text(encoding="utf-8"), prepare=False)
+        while self.cursor.nextset():
+            pass
+
+    def test_marca_ativas_preserva_dados_e_nao_reaplica(self):
+        self.cursor.execute(
+            "SELECT id_conversa, to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa"
+        )
+        antes = dict(self.cursor.fetchall())
+        self.conn.commit()
+        self.executar_migracao()
+        self.cursor.execute(
+            "SELECT id_conversa, to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa"
+        )
+        depois = dict(self.cursor.fetchall())
+        for id_conversa, original in antes.items():
+            esperado = dict(original)
+            if original["status_ativa"]:
+                esperado["followup_stage"] = 1
+            self.assertEqual(depois[id_conversa], esperado)
+        self.cursor.execute(
+            "SELECT id_conversa,stage_anterior FROM chatbot.followup_legado ORDER BY id_conversa"
+        )
+        self.assertEqual(self.cursor.fetchall(), [(1, 0), (2, None), (4, 2)])
+        self.cursor.execute(
+            "SELECT (SELECT COUNT(*) FROM chatbot.followup_envio), (SELECT COUNT(*) FROM chatbot.historico_mensagens)"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0, 0))
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=1"
+        )
+        self.cursor.execute("""
+            INSERT INTO chatbot.cliente(id_cliente,wa_id) VALUES(5,'5511999999995');
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,wa_id)
+            VALUES(5,5,1,1,'5511999999995');
+        """)
+        self.conn.commit()
+        with self.assertRaises(psycopg.errors.DuplicateTable):
+            self.executar_migracao()
+        self.conn.rollback()
+        self.cursor.execute(
+            "SELECT id_conversa,followup_stage FROM chatbot.conversa WHERE id_conversa IN (1,5) ORDER BY id_conversa"
+        )
+        self.assertEqual(self.cursor.fetchall(), [(1, 0), (5, 0)])
+
+    def test_legado_terminal_recusa_migracao_sem_marcar_ninguem(self):
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET id_etapa_atual=22 WHERE id_conversa=1"
+        )
+        self.conn.commit()
+        with self.assertRaises(psycopg.errors.RaiseException):
+            self.executar_migracao()
+        self.conn.rollback()
+        self.cursor.execute(
+            "SELECT followup_stage FROM chatbot.conversa WHERE id_conversa=1"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0,))
+        self.cursor.execute("SELECT to_regclass('chatbot.followup_legado')")
+        self.assertIsNone(self.cursor.fetchone()[0])
+
+
+if __name__ == "__main__":
+    unittest.main()
+````
+
+## Passo 159S — `tests/integration/test_suporte_por_idade_postgres.py`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `81045d5e07bc02efe3a155b06fd1c31726811805bf3130dd404f9969ec5e0dd3`
+
+````python
+"""Migração real somente em PostgreSQL local descartável explicitamente indicado."""
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import re
+import unittest
+from unittest.mock import patch
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database import bank_script
+from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
+from core.repositories.monitoramento import painel
+
+
+DSN = os.environ.get('SUPORTE_IDADE_TEST_DSN')
+MIGRACAO = Path(__file__).resolve().parents[2] / 'deploy/migrations/20260911_idade_minima_suporte.sql'
+REVERSAO = Path(__file__).resolve().parents[2] / 'deploy/rollback/20260911_idade_minima_suporte.sql'
+
+
+@unittest.skipUnless(DSN, 'Defina SUPORTE_IDADE_TEST_DSN para banco local vazio test_chatbot_suporte_idade')
+class SuporteIdadePostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        params = conninfo_to_dict(DSN)
+        locais = {'127.0.0.1', '::1', 'localhost'}
+        if (params.get('host') not in locais
+                or params.get('dbname') != 'test_chatbot_suporte_idade'
+                or (params.get('hostaddr') and params['hostaddr'] not in locais)
+                or params.get('service')):
+            raise RuntimeError('Exige host loopback explícito e dbname=test_chatbot_suporte_idade')
+        cls.conn = psycopg.connect(DSN, connect_timeout=5, autocommit=True)
+        if cls.conn.info.host not in locais or cls.conn.info.dbname != 'test_chatbot_suporte_idade':
+            cls.conn.close()
+            raise RuntimeError('Conexão efetiva não corresponde ao banco descartável')
+        if cls.conn.execute("SELECT to_regnamespace('chatbot')").fetchone()[0] is not None:
+            cls.conn.close()
+            raise RuntimeError('Schema chatbot já existe: use um banco de teste vazio')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def setUp(self):
+        self.conn.execute('CREATE SCHEMA chatbot')
+        self.addCleanup(self.limpar_schema)
+        self.conn.execute('''CREATE TABLE chatbot.unidade (
+            id_unidade SERIAL PRIMARY KEY, nome_unidade TEXT NOT NULL,
+            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+            bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
+            numero_comercial TEXT
+        );
+        INSERT INTO chatbot.unidade(nome_unidade, suporte_idoso, email_obrigatorio, numero_comercial)
+        VALUES ('Ativa', TRUE, FALSE, '5571999999999'), ('Desativada', FALSE, TRUE, NULL);
+        CREATE TABLE chatbot.conversa (id_conversa INTEGER, followup_stage INTEGER, status_ativa BOOLEAN);
+        INSERT INTO chatbot.conversa VALUES (1, 1, TRUE), (2, 0, FALSE);
+        ''')
+
+    def limpar_schema(self):
+        self.conn.execute('ROLLBACK')
+        # Este schema foi criado pelo próprio teste após recusar um preexistente.
+        self.conn.execute('DROP SCHEMA chatbot CASCADE')
+
+    def migrar(self, sql=None):
+        self.conn.execute(sql or MIGRACAO.read_text(encoding='utf-8'))
+
+    def assert_dominio(self):
+        for idade in (None, 50, 60, 70, 80, 90):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (idade,))
+        for idade in (0, -1, 49, 55, 100):
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (idade,))
+
+    def test_conversao_preserva_unidades_conversas_e_dominio(self):
+        self.migrar()
+        self.assertEqual(self.conn.execute('''SELECT idade_minima_suporte, email_obrigatorio,
+            bpa_ativo, numero_comercial FROM chatbot.unidade ORDER BY id_unidade''').fetchall(),
+            [(60, False, False, '5571999999999'), (None, True, False, None)])
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.conversa ORDER BY id_conversa').fetchall(),
+                         [(1, 1, True), (2, 0, False)])
+        self.assert_dominio()
+        self.conn.execute("INSERT INTO chatbot.unidade(nome_unidade) VALUES ('Nova')")
+        self.assertIsNone(self.conn.execute("SELECT idade_minima_suporte FROM chatbot.unidade WHERE nome_unidade='Nova'").fetchone()[0])
+
+    def test_reaplicacao_recusada_sem_perder_configuracao_nova(self):
+        self.migrar()
+        self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=70 WHERE id_unidade=1')
+        with self.assertRaisesRegex(psycopg.Error, 'já aplicada ou schema parcial'):
+            self.migrar()
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1').fetchone()[0], 70)
+
+    def test_schema_parcial_recusado(self):
+        self.conn.execute('ALTER TABLE chatbot.unidade ADD COLUMN idade_minima_suporte INTEGER')
+        with self.assertRaisesRegex(psycopg.Error, 'schema parcial'):
+            self.migrar()
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade').fetchall(), [(True,), (False,)])
+
+    def test_falha_pos_conversao_reverte_toda_a_transacao(self):
+        sql = MIGRACAO.read_text(encoding='utf-8').replace(
+            'DO $poscondicoes$\nBEGIN',
+            "DO $poscondicoes$\nBEGIN\n    RAISE EXCEPTION 'Falha injetada de teste';",
+        )
+        with self.assertRaisesRegex(psycopg.Error, 'Falha injetada'):
+            self.migrar(sql)
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade').fetchall(), [(True,), (False,)])
+        self.assertEqual(self.conn.execute("""SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema='chatbot' AND table_name='unidade' AND column_name='idade_minima_suporte'""").fetchone()[0], 0)
+
+    def test_instalacao_limpa_usa_o_mesmo_dominio(self):
+        comandos = []
+
+        class CapturaDDL:
+            def execute(self, sql, *args): comandos.append(sql)
+
+        @contextmanager
+        def capturar(*args): yield CapturaDDL()
+
+        with patch.object(bank_script, 'transacao_deploy', capturar):
+            bank_script.criar_tabelas()
+        ddl_unidade = re.search(
+            r'CREATE TABLE IF NOT EXISTS chatbot\.unidade\s*\(.*?\);',
+            '\n'.join(comandos), re.S,
+        ).group(0)
+        self.conn.execute('DROP TABLE chatbot.unidade; CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY)')
+        self.conn.execute(ddl_unidade)
+        self.conn.execute('''INSERT INTO chatbot.unidade
+            (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel, telefone,
+             waba_id, phone_number_id, link_agendamento)
+            VALUES (1, 'Nova', 'Suh', 'feminino', 'teste', 'teste@example.com', '5571999999999',
+                    'waba', 'phone', 'https://example.com')''')
+        self.assertIsNone(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade').fetchone()[0])
+        self.assert_dominio()
+
+    def test_reversao_preserva_politica_null_60(self):
+        self.migrar()
+        self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+        self.assertEqual(self.conn.execute(
+            'SELECT suporte_idoso, email_obrigatorio FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(True, False), (False, True)])
+
+    def test_reversao_recusa_faixas_novas(self):
+        self.migrar()
+        for limite in (50, 70, 80, 90):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (limite,))
+            with self.assertRaisesRegex(psycopg.Error, 'Há faixas novas configuradas'):
+                self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+            self.conn.execute('ROLLBACK')
+            self.assertEqual(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1').fetchone()[0], limite)
+
+    def test_lock_ocupado_aborta_sem_converter_a_coluna(self):
+        with psycopg.connect(DSN, connect_timeout=5) as concorrente:
+            concorrente.execute('SELECT * FROM chatbot.unidade')
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                self.migrar()
+            self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(True,), (False,)])
+
+    def test_falha_na_reversao_preserva_schema_e_valores_novos(self):
+        self.migrar()
+        sql = REVERSAO.read_text(encoding='utf-8').replace(
+            'DO $conferencia$\nBEGIN',
+            "DO $conferencia$\nBEGIN\n    RAISE EXCEPTION 'Falha na reversão';",
+        )
+        with self.assertRaisesRegex(psycopg.Error, 'Falha na reversão'):
+            self.conn.execute(sql)
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT idade_minima_suporte FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(60,), (None,)])
+        self.assert_dominio()
+
+    def test_contexto_e_relatorio_no_schema_completo_migrado(self):
+        # Usa o DDL real e a reversão para montar a estrutura anterior completa.
+        self.conn.execute('''
+            DROP TABLE chatbot.conversa, chatbot.unidade;
+            CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY);
+        ''')
+
+        @contextmanager
+        def transacao_local(*_):
+            with self.conn.cursor() as cursor:
+                yield cursor
+
+        with patch.object(bank_script, 'transacao_deploy', transacao_local):
+            bank_script.criar_tabelas()
+        self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+        self.conn.execute('''
+            INSERT INTO chatbot.unidade
+                (id_unidade, nome_unidade, nome_agente, genero, cnpj,
+                 email_responsavel, telefone, waba_id, phone_number_id,
+                 link_agendamento, numero_comercial, suporte_idoso)
+            SELECT n, 'Teste ' || n, 'Suh', 'feminino', 'cnpj-' || n,
+                   'teste' || n || '@example.com', '557199999999' || n,
+                   'waba-' || n, 'phone-' || n,
+                   'https://example.com/agendar/' || n, '5571999999999', TRUE
+              FROM generate_series(1, 2) AS n;
+            INSERT INTO chatbot.etapa (id_etapa, nome_etapa)
+            VALUES (7, 'Idade');
+            INSERT INTO chatbot.cliente (id_cliente, wa_id, nome)
+            VALUES (1, '5571999999901', 'Cliente Um'),
+                   (2, '5571999999902', 'Cliente Dois');
+            INSERT INTO chatbot.conversa
+                (id_conversa, id_unidade, id_cliente, id_etapa_atual,
+                 status_ativa, motivo_encerramento, finalizou_em, wa_id)
+            VALUES (1, 1, 1, 7, FALSE, 'encaminhado_suporte_idoso', '2026-09-01T00:00:00Z', '5571999999901'),
+                   (2, 1, 1, 7, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z', '5571999999901'),
+                   (3, 2, 1, 7, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z', '5571999999901'),
+                   (4, 1, 2, 7, FALSE, 'encaminhado_suporte_idoso', '2026-10-01T00:00:00Z', '5571999999902'),
+                   (5, 1, 1, 7, TRUE, NULL, NULL, '5571999999901');
+        ''')
+        conversas_antes = self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall()
+        self.migrar()
+        self.assertEqual(self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall(), conversas_antes)
+        inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        with self.conn.cursor() as cursor:
+            for limite in (None, 50, 60, 70, 80, 90):
+                cursor.execute(
+                    'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
+                    (limite,),
+                )
+                self.assertEqual(
+                    buscar_contexto_etapa7(5, 1, cursor)['idade_minima_suporte'],
+                    limite,
+                )
+                self.assertEqual(
+                    painel.buscar_unidade(1, cursor)['idade_minima_suporte'], limite,
+                )
+                self.assertEqual(
+                    painel.contar_encaminhados_comercial_por_idade(1, inicio, fim, cursor),
+                    1,
+                )
+            with self.assertRaisesRegex(ValueError, 'não encontrado'):
+                buscar_contexto_etapa7(5, 2, cursor)
+            self.assertEqual(
+                painel.contar_encaminhados_comercial_por_idade(2, inicio, fim, cursor), 1,
+            )
+
+
+if __name__ == '__main__':
+    unittest.main()
+````
+
+## Passo 159T — `README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `c977adb918f538e589697103c409a9e80066f7a029a986c956c0ee77763f3cf6`
+
+````markdown
+# Chatbot WhatsApp
+
+Backend de atendimento assíncrono pelo WhatsApp, com entrada Django, fila em
+PostgreSQL, workers resilientes, cache Redis, integração Meta por PyWa e envio
+periódico de oportunidades ao Funil de Vendas.
+
+Este README é o portal do projeto. Regras detalhadas vivem nos documentos
+centrais e os mapas técnicos vivem nos READMEs de cada camada.
+
+Referência atual: **V1.3.0**, com encaminhamento de titulares por idade mínima
+configurável e indicador comercial no painel, implementados e implantados.
+O follow-up de inatividade continua em funcionamento. Versões e regras de
+numeração ficam em
+[VERSIONAMENTO.md](VERSIONAMENTO.md).
+
+Os documentos técnicos abaixo descrevem o código atual. Os planos em `docs/`
+são propostas separadas: sua existência não significa que já foram aplicados.
+
+## Comece por aqui
+
+Para desenvolver novas etapas, siga a
+[rotina de implementação de etapas](ROTINA_IMPLEMENTACAO_ETAPAS.md).
+
+| Documento | Papel |
+|---|---|
+| [Regras de negócio](REGRAS_DE_NEGOCIO.md) | Fonte de verdade sobre turno, fila, etapas, retries, bloqueios e comportamentos esperados. |
+| [Padrões de arquitetura](PADROES_DE_ARQUITETURA.md) | Fronteiras, dependências permitidas e local correto para novas funções. |
+| [Aplicativos Django](callback/README.md) | Webhook, validações, fila e estrutura do aplicativo de monitoramento. |
+| [Core](core/README.md) | Mapa dos recursos compartilhados. |
+| [Workers](workers/README.md) | Processamento assíncrono, commits, locks e recuperação. |
+| [Utilitários](utilitarios/README.md) | Monitoramento e manutenção executados manualmente. |
+| [Testes](tests/README.md) | Organização, comandos e cobertura crítica. |
+| [Rotina de deploy](regras_deploy/rotina_deploy.md) | Publicação da `prod`, atualização da Lightsail e ciclo dos serviços. |
+| [Ambiente e banco em produção](regras_deploy/modificando_env_e_banco_em_prod.md) | Troca segura do `.env` e evolução controlada do schema no RDS. |
+| [Arquivos de deploy](deploy/README.md) | Serviços systemd, Nginx e migrações versionadas. |
+
+## Documentação técnica
+
+| Camada | Documento |
+|---|---|
+| Cache e Redis | [core/cache/README.md](core/cache/README.md) |
+| Banco e deploy | [core/database/README.md](core/database/README.md) |
+| SQL de runtime | [core/repositories/README.md](core/repositories/README.md) |
+| Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
+| WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
+| Funil de Vendas | [core/integrations/funil/README.md](core/integrations/funil/README.md) |
+
+### Planejamento separado do runtime
+
+As propostas de [evolução para a V2](docs/_V2/desafios_v2.md),
+[segurança avançada](docs/_V2/seguranca-avancada.md),
+[infraestrutura](docs/_V2/infraestrutura.md),
+[concorrência](docs/_V2/concorrencia-workers.md) e
+[monitoramento de tratamentos](docs/_V2/monitoramento-tratamentos.md) permanecem
+em `docs/`. Não substituem as instruções operacionais dos READMEs.
+
+## Visão geral
+
+```text
+Meta/WhatsApp
+    -> callback/webhook
+    -> PostgreSQL: fila_mensagens
+    -> workers/worker_flow
+    -> core/integrations/whatsapp
+    -> Meta/WhatsApp
+
+PostgreSQL: conversa em etapa elegível
+    -> workers/worker_funil
+    -> core/integrations/funil
+    -> Funil de Vendas: oportunidade em Leads
+
+PostgreSQL: conversa elegível sem resposta ao bot por sete horas
+    -> workers/worker_followup
+    -> core/integrations/whatsapp
+    -> Meta/WhatsApp: um lembrete por ciclo
+
+Franqueado autenticado
+    -> callback/monitoramento
+    -> autorização pela unidade da sessão
+    -> PostgreSQL: consultas somente leitura
+```
+
+Responsabilidades principais:
+
+```text
+callback/webhook  entrada HTTP e enfileiramento
+callback/monitoramento login, conversas, relatórios e CSV por unidade
+workers           fluxo assíncrono e recuperação
+core/repositories SQL de runtime
+core/database     conexão, DDL e setup
+core/cache        Redis, fallback e autocura
+core/integrations serviços externos
+core/triagem      catálogo compartilhado das seis perguntas
+core/validacoes   validações puras de e-mail e domínio de suporte por idade
+utilitarios       relatórios e comandos manuais; nunca orquestradores
+tests             testes, fakes, mocks e contratos
+```
+
+## Requisitos
+
+- Python 3.12;
+- PostgreSQL acessível;
+- Redis acessível;
+- credenciais Meta/PyWa para envios reais;
+- arquivo `.env` local privado, ignorado pelo Git e alinhado com o ambiente;
+- dependências de [`requirements.txt`](requirements.txt).
+
+Não adicione segredos ao código. A configuração atual é carregada por
+`core/config_env.py` a partir de variáveis de ambiente e do arquivo `.env` local.
+Em produção, o `.env` pode ser substituído por variáveis do serviço ou por um
+gerenciador de segredos.
+
+## Preparação local
 
 ```powershell
-python -m compileall -q callback core workers tests
-python -m unittest tests.unit.test_fluxo_turno_abc tests.unit.test_retry_essencial tests.unit.test_persistencia_essencial tests.unit.test_validador_profissao tests.unit.test_valida_etapa8 tests.unit.test_valida_etapa12 tests.unit.test_saudacao_retorno tests.unit.test_suporte_idoso_email_obrigatorio tests.unit.test_monitoramento_unidade tests.unit.test_monitoramento_login tests.unit.test_monitoramento_painel tests.unit.test_worker_flow_runtime
-python -m unittest discover -s tests -t . -p "test_*.py" -b
-python -m pip check
-python callback/manage.py check --deploy
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+# Crie/preencha o .env privado com as variáveis do ambiente autorizado.
+notepad .env
+```
+
+Depois de criar o arquivo, preencha `.env` com os valores reais do ambiente. O
+arquivo `.env` é ignorado pelo Git e não deve ser enviado para repositório,
+print, documentação ou conversa.
+
+Variáveis principais:
+
+```text
+DJANGO_SECRET_KEY
+DJANGO_DEBUG
+DJANGO_ALLOWED_HOSTS
+DJANGO_CSRF_TRUSTED_ORIGINS
+DJANGO_TRUST_X_FORWARDED_PROTO
+DJANGO_SECURE_SSL_REDIRECT
+DJANGO_SESSION_COOKIE_SECURE
+DJANGO_CSRF_COOKIE_SECURE
+DJANGO_SECURE_HSTS_SECONDS
+DB_HOST
+DB_NAME
+DB_USER
+DB_PASSWORD
+DB_PORT
+DB_SSLMODE
+DB_SSLROOTCERT
+REDIS_HOST
+REDIS_PORT
+REDIS_USERNAME
+REDIS_PASSWORD
+REDIS_SSL
+META_ACCESS_TOKEN
+META_GRAPH_API_VERSION
+META_WEBHOOK_VERIFY_TOKEN
+META_APP_SECRET
+META_WEBHOOK_SIGNATURE_REQUIRED
+META_HTTP_CONNECT_TIMEOUT_SECONDS
+META_HTTP_READ_TIMEOUT_SECONDS
+META_PHONE_REGISTRATION_PIN
+WEBHOOK_MAX_BODY_BYTES
+FUNIL_WORKER_ENABLED
+FUNIL_INTERVALO_SEGUNDOS
+FUNIL_LIMITE_POR_CICLO
+FUNIL_LEASE_SEGUNDOS
+FUNIL_RETRY_LEAD_SEGUNDOS
+FUNIL_HTTP_CONNECT_TIMEOUT_SECONDS
+FUNIL_HTTP_READ_TIMEOUT_SECONDS
+FOLLOWUP_WORKER_ENABLED
+FOLLOWUP_POLL_SECONDS
+FOLLOWUP_BATCH_SIZE
+```
+
+Nunca registre valores reais de tokens, senhas ou payloads completos na
+documentação.
+
+## Banco de desenvolvimento
+
+O setup é executado a partir da raiz:
+
+```powershell
+python -m core.database.deploy_database.setup_database
+```
+
+O setup prepara um banco de desenvolvimento autorizado. Ele não substitui a
+migração de um banco existente: `CREATE TABLE IF NOT EXISTS` não atualiza colunas
+de tabelas já criadas. As migrações incrementais ficam em
+[`deploy/migrations/`](deploy/migrations/). Consulte
+[Banco e deploy](core/database/README.md) antes de executar o setup ou alterar
+DDL e funções PostgreSQL.
+
+## Execução em desenvolvimento
+
+A aplicação não possui um processo central. Webhook, worker de atendimento,
+worker do Funil e worker de follow-up têm ciclos de vida independentes e se
+coordenam pelo PostgreSQL.
+Inicie cada processo em seu próprio terminal:
+
+```powershell
+python callback/manage.py runserver
+python -m workers.worker_flow.iniciar_flow_worker
+python -m workers.worker_funil.iniciar_worker_funil
+python -m workers.worker_followup.iniciar_worker_followup
+```
+
+O Funil encerra imediatamente enquanto `FUNIL_WORKER_ENABLED=False`.
+O follow-up também exige `FOLLOWUP_WORKER_ENABLED=True` para executar seu laço.
+Antes de ativá-lo, prepare o schema por instalação limpa ou migração pendente
+e inicie o flow compatível, conforme
+[Ativação do follow-up](deploy/README.md#ativação-do-follow-up).
+O intervalo padrão é 60 segundos entre lotes de até 20 conversas, processadas
+individualmente. A unit de produção habilita o serviço; a execução manual nasce
+desabilitada. Não inicie workers locais com credenciais de produção para testar.
+
+Endpoint do webhook:
+
+```text
+GET  /webhook
+POST /webhook
+```
+
+A rota não possui barra final.
+
+## Testes
+
+```powershell
+python -m unittest discover -s tests -t . -p "test_*.py"
+```
+
+Validações adicionais:
+
+```powershell
+python -m compileall core workers callback utilitarios tests
+python callback/manage.py check
 git diff --check
 ```
 
-O `check --deploy` deverá usar a configuração local destinada a testes. A suíte offline deverá substituir Meta, Redis e PostgreSQL por mocks/fakes sempre que o caso não for de integração. Uma tentativa real de rede durante essa suíte é falha do teste, não pré-requisito de credencial.
+Consulte [tests/README.md](tests/README.md) para os contratos críticos e a
+política de mocks.
 
-Validar também a versão e a assinatura efetivamente instaladas:
+## Portal de monitoramento
+
+O aplicativo `callback/monitoramento` oferece login por conta Django vinculada
+1:1 à unidade, histórico consolidado de conversas e relatórios por período.
+São quatro downloads: Google CSV ou dados essenciais, cada um com todos os
+contatos ou apenas elegíveis. O essencial contém Nome, E-mail e Telefone e remove
+somente o prefixo brasileiro `+55`, preservando o DDD; Google CSV mantém o
+telefone internacional. Cada requisição resolve novamente a unidade
+da sessão e todos os SELECTs mantêm esse escopo. O navegador atualiza conversas
+a cada 10 segundos e relatórios a cada 30 segundos pelo mesmo serviço web do
+webhook; não existe processo adicional na VM.
+
+Conversas usa o layout compacto, com etiquetas de perfil junto da data e
+navegação adaptada a celular em ambas as orientações. Os indicadores agregados
+ficam em Relatórios. Os lembretes confirmados entram no histórico e no total de
+mensagens; não há indicador exclusivo de follow-up no painel.
+
+Na V1.3.0, o proprietário configura no Django Admin a idade mínima para
+encaminhar titulares ao comercial na etapa 7: Desativado, 50+, 60+, 70+, 80+ ou
+90+. O limite preserva as regras de dependentes, de pessoas acima de 99 anos,
+de e-mail e das tags de perfil. Os contratos ficam no
+[README dos workers](workers/README.md#regras-atuais-das-etapas).
+
+Em Relatórios, **Encaminhados ao comercial** conta clientes distintos por unidade
+com encerramento por suporte de idade no período, inclusive históricos,
+independentemente da configuração atual. A métrica não inclui o tratamento de
+100+ nem comprova atendimento humano ou venda. Consulte
+[callback/README.md](callback/README.md) para o contrato do painel e o
+[procedimento de suporte por idade](deploy/idade_minima_suporte.md) para migração
+e reversão de uma base existente.
+
+## Follow-up em funcionamento
+
+O quarto serviço envia um único `Você viu a minha mensagem?` por ciclo para
+conversa ativa nas etapas 1–18, com `followup_stage = 0`, último envio confirmado
+do bot há pelo menos sete horas e última mensagem do cliente há menos de 24 horas
+(com um minuto de margem no código). A seleção também verifica unidade, fila e
+bloqueios. A etapa 19 e as posteriores não recebem lembretes proativos.
+
+Na primeira reação aceita com stage positivo, o flow guarda a mensagem e repete
+a etapa com `Que bom te ver novamente`, sem usar essa reação como resposta da
+pergunta. O stage só volta a zero junto da persistência da repetição. Conversas
+antigas ativas foram marcadas com stage 1 na migração inicial, sem disparo retroativo.
+
+Contratos: [regras de negócio](REGRAS_DE_NEGOCIO.md#follow-up-de-inatividade-e-reação-do-cliente),
+[workers](workers/README.md#worker-de-follow-up),
+[banco](core/database/README.md#registros-de-follow-up) e
+[diagnóstico sem envio](utilitarios/README.md#diagnóstico-de-follow-up).
+
+## Monitoramento manual
+
+[`weekly.py`](utilitarios/reports_functions/weekly.py) gera o recorte semanal e
+[`total.py`](utilitarios/reports_functions/total.py) cobre o histórico de cada
+unidade. Os HTMLs de conversas unificam os atendimentos do mesmo cliente na mesma
+unidade; os PDFs apresentam indicadores, perfis de público, encaminhamentos ao
+Funil e satisfação. São materiais distintos, salvos em `monitoramento/`, pasta
+ignorada pelo Git e que contém dados pessoais.
+
+Esses utilitários não fazem parte dos serviços. Para comandos, dependências
+opcionais do PDF e interpretação das métricas, consulte
+[`utilitarios/README.md`](utilitarios/README.md).
+
+## Princípios operacionais
+
+- PostgreSQL é a fonte persistida da verdade;
+- Redis acelera consultas e deve possuir fallback quando previsto;
+- o webhook apenas valida e enfileira;
+- o worker é dono do fluxo da conversa e das transações do ciclo;
+- o worker do Funil é independente, processa uma oportunidade por vez e nasce
+  desativado até a validação manual da integração;
+- a V1 utiliza uma instância do worker de atendimento e uma instância independente
+  de cada worker do Funil e de follow-up; flow e follow-up compartilham o lock
+  versionado da conversa, mantendo conexões e transações próprias;
+- chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;
+- falha ao persistir uma mensagem válida na fila retorna HTTP 503;
+- falha ao validar unidade por indisponibilidade de Redis e banco retorna HTTP
+  503 para permitir reentrega pela Meta;
+- descartes intencionais por regra de negócio permanecem respostas controladas;
+- erros devem ser registrados sem derrubar o processo principal.
+
+Antes de alterar comportamento, leia [REGRAS_DE_NEGOCIO.md](REGRAS_DE_NEGOCIO.md).
+Antes de mover ou criar módulos, leia
+[PADROES_DE_ARQUITETURA.md](PADROES_DE_ARQUITETURA.md).
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
+
+## Passo 159U — `workers/README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `958806f6338c701474002eb42ec9845ec8f93792172ce4f412cc4e0f20731943`
+
+````markdown
+# Workers
+
+Camada assíncrona responsável pelo atendimento no WhatsApp, lembretes de
+inatividade e publicação periódica de oportunidades no Funil de Vendas.
+
+- [Portal do projeto](../README.md)
+- [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
+- [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md)
+- [Rotina de implementação de etapas](../ROTINA_IMPLEMENTACAO_ETAPAS.md)
+
+## Estrutura
+
+```text
+workers/
+├── worker_flow/
+│   ├── iniciar_flow_worker.py
+│   ├── valida_banco.py
+│   ├── valida_historico.py
+│   ├── tratar_bloqueio.py
+│   ├── response_flow/
+│   │   ├── flow_worker.py
+│   │   ├── flow_sender.py
+│   │   ├── repeticao_followup.py
+│   │   ├── etapas/
+│   │   │   ├── validadores_universais/
+│   │   │   └── validadores_contexto/
+│   │   └── transicoes/
+│   │       ├── contexto_transicao.py
+│   │       ├── eventos.py
+│   │       └── resolver_transicao.py
+│   ├── transacoes/
+│   │   ├── efeitos_transicao.py
+│   │   ├── encerramento_atendimento.py
+│   │   ├── persistencia_resposta.py
+│   │   ├── retorno_followup.py
+│   │   ├── movimento_conversa.py
+│   │   ├── finalizacao_fila.py
+│   │   ├── lock_conversa.py
+│   │   └── ordem_turno.py
+│   └── suporte/
+│       ├── cache_repair.py
+│       └── estado_ciclo.py
+├── worker_followup/
+│   ├── iniciar_worker_followup.py
+│   ├── config.py
+│   └── followup_worker.py
+├── worker_funil/
+│   ├── iniciar_worker_funil.py
+│   ├── config.py
+│   ├── funil_worker.py
+│   ├── processamento.py
+│   └── exceptions.py
+└── tratamento_erros_externos/
+```
+
+## Ciclo principal
+
+`worker_flow/iniciar_flow_worker.py` supervisiona o processo. Se
+`worker_flow()` escapar com uma exceção, registra o traceback, aguarda e
+reinicia o fluxo.
+
+`worker_flow/response_flow/flow_worker.py` é o orquestrador do ciclo:
+
+```text
+dequeue
+-> respeitar mensagem anterior
+-> validar cliente, unidade e conversa
+-> barrar conversa com bloqueio vigente
+-> adquirir lock
+-> vincular fila à conversa
+-> reler conversa sob lock e reconhecer retomada de follow-up
+-> persistir histórico do cliente
+-> repetir etapa na retomada; nos demais casos, rotear e enviar resposta
+-> persistir histórico/contexto do bot
+-> marcar fila como sent
+-> liberar lock e fechar conexão
+```
+
+## Propriedade transacional
+
+Conexão, `commit`, `rollback` e `close` do ciclo pertencem ao `flow_worker.py`.
+Os commits intermediários são checkpoints recuperáveis:
+
+1. claim da fila;
+2. espera por mensagem anterior, quando necessária;
+3. validação do banco;
+4. aquisição do lock;
+5. vínculo, releitura e histórico do cliente, incluindo o marcador de retomada quando aplicável;
+6. renovação do lock antes do envio;
+7. histórico e contexto do bot; na retomada, conclusão do marcador e reset do stage;
+8. status `sent`, após conferir novamente a posse do lock;
+9. unlock.
+
+Uma função auxiliar pode executar uma operação com o cursor recebido, mas não
+deve decidir a transação fora do orquestrador.
+
+### Vínculo da fila com a conversa
+
+O vínculo `fila_mensagens.id_conversa` é uma anotação de integridade e
+ordenação; ele não é o lock de turno e não substitui a resolução atual por
+`(cliente, unidade)`.
+
+O repositório preenche o vínculo quando ele está vazio ou já aponta para a mesma
+conversa. Um vínculo legado divergente só é reparado quando a fila ainda não tem
+histórico. Se nenhuma linha puder ser vinculada com segurança, o worker falha
+fechado: devolve a mensagem para `pending` por 300 segundos, sem consumir uma
+tentativa de erro e sem enviar resposta.
+
+Se a conversa anterior continuar ativa, a mensagem permanece na mesma conversa
+e segue a etapa já atualizada. Se o encerramento tiver bloqueio vigente, a
+mensagem é removida como conversa bloqueada. Uma conversa nova só é resolvida
+quando o encerramento permite recomeço imediato (`bloqueio_dias = 0`) ou quando
+o bloqueio já expirou.
+
+As barreiras que continuam decidindo o atendimento são:
+
+- advisory lock do turno por cliente e unidade no webhook;
+- lock versionado da conversa no worker;
+- verificação de mensagem anterior ainda aberta;
+- `resposta_bot_para_mensagem_atual`, que impede novo envio em um retry.
+
+## Retry e recuperação
+
+- dequeue incrementa `retry_count`;
+- `processing` abandonado volta a ser elegível após o timeout do banco;
+- falhas tratadas usam `tratamento_erros_externos/expection_process.py`;
+- o limite atual é de três tentativas;
+- ao atingir o limite, a mensagem é excluída;
+- retry com histórico do bot existente não chama a Meta novamente.
+
+O worker mantém a fila sem `sent` quando envio ou persistência final falham.
+Depois de uma resposta do bot persistida, o retry repara contexto e conclui a
+fila sem duplicar o envio.
+
+## Locks e ordenação
+
+- apenas um worker processa a conversa por vez;
+- `lock_version` impede unlock por proprietário antigo;
+- uma mensagem posterior não ultrapassa outra anterior aberta;
+- a verificação de mensagem anterior ocorre logo depois do claim, antes de
+  resolver conversa e tentar seu lock;
+- espera por mensagem anterior (30 segundos) ou lock recusado (5 segundos) não
+  consome tentativa de erro.
+
+## Response flow
+
+- `flow_worker.py`: transação, checkpoints e handlers.
+- `repeticao_followup.py`: reapresentação da etapa na reação ao follow-up ou
+  legado marcado, preservando a resposta já existente;
+- `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
+  etapa atual;
+- `etapas/resolver_etapa<n>.py`: valida a resposta, aplica tratamentos e
+  encaminha para o destino autorizado;
+- `etapas/validadores_universais/`: mídia, financeiro, nome, opções da triagem
+  e outras validações reutilizáveis;
+- `etapas/validadores_contexto/`: respostas específicas de cada pergunta;
+- `transicoes/contexto_transicao.py`: transforma o resultado da consulta em
+  origem e mapa explícitos no contexto histórico;
+- `transicoes/resolver_transicao.py`: decide `origem + evento -> destino`.
+
+Textos e chamadas PyWa não pertencem a essa pasta. Use
+`core/integrations/whatsapp/messages` e
+`core/integrations/whatsapp/pywa_functions/pywa_senders`.
+
+Tratamentos não produzem evento e permanecem na etapa atual. Respostas válidas
+utilizam a tabela `chatbot.etapa_transicao`; o destino não é calculado com
+`id_etapa + 1`.
+
+Validadores universais mantêm o mesmo significado em todas as etapas e não
+escolhem entre arestas diferentes. Quando uma resposta pode gerar destinos
+distintos, o validador é contextual e devolve diretamente o evento daquela
+origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
+
+### Regras atuais das etapas
+
+- Etapa 4: profissão válida é persistida em `conversa.profissao` e atualiza
+  também `cliente.profissao`. O snapshot da conversa preserva o atendimento
+  anterior quando o cadastro do cliente muda.
+- Etapa 6: `idade_minima_suporte` aceita NULL (desativado), 50, 60, 70, 80 ou 90.
+  Encaminha somente titulares a partir do limite até 99 anos, persiste a idade e
+  encerra na etapa 7 com `encaminhado_suporte_idoso`, sem bloqueio ou Funil.
+  Dependentes seguem as regras atuais. Pessoas de 100+ conservam o encaminhamento
+  próprio para titular ou dependente, mesmo com suporte desativado.
+  Na recuperação, as cinco mensagens oficiais identificam a resposta já enviada;
+  uma reavaliação usa o limite atual, sem recuperar a configuração anterior.
+  A barreira de idempotência impede reenvio e não cria avanço de etapa.
+- Etapa 7: confirmações de aceite geram `oferta_aceita` (`7 -> 10`);
+  `Talvez mais tarde` gera `oferta_adiada` (`7 -> 8`). Pedidos como
+  `quero mais informações` ou `quero saber mais` não são aceite; assim como
+  negativas livres, recebem tratamento sem avançar.
+- Etapa 10: a política parte de `email_obrigatorio` da unidade, mas o próprio
+  titular de 60 a 99 anos fica dispensado quando chega a essa etapa. A exceção
+  não se aplica ao dependente nem à idade do responsável. Mídia, reforço e
+  financeiro são tratados antes da coleta. Com e-mail opcional, a resposta
+  pode avançar como endereço válido, ausência declarada ou não informado;
+  os três casos usam `email_valido` (`10 -> 11`). Sem endereço, o efeito grava
+  `cliente.email = NULL`, sem manter um e-mail de atendimento anterior.
+- Etapa 11: `Começar triagem`, o callback do botão e confirmações textuais como
+  `iniciar triagem`, `sim` e `vamos começar` autorizam o início. A classificação
+  permanece no validador contextual da etapa, após os tratamentos universais.
+
+No retry já respondido da etapa 11, o resultado aceito do e-mail é reconstruído
+pelo histórico original, sem nova chamada à Meta nem reavaliação pela política
+de e-mail atual da unidade.
+
+No encaminhamento por idade da etapa 7, o histórico comprova a resposta já
+enviada, e a reavaliação do encerramento usa o limite atual da unidade. Se esse
+limite estiver desativado ou não abranger mais a idade do titular, a recuperação
+não encerra por suporte, não reenvia a resposta nem avança automaticamente a
+etapa. O limite anterior não é restaurado e o histórico original é preservado.
+
+### Saudação de retorno
+
+No caminho normal com `followup_stage = 0`, após a etapa 1,
+`valida_historico.py` compara o horário da mensagem atual do
+cliente com o último envio do bot confirmado como `sent` na mesma conversa.
+Com intervalo de pelo menos três horas e nome disponível, `flow_sender.py`
+prefixa a resposta com `Olá novamente, <nome>!`, inclusive quando ela é um
+tratamento. O texto enviado e o histórico recebem o mesmo prefixo uma vez.
+
+Essa saudação não é follow-up nem disparo por inatividade: depende de uma nova
+mensagem do cliente, não cria mensagem separada e não altera a transição. A
+etapa 1, dados de nome/data ausentes ou incompatíveis e retries com resposta
+persistida não geram uma nova saudação.
+
+## Persistência de transições
+
+As responsabilidades estão divididas assim:
+
+- `transacoes/persistencia_resposta.py`: orquestra a persistência final;
+- `transacoes/movimento_conversa.py`: classifica e persiste inicialização,
+  transição ou permanência;
+- `transacoes/efeitos_transicao.py`: exibe cada ponte como
+  `origem + evento -> destino` e grava seus efeitos específicos;
+- `transacoes/encerramento_atendimento.py`: resolve e aplica encerramentos,
+  inclusive a reconstrução do encaminhamento ao suporte no retry.
+
+Fluxo:
+
+```text
+histórico do bot
+-> movimento da conversa e confirmação da aresta no PostgreSQL
+-> efeitos específicos da transição
+```
+
+O `flow_worker.py` continua dono do commit e rollback. Os repositórios recebem o
+cursor e não controlam a transação.
+
+## Worker do Funil
+
+`worker_funil` é independente do atendimento. Ele não consome
+`fila_mensagens`, não envia WhatsApp e não altera o mapa de transições.
+
+`funil_worker.py` possui o laço operacional interno: executa um ciclo completo,
+aguarda `FUNIL_INTERVALO_SEGUNDOS` depois do sucesso (padrão: 1.800 segundos,
+30 minutos) e recupera indisponibilidade esperada do
+banco com espera linear de 5 em 5 segundos, limitada a 60. O arquivo
+`iniciar_worker_funil.py` possui o laço supervisor externo. Se uma falha crítica
+escapar do worker, ele aguarda 5 segundos fixos e cria o worker novamente.
+
+```text
+materializar conversas em etapas elegíveis
+-> claim de um funil_envios com FOR UPDATE SKIP LOCKED
+-> commit da reserva
+-> montar snapshot do cliente/dependente/triagem
+-> encerrar a transação de leitura
+-> criar uma oportunidade na ApiCarrossel
+-> marcar lead_no_funil e funil_envios=sent no mesmo commit local
+-> repetir até o limite do lote
+-> aguardar FUNIL_INTERVALO_SEGUNDOS
+```
+
+Cada lead é isolado. Falha de payload ou API volta o item para `pending`, agenda
+a próxima tentativa e permite processar os demais. Indisponibilidade operacional
+do banco é recuperada pelo laço interno; defeitos críticos escapam para o
+supervisor externo.
+
+O claim possui lease: um item abandonado em `processing` volta a ser elegível
+depois de `FUNIL_LEASE_SEGUNDOS`. Isso permite recuperação de processo morto e
+protege múltiplas instâncias com `SKIP LOCKED`.
+
+Não existe transação distribuída entre PostgreSQL e Funil. Se o CRM confirmar e
+o banco cair antes do commit local, o item permanece `processing` e poderá ser
+reenviado após o lease. O título atual é `Chatbot Lead <nome_unidade>` e não
+contém o ID da conversa; ele não identifica sozinho um envio nem impede
+duplicidade externa. Não há reconciliação automática com o CRM.
+
+O processo nasce desativado. `FUNIL_WORKER_ENABLED=True` deve ser configurado
+somente depois do teste manual da unidade. O ponto de entrada é
+`python -m workers.worker_funil.iniciar_worker_funil`; o serviço de produção
+está em
+[`deploy/systemd/chatbot-worker-funil.service`](../deploy/systemd/chatbot-worker-funil.service).
+
+## Testes relacionados
+
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_saudacao_retorno.py`;
+- `tests/unit/test_validador_profissao.py`;
+- `tests/unit/test_valida_etapa7.py`;
+- `tests/unit/test_sondas_funil.py`;
+- `tests/unit/test_followup.py`;
+- `tests/integration/test_followup_postgres.py`.
+
+O núcleo transacional e os testes específicos estão descritos em
+[`tests/README.md`](../tests/README.md).
+
+## Worker de follow-up
+
+`worker_followup/iniciar_worker_followup.py` é o quarto serviço da VM. Seu laço
+seleciona candidatos pelo PostgreSQL e chama `followup_worker.py`, proprietário
+da conexão e dos commits proativos. Não faz dequeue nem chama validadores de etapas.
+`FOLLOWUP_WORKER_ENABLED` é falso por padrão em execução manual; a unit systemd
+o habilita explicitamente. Lote padrão: 20; intervalo entre lotes: 60 segundos.
+As candidatas são processadas uma por vez, com lock e transações independentes.
+Somente etapas 1–18 admitem novos lembretes; etapas 19–23 são inelegíveis.
+A paginação visita candidatos posteriores mesmo quando os primeiros falham.
+Uma falha individual não interrompe o lote. A candidata pode ser tentada novamente
+quando a paginação voltar ao início, depois de revalidar todas as condições; não
+há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janela Meta.
+
+### Configuração e elegibilidade
+
+| Variável | Padrão no Python | Valores aceitos |
+|---|---|---|
+| `FOLLOWUP_WORKER_ENABLED` | `False` | Booleano; a unit configura `true`. |
+| `FOLLOWUP_POLL_SECONDS` | `60` | 5–3.600 segundos de espera após cada lote. |
+| `FOLLOWUP_BATCH_SIZE` | `20` | 1–100 candidatas por lote; processamento sequencial. |
+
+O texto é `Você viu a minha mensagem?`. Para despachar, todas as condições
+precisam continuar válidas na releitura após adquirir o lock:
+
+- conversa ativa, sem finalização, em etapa 1–18 não terminal;
+- `followup_stage = 0` (`NULL` é tratado como zero);
+- última mensagem da conversa é do bot, confirmada como `sent`, com pelo menos
+  sete horas, e `last_interaction_at` corresponde a essa mensagem;
+- última mensagem do cliente tem menos de 23h59, reservando um minuto da janela
+  de 24 horas; não existe mensagem do cliente com horário igual ou posterior ao bot;
+- unidade adimplente, destinatário e números da unidade presentes;
+- menos de 12 turnos sem avanço, sem bloqueio persistido ou flood no banco;
+- nenhuma fila `pending`/`processing` do par cliente/unidade, inclusive sem vínculo;
+- nenhum recibo que já cubra a âncora ou o próprio lembrete, nem retomada aberta com fila pendente.
+
+Exemplo: bot há 8 horas e cliente há 25 horas não permitem envio; bot há 8 horas
+e cliente há 9 horas permitem, se os demais critérios forem atendidos.
+O relógio de elegibilidade vem do PostgreSQL. Os limites de etapa e de tempo
+são regras do código/SQL, não novas variáveis de ambiente.
+
+O sucesso persiste histórico, recibo e stage 1 no mesmo commit. Não há segunda
+mensagem enquanto o cliente não reagir. Uma confirmação da Meta seguida de
+falha no commit local ainda pode resultar em duplicidade no retry; o worker
+registra `followup_commit_falhou` como crítico.
+
+### Retomada pelo flow
+
+No flow, o contexto é relido depois do lock. `transacoes/retorno_followup.py` registra
+a reação e recupera a prova de repetição. `response_flow/repeticao_followup.py`
+chama os senders normais da etapa, sem resolvers de negócio. A renovação do lock
+antes do envio acrescenta um checkpoint; persistência final e finalização da fila
+validam a posse antes de alterar dados. Repositórios não controlam commits.
+Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
+`Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!` sem nome salvo.
+O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
+na regra existente de três horas.
+
+A primeira reação é guardada, mas não valida nem avança a etapa. A repetição
+mantém botões e dados persistidos; não altera `turnos_sem_avanco`, Funil ou
+encerramento. Stage zero, histórico da repetição e conclusão do marcador só são
+confirmados juntos após o envio. `followup_last_sent_at` permanece como auditoria.
+Falha preserva a retomada; replay concluído não reenvia nem zera um ciclo posterior.
+O legado marcado também pode repetir etapas 18–21, embora elas não recebam
+proativos. A etapa terminal 22 não é repetível por esse caminho.
+
+### Operação e logs
+
+`SIGTERM`/`SIGINT` sinalizam parada e interrompem a espera entre lotes; uma
+candidata já em andamento passa pela limpeza da conexão e do lock. Falhas de
+consulta usam espera exponencial de 5 até 300 segundos. A unit usa
+`Restart=on-failure`, `RestartSec=5s` e `TimeoutStopSec=100s`.
+
+`followup_iniciado` informa a configuração. `followup_despacho` antecede a chamada
+externa, e `followup_confirmado` confirma a persistência local. Não há log INFO a
+cada varredura vazia; ausência de despachos não comprova falha. Para consultar
+candidatas sem envio, use o [diagnóstico](../utilitarios/README.md#diagnóstico-de-follow-up).
+
+Deploy: preparar banco e código, reiniciar flow compatível, então iniciar follow-up.
+Rollback: parar o proativo primeiro e manter flow compatível enquanto houver stage
+positivo ou retomadas pendentes. Desligar o serviço não limpa esses registros.
+Os comandos completos ficam na [rotina de deploy](../regras_deploy/rotina_deploy.md)
+e no [guia de ativação](../deploy/README.md#ativação-do-follow-up).
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
+
+## Passo 159V — `core/repositories/README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `a512038065220f558a5560cb2d9d7be5acbf878e4034ad608b93491c0934359e`
+
+````markdown
+# Repositorios
+
+SQL de runtime da aplicacao. Os modulos sao agrupados por dominio e entidade,
+nao pelo consumidor nem pelo tipo de comando SQL.
+
+- [Portal do projeto](../../README.md)
+- [Padroes de arquitetura](../../PADROES_DE_ARQUITETURA.md#sql-e-repositórios)
+- [Banco e deploy](../database/README.md)
+
+## Estrutura
+
+```text
+core/repositories/
+|-- atendimento/
+|   |-- clientes.py
+|   |-- conversas.py
+|   |-- dependentes.py
+|   |-- fila.py
+|   |-- followup.py
+|   `-- historico.py
+|-- fluxo/
+|   |-- contextos/
+|   |-- pesquisa_satisfacao.py
+|   |-- politicas.py
+|   |-- transicoes.py
+|   `-- triagem.py
+|-- unidades/
+|   |-- consultas.py
+|   `-- cache_control.py
+|-- seguranca/
+|   |-- bloqueio_meta.py
+|   |-- suspeita_bot.py
+|   `-- turno_cliente.py
+|-- monitoramento/
+|   |-- acessos.py
+|   `-- painel.py
+`-- funil/
+    |-- integracao.py
+    |-- envios.py
+    `-- leads.py
+```
+
+`atendimento` persiste as entidades centrais da conversa. `fluxo` consulta e
+registra regras do mapa de etapas. `unidades` concentra consultas e versao do
+cache. `seguranca` guarda as barreiras de turno e bloqueio. `funil` cobre a
+configuracao por unidade e o estado dos envios ao CRM.
+
+`monitoramento/acessos.py` consulta `unidade.id_usuario_monitoramento`, o vínculo
+1:1 opcional entre conta e unidade, revalidando a conta no banco. Sem referência
+não há acesso. Opcionalmente verifica conversa e mensagem na
+mesma leitura, sempre pela unidade da conversa. Recebe o ID do usuário da sessão
+por meio do serviço HTTP; não aceita um ID de unidade fornecido pelo navegador.
+Retorna `AcessoMonitoramento` ou `None`. Não lê credenciais nem concede acesso
+especial a superusuários.
+
+`monitoramento/painel.py` contém somente SELECTs para unidade, conversas,
+mensagens, métricas, perfis, satisfação, etapas, atividade e contatos. Todas as
+funções exigem o `id_unidade` já obtido pelo guard e repetem o escopo no próprio
+SQL. O navegador não fornece esse identificador.
+
+No domínio `funil`:
+
+- `integracao.py` lê widget, link e canal da unidade;
+- `leads.py` reúne cliente, dependente e triagem, preservando a profissão da
+  conversa e a resposta histórica de e-mail;
+- `envios.py` materializa, reivindica, reagenda e confirma a fila
+  `chatbot.funil_envios`.
+
+O repositório não executa HTTP. O `workers/worker_funil` controla commits e
+chama `core/integrations/funil` depois de encerrar a transação de leitura.
+
+## Contextos e histórico do atendimento
+
+- `fluxo/contextos/etapa6.py` lê `idade_minima_suporte`, `bpa_ativo` e número comercial
+  da unidade; `fluxo/contextos/etapa10.py` lê `email_obrigatorio`, destino do
+  atendimento e idade do titular. Os repositórios validam a integridade dos
+  dados, mas o resolver aplica a regra de atendimento.
+- `atendimento/conversas.py` grava `conversa.profissao`, o snapshot capturado
+  na etapa 5; `atendimento/clientes.py` também atualiza o cadastro corrente.
+  O Funil usa a profissão da conversa, nunca `cliente.profissao` como fallback.
+- `funil/leads.py` busca o e-mail pela mensagem do cliente na etapa 11 ligada
+  ao envio confirmado do bot na etapa 12, na mesma conversa, fila e mensagem
+  de origem. `cliente.email` só é fallback para legado sem esse vínculo;
+  a classificação do valor ocorre fora do SQL, em `core/validacoes/email.py`.
+- `atendimento/historico.py` fornece o nome e o último bot `sent` da conversa
+  para a saudação de retorno. O repositório não decide o intervalo de três
+  horas nem dispara mensagens.
+
+## Contrato
+
+Uma funcao de repositorio deve:
+
+- receber `cursor`;
+- usar SQL parametrizado;
+- retornar linha, tupla, booleano, quantidade afetada ou uma representacao
+  simples do resultado;
+- validar invariantes persistidas quando necessario;
+- deixar excecoes de persistencia chegarem ao orquestrador.
+
+Uma funcao de repositorio nao deve:
+
+- chamar `get_conn`;
+- executar `commit`, `rollback` ou `close`;
+- decidir retry;
+- retornar resposta HTTP;
+- acessar Redis, Meta ou outro servico externo;
+- escolher a proxima etapa do atendimento.
+
+## Mapeamento de resultados
+
+Converter uma linha SQL em `dict`, tupla nomeada ou dataclass pertence ao
+repositorio quando isso apenas nomeia os dados consultados. Decisoes de negocio,
+montagem de mensagens, retry e efeitos externos continuam fora desta pasta.
+
+## Propriedade da transacao
+
+```text
+worker_flow  -> flow_worker.py
+worker_followup -> followup_worker.py
+worker_funil -> funil_worker.py e processamento.py
+webhook      -> post_flow.py, flood_guard.py ou bloqueio_meta_guard.py
+scripts      -> proprio ponto de entrada
+```
+
+O repositorio nao anuncia rollback que nao executou. Ele propaga a excecao para
+o dono real da transacao registrar e decidir a recuperacao.
+
+## Idempotencia e concorrencia
+
+- `seguranca/turno_cliente.py` usa advisory lock por cliente e unidade;
+- `atendimento/fila.py` preserva a ordem por timestamp Meta e ID;
+- `atendimento/historico.py` reutiliza os vinculos da mensagem original;
+- `fluxo/transicoes.py` carrega somente as arestas permitidas para a origem;
+- updates de conversa exigem origem, evento e destino compativeis;
+- reaplicacao idempotente aceita somente a origem ou o destino exato.
+
+## Ao criar um repositorio
+
+Acrescente a operacao ao modulo da entidade correspondente. Crie um novo modulo
+quando houver um dominio real e coeso; nao crie `utils.py` generico e nao mova
+DDL para esta pasta.
+
+## Testes relacionados
+
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_saudacao_retorno.py`.
+
+O núcleo transacional e os testes específicos estão descritos em
+[`tests/README.md`](../../tests/README.md).
+
+## Registros de follow-up
+
+`atendimento/followup.py` concentra seleção, releitura, fencing e recibos de envio
+proativo e retomada. Recebe cursor; não abre conexão, não faz commit e não importa
+worker. O histórico permanece particionado; a unicidade do ciclo fica na tabela
+não particionada `followup_envio`, pela chave composta conversa + ID/data da âncora.
+`followup_retomada` permite reconstruir a reação ignorada em retries após o reset.
+`followup_legado` audita a marcação inicial de todas as conversas ativas com stage 1,
+preservando ID, stage anterior e horário da migração. Esse registro não é um envio.
+As tabelas são internas, sem ações no monitoramento ou no admin.
+
+`listar_elegiveis` e `reler_elegivel` usam o mesmo SQL: etapa 1–18, stage zero,
+última mensagem do bot confirmada há pelo menos sete horas, última mensagem do
+cliente dentro de 23h59, unidade adimplente e ausência de bloqueios ou fila aberta.
+Os horários do bot e do cliente são condições separadas. A paginação usa
+`(ancora_em, id_conversa)` para não ficar presa nas primeiras falhas.
+
+`proteger_conversa` confere `processing`, `lock_version` e validade de 110
+segundos antes da persistência, com renovação antes do envio. A retomada
+concluída é reconhecida por sua entrada original; um replay não zera um novo ciclo.
+`consultar_diagnostico` executa transação somente leitura e não adquire o lock de
+processamento nem envia mensagens. Os contratos reais de SQL e migração são
+verificados em `tests/integration/test_followup_postgres.py`.
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
+
+## Passo 159W — `core/integrations/whatsapp/README.md`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `2707fb53505d824aca301d470b34f4269057a5c63f7c803938a06bd930195728`
+
+````markdown
+# Integração WhatsApp
+
+Comunicação com a Meta WhatsApp Cloud API por meio da biblioteca PyWa.
+
+- [Portal do projeto](../../../README.md)
+- [Regras de negócio](../../../REGRAS_DE_NEGOCIO.md)
+- [Padrões de arquitetura](../../../PADROES_DE_ARQUITETURA.md#whatsapp-e-pywa)
+- [Integrações externas](../README.md)
+
+## Estrutura
+
+```text
+core/integrations/whatsapp/
+├── exceptions.py
+├── numero_comercial.py
+├── messages/
+│   ├── etapa1_messages.py ... etapa22_messages.py
+│   ├── componentes_compartilhados.py
+│   ├── followup_messages.py
+│   ├── tratamentos_universais.py
+│   └── triagem_componentes.py
+├── pywa_functions/
+│   ├── cliente.py
+│   ├── saudacao.py
+│   ├── resposta_envio.py
+│   ├── ferramentas.md
+│   └── pywa_senders/
+│       ├── etapa1.py ... etapa22.py
+│       ├── followup.py
+│       └── triagem_base.py
+└── tools/
+    ├── ativando_numero.py
+    ├── ativando_waba_id.py
+    ├── config.py
+    ├── desativando_numero.py
+    ├── desativa_waba_id.py
+    ├── usuarios.py
+    └── validando_phone_waba.py
+```
+
+## Direção das dependências
+
+```text
+worker -> pywa_functions -> messages
+                      |--> cliente PyWa
+                      `--> Meta
+```
+
+`messages` não importa PyWa. `pywa_senders` pode importar `messages`, cliente e
+exceções da integração. Nenhum deles controla banco, fila, transição ou retry.
+
+## Messages
+
+Catálogo de conteúdo enviado:
+
+- textos;
+- títulos de botão;
+- callbacks;
+- funções puras de montagem.
+
+Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
+mensagem não deve mover a responsabilidade de envio para `messages`.
+
+Cada etapa de 1 a 22 mantém seu próprio arquivo `etapaN_messages.py`.
+
+As apresentações inicial padrão, de mídia, financeira e de tratamento de
+reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
+argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
+formata o texto; não consulta o banco nem conhece a conversa.
+
+`componentes_compartilhados.py` também monta `Olá novamente, <nome>!` quando
+o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
+na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
+incompatíveis não interrompem o atendimento e não produzem prefixo.
+
+O worker fornece o contexto histórico e aplica a saudação à resposta corrente,
+inclusive tratamentos, sem mudar o destino. Não é follow-up, mensagem separada
+ou disparo automático após três horas de inatividade. No retry com resposta
+persistida, não há novo envio.
+
+## PyWa functions
+
+Concentra a criação do cliente PyWa e o transporte das mensagens do fluxo. Os
+senders são o local normal para chamadas de envio; operações compartilhadas de
+bloqueio e desbloqueio ficam em `tools/usuarios.py`, que reutiliza a mesma
+fábrica de cliente em `pywa_functions/cliente.py`.
+
+- `cliente.py`: normaliza `phone_id`, cria `WhatsApp` e aplica o prefixo de
+  retorno somente no escopo do envio corrente;
+- `saudacao.py`: seleção de bom dia, boa tarde ou boa noite pelo horário do
+  atendimento inicial, distinta da saudação de retorno;
+- `resposta_envio.py`: extrai o ID confirmado pela Meta e falha se ele faltar;
+- `pywa_senders/etapaN.py`: mensagens normais e tratamentos específicos da
+  etapa N.
+
+Cada sender escolhe conteúdo, legenda e lista de botões, realiza a chamada PyWa
+e devolve um contexto técnico com o ID da Meta e a etapa da mensagem enviada.
+O sender não escolhe origem, evento ou destino da transição.
+
+O encaminhamento de suporte ao idoso é um sender da etapa 7 com botão para o
+número comercial, normalizado por `numero_comercial.py`. A decisão de usar
+`idade_minima_suporte`, comparar a idade do titular ao limite e encerrar o
+atendimento é do worker. O sender recebe o limite validado e o catálogo monta
+o texto; com 60, preserva exatamente a mensagem antiga. As cinco variantes
+oficiais permitem reconhecer uma resposta existente sem reenviá-la. Da mesma forma, a política `email_obrigatorio` e a distinção entre
+aceite da oferta e pedido de informações não pertencem aos senders.
+
+Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
+futuro capaz de persistir vários IDs e tratar sucesso parcial.
+
+Os senders devolvem contexto simples para o worker. Falhas são encadeadas com
+`ErroEnvioMeta`, permitindo rollback e retry sem esconder a causa original.
+
+## Tools
+
+Operações Meta compartilhadas e ferramentas administrativas usadas pelo
+Django Admin e pelo webhook:
+
+- registrar/desregistrar número;
+- validar o vínculo entre WABA e phone ID;
+- ativar/desativar a inscrição WABA;
+- bloquear e desbloquear usuários na Meta.
+
+Relatórios conscientes e somente leitura ficam em
+[`utilitarios/monitoring/blocked_users.py`](../../../utilitarios/monitoring/blocked_users.py).
+Eles comparam bloqueios pela chave completa
+`(waba_id, phone_id_unidade, wa_id_cliente)` e reconciliam registros Cloud API.
+
+`tools/usuarios.py` é a primitiva única de bloqueio e desbloqueio consumida pelo
+webhook e pelo Admin. Os demais módulos deste diretório atendem às operações de
+configuração da conta e do número. Eles podem reutilizar a fábrica de cliente,
+mas não devem duplicar envio de etapa nem assumir responsabilidades de banco,
+fila ou transação.
+
+`tools/config.py` centraliza a configuração operacional da integração Meta, mas
+os valores são lidos por `core/config_env.py` a partir de variáveis de ambiente:
+
+```text
+META_ACCESS_TOKEN
+META_GRAPH_API_VERSION
+META_HTTP_CONNECT_TIMEOUT_SECONDS
+META_HTTP_READ_TIMEOUT_SECONDS
+META_PHONE_REGISTRATION_PIN
+```
+
+`META_GRAPH_API_VERSION` usa o formato `26.0`, sem o prefixo `v`. Essa versão é
+aplicada ao cliente PyWa e a todas as URLs diretas da Graph API. Se uma versão
+nova apresentar incompatibilidade, a variável pode retornar manualmente para a
+última versão estável validada.
+
+Não adicione token ou outro valor sensível diretamente nesse arquivo. WABA ID e
+phone number ID são dados por unidade e devem vir do banco/cache.
+`META_PHONE_REGISTRATION_PIN` também é segredo operacional e só é necessário
+para a operação administrativa de registro do número; não deve ser exibido em
+logs, documentação ou mensagens.
+
+## Limites
+
+Esta integração não deve:
+
+- executar SQL ou Redis;
+- decidir etapa persistida;
+- marcar fila como `sent`;
+- escolher quantidade ou intervalo de retries;
+- executar commit, rollback ou close;
+- importar módulos de `callback` ou `workers`.
+
+## Testes relacionados
+
+- `tests/unit/test_fluxo_turno_abc.py`;
+- `tests/unit/test_persistencia_essencial.py`;
+- `tests/unit/test_retry_essencial.py`;
+- `tests/unit/test_worker_flow_runtime.py`;
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_saudacao_retorno.py`.
+
+O núcleo transacional e os testes específicos estão descritos em
+[`tests/README.md`](../../../tests/README.md).
+
+## Lembrete de follow-up
+
+`messages/followup_messages.py` também monta a saudação de retomada com stage
+positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
+O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
+O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
+do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
+
+`messages/followup_messages.py` contém o único texto aprovado:
+`Você viu a minha mensagem?`.
+`pywa_senders/followup.py` envia texto sem botões, sem saudação de retorno e sem
+id_mensagem_fila fictício. Usa sessão HTTP com timeout e sem retry automático;
+recebe destinatário e phone_id da unidade. `conta_wa` aceita sessão opcional sem
+alterar os clientes existentes. A sessão usa timeout de 20 segundos por operação,
+com conexão limitada a 5 segundos. Stage e persistência pertencem ao worker/repositório.
+O ID retornado confirma o aceite da API; os eventos `sent`, `delivered` e `read`
+recebidos pelo webhook não atualizam o histórico nesta versão.
+
+
+## Identidades, contato obrigatório e follow-up
+
+WA ID é o destinatário prioritário. Sem WA ID, somente etapas 1/2 admitem user_id
+como substituto técnico e lógico temporário. O nome é coletado na etapa 1; a etapa
+2 exige compartilhamento oficial. Texto com telefone ou cartão manual não avança.
+Username é informação de apresentação, nunca chave de identidade ou destinatário.
+
+A prova oficial é validada pelo webhook e pelo banco, na unidade e conversa corretas.
+O vínculo user_id_cliente é escopado por unidade. Na reconciliação, a conversa
+provisória mantém seu ID, históricos, fila e checkpoints, passa ao cliente canônico
+e o registro provisório só é removido após a conferência das referências. A conversa
+canônica anterior continua preservada e encerrada com o motivo previsto.
+
+O follow-up mantém um lembrete por ciclo, lote máximo 20, intervalo 60 segundos,
+lock e transação por candidata. Na numeração após user_id, apenas etapas 1–18 são
+elegíveis; agendamento é a etapa 19. O bot precisa ter sido o último a enviar há
+pelo menos sete horas e o último envio do cliente deve estar dentro de 23h59,
+preservando a margem da janela Meta de 24h. Fila pendente, bloqueios e recibos
+continuam impedindo envio. Username nunca substitui um número em CSV ou envio.
+
+A reação comum repete a etapa e só zera o ciclo após persistir a resposta. Existe
+uma exceção exclusiva: contato oficial VALIDADO na etapa 2 avança pela aresta
+contato_oficial_compartilhado para a etapa 3, já usando WA ID canônico. Histórico,
+transição e conclusão do checkpoint/reset são confirmados juntos no commit de
+resposta do flow. O código responsável é contato_apos_followup.py; o caminho
+normal de repetição continua em retorno_followup.py/repeticao_followup.py.
+
+Qualquer outra reação na etapa 2 reapresenta o botão oficial com a saudação
+Que bom te ver novamente, {nome}! (sem nome, omite a personalização) e a orientação:
+Ainda não recebi seu número pelo compartilhamento oficial. Para compartilhar seu
+número com segurança e continuar o atendimento, aperte no botão abaixo.
+
+Replay do mesmo contato exige histórico da entrada na etapa 2 e resposta na etapa
+3, com a mesma fila, WAMID, unidade e cliente canônico. Não reenvia, não refaz o
+merge e não zera ciclo posterior. Uma prova nova fora da etapa 2 não é replay.
+O ciclo da conversa antiga não é transferido para a conversa reassociada.
+
+A migração de user_id preserva a configuração idade_minima_suporte (NULL, 50, 60,
+70, 80 ou 90), a política de e-mail, recibos e legados do follow-up. Renumera as
+referências das etapas 2–22 para 3–23, inclusive followup_retomada.id_etapa.
+Não reaplica followup_registros.sql nem a migração de idade em produção.
+
+O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
+encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
+55) e a exibição provisória de @username. Não expõe user_id ao operador.
+````
+
+## Passo 159X — `callback/monitoramento/templates/monitoramento/painel.html`
+
+Substituir integralmente o arquivo com o conteúdo completo abaixo.
+
+SHA-256 do conteúdo UTF-8 normalizado: `35ea7f85c1844ac5ee69ddd045b1f79d86a5a080a9902a324e85c20e0cb90494`
+
+````html
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1c321d">
+  <meta name="referrer" content="same-origin">
+  <title>Monitoramento · ESL Tech</title>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260912-user-id">
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260912-user-id" defer></script>
+</head>
+<body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
+      data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
+      data-url-relatorio="{% url 'monitoramento:dados_relatorio' %}"
+      data-url-csv="{% url 'monitoramento:contatos_csv' %}"
+      data-url-login="{% url 'monitoramento:login' %}">
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <header class="cabecalho-app">
+    <div class="marca-app">
+      <img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt="ESL Tech" width="116" height="48">
+      <span class="divisor" aria-hidden="true"></span>
+      <div><strong>Monitoramento</strong><span id="nomeUnidade">{{ nome_unidade }}</span></div>
+    </div>
+    <nav class="seletor-secao" aria-label="Seções do monitoramento">
+      <button type="button" class="ativo" data-secao="conversas" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 3V5Z"/></svg>Conversas
+      </button>
+      <button type="button" data-secao="relatorios" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10m7 10V4m7 16v-7"/></svg>Relatórios
+      </button>
+    </nav>
+    <div class="acoes-cabecalho">
+      <span class="estado-atualizacao" id="estadoAtualizacao" role="status"><i></i>Atualizado agora</span>
+      <form method="post" action="{% url 'monitoramento:sair' %}">{% csrf_token %}<button type="submit" class="botao-sair" aria-label="Sair da conta">Sair</button></form>
+    </div>
+  </header>
+
+  <div class="faixa-consulta" role="note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/></svg>
+    <p><strong>Ambiente somente para monitoramento.</strong> Nenhuma mensagem pode ser enviada por aqui. Para falar com um contato, use o número comercial da unidade.</p>
+  </div>
+
+  <main id="conteudo">
+    <section id="secaoConversas" class="secao-painel" aria-labelledby="tituloConversas">
+      <header class="barra-contexto">
+        <div><h1 id="tituloConversas">Conversas</h1><p id="periodoConversas">Carregando período…</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div class="app-conversas">
+        <aside class="lista-conversas" aria-label="Lista de conversas">
+          <div class="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input id="buscaConversas" type="search" placeholder="Pesquisar contato" aria-label="Pesquisar contato"></div>
+          <nav class="filtros-conversas" aria-label="Filtrar conversas">
+            <button type="button" class="ativo" data-filtro="todas">Todas</button>
+            <button type="button" data-filtro="continuacoes">Continuações</button>
+            <button type="button" data-filtro="funil">Funil</button>
+            <button type="button" data-filtro="avaliadas">Avaliadas</button>
+          </nav>
+          <div id="listaConversas" class="rolagem-lista" aria-live="polite"><div class="estado-vazio carregando">Carregando conversas…</div></div>
+        </aside>
+        <section class="janela-chat" aria-label="Histórico da conversa">
+          <header class="topo-chat" id="topoChat" hidden>
+            <button type="button" id="voltarConversas" class="voltar" aria-label="Voltar para a lista">‹</button>
+            <div class="avatar" id="avatarContato"></div>
+            <div class="identidade-contato"><h2 id="nomeContato"></h2><p id="detalhesContato"></p><div id="tagsContato" class="tags-contato"></div></div>
+            <button type="button" id="alternarDetalhes" class="detalhes-botao" aria-expanded="false">Detalhes</button>
+          </header>
+          <div class="painel-detalhes" id="painelDetalhes" hidden></div>
+          <div class="mensagens" id="mensagensChat">
+            <div class="marca-dagua" aria-hidden="true"><img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt=""></div>
+            <div class="boas-vindas"><span>ESL Tech</span><h2>Acompanhe cada atendimento.</h2><p>Selecione um contato para visualizar toda a conversa consolidada.</p></div>
+          </div>
+          <button id="irFinal" type="button" class="ir-final" aria-label="Ir para a mensagem mais recente" hidden>↓</button>
+          <footer class="rodape-chat">Conteúdo privado da unidade · consulta somente leitura</footer>
+        </section>
+      </div>
+    </section>
+
+    <section id="secaoRelatorios" class="secao-painel secao-relatorios" aria-labelledby="tituloRelatorios" hidden>
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">INTELIGÊNCIA COMERCIAL</p><h1 id="tituloRelatorios">Relatórios</h1><p id="periodoRelatorios">Selecione um período para interpretar os resultados.</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div id="conteudoRelatorio" class="conteudo-relatorio"><div class="cartao carregando-relatorio">Preparando os indicadores…</div></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
+````
+
+## Gate integrado antes do SQL
+
+Em desenvolvimento, depois de materializar todos os arquivos e instalar as dependências fixadas, executar com dotenv desativado e sem credenciais externas:
 
 ```powershell
+$env:PYTHON_DOTENV_DISABLED = "1"
+python -m compileall -q callback core workers tests utilitarios
+python -m unittest discover -s tests/unit -t . -p "test_*.py" -b
+python -m pip check
+git diff --check
 python -c "import importlib.metadata as m, inspect; from pywa import WhatsApp; assert m.version('pywa') == '4.4.0'; p=inspect.signature(WhatsApp.request_contact_info).parameters; assert {'to','sender','text','tracker'} <= set(p)"
 ```
 
-Os testes devem provar, no mínimo:
+As integrações são opt-in: definir FOLLOWUP_TEST_DSN, SUPORTE_IDADE_TEST_DSN e USER_ID_TEST_DSN somente para bancos locais descartáveis exclusivos conforme os guards dos testes. Nunca reutilizar DB_HOST/DB_NAME do projeto. Então executar:
 
-1. os quatro JSONs reais de `payloads/`, inclusive fallbacks `wa_id/from` e `user_id/from_user_id`, divergência de réplicas e `CONTACT_INFO` ambíguo;
-2. identidade do item congelada, cache/turno tipados e sender usando `user_id` somente nas etapas autorizadas;
-3. promoção e reconciliação provisório/canônico, profissão válida mais recente copiada ao canônico antes da exclusão, conversa antiga encerrada por `ativou_privacidade`, bloqueio herdado encerrando a nova por `bloqueio_reconciliado`, quatro gates de exclusão, rollback e retry idempotente;
-4. efeitos 1→2, 1→3 e 2→3 sem duplicar a reconciliação; confirmação 4→5 com estado final absoluto, profissão obrigatória gravada atomicamente em conversa/cliente e bifurcação 5→6/7; 23 etapas, 27 arestas, resolvers 1–22 e terminal 23;
-5. Funil 19–23 lendo `conversa.profissao`, nunca `cliente.profissao`, username complementar, resposta histórica de e-mail da futura etapa 11 ligada à resposta `bot/sent` da etapa 12 e triagem 13–18 com pergunta/resposta em ordem; `NULL` aparece como “não tem” ou “não informado” conforme a classificação da conversa;
-6. DDL final completo, inclusive `cliente.profissao VARCHAR(100) NULL`, `unidade.suporte_idoso`, `unidade.email_obrigatorio`, o motivo `encaminhado_suporte_idoso`, constraints, FKs, índices, ausência de `ALTER TABLE` histórico nos scripts Python declarativos e ausência de novos `ADD COLUMN` dessas três funcionalidades na migração de `user_id`;
-7. ausência de nomes físicos legados nos módulos versionados do runtime e nos utilitários que consultam PostgreSQL ou o payload de bloqueio do Redis;
-8. continuidade anti-flood e ordem: depois do commit do vínculo, eventos ainda válidos dos dois aliases compõem o mesmo limite de 15 e o mesmo WAMID não duplica; antes desse commit, a segunda barreira do worker impede que a prova ultrapasse predecessor aberto, sem ponte Redis prematura; pessoas/unidades sem prova não são somadas, falha transitória do RDS/prova autoritativa produz 503 sem bloqueio Meta e falha isolada do Redis conserva o fallback seguro preservado na V1.1.0.
-9. prova diferencial da baseline V1.1.0 `3f75447`: depois de normalizar a
-   renumeração `1 -> 1` e `2..22 -> 3..23`, catálogo, mapa, mensagens e botões
-   das 22 etapas legadas permanecem equivalentes. As diferenças autorizadas são
-   somente a nova etapa 2, os contratos de identidade e a adaptação explícita
-   dos consumidores para 23 etapas. A prova conserva a profissão atual 4 na
-   futura 5, a oferta atual 7 na futura 8, o e-mail atual 10 na futura 11, a
-   introdução da triagem atual 11 na futura 12 e a triagem 12..17 em 13..18.
-   A saudação dinâmica, o aceite amplo de `Começar triagem`, os recursos do
-   monitoramento e o Google CSV já pertencem à baseline e precisam continuar
-   cobertos, sem serem tratados como deltas externos ao commit.
-10. proteção mínima da profissão: somente as oito respostas completas observadas
-    são recusadas por igualdade após normalização e recebem
-    `profissao_fora_contexto`; os oito controles legítimos permanecem válidos;
-    a recusa repete a etapa 5 sem evento, consulta ao mapa ou profissão no
-    contexto que alimenta a persistência.
-11. saudação de retorno: limiar inclusivo de três horas calculado pelo horário do
-    evento atual contra a última mensagem `bot/sent` da mesma conversa; etapa 1,
-    nome ausente, intervalo menor e timestamps incompatíveis não ativam o
-    prefixo; avanço válido, tratamento inválido e `request_contact_info` usam a
-    mesma saudação; retry com resposta exata já persistida não chama resolver nem
-    sender; cada resposta continua gerando apenas um envio e um histórico.
-12. suporte/e-mail/oferta: titular de 60–99 anos só é encaminhado quando
-    `suporte_idoso=TRUE`, com persistência da idade, encerramento sem bloqueio e
-    retry idempotente; dependente nunca entra nessa exceção; idade 100+ mantém
-    precedência; a matriz de e-mail obrigatório/opcional, a limpeza para `NULL`,
-    os tratamentos universais prioritários e o falso positivo “quero mais
-    informações” permanecem cobertos após a renumeração.
-13. introdução da triagem: a futura etapa 12 aceita o clique em `Começar
-    triagem` e as formas textuais positivas mantidas na V1.1.0; negativas
-    explícitas prevalecem e respostas alheias continuam sem evento.
-14. monitoramento: todas as consultas continuam escopadas pela unidade do
-    usuário Django; o JSON nunca contém Meta `user_id`; WA ID prevalece,
-    `@username` aparece apenas sem telefone, o bloqueio exige contador e
-    denylist, `contact_request` é somente visual e o relatório possui 23 etapas.
-15. evento `system.user_changed_user_id`: sem fixture real assinado e contrato
-    oficial validado, retorna HTTP 200 sem fila e sem mutação de identidade.
-
-Na conferência das conversas ativas, preservar a sequência das perguntas já
-enviadas: introdução e triagem ocupam 11..17 antes da migração e 12..18 depois.
-Não misturar versões do catálogo na mesma conversa durante a implantação.
-
-Antes do RDS de produção, restaurar um snapshot recente ou criar um PostgreSQL
-descartável que reflita exatamente a baseline V1.1.0 `3f75447`,
-materializar nele a migração de profissão já versionada na baseline e o delta
-`20260829_adicionar_suporte_idoso_email_obrigatorio.sql`, e só então executar o
-SQL integral de `user_id` deste documento. Comparar catálogo, colunas, constraints,
-FKs, índices e dados com o DDL final. Testes estáticos de strings complementam
-essa prova, mas não substituem a execução real da sequência em clone descartável.
-
-### Preflight somente leitura do RDS
-
-Primeiro conferir se a premissa estrutural ainda é verdadeira:
-
-```sql
-SELECT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'chatbot'
-      AND table_name = 'unidade'
-      AND column_name = 'id_portfolio'
-) AS id_portfolio_ja_existe;
-
-SELECT
-    id_unidade,
-    nome_unidade,
-    waba_id,
-    phone_number_id,
-    suporte_idoso,
-    email_obrigatorio
-FROM chatbot.unidade
-ORDER BY id_unidade;
-
-SELECT table_name, column_name, data_type, character_maximum_length,
-       is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'chatbot'
-  AND (table_name, column_name) IN (
-      ('cliente', 'profissao'),
-      ('conversa', 'profissao'),
-      ('unidade', 'suporte_idoso'),
-      ('unidade', 'email_obrigatorio'),
-      ('unidade', 'id_usuario_monitoramento')
-  )
-ORDER BY table_name;
+```powershell
+python -m unittest tests.integration.test_followup_postgres tests.integration.test_suporte_por_idade_postgres tests.integration.test_user_id_v130_postgres -v
 ```
 
-- Se `id_portfolio_ja_existe = false`, seguir normalmente: a migração criará a
-  coluna anulável e as unidades existentes permanecerão com `NULL`, sem mapa ou
-  backfill obrigatório.
-- Se `id_portfolio_ja_existe = true`, parar: consultar `id_unidade, nome_unidade, nome_agente, genero, id_portfolio`, comparar o schema real e regenerar a migração. Não remover o preflight nem contornar o erro com `DROP COLUMN`.
-- Se as duas linhas de profissão da consulta não forem exatamente
-  `VARCHAR(100)`, anuláveis e sem default, parar: o banco não corresponde à
-  baseline materializada exigida, e a migração de `user_id` não
-  pode criar a coluna faltante.
-- Se os dois flags da unidade não aparecerem como `BOOLEAN NOT NULL` com
-  defaults `FALSE`/`TRUE`, parar; a migração de `user_id` não tem autorização
-  para criar ou corrigir o delta de 20260829.
-- Se `id_usuario_monitoramento` não for `INTEGER NULL` sem default, ou se sua
-  unicidade/FK para `chatbot.auth_user(id)` com `ON DELETE SET NULL` não estiver
-  válida, parar. A migração de `user_id` preserva o vínculo implantado em
-  20260902 e não corrige essa estrutura.
+O teste user_id extrai o DDL da referência V1.3.0 pelo Git; esse commit deve estar disponível no clone. Ele aplica o SQL completo e verifica o resultado real, em vez de apenas procurar palavras no arquivo. O check --deploy exige uma configuração de teste compatível; na implantação deve ser executado depois do SQL, conforme a sequência do teórico.
 
-Antes de abrir a transação de produção, confirmar os três serviços `inactive`, snapshot `Disponível`, ausência de itens `processing` e ausência de envio do Funil em curso. Depois do `COMMIT`, publicar exatamente o código validado, executar smokes de webhook/worker/Funil e inspecionar logs e `NRestarts` antes de encerrar o deploy.
+Critérios obrigatórios para promoção:
 
-O smoke com credenciais reais é separado da suíte offline e deve usar ambiente controlado, destinatário autorizado e versão Graph `v26.0`. Ele deve validar tanto envio por WA ID quanto o fallback por `user_id` na etapa permitida.
+1. Preservar as 22 etapas legadas sob a correspondência 1→1 e 2..22→3..23; obter 23 etapas e 27 transições. Idade fica em 7, oferta em 8, e-mail em 11, introdução em 12, perguntas de triagem em 13–18 e agendamento em 19. Não alterar mensagens, botões ou precedência dos tratamentos existentes, exceto a exceção aprovada e os contratos de identidade.
+2. Exercitar os quatro fixtures de payload, divergências/ambiguidades, assinatura, identidade tipada congelada, aliases por unidade, cache, turno, ordem e bloqueios. Os fixtures não substituem capturas reais da Graph API.
+3. Provar promoção/reconciliação, conservação do ID e histórico da conversa atual, profissão canônica/snapshot, fechamento da conversa anterior, bloqueio herdado, quatro verificações antes da exclusão e requeue por lock fresco sem consumir retry.
+4. Provar os dois ramos da reação na etapa 2, botão oficial, envio por WA ID após reconciliação, resposta e reset atômicos, falha antes da persistência e recuperação que não zera um ciclo posterior. As outras etapas conservam a repetição comum.
+5. Conservar idade_minima_suporte, domínio NULL/50/60/70/80/90, regras de menores/dependentes/100+, e-mail universal 60+, tratamento financeiro/reforço/mídia, aceite amplo da triagem e negativas prioritárias.
+6. Preservar os três registros de follow-up e datas/stages das conversas. Renumerar apenas a etapa dos checkpoints. Não executar novamente as migrações históricas de follow-up e idade.
+7. Preservar isolamento por usuário/unidade, sessões Django, indicador comercial por data de encerramento, tags de perfil fixas, interface responsiva e os quatro CSVs. Não permitir Meta user_id em JSON, HTML ou CSV; provisoriamente mostrar apenas username.
+8. Validar Funil 19–23 com profissão do snapshot da conversa, e-mail histórico e perguntas/respostas renumeradas, sem transformar username em telefone.
+9. Validar a janela Meta pela última mensagem do cliente, além das sete horas desde a última mensagem global do bot. Simular filas pendentes por ambos os aliases, retomadas abertas, recibo existente e concorrência entre workers.
+10. Confirmar os payloads reais e a API em ambiente autorizado antes do deploy. system.user_changed_user_id permanece sem mutação até confirmação de seu contrato, como já definido no plano.
 
-O único risco conhecido aceito por este plano continua sendo a janela rara Meta→banco: a Meta pode aceitar uma resposta e o processo cair antes da persistência final, levando o retry a reenviar a mesma mensagem. O antigo reset da janela anti-flood na promoção `user_id`→`wa_id` foi eliminado pelos passos 12, 16, 19, 22, 28, 36 e 45, usando somente vínculo persistido e barreira de predecessor. Nenhum outro desvio de identidade, transação ou retry é aceito como risco conhecido.
+O preflight da migração recusa baseline divergente, tabelas ausentes, portfólio já existente, dados inconsistentes e trabalho em processamento. Conferir os snapshots e o COMMIT completo. Não remover esses gates nem corrigir um erro eliminando dados de produção.
 
-# Fase final — Migração manual no DBeaver
+# Migração final — arquivo SQL integral
 
-## Passo 160 (final) — `deploy/migrations/20260904_adicionar_user_id_whatsapp.sql` e comando manual integral
+## Passo 160 (final) — `deploy/migrations/20260904_adicionar_user_id_whatsapp.sql`
 
-Criar o arquivo versionado com o conteúdo abaixo. No deploy, este mesmo bloco completo é o comando manual a ser executado no DBeaver, sem selecionar apenas uma parte.
+Criar o arquivo com o conteúdo completo abaixo.
 
-O preflight bancário aceita exclusivamente o estado pré-`user_id` composto pelo
-schema da baseline V1.1.0 `3f75447`, com as migrações de profissão,
-suporte/e-mail e vínculo de monitoramento já materializadas, ainda com 22
-etapas/25 transições. A
-pós-validação exige exatamente 23 etapas/27 transições. Toda a
-migração ocorre em uma única transação: qualquer erro desfaz inclusive o
-remapeamento de etapas. Depois de um `COMMIT` bem-sucedido, uma reexecução
-aborta no preflight sem alterar dados, pois o schema já não corresponde à
-baseline; ela nunca tenta aplicar parcialmente a promoção uma segunda vez.
-
-`deploy/migrations/20260812_personalizar_agente_unidade.sql` já pertence à
-baseline e não é incorporada nem reexecutada aqui. O SQL abaixo apenas exige e
-preserva `nome_unidade`, `nome_agente`, `genero` e suas quatro constraints.
-Embora já pertença ao commit-base,
-`deploy/migrations/20260823_adicionar_profissao_cliente.sql` é pré-requisito
-materializado no banco: o preflight de `user_id` exige
-`cliente.profissao` e `conversa.profissao`, o corpo não contém novo
-`ADD COLUMN profissao` e o pós-flight prova que seus valores permaneceram
-idênticos.
-
-Da mesma forma,
-`deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql` é
-pré-requisito e não é reexecutada: o preflight exige os dois booleanos com seus
-defaults e o motivo `encaminhado_suporte_idoso`; o snapshot e o pós-flight
-provam que os valores configurados por unidade não mudaram.
-
-Pré-condições obrigatórias:
-
-- concluir todos os gates offline e a execução bem-sucedida em PostgreSQL descartável/clone da baseline;
-- aplicar e validar primeiro, caso ainda não esteja materializada no banco,
-  `deploy/migrations/20260823_adicionar_profissao_cliente.sql`; sem esse estado,
-  o preflight de `user_id` deve abortar;
-- aplicar e validar também
-  `deploy/migrations/20260829_adicionar_suporte_idoso_email_obrigatorio.sql`;
-  sem os flags e o novo motivo de encerramento, o preflight deve abortar;
-- aplicar e validar
-  `deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql`
-  depois das migrations do Django; sem `auth_user`, coluna, unicidade e FK do
-  monitoramento, o preflight deve abortar;
-- parar webhook, worker-flow e worker-funil e confirmar os três como `inactive`;
-- criar snapshot do RDS após a parada e aguardar `Disponível`;
-- confirmar servidor, database e usuário corretos no DBeaver;
-- confirmar que `id_portfolio` ainda não existe; nenhum valor precisa ser
-  levantado ou preenchido para executar a migração;
-- executar em UTF-8, como script integral, preservando `BEGIN`/`COMMIT`;
-- não religar serviços até publicar exatamente o código deste plano prático;
-- considerar sucesso somente sem `ERROR`, com `COMMIT` e todas as validações finais aprovadas.
-
-Se qualquer preflight indicar schema/catálogo divergente, executar `ROLLBACK`, não improvisar alterações no DBeaver e regenerar este último passo a partir do estado real.
-
-SHA-256 do SQL UTF-8 normalizado: `5ba1d3f4d2d7be8439317dd0477867f503c7aebb542d18866570f11c7bf344db`
+SHA-256 do conteúdo UTF-8 normalizado: `310720f0be263b58c845fd8a0e0c40579f6e9a68150baa5a80c2dba273c4fb43`
 
 ````sql
 BEGIN;
@@ -42182,17 +47788,17 @@ SET LOCAL lock_timeout = '15s';
 SET LOCAL statement_timeout = '0';
 
 
--- A V1.1.0 já contém autenticação Django e o vínculo 1:1 do monitoramento.
+-- A V1.3.0 já contém autenticação Django e o vínculo 1:1 do monitoramento.
 -- A migração de user_id prova e preserva esse contrato; ela não o recria.
-DO $dependencias_v110$
+DO $dependencias_v130$
 BEGIN
     IF TO_REGCLASS('chatbot.auth_user') IS NULL
        OR TO_REGCLASS('chatbot.unidade') IS NULL THEN
         RAISE EXCEPTION
-            'Migração recusada: auth_user e unidade da V1.1.0 devem existir.';
+            'Migração recusada: auth_user e unidade da V1.3.0 devem existir.';
     END IF;
 END
-$dependencias_v110$;
+$dependencias_v130$;
 
 LOCK TABLE
     chatbot.auth_user,
@@ -42207,10 +47813,13 @@ LOCK TABLE
     chatbot.respostas_desafios,
     chatbot.cliente_bloqueado_meta,
     chatbot.webhook_flood_evento,
-    chatbot.funil_envios
+    chatbot.funil_envios,
+    chatbot.followup_envio,
+    chatbot.followup_retomada,
+    chatbot.followup_legado
 IN ACCESS EXCLUSIVE MODE;
 
--- Contrato canônico já implantado pela V1.1.0. A tabela temporária permite
+-- Contrato canônico já implantado pela V1.3.0. A tabela temporária permite
 -- comparar as definições produzidas pelo próprio PostgreSQL, sem depender de
 -- formatação textual manual e sem alterar chatbot.unidade.
 CREATE TEMP TABLE contrato_apresentacao_unidade_esperado (
@@ -42257,7 +47866,7 @@ BEGIN
           AND column_default IS NULL
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: coluna de monitoramento da V1.1.0 ausente ou incompatível.';
+            'Migração recusada: coluna de monitoramento da V1.3.0 ausente ou incompatível.';
     END IF;
 
     IF NOT EXISTS (
@@ -42302,7 +47911,7 @@ BEGIN
           )]::SMALLINT[]
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: vínculo unidade/auth_user da V1.1.0 está incompatível.';
+            'Migração recusada: vínculo unidade/auth_user da V1.3.0 está incompatível.';
     END IF;
 
     IF EXISTS (
@@ -42330,16 +47939,14 @@ BEGIN
           AND column_name = 'nome'
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: colunas de apresentação da unidade não correspondem à baseline 3f75447.';
+            'Migração recusada: colunas de apresentação da unidade não correspondem à baseline 4f7f8a0.';
     END IF;
 
-    -- Os dois flags vieram do delta 20260829 e são parte obrigatória da
-    -- baseline pré-user_id. A migração só pode preservá-los, nunca recriá-los.
+    -- A exigência de e-mail permanece booleana na baseline V1.3.0.
     IF EXISTS (
         SELECT 1
         FROM (
             VALUES
-                ('suporte_idoso', 'false'),
                 ('email_obrigatorio', 'true')
         ) AS esperado(column_name, valor_default)
         LEFT JOIN information_schema.columns AS coluna
@@ -42359,10 +47966,10 @@ BEGIN
               ) <> esperado.valor_default
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: suporte_idoso/email_obrigatorio divergem do delta 20260829.';
+            'Migração recusada: email_obrigatorio diverge da baseline V1.3.0.';
     END IF;
 
-    -- As duas colunas de profissão já pertencem à baseline V1.1.0 e precisam
+    -- As duas colunas de profissão já pertencem à baseline V1.3.0 e precisam
     -- estar materializadas no banco. A feature de user_id não possui autorização para
     -- criar, tipar, preencher ou apagar nenhuma delas.
     IF EXISTS (
@@ -42383,7 +47990,7 @@ BEGIN
            OR coluna.column_default IS NOT NULL
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: profissões de cliente/conversa não correspondem à baseline 3f75447 materializada.';
+            'Migração recusada: profissões de cliente/conversa não correspondem à baseline 4f7f8a0 materializada.';
     END IF;
 
     IF EXISTS (
@@ -42394,7 +48001,7 @@ BEGIN
            OR genero NOT IN ('masculino', 'feminino')
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: dados de apresentação da unidade violam a baseline 3f75447.';
+            'Migração recusada: dados de apresentação da unidade violam a baseline 4f7f8a0.';
     END IF;
 
     IF EXISTS (
@@ -42478,7 +48085,7 @@ BEGIN
           )
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: constraints de apresentação da unidade divergem da baseline 3f75447.';
+            'Migração recusada: constraints de apresentação da unidade divergem da baseline 4f7f8a0.';
     END IF;
 
     SELECT COUNT(*) INTO etapas_atuais FROM chatbot.etapa;
@@ -42593,7 +48200,7 @@ BEGIN
     THEN
         RAISE EXCEPTION
             'Migração recusada: catálogo/mapa atual não corresponde exatamente '
-            'à baseline 3f75447 e seus deltas aprovados (etapas=%/%; transições=%/%).',
+            'à baseline 4f7f8a0 e seus deltas aprovados (etapas=%/%; transições=%/%).',
             etapas_atuais,
             etapas_atuais_corretas,
             transicoes_atuais,
@@ -42610,7 +48217,7 @@ BEGIN
           AND elegivel_funil IS TRUE
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: etapa final atual não corresponde à baseline 3f75447.';
+            'Migração recusada: etapa final atual não corresponde à baseline 4f7f8a0.';
     END IF;
 
     IF EXISTS (
@@ -42619,7 +48226,7 @@ BEGIN
         WHERE id_etapa NOT BETWEEN 12 AND 17
     ) THEN
         RAISE EXCEPTION
-            'Migração recusada: resposta de triagem fora das etapas 12..17 da baseline 3f75447.';
+            'Migração recusada: resposta de triagem fora das etapas 12..17 da baseline 4f7f8a0.';
     END IF;
 
     IF NOT EXISTS (
@@ -42821,6 +48428,72 @@ BEGIN
 END
 $preflight$;
 
+
+-- Pré-requisitos atuais: nunca reaplicar as migrações de follow-up ou idade.
+CREATE TEMP TABLE contrato_idade_user_id (
+    idade_minima_suporte INTEGER NULL DEFAULT NULL,
+    CONSTRAINT ck_unidade_idade_minima_suporte CHECK (
+        idade_minima_suporte IS NULL
+        OR idade_minima_suporte IN (50, 60, 70, 80, 90)
+    )
+) ON COMMIT DROP;
+
+DO $baseline_v130$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'chatbot' AND table_name = 'unidade'
+          AND column_name = 'idade_minima_suporte' AND data_type = 'integer'
+          AND is_nullable = 'YES'
+          AND (column_default IS NULL OR column_default = 'NULL::integer')
+    ) OR EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'chatbot' AND table_name = 'unidade'
+          AND column_name = 'suporte_idoso'
+    ) THEN
+        RAISE EXCEPTION 'Baseline V1.3.0 incompatível: domínio de idade ausente ou legado';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint atual
+        JOIN pg_constraint esperado ON esperado.conrelid = 'pg_temp.contrato_idade_user_id'::regclass
+          AND esperado.conname = 'ck_unidade_idade_minima_suporte'
+        WHERE atual.conrelid = 'chatbot.unidade'::regclass
+          AND atual.conname = esperado.conname AND atual.convalidated
+          AND pg_get_constraintdef(atual.oid) = pg_get_constraintdef(esperado.oid)
+    ) THEN
+        RAISE EXCEPTION 'CHECK de idade ausente, inválido ou divergente';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM (VALUES
+            ('conversa', 'followup_stage', 'integer'),
+            ('conversa', 'followup_last_sent_at', 'timestamp with time zone'),
+            ('followup_envio', 'id_ancora', 'integer'),
+            ('followup_envio', 'ancora_em', 'timestamp with time zone'),
+            ('followup_retomada', 'id_etapa', 'integer'),
+            ('followup_retomada', 'stage_anterior', 'integer'),
+            ('followup_legado', 'stage_anterior', 'integer')
+        ) esperado(tabela, coluna, tipo)
+        LEFT JOIN information_schema.columns atual
+          ON atual.table_schema = 'chatbot' AND atual.table_name = esperado.tabela
+         AND atual.column_name = esperado.coluna
+        WHERE atual.data_type IS DISTINCT FROM esperado.tipo
+    ) THEN
+        RAISE EXCEPTION 'Baseline de follow-up incompatível';
+    END IF;
+END
+$baseline_v130$;
+
+-- Snapshots preservam inclusive recibos, legado e checkpoints concluídos.
+CREATE TEMP TABLE migracao_followup_conversa ON COMMIT DROP AS
+SELECT id_conversa, followup_stage, followup_last_sent_at,
+       last_message_from, last_interaction_at FROM chatbot.conversa;
+CREATE TEMP TABLE migracao_followup_envio ON COMMIT DROP AS
+SELECT to_jsonb(f) AS registro FROM chatbot.followup_envio f;
+CREATE TEMP TABLE migracao_followup_legado ON COMMIT DROP AS
+SELECT to_jsonb(f) AS registro FROM chatbot.followup_legado f;
+CREATE TEMP TABLE migracao_followup_retomada ON COMMIT DROP AS
+SELECT to_jsonb(f) - 'id_etapa' AS registro, id_etapa FROM chatbot.followup_retomada f;
+
 -- O snapshot vem depois do gate das colunas para que uma baseline incompatível
 -- seja recusada pela mensagem controlada, em vez de falhar com undefined_column.
 CREATE TEMP TABLE migracao_apresentacao_unidade_antes
@@ -42831,7 +48504,7 @@ SELECT
     nome_unidade,
     nome_agente,
     genero,
-    suporte_idoso,
+    idade_minima_suporte,
     email_obrigatorio,
     id_usuario_monitoramento
 FROM chatbot.unidade;
@@ -43172,6 +48845,10 @@ BEGIN
         SET id_etapa = etapa_antiga + 1
         WHERE id_etapa = etapa_antiga;
 
+        UPDATE chatbot.followup_retomada
+        SET id_etapa = etapa_antiga + 1
+        WHERE id_etapa = etapa_antiga;
+
         UPDATE chatbot.respostas_desafios
         SET id_etapa = etapa_antiga + 1
         WHERE id_etapa = etapa_antiga;
@@ -43491,7 +49168,6 @@ BEGIN
         SELECT 1
         FROM (
             VALUES
-                ('suporte_idoso', 'false'),
                 ('email_obrigatorio', 'true')
         ) AS esperado(column_name, valor_default)
         LEFT JOIN information_schema.columns AS coluna
@@ -43511,7 +49187,7 @@ BEGIN
               ) <> esperado.valor_default
     ) THEN
         RAISE EXCEPTION
-            'Pós-validação falhou: flags de suporte/e-mail foram alterados.';
+            'Pós-validação falhou: política de e-mail foi alterada.';
     END IF;
 
 
@@ -43602,7 +49278,7 @@ BEGIN
            OR depois.nome_unidade IS DISTINCT FROM antes.nome_unidade
            OR depois.nome_agente IS DISTINCT FROM antes.nome_agente
            OR depois.genero IS DISTINCT FROM antes.genero
-           OR depois.suporte_idoso IS DISTINCT FROM antes.suporte_idoso
+           OR depois.idade_minima_suporte IS DISTINCT FROM antes.idade_minima_suporte
            OR depois.email_obrigatorio IS DISTINCT FROM antes.email_obrigatorio
            OR depois.id_usuario_monitoramento IS DISTINCT FROM antes.id_usuario_monitoramento
     ) THEN
@@ -44310,6 +49986,43 @@ BEGIN
     END IF;
 END
 $pos_validacao$;
+
+
+DO $preservacao_followup_v130$
+BEGIN
+    IF EXISTS (
+        (SELECT * FROM pg_temp.migracao_followup_conversa EXCEPT ALL
+         SELECT id_conversa, followup_stage, followup_last_sent_at,
+                last_message_from, last_interaction_at FROM chatbot.conversa)
+        UNION ALL
+        (SELECT id_conversa, followup_stage, followup_last_sent_at,
+                last_message_from, last_interaction_at FROM chatbot.conversa EXCEPT ALL
+         SELECT * FROM pg_temp.migracao_followup_conversa)
+    ) OR EXISTS (
+        (SELECT registro FROM pg_temp.migracao_followup_envio EXCEPT ALL
+         SELECT to_jsonb(f) FROM chatbot.followup_envio f)
+        UNION ALL
+        (SELECT to_jsonb(f) FROM chatbot.followup_envio f EXCEPT ALL
+         SELECT registro FROM pg_temp.migracao_followup_envio)
+    ) OR EXISTS (
+        (SELECT registro FROM pg_temp.migracao_followup_legado EXCEPT ALL
+         SELECT to_jsonb(f) FROM chatbot.followup_legado f)
+        UNION ALL
+        (SELECT to_jsonb(f) FROM chatbot.followup_legado f EXCEPT ALL
+         SELECT registro FROM pg_temp.migracao_followup_legado)
+    ) OR EXISTS (
+        (SELECT registro, CASE WHEN id_etapa >= 2 THEN id_etapa + 1 ELSE id_etapa END
+         FROM pg_temp.migracao_followup_retomada EXCEPT ALL
+         SELECT to_jsonb(f) - 'id_etapa', id_etapa FROM chatbot.followup_retomada f)
+        UNION ALL
+        (SELECT to_jsonb(f) - 'id_etapa', id_etapa FROM chatbot.followup_retomada f EXCEPT ALL
+         SELECT registro, CASE WHEN id_etapa >= 2 THEN id_etapa + 1 ELSE id_etapa END
+         FROM pg_temp.migracao_followup_retomada)
+    ) THEN
+        RAISE EXCEPTION 'Migração alterou indevidamente ciclos, recibos ou checkpoints do follow-up';
+    END IF;
+END
+$preservacao_followup_v130$;
 
 COMMIT;
 ````
