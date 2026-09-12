@@ -24,7 +24,7 @@ def _periodo(coluna, inicio, fim, parametros):
 
 def buscar_unidade(id_unidade, cursor):
     cursor.execute("""
-        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.suporte_idoso,
+        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.idade_minima_suporte,
                u.email_obrigatorio, u.bpa_ativo,
                MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
           FROM chatbot.unidade u
@@ -32,7 +32,7 @@ def buscar_unidade(id_unidade, cursor):
           LEFT JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
          WHERE u.id_unidade = %s
          GROUP BY u.id_unidade, u.nome_unidade, u.nome_agente,
-                  u.suporte_idoso, u.email_obrigatorio, u.bpa_ativo
+                  u.idade_minima_suporte, u.email_obrigatorio, u.bpa_ativo
     """, (id_unidade,))
     return _linha(cursor)
 
@@ -141,6 +141,21 @@ def buscar_metricas(id_unidade, inicio, fim, cursor):
                   AND p.nota IS NOT NULL {f_nota}) AS nota_media
     """, tuple(parametros + [id_unidade] + p_msg + [id_unidade] + p_funil + [id_unidade] + p_nota + [id_unidade] + p_nota))
     return _linha(cursor)
+
+
+def contar_encaminhados_comercial_por_idade(id_unidade, inicio, fim, cursor):
+    """Conta o fato concluído, pela data de encerramento, sem inferir pela idade."""
+    parametros = [id_unidade]
+    filtro = _periodo('c.finalizou_em', inicio, fim, parametros)
+    cursor.execute(f"""
+        SELECT COUNT(DISTINCT c.id_cliente)
+          FROM chatbot.conversa c
+         WHERE c.id_unidade = %s
+           AND c.status_ativa = FALSE
+           AND c.motivo_encerramento = 'encaminhado_suporte_idoso'
+           AND c.finalizou_em IS NOT NULL {filtro}
+    """, tuple(parametros))
+    return int(cursor.fetchone()[0])
 
 
 def buscar_perfis(id_unidade, inicio, fim, cursor):

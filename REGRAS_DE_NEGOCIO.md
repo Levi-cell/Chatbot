@@ -313,18 +313,21 @@ Implementação principal:
   ou mais usa a versão adulta com o nome persistido. O limite de entrada de 4
   anos em unidade com BPA e de 5 anos sem BPA continua pertencendo à validação
   de idade anterior à triagem.
-- Cada unidade possui as políticas `suporte_idoso`, desativada por padrão, e
-  `email_obrigatorio`, ativada por padrão. Esses defaults preservam o
-  comportamento das unidades existentes.
-- Na etapa 6, mídia, reforço escolar e financeiro continuam precedendo a
-  validação de idade. Idades a partir de 100 anos preservam o encerramento
-  existente. Depois dessas decisões, um titular de 60 a 99 anos em unidade com
-  `suporte_idoso = TRUE` recebe o contato comercial e tem a conversa encerrada
-  com `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio de 30
-  dias e sem envio ao Funil. A idade informada é persistida. Dependentes nunca
-  entram nessa exceção.
-- O Admin só permite ativar `suporte_idoso` quando `numero_comercial` puder ser
-  normalizado para um link brasileiro válido do WhatsApp.
+- Cada unidade possui `idade_minima_suporte` (NULL/50/60/70/80/90, padrão NULL)
+  e `email_obrigatorio` (padrão TRUE). A migração da política anterior conserva
+  TRUE como 60 e FALSE como NULL; novas unidades começam sem suporte ativado.
+- Na etapa 6, mídia, reforço escolar e financeiro precedem a validação de idade.
+  Pessoas de 100+ conservam o encaminhamento próprio para titular ou dependente,
+  independentemente do suporte. Depois, titulares com idade válida maior ou igual
+  ao limite recebem o contato comercial e encerram na etapa 6 com
+  `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio ou Funil.
+  A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
+- O proprietário configura o limite no Admin. Habilitar ou manter a política
+  requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
+- Retry reconhece as cinco variantes oficiais e o prefixo de saudação. O texto
+  identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
+  usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
+  avanço sem resposta correspondente. A reação ao follow-up apenas repete a etapa.
 - Na etapa 10, mídia, reforço escolar e financeiro continuam precedendo a
   coleta de e-mail. A exigência efetiva é a configuração da unidade, exceto
   para o titular de 60 a 99 anos, cujo e-mail é universalmente opcional quando
@@ -1029,7 +1032,7 @@ eventos de flood e controle de cache utilizam administração somente leitura:
 - Se o Redis falhar depois de a Meta responder, o banco deverá permanecer sem
   alteração e o administrador deverá receber uma mensagem para tentar novamente.
 - Exclusão em massa de unidades é proibida.
-- `suporte_idoso` e `email_obrigatorio` são editáveis no Admin; a ativação do
+- `idade_minima_suporte` e `email_obrigatorio` são editáveis no Admin; a ativação do
   suporte exige um número comercial válido. `waba_id` e `phone_number_id` ficam
   somente leitura depois da criação.
 
@@ -1126,9 +1129,16 @@ Implementação principal:
   segundos quando a página está visível. Voltar à aba força uma leitura. Esse
   polling usa o mesmo serviço Django/Gunicorn do webhook e não cria worker ou
   serviço systemd adicional.
-- As opções `suporte_idoso`, `email_obrigatorio` e `bpa_ativo` são lidas da
-  unidade. Elas controlam as informações e interpretações exibidas, inclusive a
-  idade mínima do dependente e os casos em que envio ao Funil não se aplica.
+- As opções `idade_minima_suporte`, `email_obrigatorio` e `bpa_ativo` são lidas
+  da unidade. O limite é apresentado como política; não modifica tags 18–59/60+
+  ou de dependentes nem esconde envios ao Funil registrados em qualquer faixa.
+- Relatórios possui o card Encaminhados ao comercial, abaixo dos quatro KPIs.
+  Conta clientes distintos da unidade com conversa encerrada por
+  `encaminhado_suporte_idoso`, usando `finalizou_em >= início` e `< fim` do período.
+  Inclui os registros históricos independentemente da configuração atual e da
+  conversa mais recente; não inclui outros motivos nem o tratamento de 100+.
+  Não comprova clique, atendimento humano, matrícula, venda ou envio ao Funil.
+  Falha de consulta não é zero. O card não é duplicado na seção Conversas.
 - O relatório mostra métricas, comparação, demanda ao longo do tempo, perfis,
   satisfação e a etapa atual da conversa mais recente de cada contato que teve
   atividade no período. Cada contato conta uma vez. A etapa é um retrato atual;

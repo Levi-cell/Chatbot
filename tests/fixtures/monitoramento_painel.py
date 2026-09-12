@@ -3,7 +3,7 @@
 
 CONVERSAS = {
     'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'agente': 'Suh', 'regras': {
-        'suporte_idoso': True, 'email_obrigatorio': True, 'bpa_ativo': True,
+        'idade_minima_suporte': 60, 'email_obrigatorio': True, 'bpa_ativo': True,
     }},
     'periodo': {'chave': 'total', 'rotulo': 'Todo o histórico',
                 'inicio': '2026-07-29T23:55:00-03:00', 'fim': '2026-09-03T12:00:00-03:00',
@@ -62,7 +62,8 @@ NOMES_ETAPAS = [
     'Agendamento', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
 ]
 RELATORIO = {
-    'unidade': {'nome': 'Supera Santo Antônio de Jesus'},
+    'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'idade_minima_suporte': 60},
+    'encaminhados_comercial_por_idade': 8,
     'periodo': CONVERSAS['periodo'], 'metricas': CONVERSAS['metricas'],
     'tendencias': {'leads': 12.4, 'mensagens': 8.1, 'funil': -3.2, 'avaliacoes': 5.0, 'nota_media': 2.1},
     'atividade': [
@@ -75,7 +76,7 @@ RELATORIO = {
         {'rotulo': 'Dependentes de 18 a 59 anos', 'leads': 3, 'conversas': 3, 'funil': 1, 'taxa_funil': 33.3},
         {'rotulo': 'Dependentes com 60 anos ou mais', 'leads': 2, 'conversas': 2, 'funil': 0, 'taxa_funil': 0},
         {'rotulo': 'Titulares de 18 a 59 anos', 'leads': 54, 'conversas': 56, 'funil': 6, 'taxa_funil': 11.1},
-        {'rotulo': 'Titulares com 60 anos ou mais', 'leads': 11, 'conversas': 11, 'funil': 0, 'taxa_funil': None},
+        {'rotulo': 'Titulares com 60 anos ou mais', 'leads': 11, 'conversas': 11, 'funil': 0, 'taxa_funil': 0},
     ]},
     'etapas': [{'id_etapa': i + 1, 'nome_etapa': nome, 'quantidade': (i * 7) % 19} for i, nome in enumerate(NOMES_ETAPAS)],
     'atualizado_em': '2026-09-03T15:00:00Z',

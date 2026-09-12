@@ -30,6 +30,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
 
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 SAIDA_PADRAO = RAIZ_PROJETO / "monitoramento"
@@ -256,7 +258,7 @@ def _montar_segmentacao_perfis(
     perfis_conversa: Sequence[Mapping[str, Any]],
     ids_conversas_funil: set[int],
     *,
-    suporte_idoso: bool,
+    idade_minima_suporte: int | None,
     bpa_ativo: bool,
 ) -> dict[str, Any]:
     """Agrega perfis por conversa sem confundi-los com o lead consolidado.
@@ -265,6 +267,7 @@ def _montar_segmentacao_perfis(
     de conversas permanece disponível porque um mesmo contato pode iniciar
     atendimentos para pessoas diferentes durante o período.
     """
+    validar_idade_minima_suporte(idade_minima_suporte)
     idade_minima_dependente = (
         IDADE_MINIMA_DEPENDENTE_BPA
         if bpa_ativo
@@ -321,8 +324,7 @@ def _montar_segmentacao_perfis(
         total_leads = len(acumulador["ids_clientes"])
         total_conversas = len(acumulador["ids_conversas"])
         funil_observado = len(acumulador["ids_clientes_funil"])
-        politica_nao_aplicavel = chave == "titular_idoso" and suporte_idoso
-        total_funil = 0 if politica_nao_aplicavel else funil_observado
+        total_funil = funil_observado
         linhas.append(
             {
                 "chave": chave,
@@ -332,21 +334,17 @@ def _montar_segmentacao_perfis(
                 "leads_funil": total_funil,
                 "leads_funil_observados": funil_observado,
                 "conversas_funil": (
-                    0
-                    if politica_nao_aplicavel
-                    else len(acumulador["ids_conversas_funil"])
+                    len(acumulador["ids_conversas_funil"])
                 ),
                 "conversas_funil_observadas": len(
                     acumulador["ids_conversas_funil"]
                 ),
                 "taxa_funil": (
-                    None
-                    if politica_nao_aplicavel
-                    else round(total_funil / total_leads * 100, 1)
+                    round(total_funil / total_leads * 100, 1)
                     if total_leads
                     else 0.0
                 ),
-                "funil_nao_aplicavel": politica_nao_aplicavel,
+                "funil_nao_aplicavel": False,
             }
         )
 
@@ -382,7 +380,7 @@ def _montar_segmentacao_perfis(
         if total_conversas
         else 0.0,
         "perfis_predominantes": perfis_predominantes,
-        "suporte_idoso": suporte_idoso,
+        "idade_minima_suporte": idade_minima_suporte,
     }
 
 
@@ -418,7 +416,7 @@ def montar_snapshot(
             "id_unidade": id_unidade,
             "nome_unidade": str(linha["nome_unidade"]),
             "nome_agente": str(linha.get("nome_agente") or "Assistente"),
-            "suporte_idoso": bool(linha.get("suporte_idoso", False)),
+            "idade_minima_suporte": validar_idade_minima_suporte(linha["idade_minima_suporte"]),
             "bpa_ativo": bool(linha.get("bpa_ativo", False)),
             "conversas": [],
             "pesquisas": [],
@@ -606,7 +604,7 @@ def montar_snapshot(
             "segmentacao_perfis": _montar_segmentacao_perfis(
                 perfis_por_unidade[id_unidade],
                 conversas_funil_por_unidade[id_unidade],
-                suporte_idoso=bool(unidade["suporte_idoso"]),
+                idade_minima_suporte=unidade["idade_minima_suporte"],
                 bpa_ativo=bool(unidade["bpa_ativo"]),
             ),
         }
@@ -687,7 +685,7 @@ def coletar_snapshot(
                 u.id_unidade,
                 u.nome_unidade,
                 u.nome_agente,
-                u.suporte_idoso,
+                u.idade_minima_suporte,
                 u.bpa_ativo
               FROM chatbot.unidade u
              WHERE TRUE {filtro}
@@ -1723,27 +1721,18 @@ def renderizar_pdf(
         ),
         p("Leitura rápida: " + " ".join(leituras_rapidas), "pequeno"),
     ]
-    if segmentacao["suporte_idoso"]:
-        bloco_perfis.append(
-            p(
-                "* Quantidade no funil para titulares 60+: não se aplica devido às "
-                "políticas da unidade franqueada. Pela regra atual, são encaminhados "
-                "ao comercial, sem envio automático ao funil (0 esperado).",
-                "pequeno",
-            )
-        )
-        titular_idoso = next(
-            perfil for perfil in segmentacao["linhas"]
-            if perfil["chave"] == "titular_idoso"
-        )
-        if titular_idoso["leads_funil_observados"]:
-            bloco_perfis.append(p(
-                f"Atenção ao histórico: {titular_idoso['leads_funil_observados']} "
-                "lead(s) titular(es) 60+ têm envio confirmado no período. Esses "
-                "registros continuam no total geral; a política atual não apaga "
-                "envios anteriores nem comprova qual configuração vigorava na época.",
-                "pequeno",
-            ))
+    limite = segmentacao["idade_minima_suporte"]
+    politica_suporte = (
+        "Encaminhamento por idade: desativado."
+        if limite is None
+        else f"Encaminhamento ao comercial: titulares a partir de {limite} anos, na etapa de idade."
+    )
+    bloco_perfis.append(p(
+        politica_suporte + " As faixas etárias permanecem fixas. Os números e taxas "
+        "incluem os envios confirmados; a configuração atual não apaga o histórico "
+        "nem comprova qual regra vigorava na época.",
+        "pequeno",
+    ))
     if segmentacao["conversas_funil_sem_classificacao"]:
         bloco_perfis.append(p(
             f"Envios fora das cinco faixas: {segmentacao['conversas_funil_sem_classificacao']} "

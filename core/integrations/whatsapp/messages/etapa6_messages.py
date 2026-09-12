@@ -1,3 +1,6 @@
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
+
 from core.integrations.whatsapp.messages.tratamentos_universais import (
     montar_mensagem_tratamento_reforco_escolar,
 )
@@ -178,11 +181,11 @@ def montar_botao_idade_acima_99_etapa6():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA6
 
 
-### TITULAR DE 60 A 99 ANOS COM SUPORTE ESPECIALIZADO ATIVO
+### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
 
 MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
     "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
-    "realiza o suporte a clientes com 60 anos ou mais diretamente com a "
+    "realiza o suporte a clientes com {idade_minima} anos ou mais diretamente com a "
     "nossa equipe comercial.\n\n"
     "Vou te passar o contato para continuar o atendimento. Basta clicar "
     "no botão abaixo."
@@ -191,8 +194,11 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
 BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar com Comercial"
 
 
-def montar_mensagem_suporte_idoso_etapa6():
-    return MENSAGEM_SUPORTE_IDOSO_ETAPA6
+def montar_mensagem_suporte_idoso_etapa6(idade_minima):
+    validar_idade_minima_suporte(idade_minima)
+    if idade_minima is None:
+        raise ValueError("Não há mensagem de suporte para política desativada")
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA6.format(idade_minima=idade_minima)
 
 
 def montar_botao_suporte_idoso_etapa6():

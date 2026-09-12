@@ -220,7 +220,12 @@ def montar_linha_csv_google_contatos(
     return [valores.get(coluna, '') for coluna in CABECALHO_CSV_GOOGLE_CONTATOS]
 
 
-def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade):
+def montar_relatorio(
+    metricas, anteriores, perfis, satisfacao, etapas, atividade,
+    *, encaminhados_comercial_por_idade,
+):
+    if type(encaminhados_comercial_por_idade) is not int or encaminhados_comercial_por_idade < 0:
+        raise ValueError('Total de encaminhamentos inválido')
     def variacao(atual, anterior):
         if atual is None or anterior is None:
             return None
@@ -232,6 +237,7 @@ def montar_relatorio(metricas, anteriores, perfis, satisfacao, etapas, atividade
         tendencias[chave] = variacao(metricas.get(chave, 0), anteriores.get(chave) if anteriores else None)
     return {
         'metricas': metricas,
+        'encaminhados_comercial_por_idade': encaminhados_comercial_por_idade,
         'tendencias': tendencias,
         'perfis': perfis,
         'satisfacao': satisfacao,

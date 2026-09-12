@@ -112,10 +112,17 @@ conversa. As etapas 18 a 22 são marcadas como
 e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
 30 dias são exclusivos da política da etapa 22.
 
-Cada unidade também possui `suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE` e
-`email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`. A primeira flag encaminha
-titulares de 60 a 99 anos ao comercial sem bloqueio; a segunda controla a
-coleta de e-mail, preservando a exceção universal do titular 60+.
+Cada unidade possui `idade_minima_suporte INTEGER NULL DEFAULT NULL`, limitada
+por CHECK a NULL/50/60/70/80/90, e `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`.
+O limite encaminha apenas titulares a partir da idade escolhida até 99 anos;
+NULL desativa. A coleta de e-mail conserva a exceção universal do titular 60+.
+
+O SQL `deploy/migrations/20260911_idade_minima_suporte.sql` converte a coluna
+booleana anterior: TRUE vira 60 e FALSE vira NULL. É transacional, verifica
+as configurações por unidade e recusa reaplicação/schema parcial. Não altera
+conversas, históricos ou stages do follow-up. Instalação limpa usa o DDL atual;
+não deve executar novamente as migrações históricas sobre o schema final.
+Ver [procedimento coordenado](../../deploy/idade_minima_suporte.md).
 
 A migração incremental que insere a confirmação como etapa 3 e remapeia as
 referências existentes está em

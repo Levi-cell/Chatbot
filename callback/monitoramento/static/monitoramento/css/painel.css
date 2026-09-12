@@ -268,3 +268,10 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;scroll-behavior:auto!important}
 }
+
+.indicador-comercial{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px}
+.indicador-comercial>div{flex:1 1 230px;min-width:0;overflow-wrap:anywhere}
+.indicador-comercial h2{margin:0 0 5px;font-size:16px}
+.indicador-comercial p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
+.indicador-comercial .politica-suporte{margin-top:4px}
+.total-comercial{font-size:28px;line-height:1.2;overflow-wrap:anywhere;max-width:100%;color:var(--verde-800)}

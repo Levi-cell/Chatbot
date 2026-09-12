@@ -2,6 +2,8 @@
 
 from zoneinfo import ZoneInfo
 
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
 from django.db import connection
 
 from core.repositories.monitoramento import painel as repositorio
@@ -61,7 +63,7 @@ def carregar_conversas(acesso, periodo):
             'nome': unidade['nome_unidade'],
             'agente': unidade['nome_agente'],
             'regras': {
-                'suporte_idoso': bool(unidade['suporte_idoso']),
+                'idade_minima_suporte': validar_idade_minima_suporte(unidade['idade_minima_suporte']),
                 'email_obrigatorio': bool(unidade['email_obrigatorio']),
                 'bpa_ativo': bool(unidade['bpa_ativo']),
             },
@@ -94,7 +96,7 @@ def carregar_mensagens(acesso, id_cliente, periodo):
     return {'id_cliente': id_cliente, 'mensagens': mensagens}
 
 
-def _agrupar_perfis(linhas, *, bpa_ativo, suporte_idoso):
+def _agrupar_perfis(linhas, *, bpa_ativo):
     minimo = 4 if bpa_ativo else 5
     chaves = ('dependente_menor', 'dependente_adulto', 'dependente_idoso', 'titular_adulto', 'titular_idoso')
     acumulado = {chave: {'clientes': set(), 'conversas': 0, 'funil': set()} for chave in chaves}
@@ -134,13 +136,12 @@ def _agrupar_perfis(linhas, *, bpa_ativo, suporte_idoso):
     for chave in chaves:
         item = acumulado[chave]
         leads = len(item['clientes'])
-        nao_aplicavel = chave == 'titular_idoso' and suporte_idoso
-        funil = 0 if nao_aplicavel else len(item['funil'])
+        funil = len(item['funil'])
         resposta.append({
             'chave': chave, 'rotulo': rotulos[chave], 'leads': leads,
             'conversas': item['conversas'], 'funil': funil,
-            'taxa_funil': None if nao_aplicavel else round(funil / leads * 100, 1) if leads else 0,
-            'funil_nao_aplicavel': nao_aplicavel,
+            'taxa_funil': round(funil / leads * 100, 1) if leads else 0,
+            'funil_nao_aplicavel': False,
         })
     return {
         'linhas': resposta,
@@ -161,6 +162,9 @@ def carregar_relatorio(acesso, periodo):
     with connection.cursor() as cursor:
         unidade = repositorio.buscar_unidade(acesso.id_unidade, cursor)
         metricas = repositorio.buscar_metricas(acesso.id_unidade, periodo.inicio, periodo.fim, cursor)
+        encaminhados = repositorio.contar_encaminhados_comercial_por_idade(
+            acesso.id_unidade, periodo.inicio, periodo.fim, cursor
+        )
         anteriores = None
         if periodo.inicio_anterior is not None:
             anteriores = repositorio.buscar_metricas(
@@ -190,12 +194,15 @@ def carregar_relatorio(acesso, periodo):
         _agrupar_perfis(
             perfis_brutos,
             bpa_ativo=bool(unidade['bpa_ativo']),
-            suporte_idoso=bool(unidade['suporte_idoso']),
         ),
         satisfacao, etapas, atividade,
+        encaminhados_comercial_por_idade=encaminhados,
     )
     relatorio.update({
-        'unidade': {'nome': unidade['nome_unidade']},
+        'unidade': {
+            'nome': unidade['nome_unidade'],
+            'idade_minima_suporte': validar_idade_minima_suporte(unidade['idade_minima_suporte']),
+        },
         'periodo': _periodo_payload(periodo, unidade),
         'atualizado_em': _iso(periodo.fim),
     })

@@ -1,12 +1,15 @@
 # Plano teórico — encaminhamento ao comercial por idade mínima
 
-**Status:** proposta para implementação; não aplicada ao código ou ao banco.
+**Status:** implementado no projeto local em 11/09/2026 e validado em PostgreSQL
+temporário. A migração de produção e o deploy ainda não foram executados.
 **Base analisada:** V1.2.0. **Data:** 10/09/2026.
 
 Este plano substitui a configuração booleana de suporte ao idoso por uma idade
 mínima escolhida entre seis opções fixas. Registra comportamento, responsabilidades,
 migração e verificações necessárias. O código completo de cada alteração e o SQL
-executável pertencem à futura implementação ou ao plano prático.
+executável estão no [plano prático](suporte_idoso_idade_minima_plano_pratico.md)
+e nos arquivos aplicados ao projeto. As descrições da V1.2.0 abaixo registram
+o estado anterior que motivou a mudança.
 
 Referências: [regras atuais](../REGRAS_DE_NEGOCIO.md),
 [arquitetura](../PADROES_DE_ARQUITETURA.md),

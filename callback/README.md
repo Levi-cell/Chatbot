@@ -215,8 +215,10 @@ usado para apresentar o agente nos inícios padrão, de mídia, financeiro e de
 tratamento de reforço escolar da etapa 1.
 
 `waba_id` e `phone_number_id` ficam somente leitura após a criação. O Admin
-também expõe `suporte_idoso` e `email_obrigatorio`; ativar suporte ao idoso
-exige um `numero_comercial` brasileiro válido.
+também expõe `idade_minima_suporte` e `email_obrigatorio`. O seletor de suporte
+aceita Desativado, 50+, 60+, 70+, 80+ e 90+; ativar exige um `numero_comercial`
+brasileiro válido, inclusive ao editar ou remover o número de uma unidade ativa.
+Somente o titular é alcançado; o limite não altera a dispensa de e-mail dos 60+.
 
 No Admin, criação/exclusão de unidade e desbloqueio individual seguem
 Meta-first. Se a Meta falhar, a alteração local correspondente não é
@@ -310,11 +312,19 @@ payload original dos botões, o painel apresenta como referência os botões do
 catálogo atual da etapa, sempre desabilitados.
 
 O painel é somente leitura. Os filtros, a pesquisa, os seletores de período e os
-downloads não alteram registros. As regras `suporte_idoso`, `email_obrigatorio`
+downloads não alteram registros. As regras `idade_minima_suporte`, `email_obrigatorio`
 e `bpa_ativo` vêm da unidade. O CSV completo preserva campos ausentes vazios; o
 CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
 internacional. Essa regra vale tanto para Google CSV quanto para CSV essencial;
 nenhum dos formatos acrescenta etiquetas comerciais ou datas ao nome.
+
+O card **Encaminhados ao comercial** fica somente em Relatórios, abaixo dos
+quatro indicadores. Conta clientes distintos por unidade com encerramento
+`encaminhado_suporte_idoso` no período (`finalizou_em`, intervalo semiaberto).
+Inclui históricos, sem filtrar pela política atual, sem duplicar conversas e sem
+misturar os casos 100+. Não comprova clique, atendimento humano ou matrícula.
+Tags 18–59, 60+ e de dependentes continuam fixas. Quantidades e taxas do Funil
+mantêm todos os envios registrados mesmo quando a configuração atual mudou.
 
 Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
 no portal. Contas e senhas continuam administradas pelo proprietário no Django

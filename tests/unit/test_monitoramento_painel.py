@@ -283,7 +283,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
         relatorio = montar_relatorio(
             {'leads': 2, 'mensagens': 4, 'funil': 1, 'avaliacoes': 0, 'nota_media': None},
             {'leads': 1, 'mensagens': 2, 'funil': 0, 'avaliacoes': 1, 'nota_media': 5.0},
-            {}, {}, [], [],
+            {}, {}, [], [], encaminhados_comercial_por_idade=0,
         )
         self.assertIsNone(relatorio['tendencias']['nota_media'])
 
@@ -295,7 +295,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
              'idade_dependente': None, 'foi_funil': True},
             {'id_cliente': 2, 'status_dependente': None, 'idade_titular': 44,
              'idade_dependente': None, 'foi_funil': False},
-        ], bpa_ativo=False, suporte_idoso=False)
+        ], bpa_ativo=False)
         titular_adulto = next(
             item for item in perfis['linhas'] if item['chave'] == 'titular_adulto'
         )

@@ -101,3 +101,18 @@ rollback preserva stage positivo, a confirmação mantém a etapa e os contadore
 e recuperar a mesma reação não reseta um ciclo posterior. Cobre tanto o lembrete
 confirmado quanto o legado sem data de envio.
 Meta permanece simulada; a confirmação de entrega real exige homologação manual.
+
+## Suporte por idade
+
+`unit/test_suporte_por_idade.py` cobre as seis configurações, fronteiras,
+Admin, contato comercial, mensagem, recuperação com limite atual e contagem
+real em SQLite dos encaminhamentos por unidade, data e motivo. As suítes de
+e-mail, turno, follow-up, CSV e relatórios continuam como regressão.
+
+`integration/test_suporte_por_idade_postgres.py` executa migração, domínio,
+recusa de reaplicação, falha com rollback e DDL de instalação limpa. Também
+verifica tabela ocupada, falha durante a reversão, preservação das conversas
+e consultas reais de contexto/relatório no schema completo após a migração. Exige
+`SUPORTE_IDADE_TEST_DSN`, host loopback e banco vazio `test_chatbot_suporte_idade`.
+Recusa schema chatbot preexistente; não usa DB_HOST/DB_NAME. Sem a variável, é
+pulado. Ver o [procedimento](../deploy/idade_minima_suporte.md) para homologação.

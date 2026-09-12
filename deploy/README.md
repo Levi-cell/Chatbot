@@ -187,3 +187,12 @@ de atualização fica em [rotina_deploy.md](../regras_deploy/rotina_deploy.md).
 Para interromper os lembretes, parar e desabilitar a unit de follow-up. Isso mantém
 o flow apto a tratar retornos de lembretes ou do legado marcado. Não apagar recibos, resetar
 stages em massa nem reverter o flow incompatível enquanto existirem ciclos positivos.
+
+## Suporte por idade mínima
+
+O [procedimento de suporte por idade](idade_minima_suporte.md) coordena schema,
+código, estáticos e serviços. A migração incremental está em
+`migrations/20260911_idade_minima_suporte.sql`; a reversão restrita a NULL/60 está
+em `rollback/20260911_idade_minima_suporte.sql`. Não executar em instalações
+novas, não reaplicar a migração de follow-up e não editar a migração histórica
+que criou a coluna booleana. Os comandos só pertencem à implantação aprovada.

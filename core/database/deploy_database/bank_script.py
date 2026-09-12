@@ -184,7 +184,11 @@ def criar_tabelas():
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
             numero_comercial VARCHAR(30),
-            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            idade_minima_suporte INTEGER DEFAULT NULL
+                CONSTRAINT ck_unidade_idade_minima_suporte CHECK (
+                    idade_minima_suporte IS NULL
+                    OR idade_minima_suporte IN (50, 60, 70, 80, 90)
+                ),
             email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,

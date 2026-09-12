@@ -4,13 +4,38 @@ Documento irmão do [plano teórico](suporte_idoso_idade_minima_plano_teorico.md
 
 **Base:** V1.2.0, commit `ec74d26398724e192f798397d71b189ed08c805c`, mais o estado
 local da documentação conferido na preparação. **Preparado em:** 11/09/2026.
-**Status:** plano para implementação e homologação; não aplicado ao runtime,
-ao banco ou à VM. Este documento não atribui um número à próxima versão.
+**Status:** aplicado ao projeto local em 11/09/2026, após validar a migração
+em PostgreSQL temporário. Banco de produção e VM não foram alterados.
+Este documento não atribui um número à próxima versão.
 
 São **38 arquivos completos**, um por passo, distribuídos em seis partes.
 Os blocos incluem o conteúdo que já existia nos arquivos alterados: substituir
 apenas trechos não é necessário. A preparação e os testes ocorreram numa cópia
-temporária isolada; somente este plano foi criado no projeto principal.
+temporária isolada. Na aplicação, os arquivos foram conferidos contra o manifesto
+e integrados à base `be5c5eb5f3af8be7dbfd001fd73a8f0caa6f1d5b`.
+
+## Validação da aplicação local — 11/09/2026
+
+- Suíte completa: **222 testes aprovados, sem falhas ou testes pulados**.
+- PostgreSQL 17.11 local, somente loopback, com bases descartáveis exclusivas:
+  dez testes SQL do suporte por idade e dez de regressão do follow-up.
+- Migração integral, conversão TRUE → 60 e FALSE → NULL, domínio, instalação
+  limpa, schema parcial, reaplicação, tabela ocupada, falhas intermediárias e
+  reversão foram exercitados. A reversão recusa 50/70/80/90 sem decisão explícita.
+- A estrutura completa foi migrada e consultada pelos repositórios reais;
+  conversas e configurações alheias ao novo campo foram preservadas.
+- Django check sem problemas; sintaxe dos 303 arquivos Python e do JavaScript válida.
+- Chrome com template/estáticos atuais e APIs fictícias: 24 combinações das seis
+  configurações com 1366×900, 390×844, 844×390 e 320×568; todos os períodos,
+  quatro downloads, tags fixas, zero real e erro de consulta conferidos.
+- Os dois bancos temporários foram excluídos e o servidor local foi encerrado.
+  Meta, Redis, RDS, dados reais e serviços da VM não foram utilizados nos testes.
+- O passo 26 ganhou três cenários de integração durante a aplicação; o passo 36
+  documenta essa cobertura. Os blocos e hashes finais abaixo incluem esses ajustes.
+
+Para publicar, seguir [o procedimento de deploy](../deploy/idade_minima_suporte.md),
+executando o SQL somente na janela de manutenção. Os testes simulam o envio à
+Meta; não comprovam entrega de uma mensagem real no WhatsApp.
 
 ## Contrato consolidado
 
@@ -88,9 +113,9 @@ principal e os módulos de follow-up permanecem intactos.
 - O painel proposto foi carregado em Chrome isolado, com template e estáticos
   reais e respostas de API fictícias, em 1366×900, 390×844, 844×390 e 320×568.
   O novo card exibiu o total correto, sem erros JavaScript ou largura excedente.
-- **Migração e reversão ainda exigem execução em PostgreSQL descartável antes do
-  deploy.** Não foram executadas contra banco local, RDS ou produção nesta preparação.
-  O plano fornece os testes e os comandos; testes pulados não equivalem a homologação.
+- Na preparação original, migração e reversão ainda aguardavam PostgreSQL.
+  Essa pendência foi resolvida na validação local registrada acima; a migração
+  de produção continua sendo uma etapa separada do deploy.
 
 ## Manifesto e índice dos passos
 
@@ -125,7 +150,7 @@ do bloco. `Novo` significa que o arquivo ainda não existia na preparação.
 | 23 | `tests/unit/test_metricas_perfis_relatorios.py` | Alterar | `bdbabee963d339873c14e4beee4a1a36c8421422352e5df6856252bf4621bb5f` | `7586b9fb573467d166fa588f5f47c22f17c0036c28d2a63bbcc6b35d3c5aced6` |
 | 24 | `tests/unit/test_gerar_monitoramento_unidades.py` | Alterar | `72422bcdd0da716647d62fc1c94d863a0543e42de640d6504284d3cc8090a678` | `a5db6695464688658c33f7e47098bc6d9f9e540d335f7de32ec99c76f04bd98f` |
 | 25 | `tests/unit/test_suporte_por_idade.py` | Criar | `Novo` | `457a563f3be805f751184b260541ad7aa11f0cc7687a0c4b5fedda755066709a` |
-| 26 | `tests/integration/test_suporte_por_idade_postgres.py` | Criar | `Novo` | `1a67fc55851c62100ba8e9cbaa559d7700951d3de1d4ae03f07aac2c8df1e181` |
+| 26 | `tests/integration/test_suporte_por_idade_postgres.py` | Criar | `Novo` | `c6758be11598fd6d09e707b7a977dec31d3d9de618547979826a1677b5391b84` |
 | 27 | `REGRAS_DE_NEGOCIO.md` | Alterar | `187ccf1e7885f553772392c530153f62852dc30e5ed64622ea4794118698b19b` | `91496dbe30ac0c0391ad4dcefe13425716f54dd6470c429837142aff4e240fcd` |
 | 28 | `PADROES_DE_ARQUITETURA.md` | Alterar | `b0f6f4415d1e9485aa8d135f310ae149734721e2e796b7ae77800bc34fac0901` | `6b3733f9bfd9e1db8d6e2e78e6745658a50d5cb26770297212245eb714c61d81` |
 | 29 | `core/README.md` | Alterar | `e2c54f7c7dbc3e43a0eb3bd70190dbf7b0acf39d5a1a9977d2aee7a198340fe7` | `2a0e062de26ad1a1184217a7c8c33cf38c3d1b6651d6942aca9384309bb9c426` |
@@ -135,7 +160,7 @@ do bloco. `Novo` significa que o arquivo ainda não existia na preparação.
 | 33 | `workers/README.md` | Alterar | `f9e4a75bc24a6f7da5016caebb8fb157a8224e95a3c2af23334f5928ced802f6` | `a586f419cb7f8207cba7fd562e5a3c72368b3a20d7e0b9f56890c4165f7bc655` |
 | 34 | `callback/README.md` | Alterar | `a3a7647985d05ddc230a182e5f23551ea4163cceb149db2239a34515679ac44c` | `c9ee7ee5f367a011178292e41d13b2f7abaa6b58618cf89ebb3de2203d229f80` |
 | 35 | `utilitarios/README.md` | Alterar | `601d8b8aa59738b5005308a19d507b45ecc079e6950d5d63b6f9bc266a3ccadc` | `a982e0cfc817c0784e33b4329e0beccc92f4579d3244cd937808767e3a154d86` |
-| 36 | `tests/README.md` | Alterar | `b12044c437fd38d94f6d527e73a8f74220aafd1180cb834ba1a8aa38fd9d0583` | `55a424c09bb2e6ff46abb8c742b7f11b11877b1ff697a56ee5e3c3db9df198b5` |
+| 36 | `tests/README.md` | Alterar | `b12044c437fd38d94f6d527e73a8f74220aafd1180cb834ba1a8aa38fd9d0583` | `ffb3e8ddd798d660ba16dc3b33cebf58012de702166d255dee2d4d9ff15000d8` |
 | 37 | `deploy/README.md` | Alterar | `f172b5f18e4f6e31420af7118780a81bd0b349445ce2f09b48b03df2296b6ee7` | `fbee0209124eb97f1bdc6f367d2bb0ed9867539bc7964e402987bc8441aaa688` |
 | 38 | `deploy/idade_minima_suporte.md` | Criar | `Novo` | `ac19509b954af9695a41d9f78be6137cc535eb3047c35268fe6cd0e21d1da61a` |
 
@@ -11339,6 +11364,7 @@ Conteúdo completo do arquivo:
 """Migração real somente em PostgreSQL local descartável explicitamente indicado."""
 
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import re
@@ -11349,6 +11375,8 @@ import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
 from core.database.deploy_database import bank_script
+from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
+from core.repositories.monitoramento import painel
 
 
 DSN = os.environ.get('SUPORTE_IDADE_TEST_DSN')
@@ -11488,6 +11516,101 @@ class SuporteIdadePostgresTests(unittest.TestCase):
                 self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
             self.conn.execute('ROLLBACK')
             self.assertEqual(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1').fetchone()[0], limite)
+
+    def test_lock_ocupado_aborta_sem_converter_a_coluna(self):
+        with psycopg.connect(DSN, connect_timeout=5) as concorrente:
+            concorrente.execute('SELECT * FROM chatbot.unidade')
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                self.migrar()
+            self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(True,), (False,)])
+
+    def test_falha_na_reversao_preserva_schema_e_valores_novos(self):
+        self.migrar()
+        sql = REVERSAO.read_text(encoding='utf-8').replace(
+            'DO $conferencia$\nBEGIN',
+            "DO $conferencia$\nBEGIN\n    RAISE EXCEPTION 'Falha na reversão';",
+        )
+        with self.assertRaisesRegex(psycopg.Error, 'Falha na reversão'):
+            self.conn.execute(sql)
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT idade_minima_suporte FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(60,), (None,)])
+        self.assert_dominio()
+
+    def test_contexto_e_relatorio_no_schema_completo_migrado(self):
+        # Usa o DDL real e a reversão para montar a estrutura anterior completa.
+        self.conn.execute('''
+            DROP TABLE chatbot.conversa, chatbot.unidade;
+            CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY);
+        ''')
+
+        @contextmanager
+        def transacao_local(*_):
+            with self.conn.cursor() as cursor:
+                yield cursor
+
+        with patch.object(bank_script, 'transacao_deploy', transacao_local):
+            bank_script.criar_tabelas()
+        self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+        self.conn.execute('''
+            INSERT INTO chatbot.unidade
+                (id_unidade, nome_unidade, nome_agente, genero, cnpj,
+                 email_responsavel, telefone, waba_id, phone_number_id,
+                 link_agendamento, numero_comercial, suporte_idoso)
+            SELECT n, 'Teste ' || n, 'Suh', 'feminino', 'cnpj-' || n,
+                   'teste' || n || '@example.com', '557199999999' || n,
+                   'waba-' || n, 'phone-' || n,
+                   'https://example.com/agendar/' || n, '5571999999999', TRUE
+              FROM generate_series(1, 2) AS n;
+            INSERT INTO chatbot.etapa (id_etapa, nome_etapa)
+            VALUES (6, 'Idade');
+            INSERT INTO chatbot.cliente (id_cliente, waid_telefone, nome)
+            VALUES (1, '5571999999901', 'Cliente Um'),
+                   (2, '5571999999902', 'Cliente Dois');
+            INSERT INTO chatbot.conversa
+                (id_conversa, id_unidade, id_cliente, id_etapa_atual,
+                 status_ativa, motivo_encerramento, finalizou_em)
+            VALUES (1, 1, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-01T00:00:00Z'),
+                   (2, 1, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z'),
+                   (3, 2, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z'),
+                   (4, 1, 2, 6, FALSE, 'encaminhado_suporte_idoso', '2026-10-01T00:00:00Z'),
+                   (5, 1, 1, 6, TRUE, NULL, NULL);
+        ''')
+        conversas_antes = self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall()
+        self.migrar()
+        self.assertEqual(self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall(), conversas_antes)
+        inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        with self.conn.cursor() as cursor:
+            for limite in (None, 50, 60, 70, 80, 90):
+                cursor.execute(
+                    'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
+                    (limite,),
+                )
+                self.assertEqual(
+                    buscar_contexto_etapa6(5, 1, cursor)['idade_minima_suporte'],
+                    limite,
+                )
+                self.assertEqual(
+                    painel.buscar_unidade(1, cursor)['idade_minima_suporte'], limite,
+                )
+                self.assertEqual(
+                    painel.contar_encaminhados_comercial_por_idade(1, inicio, fim, cursor),
+                    1,
+                )
+            with self.assertRaisesRegex(ValueError, 'não encontrado'):
+                buscar_contexto_etapa6(5, 2, cursor)
+            self.assertEqual(
+                painel.contar_encaminhados_comercial_por_idade(2, inicio, fim, cursor), 1,
+            )
 
 
 if __name__ == '__main__':
@@ -15744,7 +15867,9 @@ real em SQLite dos encaminhamentos por unidade, data e motivo. As suítes de
 e-mail, turno, follow-up, CSV e relatórios continuam como regressão.
 
 `integration/test_suporte_por_idade_postgres.py` executa migração, domínio,
-recusa de reaplicação, falha com rollback e DDL de instalação limpa. Exige
+recusa de reaplicação, falha com rollback e DDL de instalação limpa. Também
+verifica tabela ocupada, falha durante a reversão, preservação das conversas
+e consultas reais de contexto/relatório no schema completo após a migração. Exige
 `SUPORTE_IDADE_TEST_DSN`, host loopback e banco vazio `test_chatbot_suporte_idade`.
 Recusa schema chatbot preexistente; não usa DB_HOST/DB_NAME. Sem a variável, é
 pulado. Ver o [procedimento](../deploy/idade_minima_suporte.md) para homologação.

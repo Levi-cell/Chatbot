@@ -1,3 +1,5 @@
+from core.validacoes.suporte_por_idade import IDADES_MINIMAS_SUPORTE
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -274,12 +276,17 @@ class Unidade(models.Model):
         blank=True,
         null=True,
     )
-    suporte_idoso = models.BooleanField(
-        "suporte ao idoso",
-        default=False,
+    idade_minima_suporte = models.IntegerField(
+        "encaminhar titular ao comercial a partir de",
+        blank=True,
+        null=True,
+        default=None,
+        choices=[(None, "Desativado")] + [
+            (idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE
+        ],
         help_text=(
-            "Encaminha titulares de 60 a 99 anos ao contato comercial e "
-            "encerra o atendimento sem bloqueio."
+            "Na etapa de idade, encaminha somente o titular a partir do limite "
+            "até 99 anos e encerra sem bloqueio. Não altera a regra de e-mail."
         ),
     )
     email_obrigatorio = models.BooleanField(

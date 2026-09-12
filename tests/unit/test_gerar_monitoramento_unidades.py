@@ -60,14 +60,14 @@ class GerarMonitoramentoUnidadesTests(unittest.TestCase):
                 "id_unidade": 1,
                 "nome_unidade": "Supera SAJ",
                 "nome_agente": "Suh",
-                "suporte_idoso": False,
+                "idade_minima_suporte": None,
                 "bpa_ativo": False,
             },
             {
                 "id_unidade": 2,
                 "nome_unidade": "Supera Rio Vermelho",
                 "nome_agente": "Lia",
-                "suporte_idoso": False,
+                "idade_minima_suporte": None,
                 "bpa_ativo": False,
             },
         ]
@@ -184,7 +184,7 @@ class GerarMonitoramentoUnidadesTests(unittest.TestCase):
             "id_unidade": 1,
             "nome_unidade": "Supera SAJ",
             "nome_agente": "Suh",
-            "suporte_idoso": False,
+            "idade_minima_suporte": None,
             "bpa_ativo": False,
         }
         perfis = [
@@ -265,12 +265,12 @@ class GerarMonitoramentoUnidadesTests(unittest.TestCase):
         self.assertEqual(segmentacao["conversas_sem_classificacao"], 1)
         self.assertEqual(segmentacao["leads_multiperfil"], 1)
 
-    def test_bpa_e_suporte_idoso_alteram_rotulo_e_funil_do_titular(self) -> None:
+    def test_bpa_altera_rotulo_sem_ocultar_funil_por_politica(self) -> None:
         unidade = {
             "id_unidade": 2,
             "nome_unidade": "Supera Rio Vermelho",
             "nome_agente": "Lia",
-            "suporte_idoso": True,
+            "idade_minima_suporte": 60,
             "bpa_ativo": True,
         }
         mensagens = [
@@ -319,9 +319,9 @@ class GerarMonitoramentoUnidadesTests(unittest.TestCase):
         self.assertIn("4 a 17", linhas["dependente_infantil"]["rotulo"])
         self.assertEqual(linhas["dependente_infantil"]["leads_funil"], 1)
         self.assertEqual(linhas["dependente_idoso"]["leads_funil"], 1)
-        self.assertTrue(linhas["titular_idoso"]["funil_nao_aplicavel"])
-        self.assertEqual(linhas["titular_idoso"]["leads_funil"], 0)
-        self.assertIsNone(linhas["titular_idoso"]["taxa_funil"])
+        self.assertFalse(linhas["titular_idoso"]["funil_nao_aplicavel"])
+        self.assertEqual(linhas["titular_idoso"]["leads_funil"], 1)
+        self.assertEqual(linhas["titular_idoso"]["taxa_funil"], 100.0)
 
     def test_profissao_prioriza_cliente_e_faz_fallback_para_conversa(self) -> None:
         snapshot = self._snapshot()

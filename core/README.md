@@ -43,7 +43,7 @@ integrações não devem assumir propriedade de conexão recebida de outro módu
 
 ## Políticas e dados do atendimento
 
-As configurações `suporte_idoso` e `email_obrigatorio` pertencem à unidade. Os
+As configurações `idade_minima_suporte` e `email_obrigatorio` pertencem à unidade. Os
 contextos em `repositories/fluxo/contextos/` fornecem esses dados aos resolvers;
 a decisão de encaminhar, tratar ou avançar permanece no worker.
 

@@ -1,5 +1,7 @@
 import logging
 
+from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+
 
 logger = logging.getLogger("db.contexto_etapa6")
 
@@ -10,7 +12,7 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         SELECT
             u.numero_comercial,
             u.bpa_ativo,
-            u.suporte_idoso,
+            u.idade_minima_suporte,
             cl.nome,
             d.nome_dependente
         FROM chatbot.unidade u
@@ -38,34 +40,30 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
     (
         numero_comercial,
         bpa_ativo,
-        suporte_idoso,
+        idade_minima_suporte,
         nome_cliente,
         nome_dependente,
     ) = resultado
 
     logger.debug(
         "contexto_etapa6_consultado | id_conversa=%s id_unidade=%s "
-        "numero_comercial_configurado=%s bpa_ativo=%s suporte_idoso=%s "
+        "numero_comercial_configurado=%s bpa_ativo=%s idade_minima_suporte=%s "
         "cliente_nomeado=%s dependente_nomeado=%s",
         id_conversa,
         id_unidade,
         bool(numero_comercial),
         bool(bpa_ativo),
-        suporte_idoso,
+        idade_minima_suporte,
         bool(nome_cliente),
         bool(nome_dependente),
     )
 
-    if not isinstance(suporte_idoso, bool):
-        raise ValueError(
-            "Configuração suporte_idoso inválida "
-            f"(id_unidade={id_unidade}, valor={suporte_idoso!r})"
-        )
+    validar_idade_minima_suporte(idade_minima_suporte)
 
     return {
         "numero_comercial_unidade": numero_comercial,
         "bpa_ativo_unidade": bool(bpa_ativo),
-        "suporte_idoso_unidade": suporte_idoso,
+        "idade_minima_suporte": idade_minima_suporte,
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
     }

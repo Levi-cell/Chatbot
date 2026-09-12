@@ -180,12 +180,13 @@ própria conversa. Um retry confirmado de conversa sem mensagens na janela
 também entra nos perfis, mas não acrescenta mensagens antigas ao HTML. O envio
 não equivale a agendamento, venda ou posição atual no CRM.
 
-Com `suporte_idoso` ativo, a linha de titulares 60+ exibe “Não se aplica” e
-explica o encaminhamento ao comercial (zero envios esperado pela política
-atual). Eventuais envios reais permanecem no total geral e são sinalizados
-separadamente: ativar a política hoje não apaga fatos anteriores. As idades e
-configurações são as disponíveis na extração; o relatório não inventa um
-histórico de alterações de idade ou de BPA/suporte ao idoso.
+O snapshot carrega `idade_minima_suporte` como inteiro ou NULL e mostra a política
+atual em uma nota. As cinco faixas etárias continuam fixas; suas quantidades e
+taxas incluem os envios ao Funil registrados, sem esconder uma faixa inteira
+pelo limite da unidade. As idades e configurações são as disponíveis na extração,
+sem inventar histórico de alterações. O total reutiliza a implementação semanal.
+O novo card de encaminhamentos pertence ao painel web; não é acrescentado ao PDF.
+Os quatro CSVs mantêm formatos, telefones e elegibilidade anteriores.
 
 O PDF inclui cobertura de classificação, participação na satisfação,
 distribuição das notas, comentários com profissão e relação nominal dos leads.

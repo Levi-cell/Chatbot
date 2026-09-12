@@ -88,7 +88,7 @@ core/database     -> conexão, DDL e preparação do banco
 core/cache        -> Redis, fallback e autocura detectável
 core/integrations -> comunicação com serviços externos
 core/triagem      -> catálogo puro compartilhado de perguntas
-core/validacoes   -> validação pura compartilhada de e-mail
+core/validacoes   -> validação pura compartilhada de e-mail e domínio de suporte por idade
 utilitarios       -> diagnóstico, monitoramento e manutenção manuais
 tests             -> testes, mocks, fakes e contratos
 ```
@@ -768,7 +768,7 @@ desenvolvimento já delimitadas.
 - manter `.env` fora do Git;
 - IDs públicos e limites podem ser constantes quando não forem segredos;
 - configurações de infraestrutura não devem alterar silenciosamente regras de
-  negócio; políticas explícitas da unidade, como `suporte_idoso` e
+  negócio; políticas explícitas da unidade, como `idade_minima_suporte` e
   `email_obrigatorio`, são lidas e aplicadas pelos contextos e resolvers próprios;
 - testes devem usar valores fictícios e nunca credenciais reais.
 

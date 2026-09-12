@@ -952,7 +952,7 @@ def _persistir_idade_encaminhamento_suporte_idoso(
     if (
         isinstance(idade, bool)
         or not isinstance(idade, int)
-        or not 60 <= idade <= 99
+        or not 50 <= idade <= 99
     ):
         raise ValueError(
             "Idade inválida no encaminhamento de suporte ao idoso "
@@ -967,7 +967,7 @@ def _persistir_idade_encaminhamento_suporte_idoso(
 
     logger.info(
         "idade_titular_persistida | acao=encaminhar_suporte_idoso "
-        "id_conversa=%s id_cliente=%s faixa=60_99",
+        "id_conversa=%s id_cliente=%s faixa=50_99",
         contexto_historico["id_conversa"],
         contexto_historico["id_cliente"],
     )

@@ -31,7 +31,7 @@ from workers.worker_flow.transacoes import (
 RAIZ_PROJETO = Path(__file__).resolve().parents[2]
 
 
-def contexto_etapa6(idade, *, dependente=False, suporte=False):
+def contexto_etapa6(idade, *, dependente=False, suporte=None):
     return {
         "id_conversa": 10,
         "id_cliente": 5,
@@ -41,7 +41,7 @@ def contexto_etapa6(idade, *, dependente=False, suporte=False):
         "transicoes_permitidas": {"idade_valida": 7},
         "status_dependente": dependente,
         "bpa_ativo_unidade": False,
-        "suporte_idoso_unidade": suporte,
+        "idade_minima_suporte": suporte,
         "numero_comercial_unidade": "(71) 99999-9999",
         "nome_cliente": "Maria",
         "nome_dependente": "João" if dependente else None,
@@ -257,11 +257,11 @@ class ResolverEtapa10Tests(unittest.TestCase):
 class SuporteIdosoTests(unittest.TestCase):
     def test_fronteiras_e_dependente_preservam_a_ordem_aprovada(self):
         for idade, dependente, suporte, caminho in (
-            (59, False, True, "normal"),
-            (60, False, True, "suporte"),
-            (99, False, True, "suporte"),
-            (100, False, True, "cem_mais"),
-            (70, True, True, "normal_dependente"),
+            (59, False, 60, "normal"),
+            (60, False, 60, "suporte"),
+            (99, False, 60, "suporte"),
+            (100, False, 60, "cem_mais"),
+            (70, True, 60, "normal_dependente"),
         ):
             with self.subTest(
                 idade=idade,
@@ -309,7 +309,7 @@ class SuporteIdosoTests(unittest.TestCase):
 
     def test_efeito_terminal_persiste_idade_do_titular(self):
         cursor = object()
-        contexto = contexto_etapa6(65, suporte=True)
+        contexto = contexto_etapa6(65, suporte=60)
         envio = contexto_envio(6)
         envio.update(
             {
@@ -335,7 +335,7 @@ class SuporteIdosoTests(unittest.TestCase):
         self.assertTrue(resultado["encaminhamento_suporte_idoso"])
 
     def test_encerramento_e_replay_usam_motivo_novo_sem_bloqueio(self):
-        contexto = contexto_etapa6(65, suporte=True)
+        contexto = contexto_etapa6(65, suporte=60)
         envio = contexto_envio(6)
         envio.update(
             {
@@ -358,7 +358,7 @@ class SuporteIdosoTests(unittest.TestCase):
             "tipo_mensagem": "interactive_cta_url",
             "conteudo_texto": (
                 "Que bom te ver aqui novamente, Maria!\n\n"
-                + montar_mensagem_suporte_idoso_etapa6()
+                + montar_mensagem_suporte_idoso_etapa6(60)
             ),
         }
         replay = encerramento_atendimento.resolver_intencao_encerramento(
@@ -454,10 +454,11 @@ class PersistenciaEmailEFunilTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         for conteudo in (ddl, migracao):
-            self.assertIn("suporte_idoso", conteudo)
             self.assertIn("email_obrigatorio", conteudo)
             self.assertIn("encaminhado_suporte_idoso", conteudo)
 
+        self.assertIn("idade_minima_suporte", ddl)
+        self.assertIn("suporte_idoso", migracao)
         self.assertNotIn("UPDATE chatbot.unidade", migracao)
         self.assertNotIn("INSERT INTO chatbot.unidade", migracao)
 

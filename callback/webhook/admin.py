@@ -142,7 +142,7 @@ class UnidadeAdmin(admin.ModelAdmin):
         "cnpj",
         "telefone",
         "numero_comercial",
-        "suporte_idoso",
+        "idade_minima_suporte",
         "email_obrigatorio",
         "email_responsavel",
         "waba_id",
@@ -170,7 +170,7 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_filter = (
         "genero",
         "bpa_ativo",
-        "suporte_idoso",
+        "idade_minima_suporte",
         "email_obrigatorio",
         "status_pagamento",
     )
@@ -232,7 +232,7 @@ class UnidadeAdmin(admin.ModelAdmin):
                 super()._post_clean()
 
                 if (
-                    self.cleaned_data.get("suporte_idoso")
+                    self.cleaned_data.get("idade_minima_suporte") is not None
                     and not numero_comercial_whatsapp_valido(
                         self.cleaned_data.get("numero_comercial")
                     )
@@ -240,7 +240,7 @@ class UnidadeAdmin(admin.ModelAdmin):
                     self.add_error(
                         "numero_comercial",
                         "Informe um número comercial brasileiro válido "
-                        "antes de ativar o suporte ao idoso.",
+                        "antes de ativar o encaminhamento por idade.",
                     )
 
                 if change or self.errors:

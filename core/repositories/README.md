@@ -71,7 +71,7 @@ chama `core/integrations/funil` depois de encerrar a transação de leitura.
 
 ## Contextos e histórico do atendimento
 
-- `fluxo/contextos/etapa6.py` lê `suporte_idoso`, `bpa_ativo` e número comercial
+- `fluxo/contextos/etapa6.py` lê `idade_minima_suporte`, `bpa_ativo` e número comercial
   da unidade; `fluxo/contextos/etapa10.py` lê `email_obrigatorio`, destino do
   atendimento e idade do titular. Os repositórios validam a integridade dos
   dados, mas o resolver aplica a regra de atendimento.

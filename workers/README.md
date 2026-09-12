@@ -176,12 +176,14 @@ origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
 - Etapa 4: profissão válida é persistida em `conversa.profissao` e atualiza
   também `cliente.profissao`. O snapshot da conversa preserva o atendimento
   anterior quando o cadastro do cliente muda.
-- Etapa 6: `suporte_idoso=True` encaminha somente o próprio titular entre 60 e
-  99 anos ao número comercial da unidade. O worker persiste a idade e encerra
-  na própria etapa 6 com `encaminhado_suporte_idoso`, sem bloqueio de dias.
-  Dependentes não entram nessa regra; idade de 100 anos ou mais conserva o
-  encerramento próprio por idade inválida. Com suporte desativado, o titular
-  de 60 a 99 anos segue para a oferta.
+- Etapa 6: `idade_minima_suporte` aceita NULL (desativado), 50, 60, 70, 80 ou 90.
+  Encaminha somente titulares a partir do limite até 99 anos, persiste a idade e
+  encerra na etapa 6 com `encaminhado_suporte_idoso`, sem bloqueio ou Funil.
+  Dependentes seguem as regras atuais. Pessoas de 100+ conservam o encaminhamento
+  próprio para titular ou dependente, mesmo com suporte desativado.
+  Na recuperação, as cinco mensagens oficiais identificam a resposta já enviada;
+  uma reavaliação usa o limite atual, sem recuperar a configuração anterior.
+  A barreira de idempotência impede reenvio e não cria avanço de etapa.
 - Etapa 7: confirmações de aceite geram `oferta_aceita` (`7 -> 10`);
   `Talvez mais tarde` gera `oferta_adiada` (`7 -> 8`). Pedidos como
   `quero mais informações` ou `quero saber mais` não são aceite; assim como

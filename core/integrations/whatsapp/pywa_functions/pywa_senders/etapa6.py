@@ -267,8 +267,9 @@ def enviar_etapa6_suporte_idoso(
     cliente_telefone,
     phone_id_unidade,
     numero_comercial,
+    idade_minima,
 ):
-    mensagem_bot = montar_mensagem_suporte_idoso_etapa6()
+    mensagem_bot = montar_mensagem_suporte_idoso_etapa6(idade_minima)
     botao_url = URLButton(
         title=montar_botao_suporte_idoso_etapa6(),
         url=montar_link_numero_comercial_whatsapp(numero_comercial),

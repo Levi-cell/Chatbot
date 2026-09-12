@@ -44,12 +44,12 @@ class MetricasPerfisRelatoriosTests(unittest.TestCase):
 
     @staticmethod
     def _unidade(
-        id_unidade: int = 1, *, suporte_idoso: bool = False, bpa_ativo: bool = False
+        id_unidade: int = 1, *, idade_minima_suporte: int | None = None, bpa_ativo: bool = False
     ) -> dict[str, object]:
         return {
             "id_unidade": id_unidade,
             "nome_unidade": f"Unidade {id_unidade}",
-            "suporte_idoso": suporte_idoso,
+            "idade_minima_suporte": idade_minima_suporte,
             "bpa_ativo": bpa_ativo,
         }
 
@@ -62,13 +62,13 @@ class MetricasPerfisRelatoriosTests(unittest.TestCase):
         perfis: list[dict[str, object]],
         enviados: set[int] | None = None,
         *,
-        suporte_idoso: bool = False,
+        idade_minima_suporte: int | None = None,
         bpa_ativo: bool = False,
     ) -> dict[str, object]:
         return weekly._montar_segmentacao_perfis(
             perfis,
             enviados or set(),
-            suporte_idoso=suporte_idoso,
+            idade_minima_suporte=idade_minima_suporte,
             bpa_ativo=bpa_ativo,
         )
 
@@ -321,25 +321,25 @@ class MetricasPerfisRelatoriosTests(unittest.TestCase):
             self.assertEqual(self._linhas(segmentacao)["titular_idoso"]["leads"], 0)
             self.assertEqual(segmentacao["conversas_apenas_envio_funil"], 0)
 
-    def test_suporte_idoso_nao_apaga_envios_observados_nem_afeta_dependente(self) -> None:
+    def test_idade_minima_suporte_nao_apaga_envios_observados_nem_afeta_dependente(self) -> None:
         perfis = [
             self._perfil(1, 101, idade_titular=60),
             self._perfil(1, 102, idade_titular=60),
             self._perfil(2, 201, status_dependente=True, idade_dependente=60),
         ]
-        for suporte in (False, True):
+        for suporte in (None, 50, 60, 70, 80, 90):
             with self.subTest(suporte=suporte):
-                segmentacao = self._segmentacao(perfis, {101, 102, 201}, suporte_idoso=suporte)
+                segmentacao = self._segmentacao(perfis, {101, 102, 201}, idade_minima_suporte=suporte)
                 linhas = self._linhas(segmentacao)
                 titular = linhas["titular_idoso"]
                 self.assertEqual(titular["leads"], 1)
                 self.assertEqual(titular["conversas"], 2)
                 self.assertEqual(titular["leads_funil_observados"], 1)
                 self.assertEqual(titular["conversas_funil_observadas"], 2)
-                self.assertEqual(titular["leads_funil"], 0 if suporte else 1)
-                self.assertEqual(titular["conversas_funil"], 0 if suporte else 2)
-                self.assertEqual(titular["taxa_funil"], None if suporte else 100.0)
-                self.assertEqual(titular["funil_nao_aplicavel"], suporte)
+                self.assertEqual(titular["leads_funil"], 1)
+                self.assertEqual(titular["conversas_funil"], 2)
+                self.assertEqual(titular["taxa_funil"], 100.0)
+                self.assertFalse(titular["funil_nao_aplicavel"])
                 self.assertEqual(linhas["dependente_idoso"]["leads_funil"], 1)
                 self.assertEqual(linhas["dependente_idoso"]["taxa_funil"], 100.0)
                 self.assertFalse(linhas["dependente_idoso"]["funil_nao_aplicavel"])
@@ -347,14 +347,14 @@ class MetricasPerfisRelatoriosTests(unittest.TestCase):
     def test_suporte_atual_preserva_funil_geral_do_snapshot(self) -> None:
         perfil = self._perfil(1, 101, idade_titular=60)
         snapshot = self._snapshot(
-            [self._mensagem(perfil, 1)], [perfil], [self._unidade(suporte_idoso=True)]
+            [self._mensagem(perfil, 1)], [perfil], [self._unidade(idade_minima_suporte=60)]
         )
         metricas = snapshot["unidades"][0]["metricas"]
         titular = self._linhas(metricas["segmentacao_perfis"])["titular_idoso"]
         self.assertEqual(metricas["leads_funil"], 1)
         self.assertEqual(titular["leads_funil_observados"], 1)
-        self.assertEqual(titular["leads_funil"], 0)
-        self.assertIsNone(titular["taxa_funil"])
+        self.assertEqual(titular["leads_funil"], 1)
+        self.assertEqual(titular["taxa_funil"], 100.0)
 
     def test_todos_os_perfis_empatados_sao_predominantes_por_leads(self) -> None:
         perfis = [

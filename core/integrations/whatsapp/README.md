@@ -99,8 +99,10 @@ O sender não escolhe origem, evento ou destino da transição.
 
 O encaminhamento de suporte ao idoso é um sender da etapa 6 com botão para o
 número comercial, normalizado por `numero_comercial.py`. A decisão de usar
-`suporte_idoso`, validar a faixa de 60 a 99 anos e encerrar o atendimento é do
-worker. Da mesma forma, a política `email_obrigatorio` e a distinção entre
+`idade_minima_suporte`, comparar a idade do titular ao limite e encerrar o
+atendimento é do worker. O sender recebe o limite validado e o catálogo monta
+o texto; com 60, preserva exatamente a mensagem antiga. As cinco variantes
+oficiais permitem reconhecer uma resposta existente sem reenviá-la. Da mesma forma, a política `email_obrigatorio` e a distinção entre
 aceite da oferta e pedido de informações não pertencem aos senders.
 
 Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato

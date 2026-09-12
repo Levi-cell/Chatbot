@@ -1,5 +1,10 @@
 import logging
 
+from core.validacoes.suporte_por_idade import (
+    IDADES_MINIMAS_SUPORTE,
+    validar_idade_minima_suporte,
+)
+
 from core.integrations.whatsapp.messages.etapa6_messages import (
     montar_mensagem_suporte_idoso_etapa6,
 )
@@ -104,11 +109,17 @@ def _reconstruir_encerramento_etapa6(contexto_historico):
 
     if (
         not contexto_historico.get("status_dependente")
-        and 60 <= resultado.idade <= 99
+        and 50 <= resultado.idade <= 99
         and _resposta_bot_e_encaminhamento_suporte_idoso(
             contexto_historico
         )
     ):
+        # O texto prova o envio, mas não congela a configuração anterior.
+        idade_minima = validar_idade_minima_suporte(
+            contexto_historico["idade_minima_suporte"]
+        )
+        if idade_minima is None or resultado.idade < idade_minima:
+            return None
         return {
             "motivo": MOTIVO_SUPORTE_IDOSO,
             "motivo_encerramento": MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO,
@@ -149,8 +160,10 @@ def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
         return False
 
     conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
-    mensagem_esperada = montar_mensagem_suporte_idoso_etapa6().strip()
-    return conteudo.endswith(mensagem_esperada)
+    return any(
+        conteudo.endswith(montar_mensagem_suporte_idoso_etapa6(limite).strip())
+        for limite in IDADES_MINIMAS_SUPORTE
+    )
 
 
 def aplicar_encerramento_se_necessario(
