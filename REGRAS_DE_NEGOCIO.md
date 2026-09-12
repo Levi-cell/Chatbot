@@ -429,19 +429,27 @@ Depois que uma mensagem da fila for aceita pelo worker:
 
 ## 8. Histórico e idempotência da resposta do bot
 
-A resposta do bot é vinculada à mensagem original por:
+A resposta do bot a uma mensagem enfileirada é vinculada à entrada original por:
 
 - `id_conversa`;
 - `id_mensagem_fila`;
 - `id_hash_cliente_origem`.
+
+O lembrete proativo não responde a uma entrada enfileirada: deixa os dois campos
+de origem nulos e usa recibo próprio por conversa e âncora do ciclo. Ele não
+serve como prova de resposta para liberar um turno A/B/C.
 
 Se `resposta_bot_para_mensagem_atual` já existir:
 
 - a Meta não deverá ser chamada novamente;
 - o histórico do bot não deverá ser duplicado;
 - o contexto da conversa deverá ser reparado a partir dos dados persistidos;
-- `last_message_from` deverá terminar como `bot`;
+- no retry normal, `last_message_from` deverá terminar como `bot`;
 - a fila poderá seguir para `sent`.
+
+O replay de uma retomada de follow-up já concluída reutiliza a resposta persistida
+sem alterar a interação atual ou zerar um ciclo posterior. Essa recuperação fica
+em `workers/worker_flow/transacoes/retorno_followup.py`.
 
 As proteções `if resposta_bot_atual`, presentes nos fluxos normais e de
 tratamento, são regras essenciais de idempotência da V1.
@@ -461,6 +469,10 @@ Implementação principal:
 - Retry com resposta do bot existente mantém ou repara o campo para `bot`.
 - O campo representa o último lado com mensagem persistida para o estado atual;
   ele não é apenas uma marcação de que a conversa já foi iniciada.
+
+Recuperar uma retomada de follow-up já concluída não sobrescreve o estado de
+uma interação posterior. A confirmação do lembrete proativo também registra
+o bot como último lado, junto do histórico e do recibo de envio.
 
 ## 10. Etapas da conversa
 
@@ -700,7 +712,10 @@ tratamento futuro que reapresente conteúdo da etapa.
 
 Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
 na mesma conversa pelo menos três horas após o último envio confirmado do bot
-deverá fazer a resposta começar com `Olá novamente, {nome}!`.
+deverá fazer a resposta começar com `Olá novamente, {nome}!` no caminho normal
+com `followup_stage = 0`. Stage positivo ou retomada já registrada segue o
+[contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com a
+saudação própria e repetição da etapa.
 
 O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
 evento atual do cliente com a última linha `sent` do bot no histórico da mesma
@@ -752,15 +767,17 @@ Implementação principal:
 
 ## 13. Commits e estados intermediários do worker
 
-O worker possui checkpoints duráveis separados:
+O worker de atendimento possui checkpoints duráveis separados:
 
 1. claim da fila como `processing`;
-2. cliente, conversa e vínculo da mensagem;
-3. lock da conversa;
-4. histórico do cliente e `last_message_from = 'cliente'`;
-5. histórico do bot, etapa e `last_message_from = 'bot'`;
-6. fila marcada como `sent`;
-7. unlock da conversa.
+2. espera por mensagem anterior, quando necessária;
+3. validação do cliente e da conversa no banco;
+4. aquisição do lock da conversa;
+5. vínculo, releitura e histórico do cliente, incluindo o marcador de retomada quando aplicável;
+6. renovação do lock antes do envio;
+7. histórico e contexto do bot; na retomada, conclusão do marcador e reset do stage;
+8. fila marcada como `sent`, depois de conferir novamente a posse do lock;
+9. unlock da conversa.
 
 Uma queda entre checkpoints normalmente deixa informações suficientes para que
 o timeout e o retry reconheçam o estado intermediário. O objetivo é evitar a
@@ -1149,6 +1166,8 @@ serviço:
   continua o loop;
 - o worker do Funil isola erros por lead e reinicia falhas globais com espera
   linear de 5 a 60 segundos;
+- o worker de follow-up isola erros por candidata e usa espera exponencial de
+  5 até 300 segundos quando a consulta do lote falha;
 - `flow_worker.py` mantém o loop de consumo e os tratamentos por tipo de exceção;
 - se `worker_flow()` escapar com uma exceção, `iniciar_flow_worker.py` registra a falha,
   aguarda 5 segundos e inicia outro loop;
@@ -1159,9 +1178,10 @@ serviço:
 - caches degradam para fallback ou negam uma operação administrativa que
   produziria inconsistência.
 
-Na produção atual, webhook, worker de atendimento e worker do Funil são serviços
-systemd independentes, todos com `Restart=always` e espera de 5 segundos. As
-camadas de recuperação são complementares:
+Na produção atual, webhook, worker de atendimento, worker do Funil e worker de
+follow-up são quatro serviços systemd independentes. Os três primeiros usam
+`Restart=always`; follow-up usa `Restart=on-failure`. Todos têm `RestartSec=5s`.
+As camadas de recuperação são complementares:
 
 ```text
 operação individual falha
@@ -1187,6 +1207,9 @@ Implementação principal:
 - `deploy/systemd/chatbot-webhook.service`
 - `deploy/systemd/chatbot-worker-flow.service`
 - `deploy/systemd/chatbot-worker-funil.service`
+- `workers/worker_followup/iniciar_worker_followup.py`
+- `workers/worker_followup/followup_worker.py`
+- `deploy/systemd/chatbot-worker-followup.service`
 
 ## 21. Matriz de aderência conferida no código
 
@@ -1209,7 +1232,8 @@ Implementação principal:
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Supervisão dos três processos | Implementada | Os serviços systemd usam `Restart=always`; Nginx encaminha o endpoint público ao webhook. |
+| Follow-up antes do agendamento | Implementada | Um lembrete por ciclo nas etapas 1–17, após sete horas sem resposta e dentro da janela do cliente; retomada repete a etapa sem avançar. |
+| Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
 
@@ -1227,6 +1251,10 @@ Antes de modificar o fluxo:
 
 ## Follow-up de inatividade e reação do cliente
 
+Implementado na V1.2.0. As instruções de operação vivem nos
+[workers](workers/README.md#worker-de-follow-up) e no
+[deploy](deploy/README.md#ativação-do-follow-up); não dependem dos planos de implementação.
+
 O worker proativo envia somente `Você viu a minha mensagem?` depois de sete horas
 sem reação à última resposta comum confirmada do bot. NULL equivale a stage zero.
 O envio exige conversa ativa em etapa 1–17, unidade válida e adimplente, ausência
@@ -1237,6 +1265,11 @@ respondida mas ainda aberta também adia o proativo até sua finalização.
 O canal exige janela aberta desde a última mensagem do cliente; este envio em texto
 livre não usa template. A implementação reserva um minuto antes de completar 24h
 para evitar despacho na borda. Isso não altera o limiar de sete horas do bot.
+
+São dois relógios distintos: a última mensagem de toda a conversa precisa ser
+do bot há pelo menos sete horas, e a mensagem mais recente do cliente, anterior
+a ela, precisa estar dentro de 23h59. Bot há oito horas com cliente há 25 horas
+é inelegível; bot há oito horas com cliente há nove horas pode ser elegível.
 
 O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece até uma
 reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.

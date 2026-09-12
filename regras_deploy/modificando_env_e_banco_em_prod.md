@@ -79,6 +79,12 @@ META_GRAPH_API_VERSION=26.0
 FUNIL_WORKER_ENABLED=True
 ```
 
+O follow-up é habilitado pela própria unit, sem segredo adicional. Seus padrões
+são `FOLLOWUP_WORKER_ENABLED=true`, `FOLLOWUP_POLL_SECONDS=60` e
+`FOLLOWUP_BATCH_SIZE=20`. Se alguma dessas chaves estiver neste arquivo, seu
+valor prevalece sobre `Environment=` da unit. Preserve uma desativação
+intencional ao trocar o ambiente; ativação do proativo exige flow compatível.
+
 Os demais tokens, IDs, senhas e endpoints devem conter os valores reais do
 ambiente, sem serem enviados ao GitHub.
 
@@ -194,6 +200,7 @@ principal do Gunicorn mantém o ambiente antigo. Por isso, nessa operação há 
 `restart` curto do webhook.
 
 ```bash
+sudo systemctl stop chatbot-worker-followup.service
 sudo systemctl stop chatbot-worker-flow.service chatbot-worker-funil.service
 
 sudo install -o root -g chatbot -m 0640 \
@@ -206,11 +213,21 @@ systemctl is-active chatbot-webhook.service
 curl --fail --silent --show-error https://webhook.3esltech.com/webhook
 
 sudo systemctl start chatbot-worker-flow.service chatbot-worker-funil.service
+systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
+sudo journalctl -u chatbot-worker-flow.service --since "5 minutes ago" -n 60 --no-pager
+```
+
+Após confirmar o flow compatível ativo e sem erros, retome o follow-up se ele
+estava habilitado antes da manutenção:
+
+```bash
+sudo systemctl start chatbot-worker-followup.service
 
 systemctl is-active \
   chatbot-webhook.service \
   chatbot-worker-flow.service \
-  chatbot-worker-funil.service
+  chatbot-worker-funil.service \
+  chatbot-worker-followup.service
 ```
 
 Depois, confirme os journals:
@@ -219,6 +236,7 @@ Depois, confirme os journals:
 sudo journalctl -u chatbot-webhook.service \
   -u chatbot-worker-flow.service \
   -u chatbot-worker-funil.service \
+  -u chatbot-worker-followup.service \
   --since "5 minutes ago" --no-pager
 ```
 
@@ -234,6 +252,7 @@ sudo rm -f /etc/chatbot/chatbot.env.new
 Se algum serviço falhar após a troca:
 
 ```bash
+sudo systemctl stop chatbot-worker-followup.service
 sudo systemctl stop chatbot-worker-flow.service chatbot-worker-funil.service
 
 sudo install -o root -g chatbot -m 0640 \
@@ -242,11 +261,21 @@ sudo install -o root -g chatbot -m 0640 \
 
 sudo systemctl restart chatbot-webhook.service
 sudo systemctl start chatbot-worker-flow.service chatbot-worker-funil.service
+systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
+sudo journalctl -u chatbot-worker-flow.service --since "5 minutes ago" -n 60 --no-pager
+```
+
+Após confirmar o flow compatível ativo e sem erros, retome o follow-up se ele
+estava habilitado antes da manutenção:
+
+```bash
+sudo systemctl start chatbot-worker-followup.service
 
 systemctl is-active \
   chatbot-webhook.service \
   chatbot-worker-flow.service \
-  chatbot-worker-funil.service
+  chatbot-worker-funil.service \
+  chatbot-worker-followup.service
 ```
 
 ### Erros conhecidos de ambiente
@@ -302,6 +331,7 @@ Executar novamente `setup_database.py` não substitui a migração incremental.
 ### Arquivos canônicos que podem precisar mudar
 
 - `core/database/deploy_database/bank_script.py`: schema principal final;
+- `core/database/deploy_database/followup_script.py`: tabelas de recibos, retomadas e legado, chamadas pelo schema principal;
 - `core/database/deploy_database/cache_control_script.py`: controle de versão do cache;
 - `core/database/deploy_database/floodscript.py`: estruturas de flood e bloqueio;
 - `core/database/deploy_database/turno_cliente_script.py`: índices de turno;
@@ -330,11 +360,13 @@ O arquivo correto depende do domínio da alteração. Não mova tudo para
 3. Preparar o SQL incremental e seu rollback.
 4. Executar a suíte local.
 5. Criar snapshot do RDS antes de operação com risco estrutural.
-6. Parar `chatbot-worker-flow` e `chatbot-worker-funil` na Lightsail.
+6. Parar `chatbot-worker-followup` primeiro e depois `chatbot-worker-flow` e
+   `chatbot-worker-funil` na Lightsail.
 7. Aplicar o SQL no DBeaver.
 8. Executar as consultas de validação e confirmar a transação.
 9. Publicar e instalar o código conforme `rotina_deploy.md`.
-10. Recarregar o Gunicorn com `HUP` e só então iniciar os workers.
+10. Recarregar o Gunicorn com `HUP`, validar banco/webhook e iniciar flow e Funil.
+11. Conferir o flow compatível e o diagnóstico sem envio antes de iniciar o follow-up.
 
 Para mudança aditiva e retrocompatível, o webhook pode permanecer ativo. Para
 rename, drop, mudança de tipo, constraint incompatível ou remoção de coluna,
@@ -349,6 +381,19 @@ use o padrão **expand/contract**:
 Se isso não for possível, será necessária uma janela de manutenção e o webhook
 poderá precisar ser interrompido. “Webhook sempre ativo” é objetivo do deploy
 comum, não autorização para executar DDL incompatível enquanto recebe tráfego.
+
+### Migração inicial de follow-up
+
+[followup_registros.sql](../deploy/migrations/followup_registros.sql) é a migração
+transacional de aplicação única da V1.2.0. Cria três tabelas e marca as conversas
+antigas ativas com stage 1, auditando o estado anterior. Esse backfill é parte
+explícita da migração, não edição manual rotineira de dados. Na produção atual
+já foi aplicado; não repetir em futuras atualizações.
+
+O script exige flow parado e proativo desligado. O diagnóstico usa SELECTs e
+não prova permissões de escrita: crie as tabelas com a role da aplicação ou
+conceda os acessos necessários antes de ativar o worker. Procedimento completo
+em [deploy/README.md](../deploy/README.md#ativação-do-follow-up).
 
 ### Modelo de SQL incremental para o DBeaver
 
@@ -414,6 +459,10 @@ recriação do schema e não faz parte de um deploy comum.
 Use somente com autorização explícita, snapshot recente do RDS e uma janela em
 que ninguém esteja testando ou enviando mensagens para o número da Meta.
 
+As tabelas de follow-up têm FK para `conversa`. Elas entram explicitamente no
+reset integral abaixo para preservar a coerência do schema atual; apagá-las
+isoladamente para tentar reativar lembretes não é um reset suportado.
+
 ### Escopo do reset
 
 Devem voltar ao estado vazio:
@@ -426,6 +475,9 @@ Devem voltar ao estado vazio:
 - `chatbot.respostas_desafios`;
 - `chatbot.pesquisa_satisfacao`;
 - `chatbot.funil_envios`;
+- `chatbot.followup_envio`;
+- `chatbot.followup_retomada`;
+- `chatbot.followup_legado`;
 - `chatbot.webhook_flood_evento`, por ser um registro operacional temporário
   da janela de flood.
 
@@ -451,11 +503,12 @@ incluir `cliente_bloqueado_meta` no cascade e destruir os bloqueios preservados.
 
 ### 1. Preparar a janela de manutenção
 
-Crie um snapshot do RDS e pare os três processos que acessam as tabelas. Neste
+Crie um snapshot do RDS e pare os quatro serviços que acessam as tabelas. Neste
 reset excepcional, o webhook também deve parar para não inserir uma mensagem no
 meio da transação:
 
 ```bash
+sudo systemctl stop chatbot-worker-followup.service
 sudo systemctl stop \
   chatbot-webhook.service \
   chatbot-worker-flow.service \
@@ -464,10 +517,11 @@ sudo systemctl stop \
 systemctl is-active \
   chatbot-webhook.service \
   chatbot-worker-flow.service \
-  chatbot-worker-funil.service
+  chatbot-worker-funil.service \
+  chatbot-worker-followup.service
 ```
 
-O resultado esperado durante a manutenção é `inactive` para os três. Não envie
+O resultado esperado durante a manutenção é `inactive` para os quatro. Não envie
 mensagens ao número nesse intervalo: a Meta pode tentar entregar novamente um
 evento recebido enquanto o webhook estiver indisponível.
 
@@ -501,6 +555,12 @@ SELECT 'pesquisa_satisfacao', COUNT(*) FROM chatbot.pesquisa_satisfacao
 UNION ALL
 SELECT 'funil_envios', COUNT(*) FROM chatbot.funil_envios
 UNION ALL
+SELECT 'followup_envio', COUNT(*) FROM chatbot.followup_envio
+UNION ALL
+SELECT 'followup_retomada', COUNT(*) FROM chatbot.followup_retomada
+UNION ALL
+SELECT 'followup_legado', COUNT(*) FROM chatbot.followup_legado
+UNION ALL
 SELECT 'webhook_flood_evento', COUNT(*) FROM chatbot.webhook_flood_evento;
 ```
 
@@ -527,6 +587,9 @@ LOCK TABLE
     chatbot.respostas_desafios,
     chatbot.pesquisa_satisfacao,
     chatbot.funil_envios,
+    chatbot.followup_envio,
+    chatbot.followup_retomada,
+    chatbot.followup_legado,
     chatbot.webhook_flood_evento
 IN ACCESS EXCLUSIVE MODE;
 
@@ -545,6 +608,9 @@ TRUNCATE TABLE
     chatbot.respostas_desafios,
     chatbot.pesquisa_satisfacao,
     chatbot.funil_envios,
+    chatbot.followup_envio,
+    chatbot.followup_retomada,
+    chatbot.followup_legado,
     chatbot.dependente,
     chatbot.fila_mensagens,
     chatbot.conversa,
@@ -615,6 +681,9 @@ BEGIN
       + (SELECT COUNT(*) FROM chatbot.respostas_desafios)
       + (SELECT COUNT(*) FROM chatbot.pesquisa_satisfacao)
       + (SELECT COUNT(*) FROM chatbot.funil_envios)
+      + (SELECT COUNT(*) FROM chatbot.followup_envio)
+      + (SELECT COUNT(*) FROM chatbot.followup_retomada)
+      + (SELECT COUNT(*) FROM chatbot.followup_legado)
       + (SELECT COUNT(*) FROM chatbot.webhook_flood_evento)
       INTO registros_operacionais;
 
@@ -665,14 +734,25 @@ curl -i https://webhook.3esltech.com/webhook
 sudo systemctl start \
   chatbot-worker-flow.service \
   chatbot-worker-funil.service
+systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
+sudo journalctl -u chatbot-worker-flow.service --since "5 minutes ago" -n 60 --no-pager
+```
+
+Confirme o flow ativo e sem erros. Execute também o
+[diagnóstico de follow-up](../utilitarios/README.md#diagnóstico-de-follow-up).
+Só então retome o proativo, se estava habilitado:
+
+```bash
+sudo systemctl start chatbot-worker-followup.service
 
 systemctl is-active \
   chatbot-webhook.service \
   chatbot-worker-flow.service \
-  chatbot-worker-funil.service
+  chatbot-worker-funil.service \
+  chatbot-worker-followup.service
 ```
 
-O resultado final esperado é HTTP `200` no webhook e três estados `active`.
+O resultado final esperado é HTTP `200` no webhook e quatro estados `active`, quando todos estavam habilitados.
 Confira também se não surgiram erros de banco ou Redis:
 
 ```bash
@@ -680,6 +760,7 @@ sudo journalctl \
   -u chatbot-webhook.service \
   -u chatbot-worker-flow.service \
   -u chatbot-worker-funil.service \
+  -u chatbot-worker-followup.service \
   --since "10 minutes ago" \
   --no-pager
 ```

@@ -1,10 +1,11 @@
 # Implantacao no Lightsail
 
 Os arquivos assumem a aplicacao em `/opt/chatbot/app`, o ambiente virtual em
-`/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os tres
+`/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os quatro
 processos da aplicacao sao independentes e escrevem seus logs no journald. O
 portal de monitoramento faz parte do processo web `chatbot-webhook`; ele não
-cria um quarto serviço.
+cria outro serviço. O quarto serviço é `chatbot-worker-followup`, implantado na
+V1.2.0. Este guia também cobre a preparação de uma instalação nova.
 
 ## Preparar a aplicacao
 
@@ -66,9 +67,13 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now chatbot-webhook chatbot-worker-flow chatbot-worker-funil
 ```
 
+O follow-up é instalado junto das demais units, mas deve ser iniciado somente
+após o banco e o flow compatível estarem validados. Conclua a seção
+[Ativação do follow-up](#ativação-do-follow-up) para habilitá-lo.
+
 ```bash
-systemctl status chatbot-webhook chatbot-worker-flow chatbot-worker-funil
-journalctl -u chatbot-webhook -u chatbot-worker-flow -u chatbot-worker-funil -f
+systemctl status chatbot-webhook chatbot-worker-flow chatbot-worker-funil chatbot-worker-followup
+journalctl -u chatbot-webhook -u chatbot-worker-flow -u chatbot-worker-funil -u chatbot-worker-followup -f
 ```
 
 ## Habilitar o Nginx e HTTPS
@@ -106,10 +111,12 @@ em um valor enviado diretamente pelo cliente.
 O procedimento canonico esta em
 [`regras_deploy/rotina_deploy.md`](../regras_deploy/rotina_deploy.md).
 
-Na atualizacao comum, somente `chatbot-worker-flow` e
-`chatbot-worker-funil` sao parados. O webhook continua recebendo e enfileirando,
-mas precisa receber `HUP` depois do `git pull`: o Gunicorn de producao nao possui
-auto-reload. Alteracao de `.env` ou da unit do webhook exige `restart` e segue
+Na atualização dos workers ou de seus módulos compartilhados, pare o follow-up
+antes do flow; retome o flow compatível e validado antes de reativar os lembretes.
+Pare também o Funil quando ele for afetado. Alterações exclusivas do painel
+podem manter os workers ativos. O webhook continua recebendo e enfileirando
+quando o schema permite; para carregar Python/templates novos, recebe `HUP`,
+pois Gunicorn não possui auto-reload. Alteração de `.env` ou da unit exige `restart` e segue
 [`modificando_env_e_banco_em_prod.md`](../regras_deploy/modificando_env_e_banco_em_prod.md).
 
 ## Migracoes incrementais do banco de negocio
@@ -146,23 +153,36 @@ Nao exponha a porta `6379` e nao use `FLUSHDB` ou `FLUSHALL` em producao.
 
 Esta alteração exige migração manual `migrations/followup_registros.sql` antes do
 flow novo. Instalação limpa utiliza `followup_script.py`, chamado por `bank_script`.
-As colunas followup_stage/last_sent_at já existentes não são recriadas. Com o flow
+As colunas `followup_stage`/`followup_last_sent_at` já existentes não são recriadas. Com o flow
 parado e o follow-up desligado, a migração registra em followup_legado todas as
 conversas ativas e marca followup_stage = 1, inclusive nas etapas 18–21. O horário
-last_sent_at, o histórico, a etapa e a finalização permanecem como estavam.
+`followup_last_sent_at`, o histórico, a etapa e a finalização permanecem como estavam.
 O script é único e transacional; não reaplicar nos próximos deploys. O setup limpo
 cria as três tabelas e não marca conversas. A marcação não comprova envio de mensagem.
 Conversa ativa terminal/inconsistente recusa toda a migração: concluir a recuperação
 pendente do flow e revisar a anomalia antes de tentar de novo, sem encerrar em massa.
 
+Na produção, essa migração já foi aplicada em 10/09/2026 na V1.2.0, com 106
+conversas marcadas naquela execução. Não repetir nem manter esse número como
+expectativa fixa: os clientes podem retomar normalmente após o deploy.
+
 Instalar `systemd/chatbot-worker-followup.service` e executar daemon-reload não
 inicia envios. A unit habilita FOLLOWUP_WORKER_ENABLED; se essa chave já existir no
 EnvironmentFile, conferir a precedência antes da ativação. Nenhum segredo novo é necessário.
-Reiniciar primeiro chatbot-worker-flow.service. Somente após validar o flow e a
-consulta sem envio, habilitar e iniciar chatbot-worker-followup.service.
+Antes da primeira ativação, executar o diagnóstico abaixo e conferir permissões
+da role da aplicação nas novas tabelas. Reiniciar primeiro
+`chatbot-worker-flow.service` e conferir estado/logs. Somente então:
+
+```bash
+sudo systemctl enable --now chatbot-worker-followup.service
+sudo journalctl -u chatbot-worker-followup.service --since "5 minutes ago" -n 80 --no-pager
+```
 
 `python -m utilitarios.verificar_followup` faz leitura e mostra IDs de uma amostra.
 Não é uma execução do worker e não envia mensagens. Um resultado vazio é válido.
+O [README dos utilitários](../utilitarios/README.md#diagnóstico-de-follow-up)
+traz o comando com o ambiente da VM e explica cada indicador. A sequência completa
+de atualização fica em [rotina_deploy.md](../regras_deploy/rotina_deploy.md).
 
 Para interromper os lembretes, parar e desabilitar a unit de follow-up. Isso mantém
 o flow apto a tratar retornos de lembretes ou do legado marcado. Não apagar recibos, resetar

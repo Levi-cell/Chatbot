@@ -15,6 +15,7 @@ core/database/
 └── deploy_database/
     ├── setup_database.py
     ├── bank_script.py
+    ├── followup_script.py
     ├── transacao_deploy.py
     ├── cache_control_script.py
     ├── etapa_transicao_script.py
@@ -25,7 +26,8 @@ core/database/
 
 ## Runtime e deploy
 
-- `connection_aws.py` fornece conexões para os orquestradores;
+- `connection_aws.py` fornece conexões para os orquestradores e aceita
+  `connect_timeout` opcional; o follow-up e seu diagnóstico usam 10 segundos;
 - `connection_check.py` valida acesso ao PostgreSQL;
 - `deploy_database/` cria schema, tabelas, índices e funções;
 - partições mensais são mantidas pelo comando manual
@@ -59,6 +61,7 @@ Ordem atual:
 healthcheck
 -> configuração única da role
 -> schema principal final
+   (inclui tabelas de follow-up por followup_script.py)
 -> controle de cache
 -> tabelas de flood
 -> índices de turno
@@ -161,6 +164,41 @@ de aceitar uma estrutura divergente. Em caso de erro, execute `ROLLBACK`.
 `ALTER TABLE`, transferência e remoção de legado ficam somente na migração;
 o DDL continua sendo exclusivamente a definição final para instalação nova.
 
+## Registros de follow-up
+
+O DDL de instalação limpa inclui três tabelas não particionadas, criadas por
+`deploy_database/followup_script.py` dentro da transação de `bank_script.py`:
+
+| Tabela | Responsabilidade |
+|---|---|
+| `followup_envio` | Recibo por conversa e ID/data da mensagem do bot que originou o ciclo; registra o histórico e o WAMID do lembrete confirmado. |
+| `followup_retomada` | Checkpoint da reação do cliente por conversa, fila e hash; preserva etapa, stage anterior e conclusão para retries. |
+| `followup_legado` | Auditoria das conversas ativas marcadas na migração, com stage anterior e data da marcação. |
+
+As FKs dessas tabelas apontam para a conversa com `ON DELETE CASCADE`; o
+histórico de mensagens continua particionado. Não há nova tabela Django nem
+ação administrativa para editar esses registros. `followup_stage` e
+`followup_last_sent_at` já pertencem à tabela `conversa`.
+
+Para uma base anterior à V1.2.0, use uma única vez
+[followup_registros.sql](../../deploy/migrations/followup_registros.sql), com
+flow parado e follow-up desligado. O script inteiro é transacional: cria os
+registros, audita todas as conversas ativas e marca `followup_stage = 1`, inclusive
+nas etapas 18–21. Não altera etapa, histórico, finalização ou datas anteriores e
+não envia mensagens. Legado ativo terminal/inconsistente cancela a migração.
+
+Na produção atual, essa migração já foi aplicada. Não a repita em deploys
+seguintes: a reaplicação falha em vez de remarcar conversas. O setup de banco
+vazio cria a estrutura sem marcar o legado. A role da aplicação precisa ter
+permissões de leitura e escrita nas novas tabelas, por propriedade ou grants.
+O [diagnóstico sem envio](../../utilitarios/README.md#diagnóstico-de-follow-up)
+confere as consultas; ele não comprova as permissões de escrita.
+
+Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo.
+Histórico da repetição, conclusão da retomada e reset do stage são confirmados
+juntos pelo flow. A chamada à Meta ocorre fora dessa atomicidade local;
+aceite externo seguido de falha no commit ainda pode gerar duplicidade.
+
 ## Atomicidade
 
 No PostgreSQL, o DDL utilizado pelo projeto participa de transações. Uma tabela
@@ -211,6 +249,8 @@ gerenciador de segredos.
 - `tests/unit/test_persistencia_essencial.py`;
 - `tests/unit/test_retry_essencial.py`;
 - `tests/unit/test_worker_flow_runtime.py`;
-- `tests/unit/test_suporte_idoso_email_obrigatorio.py`.
+- `tests/unit/test_suporte_idoso_email_obrigatorio.py`;
+- `tests/unit/test_followup.py`;
+- `tests/integration/test_followup_postgres.py` (PostgreSQL local descartável).
 
 A organização e o comando da suíte completa estão em `tests/README.md`.

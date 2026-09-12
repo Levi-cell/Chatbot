@@ -1,7 +1,7 @@
 # Workers
 
-Camada assíncrona responsável pelo atendimento no WhatsApp e pela publicação
-periódica de oportunidades no Funil de Vendas.
+Camada assíncrona responsável pelo atendimento no WhatsApp, lembretes de
+inatividade e publicação periódica de oportunidades no Funil de Vendas.
 
 - [Portal do projeto](../README.md)
 - [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
@@ -20,6 +20,7 @@ workers/
 │   ├── response_flow/
 │   │   ├── flow_worker.py
 │   │   ├── flow_sender.py
+│   │   ├── repeticao_followup.py
 │   │   ├── etapas/
 │   │   │   ├── validadores_universais/
 │   │   │   └── validadores_contexto/
@@ -31,6 +32,7 @@ workers/
 │   │   ├── efeitos_transicao.py
 │   │   ├── encerramento_atendimento.py
 │   │   ├── persistencia_resposta.py
+│   │   ├── retorno_followup.py
 │   │   ├── movimento_conversa.py
 │   │   ├── finalizacao_fila.py
 │   │   ├── lock_conversa.py
@@ -38,6 +40,10 @@ workers/
 │   └── suporte/
 │       ├── cache_repair.py
 │       └── estado_ciclo.py
+├── worker_followup/
+│   ├── iniciar_worker_followup.py
+│   ├── config.py
+│   └── followup_worker.py
 ├── worker_funil/
 │   ├── iniciar_worker_funil.py
 │   ├── config.py
@@ -62,8 +68,9 @@ dequeue
 -> barrar conversa com bloqueio vigente
 -> adquirir lock
 -> vincular fila à conversa
+-> reler conversa sob lock e reconhecer retomada de follow-up
 -> persistir histórico do cliente
--> rotear e enviar resposta
+-> repetir etapa na retomada; nos demais casos, rotear e enviar resposta
 -> persistir histórico/contexto do bot
 -> marcar fila como sent
 -> liberar lock e fechar conexão
@@ -77,11 +84,12 @@ Os commits intermediários são checkpoints recuperáveis:
 1. claim da fila;
 2. espera por mensagem anterior, quando necessária;
 3. validação do banco;
-4. lock e vínculo com a conversa;
-5. histórico do cliente;
-6. histórico e contexto do bot;
-7. status `sent`;
-8. unlock.
+4. aquisição do lock;
+5. vínculo, releitura e histórico do cliente, incluindo o marcador de retomada quando aplicável;
+6. renovação do lock antes do envio;
+7. histórico e contexto do bot; na retomada, conclusão do marcador e reset do stage;
+8. status `sent`, após conferir novamente a posse do lock;
+9. unlock.
 
 Uma função auxiliar pode executar uma operação com o cursor recebido, mas não
 deve decidir a transação fora do orquestrador.
@@ -137,6 +145,8 @@ fila sem duplicar o envio.
 ## Response flow
 
 - `flow_worker.py`: transação, checkpoints e handlers.
+- `repeticao_followup.py`: reapresentação da etapa na reação ao follow-up ou
+  legado marcado, preservando a resposta já existente;
 - `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
   etapa atual;
 - `etapas/resolver_etapa<n>.py`: valida a resposta, aplica tratamentos e
@@ -183,6 +193,9 @@ origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
   pode avançar como endereço válido, ausência declarada ou não informado;
   os três casos usam `email_valido` (`10 -> 11`). Sem endereço, o efeito grava
   `cliente.email = NULL`, sem manter um e-mail de atendimento anterior.
+- Etapa 11: `Começar triagem`, o callback do botão e confirmações textuais como
+  `iniciar triagem`, `sim` e `vamos começar` autorizam o início. A classificação
+  permanece no validador contextual da etapa, após os tratamentos universais.
 
 No retry já respondido, o resultado aceito do e-mail e o encaminhamento de
 suporte são reconstruídos pelo histórico original, sem nova chamada à Meta
@@ -190,7 +203,8 @@ nem reavaliação da decisão pela configuração atual da unidade.
 
 ### Saudação de retorno
 
-Após a etapa 1, `valida_historico.py` compara o horário da mensagem atual do
+No caminho normal com `followup_stage = 0`, após a etapa 1,
+`valida_historico.py` compara o horário da mensagem atual do
 cliente com o último envio do bot confirmado como `sent` na mesma conversa.
 Com intervalo de pelo menos três horas e nome disponível, `flow_sender.py`
 prefixa a resposta com `Olá novamente, <nome>!`, inclusive quando ela é um
@@ -279,7 +293,9 @@ está em
 - `tests/unit/test_saudacao_retorno.py`;
 - `tests/unit/test_validador_profissao.py`;
 - `tests/unit/test_valida_etapa7.py`;
-- `tests/unit/test_sondas_funil.py`.
+- `tests/unit/test_sondas_funil.py`;
+- `tests/unit/test_followup.py`;
+- `tests/integration/test_followup_postgres.py`.
 
 O núcleo transacional e os testes específicos estão descritos em
 [`tests/README.md`](../tests/README.md).
@@ -298,6 +314,40 @@ Uma falha individual não interrompe o lote. A candidata pode ser tentada novame
 quando a paginação voltar ao início, depois de revalidar todas as condições; não
 há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janela Meta.
 
+### Configuração e elegibilidade
+
+| Variável | Padrão no Python | Valores aceitos |
+|---|---|---|
+| `FOLLOWUP_WORKER_ENABLED` | `False` | Booleano; a unit configura `true`. |
+| `FOLLOWUP_POLL_SECONDS` | `60` | 5–3.600 segundos de espera após cada lote. |
+| `FOLLOWUP_BATCH_SIZE` | `20` | 1–100 candidatas por lote; processamento sequencial. |
+
+O texto é `Você viu a minha mensagem?`. Para despachar, todas as condições
+precisam continuar válidas na releitura após adquirir o lock:
+
+- conversa ativa, sem finalização, em etapa 1–17 não terminal;
+- `followup_stage = 0` (`NULL` é tratado como zero);
+- última mensagem da conversa é do bot, confirmada como `sent`, com pelo menos
+  sete horas, e `last_interaction_at` corresponde a essa mensagem;
+- última mensagem do cliente tem menos de 23h59, reservando um minuto da janela
+  de 24 horas; não existe mensagem do cliente com horário igual ou posterior ao bot;
+- unidade adimplente, destinatário e números da unidade presentes;
+- menos de 12 turnos sem avanço, sem bloqueio persistido ou flood no banco;
+- nenhuma fila `pending`/`processing` do par cliente/unidade, inclusive sem vínculo;
+- nenhum recibo que já cubra a âncora ou o próprio lembrete, nem retomada aberta com fila pendente.
+
+Exemplo: bot há 8 horas e cliente há 25 horas não permitem envio; bot há 8 horas
+e cliente há 9 horas permitem, se os demais critérios forem atendidos.
+O relógio de elegibilidade vem do PostgreSQL. Os limites de etapa e de tempo
+são regras do código/SQL, não novas variáveis de ambiente.
+
+O sucesso persiste histórico, recibo e stage 1 no mesmo commit. Não há segunda
+mensagem enquanto o cliente não reagir. Uma confirmação da Meta seguida de
+falha no commit local ainda pode resultar em duplicidade no retry; o worker
+registra `followup_commit_falhou` como crítico.
+
+### Retomada pelo flow
+
 No flow, o contexto é relido depois do lock. `transacoes/retorno_followup.py` registra
 a reação e recupera a prova de repetição. `response_flow/repeticao_followup.py`
 chama os senders normais da etapa, sem resolvers de negócio. A renovação do lock
@@ -308,6 +358,28 @@ Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
 O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
 na regra existente de três horas.
 
+A primeira reação é guardada, mas não valida nem avança a etapa. A repetição
+mantém botões e dados persistidos; não altera `turnos_sem_avanco`, Funil ou
+encerramento. Stage zero, histórico da repetição e conclusão do marcador só são
+confirmados juntos após o envio. `followup_last_sent_at` permanece como auditoria.
+Falha preserva a retomada; replay concluído não reenvia nem zera um ciclo posterior.
+O legado marcado também pode repetir etapas 18–21, embora elas não recebam
+proativos. A etapa terminal 22 não é repetível por esse caminho.
+
+### Operação e logs
+
+`SIGTERM`/`SIGINT` sinalizam parada e interrompem a espera entre lotes; uma
+candidata já em andamento passa pela limpeza da conexão e do lock. Falhas de
+consulta usam espera exponencial de 5 até 300 segundos. A unit usa
+`Restart=on-failure`, `RestartSec=5s` e `TimeoutStopSec=100s`.
+
+`followup_iniciado` informa a configuração. `followup_despacho` antecede a chamada
+externa, e `followup_confirmado` confirma a persistência local. Não há log INFO a
+cada varredura vazia; ausência de despachos não comprova falha. Para consultar
+candidatas sem envio, use o [diagnóstico](../utilitarios/README.md#diagnóstico-de-follow-up).
+
 Deploy: preparar banco e código, reiniciar flow compatível, então iniciar follow-up.
 Rollback: parar o proativo primeiro e manter flow compatível enquanto houver stage
 positivo ou retomadas pendentes. Desligar o serviço não limpa esses registros.
+Os comandos completos ficam na [rotina de deploy](../regras_deploy/rotina_deploy.md)
+e no [guia de ativação](../deploy/README.md#ativação-do-follow-up).

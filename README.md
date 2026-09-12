@@ -7,6 +7,10 @@ periódico de oportunidades ao Funil de Vendas.
 Este README é o portal do projeto. Regras detalhadas vivem nos documentos
 centrais e os mapas técnicos vivem nos READMEs de cada camada.
 
+Referência atual: **V1.2.0**, com follow-up de inatividade implementado e
+implantado. Versões e regras de numeração ficam em
+[VERSIONAMENTO.md](VERSIONAMENTO.md).
+
 Os documentos técnicos abaixo descrevem o código atual. Os planos em `docs/`
 são propostas separadas: sua existência não significa que já foram aplicados.
 
@@ -158,6 +162,9 @@ FUNIL_LEASE_SEGUNDOS
 FUNIL_RETRY_LEAD_SEGUNDOS
 FUNIL_HTTP_CONNECT_TIMEOUT_SECONDS
 FUNIL_HTTP_READ_TIMEOUT_SECONDS
+FOLLOWUP_WORKER_ENABLED
+FOLLOWUP_POLL_SECONDS
+FOLLOWUP_BATCH_SIZE
 ```
 
 Nunca registre valores reais de tokens, senhas ou payloads completos na
@@ -194,8 +201,12 @@ python -m workers.worker_followup.iniciar_worker_followup
 
 O Funil encerra imediatamente enquanto `FUNIL_WORKER_ENABLED=False`.
 O follow-up também exige `FOLLOWUP_WORKER_ENABLED=True` para executar seu laço.
-Antes de ativá-lo, aplique a migração e inicie o flow compatível, conforme
+Antes de ativá-lo, prepare o schema por instalação limpa ou migração pendente
+e inicie o flow compatível, conforme
 [Ativação do follow-up](deploy/README.md#ativação-do-follow-up).
+O intervalo padrão é 60 segundos entre lotes de até 20 conversas, processadas
+individualmente. A unit de produção habilita o serviço; a execução manual nasce
+desabilitada. Não inicie workers locais com credenciais de produção para testar.
 
 Endpoint do webhook:
 
@@ -226,11 +237,37 @@ política de mocks.
 ## Portal de monitoramento
 
 O aplicativo `callback/monitoramento` oferece login por conta Django vinculada
-1:1 à unidade, histórico consolidado de conversas, relatórios por período e dois
-arquivos CSV para Google Contatos. Cada requisição resolve novamente a unidade
+1:1 à unidade, histórico consolidado de conversas e relatórios por período.
+São quatro downloads: Google CSV ou dados essenciais, cada um com todos os
+contatos ou apenas elegíveis. O essencial contém Nome, E-mail e Telefone e remove
+somente o prefixo brasileiro `+55`, preservando o DDD; Google CSV mantém o
+telefone internacional. Cada requisição resolve novamente a unidade
 da sessão e todos os SELECTs mantêm esse escopo. O navegador atualiza conversas
 a cada 10 segundos e relatórios a cada 30 segundos pelo mesmo serviço web do
 webhook; não existe processo adicional na VM.
+
+Conversas usa o layout compacto, com etiquetas de perfil junto da data e
+navegação adaptada a celular em ambas as orientações. Os indicadores agregados
+ficam em Relatórios. Os lembretes confirmados entram no histórico e no total de
+mensagens; não há indicador exclusivo de follow-up no painel.
+
+## Follow-up em funcionamento
+
+O quarto serviço envia um único `Você viu a minha mensagem?` por ciclo para
+conversa ativa nas etapas 1–17, com `followup_stage = 0`, último envio confirmado
+do bot há pelo menos sete horas e última mensagem do cliente há menos de 24 horas
+(com um minuto de margem no código). A seleção também verifica unidade, fila e
+bloqueios. A etapa 18 e as posteriores não recebem lembretes proativos.
+
+Na primeira reação aceita com stage positivo, o flow guarda a mensagem e repete
+a etapa com `Que bom te ver novamente`, sem usar essa reação como resposta da
+pergunta. O stage só volta a zero junto da persistência da repetição. Conversas
+antigas ativas foram marcadas com stage 1 na migração inicial, sem disparo retroativo.
+
+Contratos: [regras de negócio](REGRAS_DE_NEGOCIO.md#follow-up-de-inatividade-e-reação-do-cliente),
+[workers](workers/README.md#worker-de-follow-up),
+[banco](core/database/README.md#registros-de-follow-up) e
+[diagnóstico sem envio](utilitarios/README.md#diagnóstico-de-follow-up).
 
 ## Monitoramento manual
 
@@ -254,7 +291,8 @@ opcionais do PDF e interpretação das métricas, consulte
 - o worker do Funil é independente, processa uma oportunidade por vez e nasce
   desativado até a validação manual da integração;
 - a V1 utiliza uma instância do worker de atendimento e uma instância independente
-  do worker do Funil; os contratos de lock e ordenação continuam necessários;
+  de cada worker do Funil e de follow-up; flow e follow-up compartilham o lock
+  versionado da conversa, mantendo conexões e transações próprias;
 - chamadas Meta confirmadas são persistidas antes de a fila chegar a `sent`;
 - falha ao persistir uma mensagem válida na fila retorna HTTP 503;
 - falha ao validar unidade por indisponibilidade de Redis e banco retorna HTTP

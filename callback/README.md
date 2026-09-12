@@ -31,7 +31,7 @@ callback/
 │   ├── urls.py           rotas públicas e privadas do monitoramento
 │   ├── monitoramento_guard.py  autorização da sessão e dos recursos
 │   ├── periodos.py       janelas de consulta aceitas pelo servidor
-│   ├── apresentacao.py   consolidação, perfis, botões e Google CSV
+│   ├── apresentacao.py   consolidação, perfis, botões e CSV Google/essencial
 │   ├── services.py       orquestra leituras da unidade autorizada
 │   ├── templates/monitoramento/  login, painel e acesso negado
 │   └── static/monitoramento/     estilos, interação e logo ESL Tech
@@ -90,6 +90,9 @@ Content-Type
 ```
 
 O webhook não envia etapas, não avança conversa e não executa dequeue.
+O follow-up é disparado pelo worker próprio após consulta de inatividade; não
+exige um evento recebido nem cria uma entrada fictícia na fila. A reação real
+do cliente passa pelas mesmas barreiras de assinatura, bloqueio, flood e turno.
 
 Eventos contendo apenas `statuses` retornam 200 sem processamento na V1.
 Eventos sem `messages`/`statuses`, ou com ambos, também retornam 200 sem
@@ -281,9 +284,15 @@ Admin.
 
 O navegador atualiza a seção de conversas a cada 10 segundos e a de relatórios
 a cada 30 segundos, somente enquanto a página está visível. Voltar à aba força
-uma nova leitura. Não há WebSocket, tarefa periódica no servidor nem quarto
-serviço: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
+uma nova leitura. Não há WebSocket nem tarefa periódica no servidor para o
+painel: as requisições são atendidas pelo mesmo Gunicorn/Django do webhook.
 Mensagens são carregadas somente quando um contato é aberto.
+
+O follow-up confirmado aparece como mensagem de texto do bot na conversa e
+participa da contagem de mensagens no período. Não há cartão exclusivo,
+controle de disparo nem edição de stage no monitoramento. A lista mostra os
+perfis junto da data: `DP -18`, `DP 18–59`, `DP 60+`, `18–59` e `60+`, conforme
+os dados disponíveis; o cabeçalho da conversa mantém a descrição completa.
 
 Conversas prioriza a lista e o histórico, sem repetir os quatro indicadores do
 relatório. O layout compacto preserva as fontes e ajusta o espaço do chat pela

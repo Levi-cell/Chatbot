@@ -16,6 +16,7 @@ core/integrations/whatsapp/
 ├── messages/
 │   ├── etapa1_messages.py ... etapa22_messages.py
 │   ├── componentes_compartilhados.py
+│   ├── followup_messages.py
 │   ├── tratamentos_universais.py
 │   └── triagem_componentes.py
 ├── pywa_functions/
@@ -25,6 +26,7 @@ core/integrations/whatsapp/
 │   ├── ferramentas.md
 │   └── pywa_senders/
 │       ├── etapa1.py ... etapa22.py
+│       ├── followup.py
 │       └── triagem_base.py
 └── tools/
     ├── ativando_numero.py
@@ -67,7 +69,7 @@ argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
 formata o texto; não consulta o banco nem conhece a conversa.
 
 `componentes_compartilhados.py` também monta `Olá novamente, <nome>!` quando
-o cliente retorna pelo menos três horas após o último envio confirmado do bot
+o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
 na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
 incompatíveis não interrompem o atendimento e não produzem prefixo.
 
@@ -181,8 +183,12 @@ O nome vem do cadastro persistido; não é extraído da reação que será desco
 O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
 do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
 
-`messages/followup_messages.py` contém o único texto aprovado.
+`messages/followup_messages.py` contém o único texto aprovado:
+`Você viu a minha mensagem?`.
 `pywa_senders/followup.py` envia texto sem botões, sem saudação de retorno e sem
 id_mensagem_fila fictício. Usa sessão HTTP com timeout e sem retry automático;
 recebe destinatário e phone_id da unidade. `conta_wa` aceita sessão opcional sem
-alterar os clientes existentes. Stage e persistência pertencem ao worker/repositório.
+alterar os clientes existentes. A sessão usa timeout de 20 segundos por operação,
+com conexão limitada a 5 segundos. Stage e persistência pertencem ao worker/repositório.
+O ID retornado confirma o aceite da API; os eventos `sent`, `delivered` e `read`
+recebidos pelo webhook não atualizam o histórico nesta versão.

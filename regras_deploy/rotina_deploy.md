@@ -1,105 +1,50 @@
 # Rotina de deploy da branch `prod`
 
-Este é o procedimento canônico para publicar uma atualização comum do projeto
-na instância Lightsail.
+Procedimento para atualizar a aplicação na Lightsail. Referência atual:
+**V1.2.0**, com monitoramento e follow-up implantados. Versões e hashes ficam em
+[VERSIONAMENTO.md](../VERSIONAMENTO.md).
 
-Ambiente atual:
+## Ambiente e serviços
 
-- repositório na VM: `/opt/chatbot/app`;
+- repositório: `/opt/chatbot/app`, branch `prod`;
 - ambiente virtual: `/opt/chatbot/venv`;
-- configuração de produção: `/etc/chatbot/chatbot.env`;
-- webhook público: `https://webhook.3esltech.com/webhook`;
-- monitoramento planejado: `https://monitoramento.3esltech.com/`;
-- branch de produção: `prod`.
+- configuração: `/etc/chatbot/chatbot.env`;
+- webhook: `https://webhook.3esltech.com/webhook`;
+- monitoramento: `https://monitoramento.3esltech.com/`;
+- banco PostgreSQL no RDS e Redis remoto.
 
-## Pendências para o primeiro deploy do monitoramento
+| Serviço | Responsabilidade |
+|---|---|
+| `chatbot-webhook.service` | Gunicorn/Django: webhook, Admin e monitoramento. |
+| `chatbot-worker-flow.service` | Consome a fila, atende e trata a retomada após follow-up. |
+| `chatbot-worker-funil.service` | Publica oportunidades no CRM. |
+| `chatbot-worker-followup.service` | Consulta inatividade e envia um lembrete por ciclo elegível. |
 
-O DNS de `monitoramento.3esltech.com` já aponta para `18.229.43.133`. O domínio
-foi acrescentado somente ao `.env` local; o ambiente da VM ainda precisa ser
-atualizado. Como esse arquivo é privado e ignorado pelo Git, um `git pull` não
-leva essa configuração para produção.
+O painel compartilha o serviço web; seu polling não cria outro processo.
+Há uma instância de cada worker. O follow-up é um processo contínuo, com lotes
+padrão de até 20 candidatas e espera de 60 segundos, não um timer de meia hora.
 
-Antes de disponibilizar o painel:
+## Escolher o alcance da atualização
 
-- Atualizar `/etc/chatbot/chatbot.env`, preservando os valores existentes:
-  acrescentar `monitoramento.3esltech.com` a `DJANGO_ALLOWED_HOSTS` e
-  `https://monitoramento.3esltech.com` a `DJANGO_CSRF_TRUSTED_ORIGINS`.
-  Seguir o procedimento de backup, validação e aplicação da Parte A de
-  [modificando_env_e_banco_em_prod.md](modificando_env_e_banco_em_prod.md).
-- Reiniciar `chatbot-webhook.service` para carregar o ambiente atualizado;
-  o `HUP` do deploy comum não relê o `EnvironmentFile`.
-- Aplicar e conferir no DBeaver, se ainda pendente, a migração
-  [20260902_adicionar_usuario_monitoramento_unidade.sql](../deploy/migrations/20260902_adicionar_usuario_monitoramento_unidade.sql)
-  antes de carregar o código que depende de `unidade.id_usuario_monitoramento`.
-- Configurar o Nginx e emitir o certificado HTTPS para o subdomínio, mantendo
-  as opções de cookies seguros e HTTPS da Parte A do procedimento de ambiente.
-- Executar `collectstatic` para publicar CSS, JavaScript e logo do portal.
-  Validar `https://monitoramento.3esltech.com/login/` e `/` com contas comuns
-  vinculadas a unidades diferentes, além de senha incorreta e saída por POST.
-  Conferir os períodos, filtros, detalhes, relatórios, atualização automática e
-  os downloads completo/elegível sem permitir acesso cruzado entre unidades.
+| Alteração | Ação necessária |
+|---|---|
+| Somente documentação | Atualizar o checkout; não reiniciar serviços. |
+| Somente painel, sem módulos compartilhados pelos workers | Atualizar, publicar estáticos se mudaram e recarregar o webhook se Python/templates mudaram; workers podem continuar. |
+| Worker ou módulo compartilhado | Parar os workers afetados antes do pull; se flow ou seu contrato mudar, parar follow-up primeiro e retomá-lo por último. |
+| Dependências Python | Atualizar o venv com os processos consumidores parados; avaliar a interrupção do webhook. |
+| `.env` ou unit | Instalar/validar a alteração e reiniciar os serviços afetados; `HUP` não relê `EnvironmentFile`. |
+| Schema | Aplicar somente a migração específica ainda pendente, antes de iniciar o código dependente. |
 
-Estas pendências são de implantação; ainda não foram executadas na VM. Atualize
-este registro conforme cada etapa for concluída e conferida em produção.
+A sequência abaixo cobre alterações dos workers e de código compartilhado com
+schema compatível. O webhook pode continuar enfileirando enquanto eles estão
+parados. Uma mudança de banco incompatível com o webhook ativo exige janela de
+manutenção ou estratégia expand/contract, conforme o
+[guia de ambiente e banco](modificando_env_e_banco_em_prod.md).
 
-## Regra dos três serviços
+## 1. Preparar e publicar no computador local
 
-| Serviço | Papel | Ação no deploy comum |
-|---|---|---|
-| `chatbot-webhook.service` | Recebe a Meta e grava na fila | Permanece atendendo; recebe `HUP` depois da atualização |
-| `chatbot-worker-flow.service` | Processa o fluxo do atendimento | Para antes do `git pull` e inicia depois das validações |
-| `chatbot-worker-funil.service` | Envia oportunidades ao Funil | Para antes do `git pull` e inicia depois das validações |
-
-O monitoramento não acrescenta um quarto serviço. Nginx encaminha o subdomínio
-ao mesmo `chatbot-webhook.service`, cujo Gunicorn atende as rotas Django do
-webhook, Admin e painel. A atualização da página são requisições GET iniciadas
-pelo navegador.
-
-O webhook continuar ativo permite que novas mensagens sejam persistidas na
-fila enquanto os workers estão parados. Elas serão processadas quando o worker
-de fluxo voltar.
-
-### Correção importante sobre o webhook
-
-O auto-reload é comportamento do servidor de desenvolvimento do Django. Em
-produção, o projeto usa Gunicorn sem `--reload`; portanto, um `git pull` sozinho
-**não** carrega o novo código no webhook.
-
-No deploy comum, não é necessário interromper o endpoint. Envie `HUP` ao
-processo principal do Gunicorn: ele cria workers com o código novo e encerra os
-antigos graciosamente.
-
-Mudança em `.env` ou na unit systemd do webhook é exceção: exige `restart`, pois
-o processo principal precisa reler seu ambiente ou sua definição de serviço.
-
-## Comandos rápidos para parar e iniciar somente os workers
-
-Parar:
-
-```bash
-sudo systemctl stop chatbot-worker-flow.service chatbot-worker-funil.service
-```
-
-Iniciar:
-
-```bash
-sudo systemctl start chatbot-worker-flow.service chatbot-worker-funil.service
-```
-
-Verificar:
-
-```bash
-systemctl is-active chatbot-webhook.service
-systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
-```
-
-Durante a atualização, o resultado esperado é `active` para o webhook e
-`inactive` para os dois workers. `inactive` faz `systemctl is-active` retornar
-um código diferente de zero; nesse ponto isso é esperado, não uma falha.
-
-## 1. Sincronizar a `prod` antes de começar uma alteração
-
-Execute no PowerShell, na raiz do projeto local, antes de iniciar o trabalho:
+Antes de começar uma alteração, confira a branch e preserve qualquer trabalho
+local. Com o checkout limpo:
 
 ```powershell
 git switch prod
@@ -107,225 +52,192 @@ git status --short
 git pull --ff-only origin prod
 ```
 
-O `git status --short` deve estar vazio antes do `pull`. Se houver arquivos
-alterados, primeiro revise e preserve o trabalho; não use `reset --hard` para
-forçar a sincronização.
-
-## 2. Testar e publicar a atualização no GitHub
-
-Depois de concluir as alterações, ainda no computador local:
+Depois de implementar, execute os testes do comportamento afetado. Alterações
+de follow-up/SQL também exigem a integração PostgreSQL descartável descrita em
+[tests/README.md](../tests/README.md#follow-up).
 
 ```powershell
-git branch --show-current
-git status --short
 python -m unittest discover -s tests -t . -p "test_*.py"
 git diff --check
-
-git add -A
-git diff --cached --name-status
-git diff --cached --check
-git diff --cached --stat
-
-git commit -m "Descreva objetivamente a atualizacao"
-git push origin prod
-git status -sb
+git status --short
 ```
 
-Antes do commit, confira a lista de arquivos preparada por
-`git diff --cached --name-status`. Nunca publique `.env`, tokens,
-senhas, certificados ou dumps do banco.
-
-O `-u` não é necessário no `git push`: a `prod` já acompanha `origin/prod`.
-Usá-lo novamente não costuma causar problema, mas não acrescenta nada à rotina.
-
-Anote o commit publicado para conferi-lo na VM:
+Prepare somente os arquivos revisados para o commit. Confira antes de publicar:
 
 ```powershell
-git rev-parse --short HEAD
+git diff --cached --name-status
+git diff --cached --check
+git commit -m "Descreva objetivamente a atualizacao"
+git push origin prod
+git rev-parse HEAD
 ```
 
-## 3. Parar os workers na Lightsail
+Anote o hash completo. Não inclua `.env`, segredos, certificados privados ou
+dumps. Não use `reset --hard` para contornar alterações locais.
 
-Execute no terminal Ubuntu da Lightsail:
+## 2. Parar os workers afetados na VM
+
+Na atualização completa, pare o proativo antes do flow:
 
 ```bash
+sudo systemctl stop chatbot-worker-followup.service
 sudo systemctl stop chatbot-worker-flow.service chatbot-worker-funil.service
-
 systemctl is-active chatbot-webhook.service
-systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
+systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service chatbot-worker-followup.service
 ```
 
-Não continue se o webhook não estiver `active`.
+Esperado: webhook `active` e três workers `inactive`. O código de saída não zero
+de `is-active` para serviço parado é esperado. Em instalação anterior ao follow-up,
+ele ainda pode não ter unit; siga a [primeira ativação](../deploy/README.md#ativação-do-follow-up).
 
-## 4. Atualizar o checkout da VM
+## 3. Atualizar o checkout
 
 ```bash
 cd /opt/chatbot/app
-
 git status --short
 git fetch origin
 git checkout prod
 git pull --ff-only origin prod
-git rev-parse --short HEAD
+git rev-parse HEAD
 ```
 
-Regras:
+O status deve estar vazio antes do pull, e o hash final deve coincidir com o
+aprovado. Se houver divergência, preserve os arquivos e investigue antes de seguir.
 
-- `git status --short` deve estar vazio antes do `pull`;
-- o hash final deve ser o mesmo publicado no computador local;
-- se a VM estiver com alteração local, pare e investigue. Não apague a mudança
-  com `reset`, `checkout --` ou remoção de arquivo sem saber sua origem.
+## 4. Aplicar somente as migrações pendentes
 
-## 5. Atualizar dependências e validar o Django
+Leia o SQL da versão e execute o script completo no DBeaver, contra o banco
+correto e com a role apropriada, enquanto os workers dependentes estão parados.
+Confira as validações e a conclusão do `COMMIT`. Em erro, execute `ROLLBACK` e
+investigue; não aplique apenas fragmentos para contornar a falha.
+
+**O follow-up já foi migrado na produção em 10/09/2026.**
+`deploy/migrations/followup_registros.sql` marcou 106 conversas ativas naquele
+deploy. Esse número é histórico, não uma condição para verificações futuras.
+Não reexecute esse arquivo nos próximos deploys. Novas conversas e retomadas
+alteram os contadores normalmente.
+
+`manage.py migrate` cuida somente dos modelos gerenciados pelo Django; não
+substitui as migrações de negócio. `setup_database.py` serve à instalação limpa,
+nunca à atualização de um RDS existente.
+
+## 5. Dependências, Django e arquivos estáticos
+
+Se `requirements.txt` mudou, atualize o venv conforme o alcance definido:
 
 ```bash
 /opt/chatbot/venv/bin/pip install -r /opt/chatbot/app/requirements.txt
+```
 
+Para conferir Django com o mesmo ambiente dos serviços:
+
+```bash
 sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py check --deploy'
+```
 
+Execute `migrate --noinput` somente quando houver migrations Django pendentes,
+e `collectstatic --noinput` quando os arquivos estáticos mudarem:
+
+```bash
 sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py migrate --noinput'
-
 sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python callback/manage.py collectstatic --noinput'
 ```
 
-O `EnvironmentFile` das units não é herdado pela sessão SSH. Esses comandos
-carregam explicitamente `/etc/chatbot/chatbot.env`; não use `cat`, `env` ou outro
-comando que imprima seus valores.
+Esses comandos carregam explicitamente o ambiente porque a sessão SSH não herda
+`EnvironmentFile`. Não imprima os valores do arquivo. Mudança somente em Python
+de exportação CSV exige recarga web, mas não `collectstatic`.
 
-`manage.py migrate` cuida das tabelas internas gerenciadas pelo Django. As
-tabelas de negócio `chatbot.*` usam modelos `managed = False` e seguem o fluxo
-de DDL e `ALTER` descrito em
-[modificando_env_e_banco_em_prod.md](modificando_env_e_banco_em_prod.md).
+## 6. Instalar units alteradas
 
-Se o deploy incluir uma alteração de schema, o `ALTER` compatível já deve ter
-sido aplicado e validado no RDS antes de carregar código que dependa dele.
-
-## 6. Atualizar units systemd, quando necessário
-
-Se `deploy/systemd/chatbot-worker-flow.service` ou
-`deploy/systemd/chatbot-worker-funil.service` mudou:
+Instale somente as units que mudaram. Exemplo para o follow-up:
 
 ```bash
-sudo install -m 0644 \
-  /opt/chatbot/app/deploy/systemd/chatbot-worker-flow.service \
-  /etc/systemd/system/chatbot-worker-flow.service
-
-sudo install -m 0644 \
-  /opt/chatbot/app/deploy/systemd/chatbot-worker-funil.service \
-  /etc/systemd/system/chatbot-worker-funil.service
-
+sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-worker-followup.service /etc/systemd/system/chatbot-worker-followup.service
 sudo systemctl daemon-reload
-sudo systemd-analyze verify \
-  /etc/systemd/system/chatbot-worker-flow.service \
-  /etc/systemd/system/chatbot-worker-funil.service
+sudo systemd-analyze verify /etc/systemd/system/chatbot-worker-followup.service
 ```
 
-Se a unit `chatbot-webhook.service` mudou, instale-a, execute
-`systemctl daemon-reload` e faça `restart` do webhook. Um `HUP` não aplica uma
-nova unit systemd.
+Instalar uma unit e recarregar o systemd não inicia o serviço. A unit do follow-up
+define `FOLLOWUP_WORKER_ENABLED=true`, lote 20 e intervalo 60. Se essas chaves
+também estiverem no `EnvironmentFile`, os valores do arquivo prevalecem.
 
-## 7. Recarregar o código do webhook sem derrubar o endpoint
+## 7. Diagnosticar o follow-up sem envio
+
+Com o schema instalado, valide o acesso usando a identidade da aplicação:
 
 ```bash
-sudo systemctl kill \
-  --signal=HUP \
-  --kill-who=main \
-  chatbot-webhook.service
-
-sleep 3
-
-systemctl is-active chatbot-webhook.service
-sudo systemctl show chatbot-webhook.service \
-  -p ActiveState -p SubState -p MainPID -p NRestarts --no-pager
-
-curl --fail --silent --show-error \
-  https://webhook.3esltech.com/webhook
-
-sudo journalctl -u chatbot-webhook.service \
-  --since "5 minutes ago" --no-pager
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python -m utilitarios.verificar_followup'
 ```
 
-O `curl` deve retornar `Webhook ativo`, e o serviço deve permanecer `active` e
-`running`. O journal do Gunicorn deve registrar o recebimento do sinal e a
-substituição graciosa dos workers.
+Esperado: `FOLLOWUP_CONSULTA_OK_SEM_ENVIO`. A amostra pode estar vazia.
+Os [indicadores do diagnóstico](../utilitarios/README.md#diagnóstico-de-follow-up)
+não são contagem de mensagens enviadas. O comando não comprova permissões de
+escrita: as novas tabelas devem pertencer à role usada pela aplicação ou receber
+as permissões necessárias antes da ativação.
 
-Se o `HUP` falhar ou o novo código não carregar, use o fallback abaixo. Haverá
-uma interrupção curta, e por isso o health check deve ser repetido em seguida:
+## 8. Carregar o código web atualizado
+
+Quando somente código Python/templates mudou, recarregue o Gunicorn:
 
 ```bash
-sudo systemctl restart chatbot-webhook.service
-systemctl is-active chatbot-webhook.service
+sudo systemctl kill --signal=HUP --kill-who=main chatbot-webhook.service
+sudo journalctl -u chatbot-webhook.service --since "5 minutes ago" -n 60 --no-pager
 curl --fail --silent --show-error https://webhook.3esltech.com/webhook
+curl --fail --silent --show-error --output /dev/null --write-out '%{http_code}\n' https://monitoramento.3esltech.com/login/
 ```
 
-## 8. Iniciar e verificar os workers
+Espere a inicialização dos novos processos no journal e confira `Webhook ativo`
+e HTTP `200` no login. `git pull` sozinho não recarrega o Gunicorn. Se o ambiente
+ou a unit do webhook mudou, use `sudo systemctl restart chatbot-webhook.service`
+e repita as verificações; nesse caso há uma interrupção breve.
 
-Somente depois de o webhook e o banco estarem validados:
+## 9. Retomar flow e Funil antes do follow-up
+
+Inicie os serviços que foram parados:
 
 ```bash
 sudo systemctl start chatbot-worker-flow.service chatbot-worker-funil.service
-
-systemctl is-active \
-  chatbot-webhook.service \
-  chatbot-worker-flow.service \
-  chatbot-worker-funil.service
-
-sudo systemctl show \
-  chatbot-webhook.service \
-  chatbot-worker-flow.service \
-  chatbot-worker-funil.service \
-  -p Id -p ActiveState -p SubState -p NRestarts --no-pager
-
-sudo journalctl \
-  -u chatbot-worker-flow.service \
-  -u chatbot-worker-funil.service \
-  --since "5 minutes ago" --no-pager
+systemctl is-active chatbot-worker-flow.service chatbot-worker-funil.service
+sudo journalctl -u chatbot-worker-flow.service -u chatbot-worker-funil.service --since "5 minutes ago" -n 80 --no-pager
 ```
 
-Resultados esperados:
-
-- os três serviços em `active` / `running`;
-- worker de fluxo iniciando ciclos sem erro de banco, Redis ou Meta;
-- worker do Funil concluindo o ciclo e informando o próximo ciclo conforme
-  `FUNIL_INTERVALO_SEGUNDOS` (padrão atual: 30 minutos);
-- ausência de crescimento contínuo de `NRestarts`.
-
-## 9. Casos que não são um deploy comum
-
-| Mudança | Procedimento adicional |
-|---|---|
-| Somente código Python | `HUP` gracioso no Gunicorn |
-| `.env` de produção | `restart` dos serviços afetados; o Gunicorn não relê o EnvironmentFile por `HUP` |
-| Unit systemd | instalar a unit, `daemon-reload` e reiniciar o serviço afetado |
-| Nginx | `nginx -t` antes de `systemctl reload nginx` |
-| Schema compatível/aditivo | aplicar primeiro o `ALTER` validado no DBeaver |
-| Rename, drop, mudança de tipo ou `NOT NULL` incompatível | usar migração expand/contract ou janela de manutenção |
-
-Manter o webhook ativo pressupõe que a mudança seja compatível com a versão que
-está atendendo durante os poucos minutos do deploy. Alterações destrutivas de
-banco não devem ser improvisadas nesse fluxo.
-
-## 10. Se algo falhar
-
-1. Mantenha os dois workers parados. O webhook saudável continuará enfileirando.
-2. Consulte os journals e corrija a causa antes de reiniciá-los.
-3. Para voltar código, faça `git revert` do commit no computador local, teste,
-   publique o novo commit na `prod` e repita o deploy. Não reescreva o histórico
-   da `prod` e não force um estado antigo diretamente na VM.
-4. Se o webhook também estiver indisponível, priorize restaurá-lo e valide o
-   endpoint público antes de qualquer worker.
-
-Comandos de diagnóstico:
+Somente após confirmar flow compatível ativo, sem falha de inicialização ou
+acesso ao banco, inicie o proativo:
 
 ```bash
-sudo journalctl -u chatbot-webhook.service -n 200 --no-pager
-sudo journalctl -u chatbot-worker-flow.service -n 200 --no-pager
-sudo journalctl -u chatbot-worker-funil.service -n 200 --no-pager
-sudo nginx -t
-sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app; /opt/chatbot/venv/bin/python -c "from core.cache.redis_client import get_redis; r=get_redis(); print(\"REDIS_PING=\", r.ping()); print(\"REDIS_DESTINO=\", r.connection_pool.connection_kwargs.get(\"host\"), r.connection_pool.connection_kwargs.get(\"port\"))"'
+sudo systemctl start chatbot-worker-followup.service
+sudo systemctl show chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service chatbot-worker-followup.service -p Id -p ActiveState -p SubState -p NRestarts --no-pager
+sudo journalctl -u chatbot-worker-followup.service --since "5 minutes ago" -n 80 --no-pager
 ```
 
-O ultimo comando usa o Redis definido no ambiente da aplicacao. Nao use
-`redis-cli ping` sem host: ele consulta `127.0.0.1:6379` e nao valida o Redis
-remoto de producao. Consulte tambem
-[`servicos_e_redis_remoto.md`](servicos_e_redis_remoto.md).
+Na primeira ativação, use `enable --now` em vez de apenas `start` para habilitar
+o boot. Uma pausa deliberada de lembretes deve ser respeitada em deploys seguintes.
+`After=network-online.target` não valida que o flow está pronto; essa conferência
+pertence à operação.
+
+Os quatro serviços devem ficar `active`/`running`, sem crescimento contínuo de
+`NRestarts`. O follow-up registra `followup_iniciado`, mas não emite INFO a cada
+consulta vazia. `followup_confirmado` comprova persistência local de um envio;
+não force elegibilidade nem remova proteções para gerar um teste em produção.
+
+## 10. Interromper lembretes ou recuperar uma falha
+
+Para desativar somente os lembretes, mantendo o atendimento capaz de retomar:
+
+```bash
+sudo systemctl disable --now chatbot-worker-followup.service
+```
+
+Mantenha o flow compatível com `followup_retomada` e stage positivo. Não apague
+recibos/tabelas, não zere stages em massa e não volte ao flow anterior à V1.2.0
+enquanto houver ciclos positivos ou retomadas pendentes. A marcação do legado
+não pode ser revertida sobrescrevendo estágios que já mudaram após a migração.
+
+Falha no deploy exige leitura do journal do serviço afetado e correção da causa.
+Se precisar reverter código, prepare e teste um commit de reversão compatível
+com o schema e os registros atuais antes de publicar; não force o checkout antigo
+na VM. Se o webhook falhar, priorize restaurá-lo para voltar a receber eventos.
+
+Diagnósticos adicionais de Redis e manutenção ficam em
+[servicos_e_redis_remoto.md](servicos_e_redis_remoto.md). Use o ambiente configurado:
+`redis-cli ping` sem host consulta o Redis local e não valida a produção.

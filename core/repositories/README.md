@@ -16,6 +16,7 @@ core/repositories/
 |   |-- conversas.py
 |   |-- dependentes.py
 |   |-- fila.py
+|   |-- followup.py
 |   `-- historico.py
 |-- fluxo/
 |   |-- contextos/
@@ -115,6 +116,7 @@ montagem de mensagens, retry e efeitos externos continuam fora desta pasta.
 
 ```text
 worker_flow  -> flow_worker.py
+worker_followup -> followup_worker.py
 worker_funil -> funil_worker.py e processamento.py
 webhook      -> post_flow.py, flood_guard.py ou bloqueio_meta_guard.py
 scripts      -> proprio ponto de entrada
@@ -160,3 +162,16 @@ não particionada `followup_envio`, pela chave composta conversa + ID/data da â
 `followup_legado` audita a marcação inicial de todas as conversas ativas com stage 1,
 preservando ID, stage anterior e horário da migração. Esse registro não é um envio.
 As tabelas são internas, sem ações no monitoramento ou no admin.
+
+`listar_elegiveis` e `reler_elegivel` usam o mesmo SQL: etapa 1–17, stage zero,
+última mensagem do bot confirmada há pelo menos sete horas, última mensagem do
+cliente dentro de 23h59, unidade adimplente e ausência de bloqueios ou fila aberta.
+Os horários do bot e do cliente são condições separadas. A paginação usa
+`(ancora_em, id_conversa)` para não ficar presa nas primeiras falhas.
+
+`proteger_conversa` confere `processing`, `lock_version` e validade de 110
+segundos antes da persistência, com renovação antes do envio. A retomada
+concluída é reconhecida por sua entrada original; um replay não zera um novo ciclo.
+`consultar_diagnostico` executa transação somente leitura e não adquire o lock de
+processamento nem envia mensagens. Os contratos reais de SQL e migração são
+verificados em `tests/integration/test_followup_postgres.py`.

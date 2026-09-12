@@ -1,7 +1,7 @@
 # Utilitários operacionais
 
 Comandos manuais de monitoramento, diagnóstico e manutenção. Esta pasta não é
-importada pelo webhook, pelo `flow_worker`, pelo `funil_worker` nem pelo Django
+importada pelo webhook, pelo monitoramento, pelos workers nem pelo Django
 Admin.
 
 ## Fronteira
@@ -26,6 +26,7 @@ utilitarios/
 │   └── total.py             dashboards e PDFs desde o primeiro atendimento
 ├── requirements-monitoramento.txt
 ├── montar_lead_teste.py
+├── verificar_followup.py    diagnóstico somente leitura, sem envio
 ├── cache_consulta.py
 ├── utlitys.py
 ├── pintregister.py
@@ -43,7 +44,9 @@ utilitarios/
     └── funil_andre_teste.py
 ```
 
-As ferramentas foram preparadas para execução local no PyCharm. Nesse modo, o
+A maioria das ferramentas usa o bootstrap para execução local no PyCharm;
+o [diagnóstico de follow-up](#diagnóstico-de-follow-up) é uma exceção.
+Nas ferramentas que usam esse bootstrap, o
 `.env` da raiz é lido explicitamente e os ajustes privados de
 `utilitarios/local_settings.py`, arquivo ignorado pelo Git, são aplicados por
 cima dele. Assim, o SSL do PostgreSQL continua compatível com o Windows sem
@@ -55,12 +58,12 @@ VM; eles nunca dependem do arquivo privado local.
 
 Um arquivo pertence a `utilitarios/` quando é um comando iniciado
 conscientemente por uma pessoa para diagnóstico, monitoramento, manutenção ou
-probe. Nenhum dos quatro pontos de entrada da aplicação — webhook,
-`worker_flow`, `worker_funil` e Django Admin — pode importar esta pasta.
+probe. Nenhum ponto de entrada da aplicação — webhook, monitoramento,
+`worker_flow`, `worker_funil`, `worker_followup` ou Django Admin — pode importar esta pasta.
 
 Não pertencem a `utilitarios/`:
 
-- primitivas reutilizadas pelos quatro pontos de entrada, que ficam em `core`;
+- primitivas reutilizadas pelos pontos de entrada, que ficam em `core`;
 - instalação e DDL inicial, que ficam em `core/database/deploy_database`;
 - migrações incrementais, que ficam em `deploy/migrations`;
 - entrypoints do framework ou dos serviços, como `manage.py`, WSGI e workers;
@@ -245,6 +248,33 @@ uma WABA inteira que ainda não esteja cadastrada localmente.
 
 Os comandos são somente leitura. Código de saída `0` significa sincronizado,
 `1` indica divergência e `2` indica falha de coleta.
+
+## Diagnóstico de follow-up
+
+`verificar_followup.py` usa o ambiente carregado por `core.config_env`;
+não usa `bootstrap.py`, `local_settings.py` nem aceita `--env-file`.
+Com as variáveis do banco de teste já configuradas, execute da raiz:
+
+```bash
+python -m utilitarios.verificar_followup
+```
+
+Na VM, carregue o ambiente dos serviços:
+
+```bash
+sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /opt/chatbot/app; export PYTHONPATH=/opt/chatbot/app PYTHONDONTWRITEBYTECODE=1; /opt/chatbot/venv/bin/python -m utilitarios.verificar_followup'
+```
+
+O comando usa uma transação somente leitura. Confere a existência das três
+tabelas, conta stages positivos/negativos/maiores que um, marcações do legado e
+datas futuras em `last_interaction_at`, e lista até dez candidatas por ID de
+conversa, unidade e etapa. Não envia mensagens nem adquire lock de processamento.
+
+`FOLLOWUP_CONSULTA_OK_SEM_ENVIO` confirma a consulta. Stage negativo ou data futura
+encerra com `REVISAR_ANOMALIAS_ANTES_DE_ATIVAR`; ausência das tabelas falha com
+`SCHEMA_FOLLOWUP_AUSENTE`. Stage maior que um aparece para revisão, mas é aceito
+pela retomada. Amostra vazia é válida e não significa falha do serviço.
+`ciclos_aguardando_reacao` inclui o legado marcado e não mede lembretes enviados.
 
 ## Conversas suspeitas
 

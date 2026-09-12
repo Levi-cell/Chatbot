@@ -56,7 +56,7 @@ Worker 2 -> conversa do cliente A ao mesmo tempo
 Assim, vários workers poderão atender clientes diferentes em paralelo, mas cada
 conversa ficará sob responsabilidade de apenas um worker por vez.
 
-Embora a V1 execute apenas uma instância, seu ciclo já deve preservar as
+Embora a V1 execute apenas uma instância de cada worker, seus ciclos preservam as
 proteções necessárias para concorrência e recuperação:
 
 - dequeue atômico com `FOR UPDATE SKIP LOCKED`;
@@ -329,6 +329,8 @@ Responsabilidades:
 - validar histórico;
 - rotear resposta ou tratamento;
 - persistir resposta e contexto;
+- reconhecer a reação com stage positivo ou marcador anterior e repetir a etapa
+  sem resolver transições, zerando o stage na persistência final;
 - marcar a fila como `sent` somente após a persistência necessária.
 
 ### `worker_followup`
@@ -779,8 +781,11 @@ Estrutura atual:
 ```text
 tests/
 ├── helpers.py
-└── unit/
-    └── test_*.py
+├── fixtures/
+├── unit/
+│   └── test_*.py
+└── integration/
+    └── test_followup_postgres.py
 ```
 
 Regras:
@@ -793,6 +798,11 @@ Regras:
 - alterações estruturais devem possuir testes que impeçam regressão da
   organização quando isso for relevante;
 - a suíte completa deve permanecer executável por descoberta.
+
+A integração PostgreSQL exige `FOLLOWUP_TEST_DSN` apontando para loopback e um
+banco descartável chamado `test_chatbot_followup`, sem schema `chatbot` prévio.
+Sem essa variável, é pulada. Não usa as credenciais de produção do `.env`; Meta
+continua simulada. Consulte o [guia de testes](tests/README.md#follow-up).
 
 Comando padrão:
 
@@ -811,6 +821,7 @@ Fluxos críticos que não podem perder cobertura:
 - `last_message_from` semântico;
 - fallback e autocura de cache;
 - transações de worker e webhook;
+- elegibilidade proativa, recibos, migração do legado e retorno sem avanço de etapa;
 - intenção local antes dos bloqueios automáticos e desbloqueio administrativo
   Meta-first.
 

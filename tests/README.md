@@ -1,12 +1,12 @@
 # Testes do projeto
 
-Esta pasta reúne a suíte unitária e de contrato do projeto. Além do núcleo
+Esta pasta reúne testes unitários, de contrato e de integração SQL. Além do núcleo
 transacional, ela cobre regras e utilitários já implementados:
 
 - cenário completo de turno A/B/C;
 - retry, requeue, ordem da fila e fencing por `lock_version`;
 - persistência idempotente, avanço e não avanço de etapa;
-- checkpoints, commits, rollback e conclusão da fila no worker.
+- checkpoints, commits, rollback e conclusão da fila no worker;
 - suporte ao idoso e obrigatoriedade do e-mail;
 - validação da oferta, início da triagem, profissão e saudação após inatividade;
 - montagem dos relatórios semanais e totais;
@@ -14,7 +14,8 @@ transacional, ela cobre regras e utilitários já implementados:
 - vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
 - login nativo, par username/senha, sessão, CSRF e revogação do acesso ao portal;
 - painel somente leitura, períodos, consultas por unidade, botões históricos,
-  indicadores e arquivos Google CSV.
+  indicadores, Google CSV e CSV essencial sem o prefixo brasileiro `+55`;
+- follow-up proativo, retomada reativa, elegibilidade, migração e locks entre workers.
 
 Para executar a suíte completa a partir da raiz:
 
@@ -40,14 +41,19 @@ tests/unit/test_sondas_funil.py
 tests/unit/test_monitoramento_unidade.py
 tests/unit/test_monitoramento_login.py
 tests/unit/test_monitoramento_painel.py
+tests/unit/test_followup.py
+tests/integration/test_followup_postgres.py
 ```
 
-Os testes usam fakes e mocks para fronteiras externas: a descoberta da suíte não
-deve chamar Meta, Funil, Redis, RDS nem outro serviço real. Um utilitário manual
-não deve ser executado como forma de testar sua importação.
+Por padrão, os testes usam fakes e mocks para fronteiras externas, sem chamar
+Meta, Funil, Redis ou RDS. A integração com PostgreSQL local só executa quando
+`FOLLOWUP_TEST_DSN` é fornecida explicitamente. Um utilitário manual não deve
+ser executado como forma de testar sua importação.
 
-Novos testes pertencem a `tests/unit/`; dados e classes auxiliares exclusivos de
-teste ficam em `tests/`, nunca nos módulos de produção.
+Testes unitários pertencem a `tests/unit/`; contratos com PostgreSQL real ficam
+em `tests/integration/` e exigem ambiente descartável explícito. Dados e classes
+auxiliares exclusivos de teste ficam em `tests/`, nunca nos módulos de produção.
+Sem `FOLLOWUP_TEST_DSN`, a descoberta pula a integração PostgreSQL.
 
 O teste de monitoramento executa o SQL de autorização em SQLite em memória,
 adaptando apenas os placeholders, com um cliente compartilhado por duas
@@ -71,6 +77,8 @@ CSV (Google e essencial, todos e elegíveis). Cobre todos os períodos, unidade
 autorizada, revogação de acesso, acentos, campos vazios e proteção contra fórmulas
 nos dados textuais. Seus payloads vivem em `fixtures/monitoramento_painel.py` e
 são fictícios.
+O teste distingue a remoção de `+55` no essencial da preservação do telefone
+internacional no Google CSV; não remove o DDD nem altera os dados de origem.
 
 ## Follow-up
 

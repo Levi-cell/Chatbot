@@ -569,6 +569,23 @@ testes
 Uma aresta ativa apontando para resolver ou sender inexistente deixa a conversa
 em um estado sem atendimento.
 
+### 11. Conferir a repetição após follow-up
+
+Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
+selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
+dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
+podem ser extraídos da reação que será ignorada. O catálogo atual repete 1–21.
+
+Esse caminho não chama validador, resolver, mapa de transições ou efeitos de
+negócio. A saudação `Que bom te ver novamente` é aplicada ao conteúdo e aos
+botões existentes, e o flow persiste a repetição junto do reset do stage.
+Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
+
+Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
+atual é 1–17, antes do agendamento. Mudanças no mapa precisam revisar
+explicitamente esse limite, o catálogo de repetição, as regras e os testes.
+O comportamento normal com stage zero conserva a saudação de três horas.
+
 ## Subfluxo da integração WhatsApp
 
 ```text
@@ -607,6 +624,10 @@ core/integrations/whatsapp/
 | persistência final | Não | Não | Não | Sim |
 
 ## Subfluxo do response_flow
+
+O diagrama abaixo é o caminho normal. Antes dele, `flow_worker.py` relê a
+conversa sob lock e consulta a retomada: stage positivo ou marcador da entrada
+pode desviar para `repeticao_followup.py` e `transacoes/retorno_followup.py`.
 
 ```text
 valida_historico
@@ -733,6 +754,7 @@ Uma etapa está concluída somente quando:
 [ ] Django check passa
 [ ] compileall passa
 [ ] documentação continua coerente
+[ ] repetição de follow-up preserva conteúdo, botões, etapa e idempotência
 ```
 
 ## O que não fazer

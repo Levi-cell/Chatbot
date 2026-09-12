@@ -1,6 +1,6 @@
 # Core
 
-Recursos compartilhados pelo webhook, worker, Django Admin e ferramentas
+Recursos compartilhados pelo webhook, monitoramento, workers, Django Admin e ferramentas
 operacionais. `core` não conhece o fluxo completo de nenhum ponto de entrada.
 
 - [Portal do projeto](../README.md)
@@ -53,3 +53,9 @@ ausência permitida, sem substituir esse histórico pelo cadastro de outra
 conversa. Consulte os contratos de
 [repositórios](repositories/README.md) e da
 [integração Funil](integrations/funil/README.md) antes de alterar essa fronteira.
+
+O follow-up usa `repositories/atendimento/followup.py` para elegibilidade,
+fencing e registros de envio/retomada; conteúdo e transporte pertencem a
+`integrations/whatsapp`. A criação das tabelas fica em `database/deploy_database`,
+e a migração de uma base existente em `deploy/migrations`. O laço proativo e a
+decisão de repetir a etapa no retorno continuam nos respectivos workers.

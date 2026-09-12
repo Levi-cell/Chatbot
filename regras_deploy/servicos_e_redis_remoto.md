@@ -1,6 +1,6 @@
 # Servicos da VM e Redis remoto
 
-Este e o procedimento canonico para operar os tres processos do chatbot e o
+Este e o procedimento canonico para operar os quatro serviços do chatbot e o
 Redis de producao.
 
 ## Regra de arquitetura
@@ -23,17 +23,18 @@ Nao use `redis-cli ping` sem informar um host. Esse comando consulta o Redis
 local padrao em `127.0.0.1:6379` e nao prova que a aplicacao alcanca o Redis
 remoto.
 
-## Parar os tres servicos
+## Parar os quatro serviços
 
 Execute na VM, um por vez:
 
 ```bash
+sudo systemctl stop chatbot-worker-followup.service
 sudo systemctl stop chatbot-webhook.service
 sudo systemctl stop chatbot-worker-flow.service
 sudo systemctl stop chatbot-worker-funil.service
 ```
 
-## Iniciar os tres servicos
+## Iniciar os quatro serviços
 
 Execute na VM, um por vez:
 
@@ -41,15 +42,38 @@ Execute na VM, um por vez:
 sudo systemctl start chatbot-webhook.service
 sudo systemctl start chatbot-worker-flow.service
 sudo systemctl start chatbot-worker-funil.service
+systemctl is-active chatbot-worker-flow.service
+sudo journalctl -u chatbot-worker-flow.service --since "5 minutes ago" -n 60 --no-pager
 ```
 
-Confirme os tres estados:
+Depois de confirmar o flow compatível ativo e sem erros, inicie o follow-up
+se os lembretes estavam habilitados antes da manutenção:
 
 ```bash
-systemctl is-active chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service
+sudo systemctl start chatbot-worker-followup.service
 ```
 
-O resultado esperado sao tres linhas `active`.
+Confirme os quatro estados:
+
+```bash
+systemctl is-active chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service chatbot-worker-followup.service
+```
+
+O resultado esperado são quatro linhas `active`.
+
+## Pausar somente os lembretes
+
+Para uma pausa temporária, use `sudo systemctl stop chatbot-worker-followup.service`.
+Para manter a pausa também após reiniciar a VM:
+
+```bash
+sudo systemctl disable --now chatbot-worker-followup.service
+```
+
+O flow continua tratando mensagens e retomadas com stage positivo. Essa ação não
+zera stages nem apaga recibos. Na reativação, confira banco/flow antes de usar
+`sudo systemctl enable --now chatbot-worker-followup.service`.
+O procedimento está em [rotina_deploy.md](rotina_deploy.md).
 
 ## Confirmar que a aplicacao usa o Redis remoto
 
@@ -68,7 +92,7 @@ Essa operacao apaga apenas chaves `conversa_bloqueada:*`. Ela nao apaga cache
 de unidades, clientes, flood ou qualquer outra chave. Nao usa `FLUSHDB` nem
 `FLUSHALL`.
 
-Para impedir que uma chave seja recriada durante a manutencao, pare os tres
+Para impedir que uma chave seja recriada durante a manutencao, pare os quatro
 servicos primeiro. Em seguida, execute:
 
 ```bash
@@ -82,7 +106,7 @@ sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
 
 O comando valida que o destino não é local, percorre apenas o padrão
 `conversa_bloqueada:*` e informa `RESET_CACHE_BLOQUEIOS_OK` com o total removido.
-Depois, inicie novamente os três serviços com os comandos deste documento.
+Depois, inicie novamente os quatro serviços com os comandos deste documento.
 
 Importante: se o banco ainda possuir uma conversa encerrada dentro do periodo
 de bloqueio, a regra de recuperacao do sistema pode recriar a chave. Para um
@@ -95,21 +119,22 @@ As units antigas do webhook e do worker-flow exigiam incorretamente
 `redis-server.service`. Portanto, **nao remova o Redis local antes de instalar
 as units corrigidas**.
 
-Depois de atualizar `/opt/chatbot/app` pela branch `prod`, instale as tres
+Depois de atualizar `/opt/chatbot/app` pela branch `prod`, instale as quatro
 units atuais e recarregue o `systemd`:
 
 ```bash
 sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-webhook.service /etc/systemd/system/chatbot-webhook.service
 sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-worker-flow.service /etc/systemd/system/chatbot-worker-flow.service
 sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-worker-funil.service /etc/systemd/system/chatbot-worker-funil.service
+sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-worker-followup.service /etc/systemd/system/chatbot-worker-followup.service
 sudo systemctl daemon-reload
-sudo systemd-analyze verify /etc/systemd/system/chatbot-webhook.service /etc/systemd/system/chatbot-worker-flow.service /etc/systemd/system/chatbot-worker-funil.service
+sudo systemd-analyze verify /etc/systemd/system/chatbot-webhook.service /etc/systemd/system/chatbot-worker-flow.service /etc/systemd/system/chatbot-worker-funil.service /etc/systemd/system/chatbot-worker-followup.service
 ```
 
 Confirme que nenhuma unit ainda depende do servidor local:
 
 ```bash
-if systemctl show chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service -p Requires -p After --no-pager | grep -q redis-server; then echo 'ABORTAR: ainda existe dependencia de redis-server'; exit 1; else echo 'OK: units sem Redis local'; fi
+if systemctl show chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service chatbot-worker-followup.service -p Requires -p After --no-pager | grep -q redis-server; then echo 'ABORTAR: ainda existe dependencia de redis-server'; exit 1; else echo 'OK: units sem Redis local'; fi
 ```
 
 Execute tambem o teste `REDIS_REMOTO_OK` deste documento. Somente se os dois
@@ -133,5 +158,5 @@ sudo ss -lntp | grep ':6379'
 O resultado esperado e nenhuma linha. `systemctl status redis-server.service`
 tambem deve informar que a unit nao foi encontrada.
 
-Por fim, inicie os tres servicos e repita a verificacao
+Por fim, inicie os quatro serviços e repita a verificacao
 `REDIS_REMOTO_OK=True`.

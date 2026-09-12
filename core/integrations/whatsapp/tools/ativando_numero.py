@@ -60,7 +60,7 @@ def _normalizar_resposta(response):
             "text": response.text,
         }
 
-# registrar_numero_whatsapp(1238343616032627)
+# registrar_numero_whatsapp(1376957325492184)
 
 
 

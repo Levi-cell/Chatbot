@@ -35,3 +35,9 @@ crie wrappers que apenas reexportem outra função sem responsabilidade própria
 
 Testes de integração nesta fase devem simular o serviço externo e permanecer em
 `tests/`.
+
+O follow-up reutiliza o adaptador WhatsApp, com catálogo e sender próprios.
+Não cria uma integração nova: o worker decide quando enviar, e o sender recebe
+somente destinatário e phone ID, devolvendo o texto e o ID confirmado pela Meta.
+Testes de SQL real ficam em `tests/integration/`, com PostgreSQL local descartável
+e Meta simulada, conforme o [guia de testes](../../tests/README.md).

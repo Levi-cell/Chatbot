@@ -124,6 +124,14 @@ Sem WAMID ou com contador Redis indisponível, esse tratamento também retorna
 200, sem fallback de contagem no banco ou em memória. Os 503 específicos de
 validação e persistência não usam esse limite.
 
+## Follow-up e cache
+
+O estado do follow-up não fica no Redis. Elegibilidade, lock, recibos e retomadas
+são lidos/persistidos diretamente no PostgreSQL. Limpar caches não zera
+`followup_stage` nem remove os registros de envio. O proativo consulta os
+bloqueios e eventos de flood persistidos no banco; o webhook mantém a cadeia
+Redis/banco/memória descrita acima.
+
 ## Reset de desenvolvimento
 
 `cache_reset.py` conserva o reset dos caches do chatbot usado pelo setup de
