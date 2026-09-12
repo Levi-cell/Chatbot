@@ -7,8 +7,10 @@ periódico de oportunidades ao Funil de Vendas.
 Este README é o portal do projeto. Regras detalhadas vivem nos documentos
 centrais e os mapas técnicos vivem nos READMEs de cada camada.
 
-Referência atual: **V1.2.0**, com follow-up de inatividade implementado e
-implantado. Versões e regras de numeração ficam em
+Referência atual: **V1.3.0**, com encaminhamento de titulares por idade mínima
+configurável e indicador comercial no painel, implementados e implantados.
+O follow-up de inatividade continua em funcionamento. Versões e regras de
+numeração ficam em
 [VERSIONAMENTO.md](VERSIONAMENTO.md).
 
 Os documentos técnicos abaixo descrevem o código atual. Os planos em `docs/`
@@ -89,7 +91,7 @@ core/database     conexão, DDL e setup
 core/cache        Redis, fallback e autocura
 core/integrations serviços externos
 core/triagem      catálogo compartilhado das seis perguntas
-core/validacoes   validação pura de e-mail reutilizada pelo fluxo e Funil
+core/validacoes   validações puras de e-mail e domínio de suporte por idade
 utilitarios       relatórios e comandos manuais; nunca orquestradores
 tests             testes, fakes, mocks e contratos
 ```
@@ -250,6 +252,20 @@ Conversas usa o layout compacto, com etiquetas de perfil junto da data e
 navegação adaptada a celular em ambas as orientações. Os indicadores agregados
 ficam em Relatórios. Os lembretes confirmados entram no histórico e no total de
 mensagens; não há indicador exclusivo de follow-up no painel.
+
+Na V1.3.0, o proprietário configura no Django Admin a idade mínima para
+encaminhar titulares ao comercial na etapa 6: Desativado, 50+, 60+, 70+, 80+ ou
+90+. O limite preserva as regras de dependentes, de pessoas acima de 99 anos,
+de e-mail e das tags de perfil. Os contratos ficam no
+[README dos workers](workers/README.md#regras-atuais-das-etapas).
+
+Em Relatórios, **Encaminhados ao comercial** conta clientes distintos por unidade
+com encerramento por suporte de idade no período, inclusive históricos,
+independentemente da configuração atual. A métrica não inclui o tratamento de
+100+ nem comprova atendimento humano ou venda. Consulte
+[callback/README.md](callback/README.md) para o contrato do painel e o
+[procedimento de suporte por idade](deploy/idade_minima_suporte.md) para migração
+e reversão de uma base existente.
 
 ## Follow-up em funcionamento
 

@@ -58,6 +58,10 @@ Commit: `84735aeaa521cfcf3a8bb13b2a8eddeb126fa1df`
 
 Commit: `ec74d26398724e192f798397d71b189ed08c805c`
 
+### V1.3.0 — Suporte etário configurável e indicadores comerciais
+
+Commit: `50e59879c4c2aa6e0f6cf676adf50d40aec8ca03`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

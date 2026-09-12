@@ -199,9 +199,15 @@ origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
   `iniciar triagem`, `sim` e `vamos começar` autorizam o início. A classificação
   permanece no validador contextual da etapa, após os tratamentos universais.
 
-No retry já respondido, o resultado aceito do e-mail e o encaminhamento de
-suporte são reconstruídos pelo histórico original, sem nova chamada à Meta
-nem reavaliação da decisão pela configuração atual da unidade.
+No retry já respondido da etapa 10, o resultado aceito do e-mail é reconstruído
+pelo histórico original, sem nova chamada à Meta nem reavaliação pela política
+de e-mail atual da unidade.
+
+No encaminhamento por idade da etapa 6, o histórico comprova a resposta já
+enviada, e a reavaliação do encerramento usa o limite atual da unidade. Se esse
+limite estiver desativado ou não abranger mais a idade do titular, a recuperação
+não encerra por suporte, não reenvia a resposta nem avança automaticamente a
+etapa. O limite anterior não é restaurado e o histórico original é preservado.
 
 ### Saudação de retorno
 

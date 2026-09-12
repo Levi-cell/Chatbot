@@ -15,7 +15,7 @@ operacionais. `core` não conhece o fluxo completo de nenhum ponto de entrada.
 | `repositories/` | SQL de runtime usando cursor recebido | [repositories/README.md](repositories/README.md) |
 | `integrations/` | Comunicação com serviços externos | [integrations/README.md](integrations/README.md) |
 | `triagem/` | Catálogo único das seis perguntas, compartilhado pelo WhatsApp e Funil | [triagem/perguntas.py](triagem/perguntas.py) |
-| `validacoes/` | Validação pura de e-mail, sem acesso ao banco ou envio | [validacoes/email.py](validacoes/email.py) |
+| `validacoes/` | Validações puras de e-mail e domínio de suporte por idade, sem acesso ao banco ou envio | [email.py](validacoes/email.py), [suporte_por_idade.py](validacoes/suporte_por_idade.py) |
 | `config_env.py` | Leitura de `.env`, variáveis de ambiente e validação de tipos | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#configuração-e-segredos) |
 | `logging_config.py` | Configuração comum de logs e redução de identificadores | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#logging-e-exceções) |
 
@@ -46,6 +46,11 @@ integrações não devem assumir propriedade de conexão recebida de outro módu
 As configurações `idade_minima_suporte` e `email_obrigatorio` pertencem à unidade. Os
 contextos em `repositories/fluxo/contextos/` fornecem esses dados aos resolvers;
 a decisão de encaminhar, tratar ou avançar permanece no worker.
+
+`validacoes/suporte_por_idade.py` centraliza as idades mínimas permitidas e a
+validação da configuração: `None` (NULL no banco) desativa; 50, 60, 70, 80 e 90
+são os limites aceitos. O módulo rejeita booleanos e valores fora desse domínio;
+não decide se um atendimento deve ser encaminhado.
 
 A profissão é preservada na conversa e atualizada no cadastro do cliente. O
 Funil utiliza o e-mail da resposta aceita naquele atendimento, inclusive a
