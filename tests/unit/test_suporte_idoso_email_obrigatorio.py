@@ -44,6 +44,8 @@ def contexto_etapa6(idade, *, dependente=False, suporte=None):
         "idade_minima_suporte": suporte,
         "numero_comercial_unidade": "(71) 99999-9999",
         "nome_cliente": "Maria",
+        "nome_agente_unidade": "Suh",
+        "genero_agente_unidade": "feminino",
         "nome_dependente": "João" if dependente else None,
         "texto_cliente_atual": str(idade),
         "tipo_mensagem_atual": "text",

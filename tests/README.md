@@ -9,6 +9,8 @@ transacional, ela cobre regras e utilitários já implementados:
 - checkpoints, commits, rollback e conclusão da fila no worker;
 - suporte ao idoso e obrigatoriedade do e-mail;
 - validação da oferta, início da triagem, profissão e saudação após inatividade;
+- experiência Supera gratuita, coerência titular/dependente, aceite de reserva com
+  respostas antigas e preservação do texto em replay e follow-up;
 - montagem dos relatórios semanais e totais;
 - payloads e sondas manuais do Funil;
 - vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
@@ -33,6 +35,7 @@ tests/unit/test_worker_flow_runtime.py
 tests/unit/test_suporte_idoso_email_obrigatorio.py
 tests/unit/test_saudacao_retorno.py
 tests/unit/test_valida_etapa7.py
+tests/unit/test_mensagens_reserva.py
 tests/unit/test_valida_etapa11.py
 tests/unit/test_validador_profissao.py
 tests/unit/test_gerar_monitoramento_unidades.py
@@ -54,6 +57,10 @@ Testes unitários pertencem a `tests/unit/`; contratos com PostgreSQL real ficam
 em `tests/integration/` e exigem ambiente descartável explícito. Dados e classes
 auxiliares exclusivos de teste ficam em `tests/`, nunca nos módulos de produção.
 Sem `FOLLOWUP_TEST_DSN`, a descoberta pula a integração PostgreSQL.
+
+`test_mensagens_reserva.py` cobre negativas na escolha do participante,
+gratuidade contextual, preservação do aceite flexível, retomada com uma
+saudação, barreira terminal e igualdade entre texto enviado e histórico.
 
 O teste de monitoramento executa o SQL de autorização em SQLite em memória,
 adaptando apenas os placeholders, com um cliente compartilhado por duas
@@ -87,6 +94,9 @@ substituído, recuperação, falta de lock, falhas e parâmetros SQL. O teste de
 do flow cobre o novo caminho sem chamar validadores ou persistência de transição.
 Cobre saudação com e sem nome, texto enviado igual ao histórico, isolamento do
 prefixo sob exceção, retorno legado sem data de envio e falha sem interromper o lote.
+Na etapa 1, cobre cliente antigo com nome salvo: saudação genérica, coleta de nome
+mantida, reação ignorada e cadastro preservado. Também verifica nome novo aceito
+no fluxo normal, personalização nas etapas seguintes e retry sem novo envio.
 
 `integration/test_followup_postgres.py` exige explicitamente FOLLOWUP_TEST_DSN com
 host loopback e banco vazio chamado `test_chatbot_followup`. Ele cria e remove seu

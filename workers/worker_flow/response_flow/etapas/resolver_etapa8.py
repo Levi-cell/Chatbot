@@ -66,12 +66,14 @@ def resolve_etapa8(contexto_historico):
             phone_id_unidade,
             nome_cliente,
             nome_dependente,
+            incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
         )
     else:
         contexto_envio = enviar_etapa9_cliente(
             cliente_telefone,
             phone_id_unidade,
             nome_cliente,
+            incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
         )
 
     return anexar_transicao_ao_contexto_envio(

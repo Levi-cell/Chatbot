@@ -1,9 +1,10 @@
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-MENSAGEM_ETAPA4 = "Antes de prosseguirmos com o atendimento, me fala, qual sua profissão hoje?"
+MENSAGEM_ETAPA4 = "Antes de prosseguirmos, me fala, qual sua profissão hoje?"
 
 
 def montar_mensagem_etapa4():
@@ -20,10 +21,8 @@ def montar_mensagem_midia_etapa4():
     return MENSAGEM_MIDIA_ETAPA4
 
 
-MENSAGEM_FINANCEIRO_ETAPA4 = (
-    "Olha, demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
+MENSAGEM_FINANCEIRO_ETAPA4 = montar_mensagem_tratamento_financeiro(
+    "Me fala, qual sua profissão?"
 )
 
 

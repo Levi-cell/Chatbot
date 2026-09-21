@@ -2,7 +2,7 @@
 
 MENSAGEM_ETAPA22 = (
     "Perfeito, foi um prazer falar com você! 🥰\n\n"
-    "Agora é só aguardar o dia da avaliação, esperamos você para viver sua experiência no SUPERA! 🧡\n\n"
+    "Agora é só aguardar o dia reservado para a *experiência Supera gratuita*! 🧡\n\n"
     "No próximo dia útil, nossa equipe entrará em contato.\n"
     "Até breve! 👋🏼😉"
 )

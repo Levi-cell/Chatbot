@@ -72,7 +72,8 @@ def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
         """
         SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, u.nome_agente,
                u.genero, u.link_agendamento, u.link_instagram,
-               c.status_dependente, e.encerra_automaticamente
+               c.status_dependente,
+               e.encerra_automaticamente
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
         JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade

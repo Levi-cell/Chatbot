@@ -164,12 +164,26 @@ def enviar_repeticao_followup(contexto):
         contexto["id_etapa_atual"], contexto["dados_repeticao"]
     )
     mensagem = contexto["mensagem_cliente_atual"]
+    # Na etapa 1, o nome ainda não foi coletado neste atendimento. O cadastro
+    # pode ter um nome de conversa anterior e não autoriza essa personalização.
+    nome_saudacao = (
+        None
+        if contexto["id_etapa_atual"] == ETAPA_1_NOME_CLIENTE
+        else contexto["dados_repeticao"].get("nome_cliente")
+    )
     saudacao = montar_saudacao_retomada_followup(
-        contexto["dados_repeticao"].get("nome_cliente")
+        nome_saudacao
+    )
+    # O prefixo da retomada substitui a saudação própria da oferta da etapa 9.
+    opcoes_envio = (
+        {"incluir_saudacao": False}
+        if contexto["id_etapa_atual"] == ETAPA_9_RETORNO_OFERTA
+        else {}
     )
     with usar_prefixo_mensagem_bot(saudacao):
         envio = sender(
-            mensagem["cliente_telefone"], mensagem["id_phone_unidade"], *extras
+            mensagem["cliente_telefone"], mensagem["id_phone_unidade"],
+            *extras, **opcoes_envio,
         )
     # O cabeçalho já foi ao WhatsApp no corpo. O histórico recebe o mesmo texto.
     texto = envio["mensagem_bot"]

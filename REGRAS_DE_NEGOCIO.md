@@ -322,9 +322,15 @@ Implementação principal:
   ao limite recebem o contato comercial e encerram na etapa 6 com
   `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio ou Funil.
   A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
+- Para todas as faixas configuráveis (50/60/70/80/90), o encaminhamento usa
+  a mesma mensagem de atendimento personalizado, sem anunciar o limite, e o
+  botão `Falar agora`. O link abre o contato comercial com um texto pronto:
+  agente com artigo conforme seu gênero, nome do titular e idade validada na
+  resposta atual, seguido do interesse em reservar uma demonstração prática.
+  O cliente confirma o envio no WhatsApp; abrir o botão não envia esse texto.
 - O proprietário configura o limite no Admin. Habilitar ou manter a política
   requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
-- Retry reconhece as cinco variantes oficiais e o prefixo de saudação. O texto
+- Retry reconhece a mensagem atual, as cinco variantes antigas e o prefixo de saudação. O texto
   identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
   usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
   avanço sem resposta correspondente. A reação ao follow-up apenas repete a etapa.
@@ -541,6 +547,38 @@ Esses campos não alteram evento, transição, turno, retry ou transação. Eles
 apenas dados de apresentação lidos pelo contexto da etapa 1. As demais mensagens
 mantêm seus textos próprios.
 
+### Linguagem da experiência Supera e sua reserva
+
+A oferta apresenta uma **demonstração prática exclusiva**, uma avaliação
+de habilidades e o convite para reservar uma **experiência Supera gratuita**.
+Quando o atendimento é para um dependente, ele é identificado como o
+participante. Gratuidade da experiência não significa curso ou matrícula
+gratuitos. Não há nome/gênero de diretor ou novas colunas para essa oferta.
+
+Uma negativa sem alternativa na etapa 2 repete a pergunta, sem escolher
+um destino. Correções explícitas com vírgula e destinos alternativos
+completos continuam aceitos. A confirmação da etapa 3 é preservada.
+
+Perguntas sobre a gratuidade da demonstração ou experiência recebem o
+tratamento financeiro, sem avanço. Perguntas curtas como `É gratuita?`
+podem retomar a oferta nas etapas de convite e reserva. Menções a algo
+gratuito fora desse contexto não recebem uma classificação nova genérica.
+
+As saudações de retorno não se acumulam na etapa 9. O sender devolve
+ao histórico o mesmo texto enviado; retries preservam respostas anteriores.
+
+Nas etapas 7 e 9, o botão **Quero reservar** e confirmações digitadas como
+**quero**, **sim** e **quero agendar** continuam aceitos. Por decisão de
+negócio, o aceite flexível não foi endurecido: expressões como `quero pensar melhor`
+continuam seguindo o reconhecimento existente. Negativas reconhecidas e pedidos
+informativos, como **quero saber como reservar**, não confirmam a oferta.
+**Talvez mais tarde** mantém o evento de adiamento. A etapa 18 apresenta
+**Já reservei** e aceita também as confirmações antigas de conclusão, como
+**já agendei**. Dizer **quero reservar** nessa etapa não comprova conclusão.
+Os nomes técnicos de eventos e colunas permanecem, incluindo `link_agendamento`
+e `agendamento_confirmado`; idade, e-mail, follow-up e fronteiras transacionais
+conservam suas regras.
+
 ### 11.2. Exceção para conversa iniciada com mídia
 
 Quando a primeira mensagem de uma conversa for uma mídia, ainda não existirá
@@ -556,10 +594,10 @@ Mensagem esperada, usando uma das duas primeiras linhas conforme o gênero do
 agente:
 
 ```text
-Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
-Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
-Me diz, qual o seu nome?
+Me diz, qual o seu primeiro nome?
 ```
 
 Para qualquer etapa já apresentada, a regra geral será diferente. Se a conversa
@@ -577,7 +615,7 @@ Na etapa 1 já apresentada, a resposta esperada para mídia será:
 
 ```text
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
-Me diz, qual o seu nome?
+Me diz, qual o seu primeiro nome?
 ```
 
 Para etapas ainda sem tratamento específico, a mensagem poderá ser mais genérica:
@@ -604,8 +642,8 @@ Quando o cliente enviar texto perguntando sobre valor, custo, preço,
 mensalidade, investimento ou termo equivalente:
 
 1. a mensagem do cliente será registrada no histórico;
-2. o bot responderá que valores são apresentados no atendimento presencial após
-   a aula gratuita;
+2. o bot explicará que os valores de investimento são definidos após a
+   experiência Supera gratuita na unidade, com orientação da equipe;
 3. a mensagem também reapresentará a pergunta da etapa atual;
 4. a conversa não avançará por causa da pergunta de valor;
 5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
@@ -614,10 +652,14 @@ Se a conversa iniciar com pergunta de valor, a resposta esperada usará uma das
 duas primeiras linhas conforme o gênero do agente:
 
 ```text
-Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, atendente virtual do {nome_unidade}! ☺️
-Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, atendente virtual do {nome_unidade}! ☺️
-Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
-Me diz, qual o seu nome?
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}! ☺️
+
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+
+Mas bora lá:
+
+Me diz, qual o seu primeiro nome?
 ```
 
 Nesse caso, a etapa 1 fica registrada como apresentada, e a próxima resposta em
@@ -627,13 +669,21 @@ Se a etapa 1 já tiver sido apresentada e o cliente responder perguntando sobre
 valor, a mensagem esperada será:
 
 ```text
-Olha demais informações como valores são apresentados no atendimento presencial após sua aula gratuita.
-Me diz, qual o seu nome?
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+
+Mas bora lá:
+
+Me diz, qual o seu primeiro nome?
 ```
 
 Esse tratamento é financeiro, não tratamento de contexto. Ele possui fluxo e
 sender próprios para evitar misturar dúvida comercial com resposta fora do
 contexto da etapa.
+
+O prefixo é único e a pergunta seguinte retoma a etapa sem repetir todo o
+convite. O participante permanece correto, inclusive quando é um dependente.
+Os textos destacam com moderação a experiência e a ação principal usando
+`*negrito*` no corpo. Os títulos de botões não recebem essa marcação.
 
 ### 11.4. Tratamento de dúvida sobre reforço escolar
 
@@ -690,7 +740,7 @@ Mensagem esperada:
 
 ```text
 Olha sua mensagem parece estar fora do contexto e também não aceitamos nomes e apelidos pejorativos.
-Me diz, qual o seu nome?
+Me diz, qual o seu primeiro nome?
 ```
 
 Esse tratamento é diferente do financeiro e do tipo não suportado. Ele existe
@@ -1285,7 +1335,11 @@ O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece at�
 reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.
 A primeira entrada aceita com stage positivo é armazenada, mas seu conteúdo não é
 interpretado como resposta da etapa. A repetição começa com `Que bom te ver novamente,
-<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido. Essa saudação
+<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido.
+Na etapa 1, usar sempre `Que bom te ver novamente!`, mesmo que o cadastro tenha
+nome de atendimento anterior. A coleta do nome ainda está pendente nesta conversa;
+repetir sua pergunta sem personalização, sem usar a reação como nome e sem avançar.
+Não apagar o cadastro anterior para aplicar essa regra. Essa saudação
 independe do tempo de retorno e não se soma a `Olá novamente`. Não há tratamento,
 transição, alteração de turnos_sem_avanco, funil ou encerramento.
 

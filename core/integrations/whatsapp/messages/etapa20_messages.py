@@ -1,4 +1,5 @@
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -19,11 +20,8 @@ MENSAGEM_MIDIA_ETAPA20 = (
     f"{MENSAGEM_ETAPA20}"
 )
 
-MENSAGEM_FINANCEIRO_ETAPA20 = (
-    "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_ETAPA20}"
+MENSAGEM_FINANCEIRO_ETAPA20 = montar_mensagem_tratamento_financeiro(
+    MENSAGEM_ETAPA20,
 )
 
 MENSAGEM_CONTEXTO_INVALIDO_ETAPA20 = (

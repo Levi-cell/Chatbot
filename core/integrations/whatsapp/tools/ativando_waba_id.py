@@ -73,4 +73,4 @@ def _normalizar_resposta(response):
             "text": response.text,
         }
 
-# ativar_waba_id(1036697869129349)
+# ativar_waba_id(2301489160662354)

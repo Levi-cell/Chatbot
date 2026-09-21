@@ -1,4 +1,5 @@
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -6,9 +7,10 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 # ENTRADA NA ETAPA 11
 
 MENSAGEM_TRIAGEM_COGNITIVA_ETAPA11 = (
-    "Certo, antes de continuarmos o agendamento, vou fazer uma triagem com 6 perguntas rápidas "
-    "para conhecer melhor o seu perfil e suas necessidades. "
-    "É bem simples e leva poucos minutos. Podemos começar? ☺️"
+    "Antes de escolher o melhor dia e horário para a *experiência Supera gratuita*, vamos "
+    "fazer uma triagem com *6 perguntas rápidas* sobre quem participará. Leva "
+    "poucos minutos e nos ajuda a preparar um atendimento personalizado. Podemos "
+    "começar? ☺️"
 )
 
 
@@ -23,11 +25,8 @@ MENSAGEM_MIDIA_ETAPA11 = (
 
 # CLIENTE RESPONDE À INTRODUÇÃO DA TRIAGEM COM PERGUNTA FINANCEIRA
 
-MENSAGEM_FINANCEIRO_ETAPA11 = (
-    "Olha, demais informações, como valores de investimento, são "
-    "apresentadas no atendimento presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_TRIAGEM_COGNITIVA_ETAPA11}"
+MENSAGEM_FINANCEIRO_ETAPA11 = montar_mensagem_tratamento_financeiro(
+    "Vamos começar as *6 perguntas rápidas* sobre quem participará? ☺️"
 )
 
 

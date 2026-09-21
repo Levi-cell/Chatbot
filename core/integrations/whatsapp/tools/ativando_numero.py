@@ -36,7 +36,7 @@ def registrar_numero_whatsapp(phone_number_id, pin=None):
     )
 
     # resposta = _normalizar_resposta(response)
-
+    #
     # print(response)
     # print(response.json())
     # print(resposta)
@@ -60,7 +60,7 @@ def _normalizar_resposta(response):
             "text": response.text,
         }
 
-# registrar_numero_whatsapp(1376957325492184)
+# registrar_numero_whatsapp(1265716939963855)
 
 
 

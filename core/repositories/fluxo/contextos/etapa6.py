@@ -14,7 +14,9 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
             u.bpa_ativo,
             u.idade_minima_suporte,
             cl.nome,
-            d.nome_dependente
+            d.nome_dependente,
+            u.nome_agente,
+            u.genero
         FROM chatbot.unidade u
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
@@ -43,6 +45,8 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         idade_minima_suporte,
         nome_cliente,
         nome_dependente,
+        nome_agente,
+        genero_agente,
     ) = resultado
 
     logger.debug(
@@ -66,4 +70,6 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         "idade_minima_suporte": idade_minima_suporte,
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
+        "nome_agente_unidade": nome_agente,
+        "genero_agente_unidade": genero_agente,
     }

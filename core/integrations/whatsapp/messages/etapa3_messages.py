@@ -1,23 +1,16 @@
 """Mensagens da confirmação de quem receberá o atendimento."""
 
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-MENSAGEM_ETAPA3_TITULAR = (
-    "Você confirma que esse atendimento é para você?"
-)
-MENSAGEM_ETAPA3_DEPENDENTE = (
-    "Você confirma que esse atendimento é para um dependente?"
-)
+MENSAGEM_ETAPA3_TITULAR = "Você confirma que esse atendimento é para você?"
+MENSAGEM_ETAPA3_DEPENDENTE = "Você confirma que esse atendimento é para um dependente?"
 
 MENSAGEM_TRATAMENTO_MIDIA_ETAPA3 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto."
-)
-MENSAGEM_TRATAMENTO_FINANCEIRO_ETAPA3 = (
-    "Olha, demais informações, como valores de investimento, são "
-    "apresentadas no atendimento presencial após a aula *gratuita*."
 )
 MENSAGEM_TRATAMENTO_CONTEXTO_ETAPA3 = "Desculpe, não entendi."
 
@@ -45,9 +38,8 @@ def montar_mensagem_midia_etapa3(status_dependente):
 
 
 def montar_mensagem_financeiro_etapa3(status_dependente):
-    return _montar_mensagem_tratamento(
-        MENSAGEM_TRATAMENTO_FINANCEIRO_ETAPA3,
-        status_dependente,
+    return montar_mensagem_tratamento_financeiro(
+        montar_mensagem_etapa3(status_dependente),
     )
 
 

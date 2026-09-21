@@ -132,7 +132,6 @@ FRASES_PARA_MIM = frozenset(
         "so para mim",
         "somente para mim",
         "sou eu",
-        "nao e para mim",
         "vai ser para mim",
         "quero para mim",
     }
@@ -190,12 +189,6 @@ _MODELOS_COM_PARENTESCO = (
     "e para as minhas {parentesco}",
     "e pro meu {parentesco}",
     "e pra minha {parentesco}",
-    "nao para meu {parentesco}",
-    "nao para minha {parentesco}",
-    "nao e para meu {parentesco}",
-    "nao e para minha {parentesco}",
-    "nao e para o meu {parentesco}",
-    "nao e para a minha {parentesco}",
     "nao e para mim e para meu {parentesco}",
     "nao e para mim e para minha {parentesco}",
     "nao e para mim e para o meu {parentesco}",
@@ -249,8 +242,6 @@ _MODELOS_COM_DESTINO_GENERICO = (
     "e para {destino}",
     "e pro {destino}",
     "e pra {destino}",
-    "nao para {destino}",
-    "nao e para {destino}",
     "nao e para mim e para {destino}",
     "sim eu quero e para {destino}",
     "o atendimento e para {destino}",
@@ -278,12 +269,16 @@ def validar_etapa2(conteudo_texto):
     """Classifica somente frases inequívocas sobre quem receberá atendimento.
 
     O clique no botão e o texto digitado chegam no mesmo campo. A normalização
-    também tolera caixa, acentos, pontuação, espaços e vírgulas ausentes.
+    tolera caixa, acentos, pontuação e espaços. A vírgula após "não" é
+    considerada antes disso para distinguir correção de negação do destino.
     """
     if not isinstance(conteudo_texto, str):
         return None
 
-    resposta_normalizada = _normalizar_resposta(conteudo_texto)
+    # "Não, é para mim" é uma correção explícita. Sem a vírgula, a mesma
+    # sequência nega o destino e deve repetir a pergunta, sem adivinhar outro.
+    texto = re.sub(r"^\s*n[aã]o\s*,\s*", "", conteudo_texto, flags=re.IGNORECASE)
+    resposta_normalizada = _normalizar_resposta(texto)
 
     if resposta_normalizada in FRASES_PARA_MIM:
         return OPCAO_PARA_MIM

@@ -1,6 +1,10 @@
 import re
 import unicodedata
 
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
+    validar_duvida_gratuidade_experiencia,
+)
+
 
 _TERMOS_FINANCEIROS_ISOLADOS = {
     "custo",
@@ -51,6 +55,9 @@ _PADROES_PERGUNTA_FINANCEIRA = (
 def validar_pergunta_financeira_etapa4(conteudo_texto):
     if not isinstance(conteudo_texto, str):
         return False
+
+    if validar_duvida_gratuidade_experiencia(conteudo_texto):
+        return True
 
     if re.search(r"(?:r\s*\$|\$)", conteudo_texto, flags=re.IGNORECASE):
         return True

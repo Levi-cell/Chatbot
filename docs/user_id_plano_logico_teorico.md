@@ -444,7 +444,7 @@ A etapa de idade atual 6 passa a 7. Preservar a ordem: tratamentos universais,
 validação da idade e limites de menores, tratamento universal de 100+, e suporte
 configurado somente para titular com idade entre o limite inclusivo e 99.
 Dependentes nunca entram no suporte configurável. O encaminhamento conserva a
-mensagem com a faixa escolhida, botão Falar com Comercial, persistência da idade,
+mensagem única de atendimento personalizado, botão Falar agora e persistência da idade,
 encerramento `encaminhado_suporte_idoso`, ausência de bloqueio e de envio ao Funil.
 A regra separada de 100+ conserva `idade_invalida` e independe da configuração.
 
@@ -452,7 +452,11 @@ O helper puro `core/validacoes/suporte_por_idade.py` valida o domínio; booleano
 não são inteiros válidos. O Admin exige número comercial brasileiro válido ao
 ativar/manter o limite, inclusive quando apenas o número é editado.
 
-Recuperação reconhece as cinco variantes oficiais já enviadas e a saudação.
+O botão abre texto pré-preenchido com agente (artigo conforme gênero), nome do
+titular e idade recém-informada, para reservar uma demonstração prática. O cliente
+confirma o envio no WhatsApp. A mensagem é igual em 50/60/70/80/90.
+
+Recuperação reconhece o texto atual, as cinco variantes antigas e a saudação.
 Se precisar reconstruir o encerramento, usa o limite atual, sem restaurar uma
 configuração antiga. Uma mudança que retire a elegibilidade não autoriza reenviar,
 reescrever histórico, avançar sem resposta correspondente ou forçar encerramento.
@@ -1747,7 +1751,11 @@ do cliente, não avança etapa e não incrementa o contador de repetições.
 Na reação comum, o flow mantém o comportamento já implantado: registra a
 entrada, repete a etapa sem interpretar sua resposta e usa a saudação
 **Que bom te ver novamente, {nome}!**, ou **Que bom te ver novamente!** quando
-não houver nome. Somente ao confirmar a resposta no banco conclui o checkpoint
+não houver nome. Na etapa 1, a saudação é sempre genérica, mesmo que o
+cliente antigo tenha nome salvo: a coleta nesta conversa ainda está pendente.
+Repetir a pergunta sem interpretar a reação como nome, sem avançar e sem apagar
+o cadastro antigo. A exceção de compartilhamento da etapa 2 permanece independente.
+Somente ao confirmar a resposta no banco conclui o checkpoint
 e zera followup_stage. Conserva followup_last_sent_at como auditoria. A política
 stage = 0 após três horas conserva a saudação normal **Olá novamente**.
 

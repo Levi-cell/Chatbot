@@ -9,6 +9,16 @@ V1.2.0. Este guia também cobre a preparação de uma instalação nova.
 
 ## Preparar a aplicacao
 
+### Atualização das mensagens da experiência Supera
+
+A oferta usa **experiência Supera gratuita** e **demonstração prática exclusiva**.
+Esta revisão não altera o schema da V1.3.0 já implantada. A proposta de
+cadastro de responsável foi retirada antes do deploy, junto com seu SQL
+pendente. Não executar scripts antigos salvos para criar essas duas colunas.
+A apresentação do agente continua usando os campos já existentes.
+
+### Instalação inicial
+
 Clone a branch `prod` como o usuario `ubuntu` e instale as dependencias:
 
 ```bash

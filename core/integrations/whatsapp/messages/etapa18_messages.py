@@ -2,47 +2,48 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_rodape,
 )
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-# ETAPA 18 - AGENDAMENTO APÓS A TRIAGEM COGNITIVA
+# ETAPA 18 - SUA RESERVA APÓS A TRIAGEM COGNITIVA
 
-TEXTO_BOTAO_JA_AGENDEI_ETAPA18 = "Já agendei"
+TEXTO_BOTAO_JA_AGENDEI_ETAPA18 = "Já reservei"
 
 RODAPE_ETAPA18_AGENDAMENTO = (
-    "Após finalizar, volta aqui e nos avisa no botão abaixo"
+    "Depois de concluir sua reserva no link, volte aqui e toque em *Já reservei*."
 )
 
 MENSAGEM_ETAPA18 = (
-    "Obrigada por responder as perguntas! ☺️\n\n"
-    "Para escolher o melhor dia e horário para sua avaliação cognitiva + "
-    "aula experimental *gratuita*, basta clicar no link:\n"
+    "Agradeço por responder às perguntas! ☺️\n"
+    "\n"
+    "Para reservar sua *experiência Supera gratuita*, basta clicar neste link "
+    "para escolher o melhor dia e horário:\n"
     "{link_agendamento}"
 )
 
 MENSAGEM_MIDIA_ETAPA18 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Para continuar, finalize seu agendamento pelo link:\n"
+    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
+    "\n"
+    "Para continuar, finalize *sua reserva* pelo link:\n"
     "{link_agendamento}"
 )
 
-MENSAGEM_FINANCEIRO_ETAPA18 = (
-    "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n\n"
-    "Para continuar, finalize seu agendamento pelo link:\n"
+MENSAGEM_FINANCEIRO_ETAPA18 = montar_mensagem_tratamento_financeiro(
+    "Para continuar, conclua *sua reserva* pelo link:\n"
     "{link_agendamento}"
 )
 
 MENSAGEM_CONTEXTO_INVALIDO_ETAPA18 = (
-    "Não consegui entender sua resposta.\n\n"
-    "Depois de finalizar seu agendamento pelo link abaixo, selecione "
-    "*Já agendei*.\n"
+    "Não consegui entender sua resposta.\n"
+    "\n"
+    "Escolha o melhor dia e horário e conclua *sua reserva* pelo link abaixo:\n"
     "{link_agendamento}"
 )
 
 MENSAGEM_RETOMADA_ETAPA18 = (
-    "Para continuar, finalize seu agendamento pelo link:\n"
+    "Para continuar, finalize *sua reserva* pelo link:\n"
     "{link_agendamento}"
 )
 

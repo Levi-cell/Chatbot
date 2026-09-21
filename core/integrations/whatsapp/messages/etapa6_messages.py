@@ -1,7 +1,11 @@
-from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+from core.validacoes.suporte_por_idade import (
+    IDADES_MINIMAS_SUPORTE,
+    validar_idade_minima_suporte,
+)
 
 
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -54,9 +58,7 @@ def montar_mensagem_idade_dependente_etapa6_midia(nome):
 
 ### CLIENTE RESPONDE À IDADE COM PERGUNTA FINANCEIRA
 
-MENSAGEM_IDADE_ETAPA6_FINANCEIRO = (
-    "Olha, demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n"
+MENSAGEM_IDADE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
     "Me diz, qual é a sua idade?"
 )
 
@@ -67,9 +69,7 @@ def montar_mensagem_idade_etapa6_financeiro():
 
 ### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM PERGUNTA FINANCEIRA
 
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO = (
-    "Olha, demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n"
+MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
     "Me diz, qual é a idade de {nome}?"
 )
 
@@ -184,6 +184,16 @@ def montar_botao_idade_acima_99_etapa6():
 ### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
 
 MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
+    "Certo, olha, para idades mais avançadas oferecemos um atendimento "
+    "personalizado com o nosso time! 😊\n\n"
+    "Para entrar em contato, basta clicar no botão abaixo."
+)
+
+BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar agora"
+
+# Apenas para reconhecer respostas já enviadas antes da troca de texto.
+# Novos envios usam sempre MENSAGEM_SUPORTE_IDOSO_ETAPA6.
+_MENSAGEM_SUPORTE_IDOSO_LEGADA = (
     "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
     "realiza o suporte a clientes com {idade_minima} anos ou mais diretamente com a "
     "nossa equipe comercial.\n\n"
@@ -191,15 +201,43 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
     "no botão abaixo."
 )
 
-BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar com Comercial"
-
-
 def montar_mensagem_suporte_idoso_etapa6(idade_minima):
     validar_idade_minima_suporte(idade_minima)
     if idade_minima is None:
         raise ValueError("Não há mensagem de suporte para política desativada")
-    return MENSAGEM_SUPORTE_IDOSO_ETAPA6.format(idade_minima=idade_minima)
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA6
 
 
 def montar_botao_suporte_idoso_etapa6():
     return BOTAO_SUPORTE_IDOSO_ETAPA6
+
+
+def montar_mensagem_contato_suporte_idoso_etapa6(
+    *, nome_agente, genero_agente, nome_cliente, idade_cliente,
+):
+    """Texto pré-preenchido do titular, usando a idade validada nesta resposta."""
+    artigo = {"feminino": "a", "masculino": "o"}.get(genero_agente)
+    if artigo is None:
+        raise ValueError("Gênero do agente inválido para contato comercial")
+    if any(
+        not isinstance(nome, str) or not nome.strip()
+        for nome in (nome_agente, nome_cliente)
+    ):
+        raise ValueError("Nome do agente e do cliente são necessários")
+    if type(idade_cliente) is not int or not 50 <= idade_cliente <= 99:
+        raise ValueError("Idade do titular inválida para suporte por idade")
+    return (
+        f"Olá, vim do atendimento com {artigo} {nome_agente.strip()}, "
+        f"me chamo {nome_cliente.strip()}, tenho {idade_cliente} anos "
+        "e gostaria de reservar uma demonstração prática."
+    )
+
+
+def reconhecer_mensagem_suporte_idoso_etapa6(conteudo):
+    """Reconhece o corpo atual ou legado, inclusive após uma saudação."""
+    texto = str(conteudo or "").strip()
+    mensagens = (MENSAGEM_SUPORTE_IDOSO_ETAPA6,) + tuple(
+        _MENSAGEM_SUPORTE_IDOSO_LEGADA.format(idade_minima=limite)
+        for limite in IDADES_MINIMAS_SUPORTE
+    )
+    return texto.endswith(mensagens)

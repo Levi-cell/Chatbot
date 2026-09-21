@@ -68,7 +68,7 @@ def enviar_etapa18_financeiro(
     link_agendamento,
 ):
     mensagem_bot = montar_mensagem_financeiro_etapa18(
-        link_agendamento
+        link_agendamento,
     )
 
     return _enviar_texto_etapa18(

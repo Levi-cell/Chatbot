@@ -1,5 +1,5 @@
-
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -19,10 +19,8 @@ def montar_mensagem_etapa2(nome):
 
 ### RESPONDEU ERRADO COM FINANCEIRO
 
-MENSAGEM_FINANCEIRO_ETAPA2 = (
-    "Olha demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n"
-    "Fala para mim, esse atendimento é para você ou para um dependente?"
+MENSAGEM_FINANCEIRO_ETAPA2 = montar_mensagem_tratamento_financeiro(
+    "Esse atendimento é para você ou para um dependente?"
 )
 
 def montar_mensagem_financeiro_etapa2():

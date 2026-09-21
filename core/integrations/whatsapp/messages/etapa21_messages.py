@@ -1,7 +1,7 @@
 # ETAPA 21 - COMENTARIO DA PESQUISA DE SATISFACAO
 
 MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA21 = (
-    "Deixa aqui a baixo seu comentário para melhorar nosso atendimento."
+    "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
 )
 
 MENSAGEM_ETAPA21 = (

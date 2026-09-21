@@ -3,6 +3,7 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_rodape,
 )
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -11,7 +12,7 @@ from core.integrations.whatsapp.messages.tratamentos_universais import (
 
 MENSAGEM_ETAPA1 = (
     "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "atendente virtual do {nome_unidade}! ☺️\n"
+    "assistente do {nome_unidade}! ☺️\n"
     "Como você se chama?"
 )
 
@@ -36,7 +37,7 @@ def montar_mensagem_etapa1(saudacao, nome_unidade, nome_agente, genero):
 
 MENSAGEM_MIDIA_INICIO = (
     "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "atendente virtual do {nome_unidade}! ☺️\n"
+    "assistente do {nome_unidade}! ☺️\n"
     "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
     "Me diz, qual o seu primeiro nome?"
 )
@@ -67,10 +68,8 @@ def montar_mensagem_midia_inicio(
 
 MENSAGEM_FINANCEIRO_INICIO = (
     "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "atendente virtual do {nome_unidade}! ☺️\n"
-    "Olha demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n"
-    "Me diz, qual o seu primeiro nome?"
+    "assistente do {nome_unidade}! ☺️\n\n"
+    + montar_mensagem_tratamento_financeiro("Me diz, qual o seu primeiro nome?")
 )
 
 # mensagem_final = MENSAGEM_FINANCEIRO_INICIO + Midia.santo_andre (Ideia futura)
@@ -107,9 +106,7 @@ def montar_mensagem_midia_etapa1():
 
 ### CLIENTE RESPONDE AO NOME COM FINANCEIRO
 
-MENSAGEM_FINANCEIRO_ETAPA1 = (
-    "Olha demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n"
+MENSAGEM_FINANCEIRO_ETAPA1 = montar_mensagem_tratamento_financeiro(
     "Me diz, qual o seu primeiro nome?"
 )
 
@@ -117,7 +114,7 @@ def montar_mensagem_financeiro_etapa1():
     return MENSAGEM_FINANCEIRO_ETAPA1
 
 
-### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
+### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR NO INICIO
 
 MENSAGEM_RETOMADA_ETAPA1 = "Me diz, qual o seu primeiro nome?"
 
@@ -130,7 +127,7 @@ def montar_mensagem_reforco_escolar_inicio(
 ):
     apresentacao = (
         "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-        "atendente virtual do {nome_unidade}! ☺️\n"
+        "assistente do {nome_unidade}! ☺️\n"
     ).format(
         **_montar_contexto_apresentacao(
             saudacao,

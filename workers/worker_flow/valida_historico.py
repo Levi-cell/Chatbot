@@ -1,5 +1,6 @@
 import logging
 
+
 from core.logging_config import short_value
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_saudacao_retorno,

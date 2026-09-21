@@ -63,6 +63,35 @@ mensagem não deve mover a responsabilidade de envio para `messages`.
 
 Cada etapa de 1 a 22 mantém seu próprio arquivo `etapaN_messages.py`.
 
+As mensagens oferecem uma **experiência Supera gratuita**, com demonstração prática exclusiva
+e **sua reserva** de dia e horário. Os botões das etapas 7 e 9 exibem **Quero reservar**;
+a etapa 18 usa **Já reservei**. O aceite por texto continua reconhecendo expressões
+antigas como `quero agendar` e `já agendei`, conforme a etapa. Perguntas sobre como
+reservar não são aceites; na etapa 18, intenção de reservar não comprova conclusão.
+
+A gratuidade se refere à experiência; o tratamento financeiro explica que os
+valores de investimento são definidos após ela, com orientação da equipe.
+O prefixo é compartilhado em `tratamentos_universais.py`; cada etapa fornece
+sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
+Não há personalização por diretor nem campos
+adicionais na unidade. Os montadores são puros, e o histórico conserva o
+texto efetivamente enviado. Respostas já persistidas não são reenviadas.
+
+Os corpos das mensagens usam negrito do WhatsApp (`*texto*`) com moderação,
+priorizando a experiência oferecida e a ação principal. Evitar destacar todas
+as palavras ou repetir o convite completo nos tratamentos financeiros.
+Títulos de botões e valores usados pelos validadores permanecem sem marcação.
+
+Na etapa 2, negativas sem destino alternativo repetem a pergunta. Uma
+correção explícita como `Não, é para mim` conserva a escolha indicada.
+Na oferta e na reserva, dúvidas curtas como `É gratuita?` retomam a
+experiência. Fora desse contexto, o termo feminino precisa estar ligado
+explicitamente à demonstração ou experiência. O aceite flexível permanece.
+
+A retomada da etapa 9 usa uma única saudação, tanto após follow-up quanto
+após três horas de inatividade. As referências ao dependente permanecem
+explícitas; titular e dependente não trocam de papel.
+
 As apresentações inicial padrão, de mídia, financeira e de tratamento de
 reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
 argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
@@ -100,9 +129,13 @@ O sender não escolhe origem, evento ou destino da transição.
 O encaminhamento de suporte ao idoso é um sender da etapa 6 com botão para o
 número comercial, normalizado por `numero_comercial.py`. A decisão de usar
 `idade_minima_suporte`, comparar a idade do titular ao limite e encerrar o
-atendimento é do worker. O sender recebe o limite validado e o catálogo monta
-o texto; com 60, preserva exatamente a mensagem antiga. As cinco variantes
-oficiais permitem reconhecer uma resposta existente sem reenviá-la. Da mesma forma, a política `email_obrigatorio` e a distinção entre
+atendimento é do worker. O sender recebe o limite validado e o texto de contato
+montado pelo catálogo com agente, nome e idade atual do titular. Todas as faixas
+usam a mesma mensagem de atendimento personalizado e o botão `Falar agora`.
+O link inclui o texto pré-preenchido com codificação de URL; o cliente ainda
+precisa confirmar o envio no WhatsApp. O reconhecimento do corpo atual e das
+cinco variantes antigas permite recuperar respostas sem reenviá-las.
+Da mesma forma, a política `email_obrigatorio` e a distinção entre
 aceite da oferta e pedido de informações não pertencem aos senders.
 
 Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
@@ -182,6 +215,8 @@ O núcleo transacional e os testes específicos estão descritos em
 `messages/followup_messages.py` também monta a saudação de retomada com stage
 positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
 O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
+Na etapa 1, o worker passa nome ausente ao formatador, mesmo com cadastro antigo:
+a saudação é sempre genérica, seguida da pergunta de nome do atendimento atual.
 O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
 do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
 

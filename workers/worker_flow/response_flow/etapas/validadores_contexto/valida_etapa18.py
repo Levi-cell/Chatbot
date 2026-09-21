@@ -13,6 +13,11 @@ TIPO_TRATAMENTO_AGENDAMENTO_NAO_CONFIRMADO = (
 )
 
 _CONFIRMACOES_ACEITAS = {
+    "ja reservei",
+    "reservei",
+    "ja fiz minha reserva",
+    "minha reserva esta concluida",
+    "consegui reservar",
     "ja agendei",
     "agendei",
     "agendado",
@@ -25,7 +30,7 @@ _CONFIRMACOES_ACEITAS = {
 
 
 def validar_etapa18(conteudo_texto):
-    """Aceita somente confirmações curtas de agendamento concluído.
+    """Aceita somente confirmações curtas de conclusão da reserva.
 
     O webhook coloca o título do botão no mesmo campo usado pelo texto. Assim,
     clique e resposta digitada percorrem a mesma validação estrita.

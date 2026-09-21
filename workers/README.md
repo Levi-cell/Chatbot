@@ -363,6 +363,9 @@ antes do envio acrescenta um checkpoint; persistência final e finalização da 
 validam a posse antes de alterar dados. Repositórios não controlam commits.
 Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
 `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!` sem nome salvo.
+Na etapa 1, o worker sempre omite o nome, inclusive para cliente antigo com nome
+no cadastro, e mantém a pergunta de nome desse atendimento. A reação não valida
+o nome nem avança a etapa; o cadastro anterior não é apagado.
 O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
 na regra existente de três horas.
 

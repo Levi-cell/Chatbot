@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlencode
 
 
 def normalizar_numero_comercial_whatsapp(numero_comercial):
@@ -16,9 +17,14 @@ def normalizar_numero_comercial_whatsapp(numero_comercial):
     return numero
 
 
-def montar_link_numero_comercial_whatsapp(numero_comercial):
+def montar_link_numero_comercial_whatsapp(numero_comercial, mensagem=None):
     numero = normalizar_numero_comercial_whatsapp(numero_comercial)
-    return f"https://wa.me/{numero}"
+    link = f"https://wa.me/{numero}"
+    if mensagem is not None:
+        if not isinstance(mensagem, str) or not mensagem.strip():
+            raise ValueError("Mensagem do contato comercial vazia ou inválida")
+        link = f"{link}?{urlencode({'text': mensagem})}"
+    return link
 
 
 def numero_comercial_whatsapp_valido(numero_comercial):

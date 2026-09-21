@@ -1,5 +1,15 @@
 # Plano prático — suporte a `user_id`/BSUID no WhatsApp
 
+> Revisão de 20/09/2026: suporte por idade usa mensagem única e botão **Falar agora**,
+> com texto pré-preenchido de agente, titular e idade atual. Recuperação aceita também
+> os textos antigos, sem mudar elegibilidade, bloqueio ou prioridade do histórico.
+
+> Revisão pontual de 20/09/2026: a retomada da etapa 1 nunca personaliza o nome,
+> mesmo para cliente antigo. O código completo, a expectativa dos testes e a
+> documentação abaixo incluem essa correção. A pergunta de nome permanece;
+> a reação ao follow-up não vale como resposta nem autoriza avanço.
+
+
 > Documento de implementação preparado sobre a baseline funcional V1.3.0,
 > commit completo `4f7f8a0f1c64cd24086179aca2886cb77a5f1332`, auditada em 12/09/2026. A baseline já
 > contém o aplicativo Django de monitoramento, autenticação nativa, vínculo
@@ -13481,18 +13491,17 @@ def _persistir_comentario_satisfacao_da_etapa22(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `e4efc03122bb06722667a81fb4bd8e0b5ebc4ed1cf02b9f2c124af2e9e4b1354`
+SHA-256 do conteúdo UTF-8 normalizado: `99d4f8bd1844d59e4cbe0357cdf46680c7f9f0a4fd2732ab6fe8cf7fe5592d1a`
 
 ````python
 import logging
 
 from core.validacoes.suporte_por_idade import (
-    IDADES_MINIMAS_SUPORTE,
     validar_idade_minima_suporte,
 )
 
 from core.integrations.whatsapp.messages.etapa7_messages import (
-    montar_mensagem_suporte_idoso_etapa7,
+    reconhecer_mensagem_suporte_idoso_etapa7,
 )
 from core.repositories.atendimento.conversas import encerrar_conversa
 from core.repositories.atendimento.dependentes import (
@@ -13646,10 +13655,7 @@ def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
         return False
 
     conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
-    return any(
-        conteudo.endswith(montar_mensagem_suporte_idoso_etapa7(limite).strip())
-        for limite in IDADES_MINIMAS_SUPORTE
-    )
+    return reconhecer_mensagem_suporte_idoso_etapa7(conteudo)
 
 
 def aplicar_encerramento_se_necessario(
@@ -16839,10 +16845,13 @@ def montar_mensagem_contexto_nome_invalido_etapa6():
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `222da81c5058f773542a9a61e6ece6cb2506cf3026fbba329616950f4c2b14cf`
+SHA-256 do conteúdo UTF-8 normalizado: `2f94e41dd96e4d0374913f16c685649a55b5d9753583d63d92feea0441f54c1e`
 
 ````python
-from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+from core.validacoes.suporte_por_idade import (
+    IDADES_MINIMAS_SUPORTE,
+    validar_idade_minima_suporte,
+)
 
 
 from core.integrations.whatsapp.messages.tratamentos_universais import (
@@ -17028,6 +17037,16 @@ def montar_botao_idade_acima_99_etapa7():
 ### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
 
 MENSAGEM_SUPORTE_IDOSO_ETAPA7 = (
+    "Certo, olha, para idades mais avançadas oferecemos um atendimento "
+    "personalizado com o nosso time! 😊\n\n"
+    "Para entrar em contato, basta clicar no botão abaixo."
+)
+
+BOTAO_SUPORTE_IDOSO_ETAPA7 = "Falar agora"
+
+# Apenas para reconhecer respostas já enviadas antes da troca de texto.
+# Novos envios usam sempre MENSAGEM_SUPORTE_IDOSO_ETAPA7.
+_MENSAGEM_SUPORTE_IDOSO_LEGADA = (
     "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
     "realiza o suporte a clientes com {idade_minima} anos ou mais diretamente com a "
     "nossa equipe comercial.\n\n"
@@ -17035,18 +17054,46 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA7 = (
     "no botão abaixo."
 )
 
-BOTAO_SUPORTE_IDOSO_ETAPA7 = "Falar com Comercial"
-
-
 def montar_mensagem_suporte_idoso_etapa7(idade_minima):
     validar_idade_minima_suporte(idade_minima)
     if idade_minima is None:
         raise ValueError("Não há mensagem de suporte para política desativada")
-    return MENSAGEM_SUPORTE_IDOSO_ETAPA7.format(idade_minima=idade_minima)
+    return MENSAGEM_SUPORTE_IDOSO_ETAPA7
 
 
 def montar_botao_suporte_idoso_etapa7():
     return BOTAO_SUPORTE_IDOSO_ETAPA7
+
+
+def montar_mensagem_contato_suporte_idoso_etapa7(
+    *, nome_agente, genero_agente, nome_cliente, idade_cliente,
+):
+    """Texto pré-preenchido do titular, usando a idade validada nesta resposta."""
+    artigo = {"feminino": "a", "masculino": "o"}.get(genero_agente)
+    if artigo is None:
+        raise ValueError("Gênero do agente inválido para contato comercial")
+    if any(
+        not isinstance(nome, str) or not nome.strip()
+        for nome in (nome_agente, nome_cliente)
+    ):
+        raise ValueError("Nome do agente e do cliente são necessários")
+    if type(idade_cliente) is not int or not 50 <= idade_cliente <= 99:
+        raise ValueError("Idade do titular inválida para suporte por idade")
+    return (
+        f"Olá, vim do atendimento com {artigo} {nome_agente.strip()}, "
+        f"me chamo {nome_cliente.strip()}, tenho {idade_cliente} anos "
+        "e gostaria de reservar uma demonstração prática."
+    )
+
+
+def reconhecer_mensagem_suporte_idoso_etapa7(conteudo):
+    """Reconhece o corpo atual ou legado, inclusive após uma saudação."""
+    texto = str(conteudo or "").strip()
+    mensagens = (MENSAGEM_SUPORTE_IDOSO_ETAPA7,) + tuple(
+        _MENSAGEM_SUPORTE_IDOSO_LEGADA.format(idade_minima=limite)
+        for limite in IDADES_MINIMAS_SUPORTE
+    )
+    return texto.endswith(mensagens)
 ````
 
 ## Passo 69 — `core/integrations/whatsapp/messages/etapa8_messages.py`
@@ -20486,7 +20533,7 @@ def _enviar_texto_etapa6(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `211e94702dfbfca893407235b0a0ac01ad3ca6cf197f566bfd04bd0dfd6794a0`
+SHA-256 do conteúdo UTF-8 normalizado: `f589d3e8e681d01dd0bd07c0ec8e55ce909b964e3b0dfa6b451c5439d0170868`
 
 ````python
 import logging
@@ -20760,11 +20807,13 @@ def enviar_etapa7_suporte_idoso(
     phone_id_unidade,
     numero_comercial,
     idade_minima,
+    *,
+    mensagem_comercial,
 ):
     mensagem_bot = montar_mensagem_suporte_idoso_etapa7(idade_minima)
     botao_url = URLButton(
         title=montar_botao_suporte_idoso_etapa7(),
-        url=montar_link_numero_comercial_whatsapp(numero_comercial),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial, mensagem_comercial),
     )
 
     return _enviar_texto_etapa7(
@@ -21711,7 +21760,7 @@ regra de negócio; manter os dois caminhos deixaria um módulo órfão para a et
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `342b4b4c1ceb79b6c7fd5b4c7d906ffab3e862e4ae814d2342ab26634c7d221e`
+SHA-256 do conteúdo UTF-8 normalizado: `64ea1526324c4d6a6eda69d7be2ea8abd09fcea9174fa6f46d794032d9b5b64d`
 
 ````python
 import logging
@@ -21730,7 +21779,9 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
             u.bpa_ativo,
             u.idade_minima_suporte,
             cl.nome,
-            d.nome_dependente
+            d.nome_dependente,
+            u.nome_agente,
+            u.genero
         FROM chatbot.unidade u
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
@@ -21759,6 +21810,8 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         idade_minima_suporte,
         nome_cliente,
         nome_dependente,
+        nome_agente,
+        genero_agente,
     ) = resultado
 
     logger.debug(
@@ -21782,6 +21835,8 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         "idade_minima_suporte": idade_minima_suporte,
         "nome_cliente": nome_cliente,
         "nome_dependente": nome_dependente,
+        "nome_agente_unidade": nome_agente,
+        "genero_agente_unidade": genero_agente,
     }
 ````
 
@@ -25258,10 +25313,14 @@ def _logar_tratamento_texto(
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0ba22503cc175d4898f6665991d50f5304466f1104298830c0f3ace8983408ee`
+SHA-256 do conteúdo UTF-8 normalizado: `789dba26986f54a73886d91c1c30ebdc56777bb6a3e9a36ac3d0776fdc89ef1d`
 
 ````python
 import logging
+
+from core.integrations.whatsapp.messages.etapa7_messages import (
+    montar_mensagem_contato_suporte_idoso_etapa7,
+)
 
 from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 
@@ -25424,6 +25483,12 @@ def resolve_etapa7(contexto_historico):
             phone_id_unidade,
             contexto_historico.get("numero_comercial_unidade"),
             idade_minima,
+            mensagem_comercial=montar_mensagem_contato_suporte_idoso_etapa7(
+                nome_agente=contexto_historico.get("nome_agente_unidade"),
+                genero_agente=contexto_historico.get("genero_agente_unidade"),
+                nome_cliente=nome_cliente,
+                idade_cliente=idade,
+            ),
         )
         return _anexar_encerramento(
             contexto_envio,
@@ -35425,7 +35490,7 @@ encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `cf169a298f75821d9a75c7f15089bb7d83b6776e7de7e691cb05fe29f517edb8`
+SHA-256 do conteúdo UTF-8 normalizado: `5324c0c258412a6c19dccf293653909154c662f8b76eb192b2405d95b94e094e`
 
 ````markdown
 # Regras de negócio do Chatbot - V1
@@ -35767,7 +35832,7 @@ Implementação principal:
   A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
 - O proprietário configura o limite no Admin. Habilitar ou manter a política
   requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
-- Retry reconhece as cinco variantes oficiais e o prefixo de saudação. O texto
+- Retry reconhece a mensagem atual, as cinco variantes antigas e o prefixo de saudação. O texto
   identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
   usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
   avanço sem resposta correspondente. A reação ao follow-up repete a etapa, exceto o contato oficial validado na etapa 2.
@@ -36812,7 +36877,10 @@ reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo 
 A primeira entrada aceita com stage positivo é armazenada, mas seu conteúdo não é
 interpretado como resposta da etapa, exceto o contato oficial validado na etapa 2
 (ver contrato de identidades ao final). A repetição começa com `Que bom te ver novamente,
-<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido. Essa saudação
+<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido.
+Na etapa 1, a saudação é sempre genérica, mesmo com nome de atendimento anterior
+no cadastro. Manter a pergunta de nome, sem interpretar a reação ou avançar e
+sem apagar o cadastro antigo. Essa saudação
 independe do tempo de retorno e não se soma a `Olá novamente`. Não há tratamento,
 transição, alteração de turnos_sem_avanco, funil ou encerramento.
 
@@ -36887,6 +36955,10 @@ Não reaplica followup_registros.sql nem a migração de idade em produção.
 O painel conserva tags 18–59/60+ e de dependentes, o indicador comercial por
 encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
 55) e a exibição provisória de @username. Não expõe user_id ao operador.
+
+O encaminhamento por suporte configurável usa a mesma mensagem em 50/60/70/80/90
+e o botão `Falar agora`, com texto pronto contendo agente, titular e idade atual.
+O clique abre o contato; o cliente confirma o envio no WhatsApp.
 ````
 
 ## Passo 153 — `ROTINA_IMPLEMENTACAO_ETAPAS.md`
@@ -41974,7 +42046,7 @@ if __name__ == "__main__":
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `586517224aaa2c6f476d4e6b036d462d53718b384ff64a5f9ac1567cc0a4d51b`
+SHA-256 do conteúdo UTF-8 normalizado: `4d02dd0cd79ceb25893f80c44d219375c52cf3cb47f6725e0b6a2888a83dabc1`
 
 ````python
 import unittest
@@ -42026,6 +42098,8 @@ def contexto_etapa7(idade, *, dependente=False, suporte=None):
         "idade_minima_suporte": suporte,
         "numero_comercial_unidade": "(71) 99999-9999",
         "nome_cliente": "Maria",
+        "nome_agente_unidade": "Suh",
+        "genero_agente_unidade": "feminino",
         "nome_dependente": "João" if dependente else None,
         "texto_cliente_atual": str(idade),
         "tipo_mensagem_atual": "text",
@@ -42775,6 +42849,8 @@ transição. A exceção oficial da etapa 2 usa o caminho normal de avanço e te
 cobertura própria na integração user_id.
 Cobre saudação com e sem nome, texto enviado igual ao histórico, isolamento do
 prefixo sob exceção, retorno legado sem data de envio e falha sem interromper o lote.
+Inclui cliente antigo com nome salvo na etapa 1: saudação genérica, pergunta
+de nome mantida, reação desconsiderada e ausência de avanço.
 
 `integration/test_followup_postgres.py` exige explicitamente FOLLOWUP_TEST_DSN com
 host loopback e banco vazio chamado `test_chatbot_followup`. Ele cria e remove seu
@@ -44456,8 +44532,15 @@ def enviar_repeticao_followup(contexto):
         contexto["id_etapa_atual"], contexto["dados_repeticao"]
     )
     mensagem = contexto["mensagem_cliente_atual"]
+    # Na etapa 1, o nome ainda não foi coletado neste atendimento. O cadastro
+    # pode ter um nome de conversa anterior e não autoriza essa personalização.
+    nome_saudacao = (
+        None
+        if contexto["id_etapa_atual"] == ETAPA_1_NOME_CLIENTE
+        else contexto["dados_repeticao"].get("nome_cliente")
+    )
     saudacao = montar_saudacao_retomada_followup(
-        contexto["dados_repeticao"].get("nome_cliente")
+        nome_saudacao
     )
     with usar_prefixo_mensagem_bot(saudacao):
         envio = sender(
@@ -44486,7 +44569,7 @@ def enviar_repeticao_followup(contexto):
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `0eec85db2ad92f142240c33941d4ad236211c8327b93a83cf3faf67579862898`
+SHA-256 do conteúdo UTF-8 normalizado: `bd7eeebb463fe04d932711afe325832f092d4f2d290ddedc829c0593dde16588`
 
 ````python
 """Fronteiras da política, recuperação atual e encaminhamentos registrados."""
@@ -44497,6 +44580,7 @@ import sqlite3
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
@@ -44518,6 +44602,15 @@ from workers.worker_flow.transacoes import efeitos_transicao, encerramento_atend
 
 LIMITES = (None, 50, 60, 70, 80, 90)
 
+# Amostra histórica independente do catálogo atual: precisa sobreviver ao deploy.
+MENSAGEM_LEGADA = (
+    'Entendi. Para oferecer um atendimento mais adequado, esta unidade '
+    'realiza o suporte a clientes com {limite} anos ou mais diretamente com a '
+    'nossa equipe comercial.\n\n'
+    'Vou te passar o contato para continuar o atendimento. Basta clicar '
+    'no botão abaixo.'
+)
+
 
 class SuportePorIdadeTests(unittest.TestCase):
     def test_dominio_contexto_e_formulario_modelo(self):
@@ -44527,7 +44620,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                 self.assertEqual(validar_idade_minima_suporte(limite), limite)
                 self.assertEqual(campo.clean(limite, Unidade()), limite)
                 contexto = buscar_contexto_etapa7(10, 1, FakeCursor(
-                    fetchone_result=('5571999999999', False, limite, 'Maria', None)
+                    fetchone_result=('5571999999999', False, limite, 'Maria', None, 'Suh', 'feminino')
                 ))
                 self.assertEqual(contexto['idade_minima_suporte'], limite)
         self.assertEqual(list(campo.formfield().choices), [(None, 'Desativado')] + [
@@ -44538,7 +44631,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                 validar_idade_minima_suporte(invalido)
         with self.assertRaises(ValueError):
             buscar_contexto_etapa7(10, 1, FakeCursor(
-                fetchone_result=(None, False, True, None, None)
+                fetchone_result=(None, False, True, None, None, 'Suh', 'feminino')
             ))
 
     def test_admin_exige_contato_ao_ativar_e_ao_remover_numero(self):
@@ -44611,27 +44704,51 @@ class SuportePorIdadeTests(unittest.TestCase):
             resolver_etapa7.resolve_etapa7(contexto)
         conta.assert_not_called()
 
-    def test_mensagem_sender_preservam_contrato_e_60_legado(self):
-        legado = (
-            'Entendi. Para oferecer um atendimento mais adequado, esta unidade '
-            'realiza o suporte a clientes com 60 anos ou mais diretamente com a '
-            'nossa equipe comercial.\n\n'
-            'Vou te passar o contato para continuar o atendimento. Basta clicar '
-            'no botão abaixo.'
+    def test_encaminhamento_completo_padroniza_faixas_e_preenche_contato(self):
+        mensagem_esperada = (
+            'Certo, olha, para idades mais avançadas oferecemos um atendimento '
+            'personalizado com o nosso time! 😊\n\n'
+            'Para entrar em contato, basta clicar no botão abaixo.'
         )
-        self.assertEqual(montar_mensagem_suporte_idoso_etapa7(60), legado)
         for limite in LIMITES[1:]:
-            with self.subTest(limite=limite), patch.object(sender, 'conta_wa') as conta:
-                conta.return_value.send_message.return_value = SimpleNamespace(id='wamid.teste')
-                envio = sender.enviar_etapa7_suporte_idoso('5571888888888', 'phone', '5571999999999', limite)
-                enviado = conta.return_value.send_message.call_args.kwargs
-                self.assertEqual(enviado['text'], envio['mensagem_bot'])
-                self.assertIn(f'com {limite} anos', enviado['text'])
-                self.assertEqual(enviado['buttons'].url, 'https://wa.me/5571999999999')
-                self.assertEqual(enviado['buttons'].title, 'Falar com Comercial')
-                self.assertEqual(envio['tipo_mensagem'], 'interactive_cta_url')
+            for genero, nome_agente, artigo in (('feminino', 'Mia', 'a'), ('masculino', 'Léo', 'o')):
+                with self.subTest(limite=limite, genero=genero), patch.object(sender, 'conta_wa') as conta:
+                    conta.return_value.send_message.return_value = SimpleNamespace(id='wamid.teste')
+                    contexto = contexto_etapa7(limite + 1, suporte=limite)
+                    contexto.update(
+                        nome_agente_unidade=nome_agente, genero_agente_unidade=genero,
+                        nome_cliente='Ana & José', idade_cliente=20,
+                    )
+                    envio = resolver_etapa7.resolve_etapa7(contexto)
+                    enviado = conta.return_value.send_message.call_args.kwargs
+                    self.assertEqual(enviado['text'], mensagem_esperada)
+                    self.assertEqual(enviado['text'], envio['mensagem_bot'])
+                    self.assertEqual(enviado['buttons'].title, 'Falar agora')
+                    link = urlsplit(enviado['buttons'].url)
+                    self.assertEqual((link.scheme, link.netloc, link.path), ('https', 'wa.me', '/5571999999999'))
+                    self.assertEqual(parse_qs(link.query), {'text': [
+                        f'Olá, vim do atendimento com {artigo} {nome_agente}, '
+                        f'me chamo Ana & José, tenho {limite + 1} anos '
+                        'e gostaria de reservar uma demonstração prática.'
+                    ]})
+                    self.assertEqual(envio['tipo_mensagem'], 'interactive_cta_url')
+                    self.assertEqual(envio['motivo_encerramento'], 'encaminhado_suporte_idoso')
+                    self.assertEqual(envio['idade_aluno'], limite + 1)
+                    conta.return_value.send_message.assert_called_once()
         with self.assertRaises(ValueError):
             montar_mensagem_suporte_idoso_etapa7(None)
+
+    def test_dados_ausentes_nao_geram_texto_incorreto_no_botao(self):
+        for campo, valor in (
+            ('nome_cliente', None), ('nome_agente_unidade', ''),
+            ('genero_agente_unidade', 'desconhecido'),
+        ):
+            contexto = contexto_etapa7(71, suporte=70)
+            contexto[campo] = valor
+            with self.subTest(campo=campo), patch.object(sender, 'conta_wa') as conta:
+                with self.assertRaises(ValueError):
+                    resolver_etapa7.resolve_etapa7(contexto)
+                conta.assert_not_called()
 
     def test_persistencia_50_a_99_e_encerramento_sem_bloqueio(self):
         for idade in (50, 59, 60, 99):
@@ -44647,14 +44764,16 @@ class SuportePorIdadeTests(unittest.TestCase):
             self.assertFalse(intencao['excluir_dependente'])
 
     def test_recuperacao_reconhece_variantes_mas_usa_limite_atual(self):
-        for antigo in LIMITES[1:]:
+        textos = [MENSAGEM_LEGADA.format(limite=limite) for limite in LIMITES[1:]]
+        textos.append(montar_mensagem_suporte_idoso_etapa7(50))
+        for texto_enviado in textos:
             for atual, idade, encerra in ((70, 65, False), (70, 75, True), (None, 95, False), (50, 55, True)):
                 contexto = contexto_etapa7(idade, suporte=atual)
                 contexto['resposta_bot_para_mensagem_atual'] = {
                     'tipo_mensagem': 'interactive_cta_url',
-                    'conteudo_texto': 'Olá novamente, Maria!\n\n' + montar_mensagem_suporte_idoso_etapa7(antigo),
+                    'conteudo_texto': 'Olá novamente, Maria!\n\n' + texto_enviado,
                 }
-                with self.subTest(antigo=antigo, atual=atual, idade=idade):
+                with self.subTest(texto=texto_enviado, atual=atual, idade=idade):
                     intencao = encerramento_atendimento.resolver_intencao_encerramento(
                         contexto, {'resposta_ja_existia': True, 'id_etapa_resultante': 6}, object()
                     )
@@ -44992,6 +45111,35 @@ class RetornoTests(unittest.TestCase):
 
 
 class RepeticaoTests(unittest.TestCase):
+    def test_etapa1_nao_usa_nome_de_atendimento_anterior(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        for nome_antigo in ("Edcarlos", "Ana", None):
+            for stage in (1, 2):
+                with self.subTest(nome_antigo=nome_antigo, stage=stage):
+                    cx = contexto()
+                    cx["id_etapa_atual"] = 1
+                    cx["stage_anterior"] = stage
+                    cx["dados_repeticao"]["nome_cliente"] = nome_antigo
+                    cx["mensagem_cliente_atual"]["conteudo_texto"] = "Opa"
+                    fake = MagicMock()
+                    fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
+                    with patch.object(cliente, "WhatsApp", return_value=fake):
+                        envio = repeticao.enviar_repeticao_followup(cx)
+                    self.assertTrue(
+                        envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                    )
+                    self.assertIn("Como você se chama?", envio["mensagem_bot"])
+                    if nome_antigo:
+                        self.assertNotIn(nome_antigo, envio["mensagem_bot"])
+                    self.assertNotIn("Opa", envio["mensagem_bot"])
+                    self.assertEqual(envio["id_etapa_resultante"], 1)
+                    self.assertNotIn("evento_transicao", envio)
+                    self.assertEqual(cx["dados_repeticao"]["nome_cliente"], nome_antigo)
+                    self.assertEqual(
+                        envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
+                    )
+
     def test_todas_etapas_repetiveis_usam_senders_existentes(self):
         # Executa catálogos e senders reais; substitui somente o cliente HTTP.
         from core.integrations.whatsapp.pywa_functions import cliente
@@ -45017,10 +45165,13 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("evento_transicao", envio)
                     self.assertNotIn("tratamento", envio)
                     self.assertNotIn("Olá novamente", envio["mensagem_bot"])
+                    saudacao_esperada = (
+                        "Que bom te ver novamente!\n\n"
+                        if etapa == 1
+                        else "Que bom te ver novamente, Ana!\n\n"
+                    )
                     self.assertTrue(
-                        envio["mensagem_bot"].startswith(
-                            "Que bom te ver novamente, Ana!\n\n"
-                        )
+                        envio["mensagem_bot"].startswith(saudacao_esperada)
                     )
                     self.assertEqual(
                         envio["mensagem_bot"].count("Que bom te ver novamente"), 1
@@ -47068,6 +47219,8 @@ antes do envio acrescenta um checkpoint; persistência final e finalização da 
 validam a posse antes de alterar dados. Repositórios não controlam commits.
 Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
 `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!` sem nome salvo.
+Na etapa 1, omitir sempre o nome, mesmo com cadastro antigo, e manter a coleta
+do nome neste atendimento. Não consumir a reação como nome nem avançar.
 O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
 na regra existente de três horas.
 
@@ -47382,7 +47535,7 @@ encerramento/data/unidade, os quatro CSVs (Google internacional e essencial sem
 
 Substituir integralmente o arquivo com o conteúdo completo abaixo.
 
-SHA-256 do conteúdo UTF-8 normalizado: `2707fb53505d824aca301d470b34f4269057a5c63f7c803938a06bd930195728`
+SHA-256 do conteúdo UTF-8 normalizado: `b6399db27a69a510a3212072b5f3ecc64c52c57c2bba7672e89c6858741d11f7`
 
 ````markdown
 # Integração WhatsApp
@@ -47487,9 +47640,10 @@ O sender não escolhe origem, evento ou destino da transição.
 O encaminhamento de suporte ao idoso é um sender da etapa 7 com botão para o
 número comercial, normalizado por `numero_comercial.py`. A decisão de usar
 `idade_minima_suporte`, comparar a idade do titular ao limite e encerrar o
-atendimento é do worker. O sender recebe o limite validado e o catálogo monta
-o texto; com 60, preserva exatamente a mensagem antiga. As cinco variantes
-oficiais permitem reconhecer uma resposta existente sem reenviá-la. Da mesma forma, a política `email_obrigatorio` e a distinção entre
+atendimento é do worker. Todas as faixas usam a mesma mensagem de atendimento
+personalizado e o botão `Falar agora`. O texto pré-preenchido inclui agente,
+nome e idade atual do titular; o cliente confirma o envio no WhatsApp.
+A recuperação reconhece o corpo atual e as cinco variantes antigas sem reenvio. Da mesma forma, a política `email_obrigatorio` e a distinção entre
 aceite da oferta e pedido de informações não pertencem aos senders.
 
 Uma função de mídia envia somente um arquivo. Lotes e álbuns exigem um contrato
@@ -47569,6 +47723,8 @@ O núcleo transacional e os testes específicos estão descritos em
 `messages/followup_messages.py` também monta a saudação de retomada com stage
 positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
 O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
+Na etapa 1, o worker passa nome ausente ao formatador mesmo com cadastro antigo;
+a saudação é genérica e a pergunta de nome continua pendente.
 O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
 do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
 
@@ -47774,6 +47930,49 @@ Critérios obrigatórios para promoção:
 O preflight da migração recusa baseline divergente, tabelas ausentes, portfólio já existente, dados inconsistentes e trabalho em processamento. Conferir os snapshots e o COMMIT completo. Não remover esses gates nem corrigir um erro eliminando dados de produção.
 
 # Migração final — arquivo SQL integral
+
+## Passo 159Y — `core/integrations/whatsapp/numero_comercial.py`
+
+Substituir pelo arquivo completo abaixo.
+
+````python
+import re
+from urllib.parse import urlencode
+
+
+def normalizar_numero_comercial_whatsapp(numero_comercial):
+    """Normaliza um telefone comercial brasileiro para o formato do wa.me."""
+    numero = re.sub(r"\D", "", str(numero_comercial or ""))
+
+    if len(numero) in {10, 11}:
+        numero = f"55{numero}"
+
+    if not numero.startswith("55") or len(numero) not in {12, 13}:
+        raise ValueError(
+            "Número comercial da unidade inválido para link do WhatsApp"
+        )
+
+    return numero
+
+
+def montar_link_numero_comercial_whatsapp(numero_comercial, mensagem=None):
+    numero = normalizar_numero_comercial_whatsapp(numero_comercial)
+    link = f"https://wa.me/{numero}"
+    if mensagem is not None:
+        if not isinstance(mensagem, str) or not mensagem.strip():
+            raise ValueError("Mensagem do contato comercial vazia ou inválida")
+        link = f"{link}?{urlencode({'text': mensagem})}"
+    return link
+
+
+def numero_comercial_whatsapp_valido(numero_comercial):
+    try:
+        normalizar_numero_comercial_whatsapp(numero_comercial)
+    except ValueError:
+        return False
+
+    return True
+````
 
 ## Passo 160 (final) — `deploy/migrations/20260904_adicionar_user_id_whatsapp.sql`
 

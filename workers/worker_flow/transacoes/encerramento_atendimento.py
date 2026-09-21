@@ -1,12 +1,11 @@
 import logging
 
 from core.validacoes.suporte_por_idade import (
-    IDADES_MINIMAS_SUPORTE,
     validar_idade_minima_suporte,
 )
 
 from core.integrations.whatsapp.messages.etapa6_messages import (
-    montar_mensagem_suporte_idoso_etapa6,
+    reconhecer_mensagem_suporte_idoso_etapa6,
 )
 from core.repositories.atendimento.conversas import encerrar_conversa
 from core.repositories.atendimento.dependentes import (
@@ -160,10 +159,7 @@ def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
         return False
 
     conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
-    return any(
-        conteudo.endswith(montar_mensagem_suporte_idoso_etapa6(limite).strip())
-        for limite in IDADES_MINIMAS_SUPORTE
-    )
+    return reconhecer_mensagem_suporte_idoso_etapa6(conteudo)
 
 
 def aplicar_encerramento_se_necessario(

@@ -225,6 +225,35 @@ class RetornoTests(unittest.TestCase):
 
 
 class RepeticaoTests(unittest.TestCase):
+    def test_etapa1_nao_usa_nome_de_atendimento_anterior(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        for nome_antigo in ("Edcarlos", "Ana", None):
+            for stage in (1, 2):
+                with self.subTest(nome_antigo=nome_antigo, stage=stage):
+                    cx = contexto()
+                    cx["id_etapa_atual"] = 1
+                    cx["stage_anterior"] = stage
+                    cx["dados_repeticao"]["nome_cliente"] = nome_antigo
+                    cx["mensagem_cliente_atual"]["conteudo_texto"] = "Opa"
+                    fake = MagicMock()
+                    fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
+                    with patch.object(cliente, "WhatsApp", return_value=fake):
+                        envio = repeticao.enviar_repeticao_followup(cx)
+                    self.assertTrue(
+                        envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                    )
+                    self.assertIn("Como você se chama?", envio["mensagem_bot"])
+                    if nome_antigo:
+                        self.assertNotIn(nome_antigo, envio["mensagem_bot"])
+                    self.assertNotIn("Opa", envio["mensagem_bot"])
+                    self.assertEqual(envio["id_etapa_resultante"], 1)
+                    self.assertNotIn("evento_transicao", envio)
+                    self.assertEqual(cx["dados_repeticao"]["nome_cliente"], nome_antigo)
+                    self.assertEqual(
+                        envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
+                    )
+
     def test_todas_etapas_repetiveis_usam_senders_existentes(self):
         # Executa catálogos e senders reais; substitui somente o cliente HTTP.
         from core.integrations.whatsapp.pywa_functions import cliente
@@ -248,10 +277,13 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("evento_transicao", envio)
                     self.assertNotIn("tratamento", envio)
                     self.assertNotIn("Olá novamente", envio["mensagem_bot"])
+                    saudacao_esperada = (
+                        "Que bom te ver novamente!\n\n"
+                        if etapa == 1
+                        else "Que bom te ver novamente, Ana!\n\n"
+                    )
                     self.assertTrue(
-                        envio["mensagem_bot"].startswith(
-                            "Que bom te ver novamente, Ana!\n\n"
-                        )
+                        envio["mensagem_bot"].startswith(saudacao_esperada)
                     )
                     self.assertEqual(
                         envio["mensagem_bot"].count("Que bom te ver novamente"), 1
@@ -297,12 +329,38 @@ class RepeticaoTests(unittest.TestCase):
                 )
 
     def test_retry_nao_chama_sender(self):
-        cx = contexto()
-        cx["resposta_bot_para_mensagem_atual"] = {"id_hash_msg": "wamid.bot"}
-        with patch.object(repeticao, "_selecionar_sender") as selecionar:
-            envio = repeticao.enviar_repeticao_followup(cx)
-        selecionar.assert_not_called()
-        self.assertFalse(envio["enviou"])
+        for etapa in (1, 11):
+            with self.subTest(etapa=etapa):
+                cx = contexto()
+                cx["id_etapa_atual"] = etapa
+                cx["resposta_bot_para_mensagem_atual"] = {"id_hash_msg": "wamid.bot"}
+                with patch.object(repeticao, "_selecionar_sender") as selecionar:
+                    envio = repeticao.enviar_repeticao_followup(cx)
+                selecionar.assert_not_called()
+                self.assertFalse(envio["enviou"])
+                self.assertEqual(envio["id_hash_msg_bot"], "wamid.bot")
+
+    def test_nome_novo_informado_na_etapa1_prevalece_sobre_cadastro_antigo(self):
+        from workers.worker_flow.response_flow.etapas import resolver_etapa1
+
+        cx = {
+            "id_conversa": 1,
+            "id_etapa_atual": 1,
+            "id_etapa_origem_transicao": 1,
+            "nome_cliente": "Edcarlos",
+            "tipo_mensagem_atual": "text",
+            "texto_cliente_atual": "Maria",
+            "transicoes_permitidas": {"nome_cliente_valido": 2},
+            "mensagem_cliente_atual": contexto()["mensagem_cliente_atual"],
+        }
+        with patch.object(
+            resolver_etapa1, "enviar_etapa2",
+            return_value={"enviou": True, "id_etapa_resultante": 2},
+        ) as enviar:
+            envio = resolver_etapa1.resolve_etapa1(cx)
+        self.assertEqual(enviar.call_args.kwargs["nome"], "Maria")
+        self.assertEqual(envio["primeiro_nome_cliente"], "Maria")
+        self.assertEqual(envio["evento_transicao"], "nome_cliente_valido")
 
     def test_terminal_e_dado_ausente_falham_antes_da_meta(self):
         for etapa in (None, 0, 22, 23):

@@ -16,6 +16,10 @@ numeração ficam em
 Os documentos técnicos abaixo descrevem o código atual. Os planos em `docs/`
 são propostas separadas: sua existência não significa que já foram aplicados.
 
+As mensagens oferecem uma **experiência Supera gratuita**, com demonstração
+prática exclusiva e convite para **reservar** o melhor dia e horário. Esta
+revisão não adiciona colunas nem exige migração sobre a V1.3.0 implantada.
+
 ## Comece por aqui
 
 Para desenvolver novas etapas, siga a

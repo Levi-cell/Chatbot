@@ -79,7 +79,7 @@ def resolve_etapa18(contexto_historico):
         )
 
 # VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 18
-    if validar_pergunta_financeira(texto_cliente):
+    if validar_pergunta_financeira(texto_cliente, referencia_experiencia=True):
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,

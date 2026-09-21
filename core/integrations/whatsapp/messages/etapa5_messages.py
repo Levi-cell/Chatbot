@@ -1,4 +1,5 @@
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
@@ -30,10 +31,8 @@ def montar_mensagem_midia_etapa5():
 
 ### CLIENTE RESPONDE AO NOME DA PESSOA COM FINANCEIRO
 
-MENSAGEM_FINANCEIRO_ETAPA5 = (
-    "Olha demais informações como valores de investimento são apresentadas no atendimento "
-    "presencial após a aula *gratuita*.\n"
-    "Fala para mim, qual o primeiro nome da pessoa?"
+MENSAGEM_FINANCEIRO_ETAPA5 = montar_mensagem_tratamento_financeiro(
+    "Me diz, qual o primeiro nome da pessoa que receberá o atendimento?"
 )
 
 

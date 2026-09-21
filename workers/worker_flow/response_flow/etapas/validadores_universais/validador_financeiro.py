@@ -53,9 +53,45 @@ PADRAO_PERGUNTA_FINANCEIRA = re.compile(
 )
 
 
-def validar_pergunta_financeira(texto):
+_PADRAO_EXPERIENCIA = re.compile(r"\b(?:demonstracao(?:\s+pratica)?|experiencia(?:\s+supera)?)\b")
+_PADRAO_GRATUIDADE_FEMININA = re.compile(r"\bgratuitas?\b")
+_PADRAO_PERGUNTA_GRATUIDADE = re.compile(
+    r"\b(?:e|sera|seria|vai\s+ser|fica|sai)\s+(?:mesmo\s+)?gratuitas?\b"
+)
+_PADRAO_PERGUNTA_CURTA_GRATUIDADE = re.compile(
+    r"(?:quero\s+reservar\s+)?(?:ela\s+)?(?:e\s+)?gratuita(?:\s+mesmo)?"
+)
+
+
+def validar_duvida_gratuidade_experiencia(texto, *, referencia_experiencia=False):
+    """Reconhece a dúvida sobre a oferta, sem tornar 'gratuita' um termo genérico.
+
+    Nas etapas de oferta/reserva, uma pergunta curta pode retomar a experiência
+    já apresentada. Fora delas, o cliente precisa mencionar a atividade.
+    """
+    if not isinstance(texto, str):
+        return False
+    normalizado = normalizar_texto(texto)
+    if not _PADRAO_GRATUIDADE_FEMININA.search(normalizado):
+        return False
+    if _PADRAO_EXPERIENCIA.search(normalizado) and (
+        "?" in texto or _PADRAO_PERGUNTA_GRATUIDADE.search(normalizado)
+    ):
+        return True
+    resposta = " ".join(re.sub(r"[^a-z0-9\s]", " ", normalizado).split())
+    return bool(
+        referencia_experiencia
+        and _PADRAO_PERGUNTA_CURTA_GRATUIDADE.fullmatch(resposta)
+    )
+
+
+def validar_pergunta_financeira(texto, *, referencia_experiencia=False):
     texto_normalizado = normalizar_texto(texto or "")
-    return bool(PADRAO_PERGUNTA_FINANCEIRA.search(texto_normalizado))
+    return bool(PADRAO_PERGUNTA_FINANCEIRA.search(texto_normalizado)) or (
+        validar_duvida_gratuidade_experiencia(
+            texto, referencia_experiencia=referencia_experiencia,
+        )
+    )
 
 
 def normalizar_texto(texto):

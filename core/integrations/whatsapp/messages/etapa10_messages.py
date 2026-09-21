@@ -1,11 +1,12 @@
 from core.integrations.whatsapp.messages.tratamentos_universais import (
+    montar_mensagem_tratamento_financeiro,
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
 # ENTRADA NA ETAPA 10
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA10 = "Para completar seu cadastro, qual é o seu melhor email? ☺️"
+MENSAGEM_PERGUNTA_EMAIL_ETAPA10 = "Certo, para fazer *sua reserva*, me diz, qual é o seu melhor email? ☺️"
 
 
 def montar_mensagem_email_etapa10():
@@ -26,9 +27,7 @@ def montar_mensagem_email_etapa10_midia():
 
 # CLIENTE RESPONDE AO EMAIL COM PERGUNTA FINANCEIRA
 
-MENSAGEM_PERGUNTA_EMAIL_ETAPA10_FINANCEIRO = (
-    "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
-    "presencial após sua aula *gratuita*.\n\n"
+MENSAGEM_PERGUNTA_EMAIL_ETAPA10_FINANCEIRO = montar_mensagem_tratamento_financeiro(
     "Me diz, qual o seu melhor email?"
 )
 

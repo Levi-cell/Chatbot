@@ -112,7 +112,7 @@ def resolve_etapa9(contexto_historico):
             phone_id_unidade,
         )
 
-    if validar_pergunta_financeira(texto_cliente):
+    if validar_pergunta_financeira(texto_cliente, referencia_experiencia=True):
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_FINANCEIRO,

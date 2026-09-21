@@ -124,7 +124,7 @@ def enviar_etapa6_dependente_financeiro(
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_idade_dependente_etapa6_financeiro(
-        nome_dependente
+        nome_dependente,
     )
 
     return _enviar_texto_etapa6(
@@ -268,11 +268,13 @@ def enviar_etapa6_suporte_idoso(
     phone_id_unidade,
     numero_comercial,
     idade_minima,
+    *,
+    mensagem_comercial,
 ):
     mensagem_bot = montar_mensagem_suporte_idoso_etapa6(idade_minima)
     botao_url = URLButton(
         title=montar_botao_suporte_idoso_etapa6(),
-        url=montar_link_numero_comercial_whatsapp(numero_comercial),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial, mensagem_comercial),
     )
 
     return _enviar_texto_etapa6(

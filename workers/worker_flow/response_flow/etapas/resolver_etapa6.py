@@ -1,6 +1,9 @@
 import logging
 
 from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
+from core.integrations.whatsapp.messages.etapa6_messages import (
+    montar_mensagem_contato_suporte_idoso_etapa6,
+)
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
     enviar_etapa6_cliente_contexto_idade_invalida,
@@ -153,6 +156,12 @@ def resolve_etapa6(contexto_historico):
             phone_id_unidade,
             contexto_historico.get("numero_comercial_unidade"),
             idade_minima,
+            mensagem_comercial=montar_mensagem_contato_suporte_idoso_etapa6(
+                nome_agente=contexto_historico.get("nome_agente_unidade"),
+                genero_agente=contexto_historico.get("genero_agente_unidade"),
+                nome_cliente=nome_cliente,
+                idade_cliente=idade,
+            ),
         )
         return _anexar_encerramento(
             contexto_envio,

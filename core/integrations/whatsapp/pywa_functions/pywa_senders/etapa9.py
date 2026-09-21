@@ -41,9 +41,12 @@ def enviar_etapa9_cliente(
     cliente_telefone,
     phone_id_unidade,
     nome_cliente,
+    *,
+    incluir_saudacao=True,
 ):
     mensagem_bot = montar_mensagem_retorno_cliente_etapa9(
-        nome_cliente
+        nome_cliente,
+        incluir_saudacao=incluir_saudacao,
     )
 
     return _enviar_texto_etapa9(
@@ -60,10 +63,13 @@ def enviar_etapa9_dependente(
     phone_id_unidade,
     nome_cliente,
     nome_dependente,
+    *,
+    incluir_saudacao=True,
 ):
     mensagem_bot = montar_mensagem_retorno_dependente_etapa9(
         nome_cliente,
         nome_dependente,
+        incluir_saudacao=incluir_saudacao,
     )
 
     return _enviar_texto_etapa9(
@@ -132,7 +138,7 @@ def enviar_etapa9_dependente_financeiro(
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_retorno_dependente_financeiro_etapa9(
-        nome_dependente
+        nome_dependente,
     )
 
     return _enviar_texto_etapa9(

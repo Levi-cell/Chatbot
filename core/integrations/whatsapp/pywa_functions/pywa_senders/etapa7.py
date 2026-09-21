@@ -59,7 +59,7 @@ def enviar_etapa7_dependente(
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_oferta_dependente_etapa7(
-        nome_dependente
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(
@@ -93,7 +93,7 @@ def enviar_etapa7_dependente_midia(
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_oferta_dependente_midia_etapa7(
-        nome_dependente
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(
@@ -128,7 +128,7 @@ def enviar_etapa7_dependente_financeiro(
     nome_dependente,
 ):
     mensagem_bot = montar_mensagem_oferta_dependente_financeiro_etapa7(
-        nome_dependente
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(
@@ -163,7 +163,7 @@ def enviar_etapa7_dependente_reforco_escolar(
 ):
     mensagem_bot = (
         montar_mensagem_oferta_dependente_reforco_escolar_etapa7(
-            nome_dependente
+            nome_dependente,
         )
     )
 
@@ -202,7 +202,7 @@ def enviar_etapa7_dependente_contexto_invalido(
 ):
     mensagem_bot = (
         montar_mensagem_oferta_dependente_contexto_invalido_etapa7(
-            nome_dependente
+            nome_dependente,
         )
     )
 
