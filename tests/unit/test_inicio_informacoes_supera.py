@@ -76,6 +76,7 @@ class PedidoInformacoesSuperaTests(unittest.TestCase):
                     self.assertTrue(validar_pedido_informacoes_supera(texto))
         for texto in (
             "Ola! Posso ter mais informacoes sobre isso?",
+            "Oi, gostaria de saber um pouco sobre o Supera",
             "Oi, tudo bem? Queria saber mais sobre o Supera. Obrigada!",
             "  BOA NOITE!!!\nComo funciona o supera??? 🧡",
         ):
@@ -166,8 +167,12 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
                 incrementar.assert_not_called()
                 self.assertTrue(resultado["historico_bot_inserido"])
 
-    def test_ambas_as_aberturas_convergem_para_prazer_e_entao_supera(self):
-        for texto in ("Olá", "O que é o Supera?"):
+    def test_ambas_as_aberturas_convergem_para_apresentacao_do_supera(self):
+        for texto in (
+            "Olá",
+            "O que é o Supera?",
+            "Oi, gostaria de saber um pouco sobre o Supera",
+        ):
             with self.subTest(texto=texto), patch.object(
                 cliente, "WhatsApp", return_value=cliente_simulado()
             ):
@@ -181,7 +186,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             self.assertEqual(proxima["primeiro_nome_cliente"], "Maria")
             self.assertTrue(
                 proxima["mensagem_bot"].startswith(
-                    "Prazer, Maria! ☺️\n\nEntão, o Supera"
+                    "Prazer, Maria! ☺️\n\nO Supera"
                 )
             )
 

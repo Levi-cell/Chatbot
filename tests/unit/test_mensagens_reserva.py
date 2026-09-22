@@ -437,6 +437,7 @@ class AceiteReservaTests(unittest.TestCase):
                 "Pode reservar",
                 "sim",
                 "Quero reservar!",
+                "Não há problema, quero reservar",
                 "Quero pensar melhor",
                 "Gostaria de desistir",
             ):
@@ -447,6 +448,7 @@ class AceiteReservaTests(unittest.TestCase):
                 "como reservar?",
                 "quero saber como reservar",
                 "quero mais informações",
+                "Quero cancelar",
             ):
                 with self.subTest(validador=validar.__name__, texto=texto):
                     self.assertIsNone(validar(texto))

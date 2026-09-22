@@ -11,6 +11,10 @@ OPCAO_ADIADA = "adiada"
 TEXTO_BOTAO_QUERO_RESERVAR = "quero reservar"
 TEXTO_BOTAO_TALVEZ_MAIS_TARDE = "talvez mais tarde"
 
+# Só retira a expressão inicial de ausência de objeção. O restante da resposta
+# ainda precisa passar pelas negativas, pedidos de informação e aceite.
+PADRAO_PREFIXO_SEM_OBJECAO = re.compile(r"^nao\s+ha\s+problema\b\s*")
+
 PADRAO_RESPOSTA_NEGATIVA = re.compile(
     r"(?:"
     r"\bnao\b|"
@@ -21,6 +25,7 @@ PADRAO_RESPOSTA_NEGATIVA = re.compile(
     r"\bsem\s+interesse\b|"
     r"\bnao\s+tenho\s+interesse\b|"
     r"\bdispenso\b|"
+    r"\bcancelar\b|"
     r"\brecuso\b"
     r")"
 )
@@ -97,6 +102,10 @@ def validar_aceite_reserva(conteudo_texto):
 
     if texto_normalizado == TEXTO_BOTAO_TALVEZ_MAIS_TARDE:
         return OPCAO_ADIADA
+
+    texto_normalizado = PADRAO_PREFIXO_SEM_OBJECAO.sub(
+        "", texto_normalizado, count=1
+    )
 
     # A negação prevalece mesmo quando a frase também contém termo positivo.
     if PADRAO_RESPOSTA_NEGATIVA.search(texto_normalizado):

@@ -66,6 +66,10 @@ Commit: `50e59879c4c2aa6e0f6cf676adf50d40aec8ca03`
 
 Commit: `701b834fc178efcd42591692b9c35ce5827b840c`
 
+### V1.5.0 — Atendimento refinado e abertura contextualizada
+
+Commit: `8b8a0f8f2783dc7f137f389d96bb88f3f4f4acb5`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

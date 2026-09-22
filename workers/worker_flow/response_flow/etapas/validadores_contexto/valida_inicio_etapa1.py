@@ -47,6 +47,8 @@ _PADROES = tuple(
         rf"{_INTENCAO}\s+(?:saber|entender)\s+{_PERGUNTA}",
         rf"{_INTENCAO}\s+(?:saber|conhecer|entender)\s+"
         rf"(?:um\s+pouco\s+)?(?:mais|melhor)(?:\s+{_ASSUNTO})?",
+        # Sem "mais", exige o assunto reconhecido para manter a intenção clara.
+        rf"{_INTENCAO}\s+(?:saber|conhecer|entender)\s+um\s+pouco\s+{_ASSUNTO}",
         rf"{_INTENCAO}\s+(?:(?:receber|ter|obter)\s+)?{_INFORMACOES}"
         rf"(?:\s+{_ASSUNTO})?",
         rf"{_PEDIR}\s+{_INFORMACOES}(?:\s+{_ASSUNTO})?",
