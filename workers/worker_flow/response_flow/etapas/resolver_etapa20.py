@@ -120,6 +120,8 @@ def resolve_etapa20(contexto_historico):
         contexto_envio = enviar_etapa22(
             cliente_telefone,
             phone_id_unidade,
+            status_dependente=contexto_historico["status_dependente"],
+            nome_dependente=contexto_historico.get("nome_dependente"),
         )
         contexto_envio["comentario_satisfacao"] = None
 

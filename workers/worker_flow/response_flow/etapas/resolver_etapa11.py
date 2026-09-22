@@ -62,6 +62,11 @@ def resolve_etapa11(contexto_historico):
     idade_pessoa_triagem = contexto_historico[
         "idade_pessoa_triagem"
     ]
+    # A introdução e seus tratamentos falam da mesma pessoa que a triagem.
+    participante = {
+        "status_dependente": contexto_historico.get("status_dependente"),
+        "nome_dependente": contexto_historico.get("nome_dependente"),
+    }
 
     # VALIDANDO MÍDIA NA ETAPA 11
     # Além de interactive, o webhook reconhece o formato legado button.
@@ -76,6 +81,7 @@ def resolve_etapa11(contexto_historico):
         return enviar_etapa11_midia(
             cliente_telefone,
             phone_id_unidade,
+            **participante,
         )
 
     if validar_duvida_reforco_escolar(texto_cliente):
@@ -86,6 +92,7 @@ def resolve_etapa11(contexto_historico):
         return enviar_etapa11_reforco_escolar(
             cliente_telefone,
             phone_id_unidade,
+            **participante,
         )
 
     # VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 11
@@ -97,6 +104,7 @@ def resolve_etapa11(contexto_historico):
         return enviar_etapa11_financeiro(
             cliente_telefone,
             phone_id_unidade,
+            **participante,
         )
 
     # VALIDANDO A CONFIRMAÇÃO DE INÍCIO DA TRIAGEM
@@ -110,6 +118,7 @@ def resolve_etapa11(contexto_historico):
         return enviar_etapa11_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
+            **participante,
         )
 
     # VALIDANDO DESTINO

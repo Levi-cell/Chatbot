@@ -40,13 +40,13 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 def enviar_etapa9_cliente(
     cliente_telefone,
     phone_id_unidade,
-    nome_cliente,
+    nome_titular,
     *,
     incluir_saudacao=True,
+    repeticao=False,
 ):
     mensagem_bot = montar_mensagem_retorno_cliente_etapa9(
-        nome_cliente,
-        incluir_saudacao=incluir_saudacao,
+        nome_titular, incluir_saudacao=incluir_saudacao, repeticao=repeticao
     )
 
     return _enviar_texto_etapa9(
@@ -61,15 +61,17 @@ def enviar_etapa9_cliente(
 def enviar_etapa9_dependente(
     cliente_telefone,
     phone_id_unidade,
-    nome_cliente,
+    nome_titular,
     nome_dependente,
     *,
     incluir_saudacao=True,
+    repeticao=False,
 ):
     mensagem_bot = montar_mensagem_retorno_dependente_etapa9(
-        nome_cliente,
+        nome_titular,
         nome_dependente,
         incluir_saudacao=incluir_saudacao,
+        repeticao=repeticao,
     )
 
     return _enviar_texto_etapa9(
@@ -102,9 +104,7 @@ def enviar_etapa9_dependente_midia(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = montar_mensagem_retorno_dependente_midia_etapa9(
-        nome_dependente
-    )
+    mensagem_bot = montar_mensagem_retorno_dependente_midia_etapa9(nome_dependente)
 
     return _enviar_texto_etapa9(
         cliente_telefone,
@@ -171,10 +171,8 @@ def enviar_etapa9_dependente_reforco_escolar(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_retorno_dependente_reforco_escolar_etapa9(
-            nome_dependente
-        )
+    mensagem_bot = montar_mensagem_retorno_dependente_reforco_escolar_etapa9(
+        nome_dependente
     )
 
     return _enviar_texto_etapa9(
@@ -191,9 +189,7 @@ def enviar_etapa9_cliente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
 ):
-    mensagem_bot = (
-        montar_mensagem_retorno_cliente_contexto_invalido_etapa9()
-    )
+    mensagem_bot = montar_mensagem_retorno_cliente_contexto_invalido_etapa9()
 
     return _enviar_texto_etapa9(
         cliente_telefone,
@@ -210,10 +206,8 @@ def enviar_etapa9_dependente_contexto_invalido(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_retorno_dependente_contexto_invalido_etapa9(
-            nome_dependente
-        )
+    mensagem_bot = montar_mensagem_retorno_dependente_contexto_invalido_etapa9(
+        nome_dependente
     )
 
     return _enviar_texto_etapa9(

@@ -33,8 +33,13 @@ def enviar_etapa18(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    nome_dependente=None,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_etapa18(link_agendamento)
+    mensagem_bot = montar_mensagem_etapa18(
+        link_agendamento, nome_dependente, repeticao=repeticao
+    )
 
     return _enviar_texto_etapa18(
         cliente_telefone,
@@ -49,8 +54,12 @@ def enviar_etapa18_midia(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_midia_etapa18(link_agendamento)
+    mensagem_bot = montar_mensagem_midia_etapa18(
+        link_agendamento, nome_dependente=nome_dependente
+    )
 
     return _enviar_texto_etapa18(
         cliente_telefone,
@@ -66,9 +75,11 @@ def enviar_etapa18_financeiro(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_financeiro_etapa18(
-        link_agendamento,
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa18(
@@ -85,9 +96,11 @@ def enviar_etapa18_reforco_escolar(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_reforco_escolar_etapa18(
-        link_agendamento
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa18(
@@ -104,9 +117,11 @@ def enviar_etapa18_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_contexto_invalido_etapa18(
-        link_agendamento
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa18(

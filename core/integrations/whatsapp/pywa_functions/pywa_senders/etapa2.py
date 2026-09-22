@@ -34,8 +34,15 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 
 ### CENARIO NORMAL: NOME VALIDADO NA ETAPA 1
 
-def enviar_etapa2(cliente_telefone, phone_id_unidade, nome):
-    mensagem_bot = montar_mensagem_etapa2(nome)
+
+def enviar_etapa2(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_titular,
+    *,
+    repeticao=False,
+):
+    mensagem_bot = montar_mensagem_etapa2(nome_titular, repeticao=repeticao)
 
     return _enviar_texto_etapa2(
         cliente_telefone,
@@ -46,6 +53,7 @@ def enviar_etapa2(cliente_telefone, phone_id_unidade, nome):
 
 
 ### PARA O WORKER QUANDO O CLIENTE RESPONDE A ETAPA 2 COM MIDIA
+
 
 def enviar_etapa2_midia(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_midia_etapa2()
@@ -61,6 +69,7 @@ def enviar_etapa2_midia(cliente_telefone, phone_id_unidade):
 
 ### PARA O WORKER QUANDO O CLIENTE RESPONDE A ETAPA 2 COM PERGUNTA FINANCEIRA
 
+
 def enviar_etapa2_financeiro(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_financeiro_etapa2()
 
@@ -75,6 +84,7 @@ def enviar_etapa2_financeiro(cliente_telefone, phone_id_unidade):
 
 ### PARA O WORKER QUANDO O CLIENTE PERGUNTA SOBRE REFORÇO ESCOLAR
 
+
 def enviar_etapa2_reforco_escolar(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_reforco_escolar_etapa2()
 
@@ -88,6 +98,7 @@ def enviar_etapa2_reforco_escolar(cliente_telefone, phone_id_unidade):
 
 
 ### PARA O WORKER QUANDO O CLIENTE RESPONDE A ETAPA 2 FORA DO CONTEXTO
+
 
 def enviar_etapa2_contexto_opcao_invalida(
     cliente_telefone,
@@ -105,6 +116,7 @@ def enviar_etapa2_contexto_opcao_invalida(
 
 
 ### CONSTRUTOR DE ENVIO DA ETAPA 2 COM BOTOES
+
 
 def _enviar_texto_etapa2(
     cliente_telefone,

@@ -318,19 +318,35 @@ Implementação principal:
   TRUE como 60 e FALSE como NULL; novas unidades começam sem suporte ativado.
 - Na etapa 6, mídia, reforço escolar e financeiro precedem a validação de idade.
   Pessoas de 100+ conservam o encaminhamento próprio para titular ou dependente,
-  independentemente do suporte. Depois, titulares com idade válida maior ou igual
+  independentemente do suporte. Usam uma mensagem própria sobre uma pequena
+  anamnese com um consultor, o botão de contato comercial e um rodapé acolhedor.
+  Esse texto não repete a pergunta de idade nem muda o encerramento por
+  `idade_invalida`, sem bloqueio. Depois, titulares com idade válida maior ou igual
   ao limite recebem o contato comercial e encerram na etapa 6 com
   `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio ou Funil.
   A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
 - Para todas as faixas configuráveis (50/60/70/80/90), o encaminhamento usa
   a mesma mensagem de atendimento personalizado, sem anunciar o limite, e o
-  botão `Falar agora`. O link abre o contato comercial com um texto pronto:
-  agente com artigo conforme seu gênero, nome do titular e idade validada na
-  resposta atual, seguido do interesse em reservar uma demonstração prática.
+  botão `Falar agora`.
+- Todo botão para o comercial leva uma mensagem pronta, inclusive o de 100+.
+  O texto identifica o chatbot pelo nome e artigo conforme seu gênero, a unidade
+  e o cliente que está conversando. Na rota de titular, inclui sua idade e o
+  desejo de reservar sua experiência Supera gratuita. Na rota de dependente,
+  identifica também o nome e a idade do dependente e pede a experiência para ele.
+  A idade é a informada na resposta atual da etapa 6, nunca uma idade antiga
+  nem a idade do dependente atribuída ao titular. A origem vem da unidade
+  vinculada à conversa; não inventar informações ausentes.
   O cliente confirma o envio no WhatsApp; abrir o botão não envia esse texto.
 - O proprietário configura o limite no Admin. Habilitar ou manter a política
   requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
-- Retry reconhece a mensagem atual, as cinco variantes antigas e o prefixo de saudação. O texto
+- Retry reconhece a mensagem atual de suporte por faixa e a versão sem faixa ainda
+  emitida pelo código em produção (`701b834`), inclusive com prefixo de saudação.
+  A compatibilidade serve somente à recuperação de uma entrada já respondida;
+  nunca a novos envios. Remover essa versão anterior somente após o deploy e a
+  checagem de suas pendências. As cinco variantes antigas que citavam o limite
+  foram retiradas após consulta somente de leitura em 21/09/2026: havia um envio
+  histórico, com fila concluída e conversa encerrada, sem pendência daquele formato.
+  Conversas encerradas apenas consultadas no painel não dependem desse código. O texto
   identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
   usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
   avanço sem resposta correspondente. A reação ao follow-up apenas repete a etapa.
@@ -347,11 +363,19 @@ Implementação principal:
   inventar um endereço.
 - A etapa 19 registra uma nota de satisfação de 1 a 5. Na etapa 20, o cliente
   escolhe se deseja comentar: a aceitação segue para a etapa 21 e a recusa
-  salta diretamente para a etapa 22. A etapa 21 coleta o comentário. Nota e
+  salta diretamente para a etapa 22. A etapa 21 coleta o comentário livre e
+  avança para 22 sem julgar seu conteúdo: `ok`, `sim`, emojis e pontuação também
+  são aceitos. Não há tratamento de contexto inválido nessa etapa. Uma recusa
+  explícita ou resposta sem texto encerra sem comentário (`NULL`); botões antigos
+  não são gravados como comentário. Mídias mantêm a orientação para escrever
+  por texto, sem avançar. A recuperação usa o mesmo critério de persistência. Nota e
   comentário são internos, não compõem o payload do Funil e não encerram nem
   bloqueiam o atendimento.
 - A etapa 22 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
-  30 dias.
+  30 dias. A despedida usa `te receber` para titular e `receber você e
+  {nome_dependente}` para dependente, tanto no caminho 20 -> 22 quanto 21 -> 22.
+  O nome vem do dependente vinculado à conversa e à unidade; nunca substituir
+  silenciosamente a rota de dependente pela de titular quando faltar esse dado.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
   atendimento.
 - Depois dos 30 dias, o cliente poderá iniciar uma nova conversa com a mesma
@@ -531,11 +555,22 @@ Essa regra vale mesmo que o texto inicial seja estranho, curto, tenha símbolos 
 pareça fora de contexto. Nessa primeira interação, o objetivo é apresentar o
 agente virtual configurado para a unidade e pedir o nome do cliente.
 
-A exceção é texto com intenção financeira. Nesse caso, o sistema já responde a
-dúvida sobre valores e, na mesma mensagem, apresenta a etapa 1.
+Mídia, reforço escolar e intenção financeira conservam seus tratamentos e sua
+prioridade, nessa ordem. Depois deles, o primeiro texto que perguntar o que é
+o Supera ou pedir informações gerais recebe a apresentação explicativa aprovada,
+com a comparação a uma academia para o cérebro e o pedido do nome. As demais
+entradas recebem a abertura padrão.
 
-Nas mensagens iniciais padrão, de mídia, de intenção financeira e de tratamento
-de reforço escolar, a apresentação é formada exclusivamente pelos dados
+A identificação aceita frases completas com ou sem saudação, nome do Supera,
+acentos e interrogação, como `Do que se trata?`, `O que é?` e `Olá! Posso ter
+mais informações sobre isso?`. Não basta uma palavra solta. Esse caminho só
+existe antes da etapa 1 estar apresentada; depois disso, o nome continua sendo
+validado normalmente. Ambas as aberturas inicializam a etapa 1, sem consumir
+o primeiro texto como nome, e convergem para a mesma etapa 2 após um nome válido.
+Não há novo evento de transição, flag no banco ou mudança de follow-up/retry.
+
+Nas mensagens iniciais padrão, explicativa, de mídia, de intenção financeira
+e de tratamento de reforço escolar, a apresentação é formada exclusivamente pelos dados
 persistidos em `chatbot.unidade`:
 
 - `nome_unidade`: nome público da unidade;
@@ -549,11 +584,43 @@ mantêm seus textos próprios.
 
 ### Linguagem da experiência Supera e sua reserva
 
-A oferta apresenta uma **demonstração prática exclusiva**, uma avaliação
-de habilidades e o convite para reservar uma **experiência Supera gratuita**.
-Quando o atendimento é para um dependente, ele é identificado como o
-participante. Gratuidade da experiência não significa curso ou matrícula
-gratuitos. Não há nome/gênero de diretor ou novas colunas para essa oferta.
+A composição das falas, a personalidade acolhedora e a organização dos
+arquivos seguem o [contrato editorial de messages](core/integrations/whatsapp/messages/README.md).
+Ele deve ser consultado em revisões de textos, tratamentos e retomadas,
+preservando as regras operacionais deste documento.
+
+Cada etapa separa sua mensagem padrão da repetição pura. Financeiro, mídia
+e reforço escolar vêm de módulos próprios e são compostos antes dessa repetição.
+Contexto inválido usa uma mensagem própria, que já orienta o cliente a responder
+corretamente, sem concatenar a mensagem de repetição. Preserva os botões/opções
+e rodapés nativos, assim como titular/dependente. A regra também vale na triagem
+e na pesquisa. Pode receber o prefixo de inatividade de três horas quando elegível;
+não recebe outro tratamento ou prefixo de follow-up nesse mesmo ciclo.
+Inatividade de três horas mantém a validação normal (podendo avançar ou tratar);
+a reação ao follow-up acolhe e repete, sem interpretar o conteúdo naquele
+ciclo, exceto na etapa 8, que avança diretamente para a 9. O retorno não soma
+saudações nem repete apresentação ou despedida.
+
+A oferta inicial da etapa 7 destaca **demonstração prática gratuita** logo na
+abertura, antes da explicação da avaliação de habilidades, e termina com o
+convite para reservar uma **experiência Supera exclusiva**. A saudação
+`Maravilha, {nome_titular}! ☺️` se dirige a quem conversa nas duas rotas;
+quando há dependente, a demonstração, a avaliação e a reserva mencionam
+`nome_dependente` como participante. As demais etapas e os tratamentos podem
+continuar reforçando **experiência Supera gratuita**. Gratuidade da experiência
+não significa curso ou matrícula gratuitos. Não há nome/gênero de diretor ou
+novas colunas para essa oferta.
+
+O atendimento deve ser acolhedor e convidativo, com frases naturais, emojis
+discretos e negrito moderado. A oferta usa **presentear**, e a comemoração
+**Maravilha, {nome_titular}! ☺️** pertence à apresentação normal: não aparece após avisos de
+mídia, dúvidas ou respostas não compreendidas. Nesses casos, o bot acolhe a
+mensagem e orienta como continuar, sem atribuir o erro ao cliente.
+
+Na etapa 1, a apresentação não presume quem participará da experiência.
+Na oferta e na apresentação do link de reserva, o dependente é mencionado
+pelo nome quando for o participante, inclusive na repetição por follow-up.
+Esses ajustes de linguagem não alteram validação, transição ou elegibilidade.
 
 Uma negativa sem alternativa na etapa 2 repete a pergunta, sem escolher
 um destino. Correções explícitas com vírgula e destinos alternativos
@@ -594,8 +661,10 @@ Mensagem esperada, usando uma das duas primeiras linhas conforme o gênero do
 agente:
 
 ```text
-Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
-Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}! ☺️
+Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
+
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
 Me diz, qual o seu primeiro nome?
 ```
@@ -655,7 +724,9 @@ duas primeiras linhas conforme o gênero do agente:
 Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}! ☺️
 Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}! ☺️
 
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
+
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Mas bora lá:
 
@@ -669,7 +740,7 @@ Se a etapa 1 já tiver sido apresentada e o cliente responder perguntando sobre
 valor, a mensagem esperada será:
 
 ```text
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Mas bora lá:
 
@@ -739,12 +810,12 @@ deverá tratar sem avançar a conversa.
 Mensagem esperada:
 
 ```text
-Olha sua mensagem parece estar fora do contexto e também não aceitamos nomes e apelidos pejorativos.
-Me diz, qual o seu primeiro nome?
+Olha, não consegui entender o seu nome. Digite só seu primeiro nome, por exemplo: Pedro.
 ```
 
 Esse tratamento é diferente do financeiro e do tipo não suportado. Ele existe
 para preservar a etapa atual e pedir novamente um nome utilizável.
+O pedido já está completo nessa mensagem; não acrescentar a pergunta de repetição.
 
 ### 11.6. Coerência semântica ao reapresentar a etapa
 
@@ -754,6 +825,12 @@ principal pode ser reutilizada, mas aberturas que pressuponham resposta válida,
 confirmação, apresentação ou avanço — como `Entendi`, `Certo`, `Perfeito`,
 `Maravilha` e `Prazer` — deverão ser omitidas ou substituídas por uma retomada
 neutra.
+
+**Exceção de contexto inválido:** a orientação possui redação própria e já
+contém o pedido da resposta correta. Nunca concatenar a pergunta de repetição
+nem a mensagem inicial. A apresentação visual e os botões/rodapés nativos
+continuam pertencendo à etapa. Essa exceção muda a redação, não os critérios
+dos validadores, a prioridade dos tratamentos ou os eventos de transição.
 
 A mensagem final deverá ser lida como uma única fala semanticamente coerente.
 Depois de informar que uma resposta não foi compreendida ou aceita, o bot não
@@ -768,7 +845,7 @@ na mesma conversa pelo menos três horas após o último envio confirmado do bot
 deverá fazer a resposta começar com `Olá novamente, {nome}!` no caminho normal
 com `followup_stage = 0`. Stage positivo ou retomada já registrada segue o
 [contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com a
-saudação própria e repetição da etapa.
+saudação própria e repetição da etapa, com exceção do avanço direto de 8 para 9.
 
 O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
 evento atual do cliente com a última linha `sent` do bot no histórico da mesma
@@ -780,7 +857,8 @@ nome já está validado e persistido.
 A saudação é somente um prefixo da resposta que o fluxo já produziria:
 
 - resposta válida: saudação mais a mensagem da etapa resultante;
-- resposta inválida: saudação mais o tratamento e a repetição da etapa atual.
+- mídia, financeiro ou reforço: saudação mais o tratamento e a repetição da etapa atual;
+- contexto inválido: saudação mais a mensagem própria de contexto, sem outra pergunta.
 
 Ela não cria etapa, evento de transição, envio separado nem uma segunda linha de
 histórico. A barreira idempotente continua sendo executada antes dos resolvers:
@@ -1292,7 +1370,7 @@ Implementação principal:
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Follow-up antes do agendamento | Implementada | Um lembrete por ciclo nas etapas 1–17, após sete horas sem resposta e dentro da janela do cliente; retomada repete a etapa sem avançar. |
+| Follow-up antes do agendamento | Implementada | Um lembrete por ciclo nas etapas 1–17, após sete horas sem resposta e dentro da janela do cliente; retomada repete a etapa, exceto na 8, que avança diretamente para a 9. |
 | Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
@@ -1315,8 +1393,9 @@ Implementado na V1.2.0. As instruções de operação vivem nos
 [workers](workers/README.md#worker-de-follow-up) e no
 [deploy](deploy/README.md#ativação-do-follow-up); não dependem dos planos de implementação.
 
-O worker proativo envia somente `Você viu a minha mensagem?` depois de sete horas
-sem reação à última resposta comum confirmada do bot. NULL equivale a stage zero.
+O worker proativo envia o lembrete definido em `messages/followup_messages.py`
+depois de sete horas sem reação à última resposta comum confirmada do bot.
+NULL equivale a stage zero.
 O envio exige conversa ativa em etapa 1–17, unidade válida e adimplente, ausência
 de bloqueios, de entrada posterior no histórico e de fila pending/processing do
 mesmo par cliente/unidade, mesmo se ainda não vinculada à conversa. Uma fila
@@ -1340,8 +1419,24 @@ Na etapa 1, usar sempre `Que bom te ver novamente!`, mesmo que o cadastro tenha
 nome de atendimento anterior. A coleta do nome ainda está pendente nesta conversa;
 repetir sua pergunta sem personalização, sem usar a reação como nome e sem avançar.
 Não apagar o cadastro anterior para aplicar essa regra. Essa saudação
-independe do tempo de retorno e não se soma a `Olá novamente`. Não há tratamento,
-transição, alteração de turnos_sem_avanco, funil ou encerramento.
+independe do tempo de retorno e não se soma a `Olá novamente`. Na repetição comum,
+não há tratamento, transição, alteração de turnos_sem_avanco, funil ou encerramento.
+
+**Exceção da etapa 8:** qualquer reação processada com follow-up pendente provoca
+`8 → cliente_retornou → 9`, reutilizando o resolver e o mapa do retorno normal.
+Não repetir a mensagem da 8, nem criar ou enviar uma variante de repetição.
+A oferta da 9 preserva titular/dependente, botões e rodapé e recebe somente a
+saudação de follow-up. O conteúdo não é classificado como tratamento ou aceite:
+mesmo uma confirmação nessa reação apenas apresenta a 9; a próxima resposta
+segue sua validação normal. Não há Funil ou encerramento nessa transição.
+
+O histórico do cliente e o checkpoint conservam a origem 8; a resposta do bot
+usa a etapa 9. A transição, o reset de turnos sem avanço do fluxo normal,
+o histórico da resposta e a conclusão do follow-up pertencem ao mesmo commit.
+Falha reverte esses efeitos juntos. Retry de retomada concluída reutiliza o
+destino efetivamente gravado, inclusive uma repetição antiga da 8, sem reenviar,
+refazer a transição ou zerar um ciclo posterior. A exceção vale também para
+stage positivo legado sem data de envio; a elegibilidade proativa não muda.
 
 A migração inicial marca followup_stage = 1 para todas as conversas ativas antigas,
 incluindo etapas 18–21, e registra seus IDs, stages anteriores e a data da marcação
@@ -1350,7 +1445,7 @@ nem altera followup_last_sent_at. Stage positivo passa a indicar retomada penden
 por envio real ou marcação inicial; somente o histórico/recibo comprova envio.
 Novas conversas continuam com stage zero. O setup limpo não marca conversas.
 
-Histórico da repetição, marcação da retomada e reset para zero pertencem ao mesmo
+Histórico da resposta, marcação da retomada e reset para zero pertencem ao mesmo
 commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
 concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
 seguinte é interpretada normalmente; outro período de sete horas pode iniciar um

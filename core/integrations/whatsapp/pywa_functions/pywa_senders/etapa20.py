@@ -35,11 +35,13 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_comentario_invalida"
 def enviar_etapa20(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    repeticao=False,
 ):
     return _enviar_botoes_etapa20(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa20(),
+        montar_mensagem_etapa20(repeticao=repeticao),
         evento="enviar_etapa20",
     )
 

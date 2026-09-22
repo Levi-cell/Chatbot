@@ -35,8 +35,16 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "confirmacao_triagem_invalida"
 def enviar_etapa11(
     cliente_telefone,
     phone_id_unidade,
+    status_dependente=False,
+    nome_dependente=None,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_triagem_cognitiva_etapa11()
+    mensagem_bot = montar_mensagem_triagem_cognitiva_etapa11(
+        status_dependente=status_dependente,
+        nome_dependente=nome_dependente,
+        repeticao=repeticao,
+    )
 
     return _enviar_botoes_etapa11(
         cliente_telefone,
@@ -50,8 +58,13 @@ def enviar_etapa11(
 def enviar_etapa11_midia(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    status_dependente=False,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_midia_etapa11()
+    mensagem_bot = montar_mensagem_midia_etapa11(
+        status_dependente=status_dependente, nome_dependente=nome_dependente
+    )
 
     return _enviar_botoes_etapa11(
         cliente_telefone,
@@ -66,8 +79,13 @@ def enviar_etapa11_midia(
 def enviar_etapa11_financeiro(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    status_dependente=False,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_financeiro_etapa11()
+    mensagem_bot = montar_mensagem_financeiro_etapa11(
+        status_dependente=status_dependente, nome_dependente=nome_dependente
+    )
 
     return _enviar_botoes_etapa11(
         cliente_telefone,
@@ -82,8 +100,13 @@ def enviar_etapa11_financeiro(
 def enviar_etapa11_reforco_escolar(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    status_dependente=False,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_reforco_escolar_etapa11()
+    mensagem_bot = montar_mensagem_reforco_escolar_etapa11(
+        status_dependente=status_dependente, nome_dependente=nome_dependente
+    )
 
     return _enviar_botoes_etapa11(
         cliente_telefone,
@@ -98,8 +121,13 @@ def enviar_etapa11_reforco_escolar(
 def enviar_etapa11_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    status_dependente=False,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_contexto_invalido_etapa11()
+    mensagem_bot = montar_mensagem_contexto_invalido_etapa11(
+        status_dependente=status_dependente, nome_dependente=nome_dependente
+    )
 
     return _enviar_botoes_etapa11(
         cliente_telefone,

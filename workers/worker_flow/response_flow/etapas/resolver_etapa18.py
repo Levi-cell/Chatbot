@@ -51,7 +51,11 @@ def resolve_etapa18(contexto_historico):
     link_agendamento = contexto_historico.get(
         "link_agendamento_unidade"
     )
-    nome_cliente = contexto_historico.get("nome_cliente")
+    nome_titular = contexto_historico.get("nome_titular")
+    nome_dependente = (
+        contexto_historico.get("nome_dependente")
+        if contexto_historico.get("status_dependente") else None
+    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -64,6 +68,7 @@ def resolve_etapa18(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     if validar_duvida_reforco_escolar(texto_cliente):
@@ -76,6 +81,7 @@ def resolve_etapa18(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
 # VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 18
@@ -89,6 +95,7 @@ def resolve_etapa18(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     # VALIDANDO A CONFIRMACAO DE AGENDAMENTO
@@ -104,6 +111,7 @@ def resolve_etapa18(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     # VALIDANDO DESTINO
@@ -126,7 +134,7 @@ def resolve_etapa18(contexto_historico):
     contexto_envio = enviar_etapa19(
         cliente_telefone,
         phone_id_unidade,
-        nome_cliente,
+        nome_titular,
     )
 
     return anexar_transicao_ao_contexto_envio(

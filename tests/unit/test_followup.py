@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from core.repositories.atendimento import followup as repo
+from core.integrations.whatsapp.messages.followup_messages import MENSAGEM_FOLLOWUP
 from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as sender
 from workers.worker_followup import followup_worker as worker
 from workers.worker_flow.response_flow import repeticao_followup as repeticao
@@ -44,7 +45,7 @@ def mensagem(tipo="text"):
 
 def dados():
     return {
-        "nome_cliente": "Ana",
+        "nome_titular": "Ana",
         "nome_dependente": "Bia",
         "idade_dependente": 12,
         "nome_unidade": "Unidade Teste",
@@ -91,7 +92,8 @@ def candidato():
 
 class RetornoTests(unittest.TestCase):
     def preparar(
-        self, stage=1, tipo="text", retomada=None, resposta=None, enviado_em=AGORA
+        self, stage=1, tipo="text", retomada=None, resposta=None, enviado_em=AGORA,
+        etapa=11,
     ):
         with ExitStack() as stack:
             mocks = {}
@@ -103,16 +105,18 @@ class RetornoTests(unittest.TestCase):
                 "inserir_historico_mensagem_cliente": (
                     6,
                     AGORA,
-                    11,
+                    (retomada or {}).get("id_etapa", etapa),
                     not bool(resposta),
                 ),
                 "atualizar_conversa_mensagem_cliente": None,
+                "listar_transicoes_permitidas": {"cliente_retornou": 9},
             }
             for nome, valor in valores.items():
                 mocks[nome] = stack.enter_context(
                     patch.object(retorno, nome, return_value=valor)
                 )
             cx_banco = banco(stage)
+            cx_banco["conversa"]["id_etapa_atual"] = etapa
             cx_banco["conversa"]["followup_last_sent_at"] = enviado_em
             result = retorno.preparar_retorno_followup(
                 mensagem(tipo), cx_banco, MagicMock()
@@ -234,7 +238,7 @@ class RepeticaoTests(unittest.TestCase):
                     cx = contexto()
                     cx["id_etapa_atual"] = 1
                     cx["stage_anterior"] = stage
-                    cx["dados_repeticao"]["nome_cliente"] = nome_antigo
+                    cx["dados_repeticao"]["nome_titular"] = nome_antigo
                     cx["mensagem_cliente_atual"]["conteudo_texto"] = "Opa"
                     fake = MagicMock()
                     fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
@@ -243,13 +247,14 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertTrue(
                         envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
                     )
-                    self.assertIn("Como você se chama?", envio["mensagem_bot"])
+                    self.assertIn("Me diz, qual o seu primeiro nome?", envio["mensagem_bot"])
+                    self.assertNotIn("assistente do", envio["mensagem_bot"])
                     if nome_antigo:
                         self.assertNotIn(nome_antigo, envio["mensagem_bot"])
                     self.assertNotIn("Opa", envio["mensagem_bot"])
                     self.assertEqual(envio["id_etapa_resultante"], 1)
                     self.assertNotIn("evento_transicao", envio)
-                    self.assertEqual(cx["dados_repeticao"]["nome_cliente"], nome_antigo)
+                    self.assertEqual(cx["dados_repeticao"]["nome_titular"], nome_antigo)
                     self.assertEqual(
                         envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
                     )
@@ -260,6 +265,8 @@ class RepeticaoTests(unittest.TestCase):
 
         for dependente in (False, True):
             for etapa in range(1, 22):
+                if etapa == 8:
+                    continue  # A exceção 8 -> 9 tem cobertura própria abaixo.
                 with self.subTest(etapa=etapa, dependente=dependente):
                     cx = contexto()
                     cx["id_etapa_atual"] = etapa
@@ -296,7 +303,7 @@ class RepeticaoTests(unittest.TestCase):
             with self.subTest(nome=nome):
                 cx = contexto()
                 cx["id_etapa_atual"] = 1
-                cx["dados_repeticao"]["nome_cliente"] = nome
+                cx["dados_repeticao"]["nome_titular"] = nome
                 fake = MagicMock()
                 fake.send_message.return_value = SimpleNamespace(id="wamid.bot")
                 with patch.object(cliente, "WhatsApp", return_value=fake):
@@ -347,7 +354,7 @@ class RepeticaoTests(unittest.TestCase):
             "id_conversa": 1,
             "id_etapa_atual": 1,
             "id_etapa_origem_transicao": 1,
-            "nome_cliente": "Edcarlos",
+            "nome_titular": "Edcarlos",
             "tipo_mensagem_atual": "text",
             "texto_cliente_atual": "Maria",
             "transicoes_permitidas": {"nome_cliente_valido": 2},
@@ -358,7 +365,7 @@ class RepeticaoTests(unittest.TestCase):
             return_value={"enviou": True, "id_etapa_resultante": 2},
         ) as enviar:
             envio = resolver_etapa1.resolve_etapa1(cx)
-        self.assertEqual(enviar.call_args.kwargs["nome"], "Maria")
+        self.assertEqual(enviar.call_args.kwargs["nome_titular"], "Maria")
         self.assertEqual(envio["primeiro_nome_cliente"], "Maria")
         self.assertEqual(envio["evento_transicao"], "nome_cliente_valido")
 
@@ -373,6 +380,150 @@ class RepeticaoTests(unittest.TestCase):
             repeticao._selecionar_sender(12, cx)
 
 
+class RetornoEtapa8Tests(unittest.TestCase):
+    def test_preparacao_preserva_origem_e_carrega_mapa(self):
+        for enviado_em in (None, AGORA):
+            cx, mocks = RetornoTests().preparar(etapa=8, enviado_em=enviado_em)
+            self.assertEqual(cx["id_etapa_atual"], 8)
+            self.assertEqual(cx["id_etapa_cliente"], 8)
+            self.assertEqual(cx["id_etapa_resposta"], 9)
+            self.assertEqual(cx["id_etapa_origem_transicao"], 8)
+            self.assertEqual(cx["transicoes_permitidas"], {"cliente_retornou": 9})
+            mocks["listar_transicoes_permitidas"].assert_called_once()
+            self.assertEqual(
+                mocks["inserir_historico_mensagem_cliente"].call_args.args[2], 8
+            )
+
+    def test_qualquer_reacao_apresenta_9_sem_repetir_8_nem_consumir_aceite(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+        from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa8
+
+        for dependente in (False, True):
+            for tipo, texto in (
+                ("text", "Quero reservar"),
+                ("text", "Quanto custa?"),
+                ("interactive", "Talvez mais tarde"),
+                ("image", ""),
+                ("audio", ""),
+                ("unsupported", ""),
+            ):
+                with self.subTest(dependente=dependente, tipo=tipo, texto=texto):
+                    cx, _ = RetornoTests().preparar(etapa=8, tipo=tipo)
+                    cx["dados_repeticao"]["status_dependente"] = dependente
+                    cx["dados_repeticao"]["link_instagram"] = None
+                    cx["mensagem_cliente_atual"]["conteudo_texto"] = texto
+                    fake = MagicMock()
+                    fake.send_message.return_value = SimpleNamespace(
+                        id="wamid.retorno9"
+                    )
+                    with patch.object(
+                        cliente, "WhatsApp", return_value=fake
+                    ), patch.object(
+                        etapa8,
+                        "enviar_etapa8",
+                        side_effect=AssertionError("Não repetir etapa 8"),
+                    ):
+                        envio = repeticao.enviar_repeticao_followup(cx)
+                    self.assertEqual(envio["id_etapa_resultante"], 9)
+                    self.assertEqual(envio["id_etapa_origem_transicao"], 8)
+                    self.assertEqual(envio["evento_transicao"], "cliente_retornou")
+                    self.assertNotIn("tratamento", envio)
+                    self.assertEqual(
+                        envio["mensagem_bot"].count("Que bom te ver novamente"), 1
+                    )
+                    self.assertNotIn(
+                        "Que bom ver você aqui novamente", envio["mensagem_bot"]
+                    )
+                    self.assertNotIn("Instagram", envio["mensagem_bot"])
+                    self.assertEqual("de Bia" in envio["mensagem_bot"], dependente)
+                    fake.send_message.assert_called_once()
+                    self.assertEqual(
+                        envio["mensagem_bot"],
+                        fake.send_message.call_args.kwargs["text"],
+                    )
+                    self.assertEqual(
+                        [
+                            b.title
+                            for b in fake.send_message.call_args.kwargs["buttons"]
+                        ],
+                        ["Quero reservar", "Talvez mais tarde"],
+                    )
+
+    def test_mapa_ausente_ou_destino_errado_recusa_antes_de_enviar(self):
+        from core.integrations.whatsapp.pywa_functions import cliente
+
+        for mapa in ({}, {"cliente_retornou": 10}):
+            cx, _ = RetornoTests().preparar(etapa=8)
+            cx["transicoes_permitidas"] = mapa
+            with patch.object(cliente, "WhatsApp") as wa:
+                with self.assertRaises(ValueError):
+                    repeticao.enviar_repeticao_followup(cx)
+            wa.assert_not_called()
+
+    def test_persistencia_normal_antecede_reset_no_destino_9(self):
+        cx, _ = RetornoTests().preparar(etapa=8)
+        envio = {
+            "enviou": True,
+            "id_etapa_origem_transicao": 8,
+            "evento_transicao": "cliente_retornou",
+            "id_etapa_resultante": 9,
+        }
+        final = {"data_historico_bot": AGORA, "id_etapa_resultante": 9}
+        passos = []
+        with patch.object(
+            retorno,
+            "atualizar_banco_com_contexto_final",
+            side_effect=lambda *_: passos.append("persistir") or final,
+        ), patch.object(
+            retorno,
+            "concluir_retomada",
+            side_effect=lambda *_, **kw: passos.append(("reset", kw)),
+        ):
+            resultado = retorno.persistir_retorno_followup(cx, envio, MagicMock())
+        self.assertEqual(passos, ["persistir", ("reset", {"id_etapa_resultante": 9})])
+        self.assertIs(resultado, final)
+        with patch.object(
+            retorno, "atualizar_banco_com_contexto_final", side_effect=RuntimeError
+        ), patch.object(retorno, "concluir_retomada") as concluir:
+            with self.assertRaises(RuntimeError):
+                retorno.persistir_retorno_followup(cx, envio, MagicMock())
+        concluir.assert_not_called()
+        with patch.object(retorno, "atualizar_banco_com_contexto_final") as persistir:
+            with self.assertRaises(ValueError):
+                retorno.persistir_retorno_followup(
+                    cx, dict(envio, id_etapa_resultante=8), MagicMock()
+                )
+        persistir.assert_not_called()
+
+    def test_retry_recupera_destino_gravado_sem_reenvio_ou_reset(self):
+        for destino in (8, 9):  # Inclui respostas da versão anterior ao deploy.
+            registro = {
+                "id_etapa": 8,
+                "stage_anterior": 1,
+                "followup_em": AGORA,
+                "concluida_em": AGORA,
+            }
+            resposta = (7, 1, destino, AGORA, "", "", "", "wamid.bot")
+            cx, mocks = RetornoTests().preparar(
+                etapa=10, retomada=registro, resposta=resposta
+            )
+            mocks["listar_transicoes_permitidas"].assert_not_called()
+            with patch.object(
+                repeticao, "_enviar_retorno_etapa8"
+            ) as enviar, patch.object(
+                retorno, "atualizar_banco_com_contexto_final"
+            ) as persistir, patch.object(
+                retorno, "concluir_retomada"
+            ) as concluir:
+                envio = repeticao.enviar_repeticao_followup(cx)
+                final = retorno.persistir_retorno_followup(cx, envio, MagicMock())
+            enviar.assert_not_called()
+            persistir.assert_not_called()
+            concluir.assert_not_called()
+            self.assertEqual(envio["id_etapa_resultante"], destino)
+            self.assertEqual(final["id_etapa_resultante"], destino)
+            self.assertFalse(final["atualizar_last_from_bot"])
+
 class ProativoTests(unittest.TestCase):
     def test_texto_exato_e_numero_da_unidade(self):
         wa = MagicMock()
@@ -383,9 +534,9 @@ class ProativoTests(unittest.TestCase):
             result = sender.enviar_followup("5511999999999", "unidade-3")
         self.assertEqual(conta.call_args.args, ("unidade-3",))
         wa.send_message.assert_called_once_with(
-            to="5511999999999", text="Você viu a minha mensagem?"
+            to="5511999999999", text=MENSAGEM_FOLLOWUP
         )
-        self.assertEqual(result["mensagem_bot"], "Você viu a minha mensagem?")
+        self.assertEqual(result["mensagem_bot"], MENSAGEM_FOLLOWUP)
 
     def _processar(
         self, *, elegivel=True, lock=True, erro_envio=None, erro_banco=None, parar=False

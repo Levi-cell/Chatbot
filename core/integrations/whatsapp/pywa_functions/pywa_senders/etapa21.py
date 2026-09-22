@@ -6,7 +6,6 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_cabecalho,
 )
 from core.integrations.whatsapp.messages.etapa21_messages import (
-    montar_mensagem_contexto_invalido_etapa21,
     montar_mensagem_etapa21,
     montar_mensagem_midia_etapa21,
 )
@@ -21,15 +20,19 @@ logger = logging.getLogger("whatsapp.etapa21")
 
 ID_ETAPA21 = 21
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
-TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "comentario_satisfacao_invalido"
 
 
 # CENARIO NORMAL: SOLICITA O TEXTO DO COMENTARIO
-def enviar_etapa21(cliente_telefone, phone_id_unidade):
+def enviar_etapa21(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
     return _enviar_texto_etapa21(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa21(),
+        montar_mensagem_etapa21(repeticao=repeticao),
         evento="enviar_etapa21",
     )
 
@@ -41,19 +44,6 @@ def enviar_etapa21_midia(cliente_telefone, phone_id_unidade):
         montar_mensagem_midia_etapa21(),
         evento="enviar_etapa21_midia",
         tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
-    )
-
-
-def enviar_etapa21_contexto_invalido(
-    cliente_telefone,
-    phone_id_unidade,
-):
-    return _enviar_texto_etapa21(
-        cliente_telefone,
-        phone_id_unidade,
-        montar_mensagem_contexto_invalido_etapa21(),
-        evento="enviar_etapa21_contexto_invalido",
-        tipo_tratamento=TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
     )
 
 

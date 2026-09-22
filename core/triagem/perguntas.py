@@ -87,7 +87,7 @@ def montar_pergunta_triagem(
     id_etapa,
     *,
     faixa_etaria,
-    nome_pessoa=None,
+    nome_dependente=None,
 ):
     """Monta a pergunta da etapa para uma criança, adulto ou titular."""
     perguntas_etapa = ETAPAS_PERGUNTAS_TRIAGEM.get(id_etapa)
@@ -98,12 +98,12 @@ def montar_pergunta_triagem(
     if modelo is None:
         raise ValueError(f"Faixa etária da triagem inválida: {faixa_etaria}")
 
-    nome_normalizado = ""
-    if isinstance(nome_pessoa, str):
-        nome_normalizado = nome_pessoa.strip()
+    nome_dependente_normalizado = ""
+    if isinstance(nome_dependente, str):
+        nome_dependente_normalizado = nome_dependente.strip()
 
-    if faixa_etaria == FAIXA_ETARIA_INFANTIL and not nome_normalizado:
+    if faixa_etaria == FAIXA_ETARIA_INFANTIL and not nome_dependente_normalizado:
         raise ValueError("Nome da pessoa é obrigatório na triagem infantil")
 
-    pessoa = nome_normalizado or "você"
+    pessoa = nome_dependente_normalizado or "você"
     return modelo.format(pessoa=pessoa)

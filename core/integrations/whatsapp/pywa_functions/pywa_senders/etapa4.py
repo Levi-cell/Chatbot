@@ -24,11 +24,16 @@ TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_PROFISSAO_INVALIDA = "profissao_invalida"
 
 
-def enviar_etapa4(cliente_telefone, phone_id_unidade):
+def enviar_etapa4(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
     return _enviar_texto_etapa4(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa4(),
+        montar_mensagem_etapa4(repeticao=repeticao),
         evento="enviar_etapa4",
     )
 

@@ -2,7 +2,7 @@ import logging
 
 
 from core.logging_config import short_value
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
+from core.integrations.whatsapp.messages.tratamentos.retorno_inatividade import (
     montar_saudacao_retorno,
 )
 from core.repositories.atendimento.conversas import (
@@ -20,6 +20,7 @@ from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
 from core.repositories.fluxo.contextos.etapa9 import buscar_contexto_etapa9
 from core.repositories.fluxo.contextos.etapa10 import buscar_contexto_etapa10
 from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
+from core.repositories.fluxo.contextos.etapa22 import buscar_contexto_etapa22
 from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
 from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
@@ -40,6 +41,8 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_16_TRIAGEM_PERGUNTA_5,
     ETAPA_17_TRIAGEM_PERGUNTA_6,
     ETAPA_18_AGENDAMENTO,
+    ETAPA_20_DECISAO_COMENTARIO,
+    ETAPA_21_COMENTARIO_SATISFACAO,
 )
 
 
@@ -108,7 +111,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         not resposta_bot_para_mensagem_atual
         and contexto_conversa.get("id_etapa_atual") not in {None, 1}
     ):
-        nome_cliente, ultima_mensagem_bot_em = (
+        nome_titular, ultima_mensagem_bot_em = (
             buscar_contexto_saudacao_retorno(
                 id_conversa,
                 contexto_banco["id_cliente"],
@@ -116,7 +119,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
             )
         )
         saudacao_retorno = montar_saudacao_retorno(
-            nome_cliente,
+            nome_titular,
             ultima_mensagem_bot_em,
             data_historico_cliente,
             contexto_conversa.get("id_etapa_atual"),
@@ -171,7 +174,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
 
         if (
             not contexto_conversa.get("status_dependente")
-            and not contexto_especifico_etapa["nome_cliente"]
+            and not contexto_especifico_etapa["nome_titular"]
         ):
             raise ValueError(
                 "Etapa 6 do cliente sem nome persistido"
@@ -187,7 +190,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         chave_nome = (
             "nome_dependente"
             if contexto_conversa.get("status_dependente")
-            else "nome_cliente"
+            else "nome_titular"
         )
         if not contexto_especifico_etapa[chave_nome]:
             raise ValueError(
@@ -205,7 +208,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
             cursor,
         )
 
-        if not contexto_especifico_etapa["nome_cliente"]:
+        if not contexto_especifico_etapa["nome_titular"]:
             raise ValueError(
                 "Retorno da etapa 9 sem nome do cliente persistido "
                 f"(etapa={id_etapa_cliente})"
@@ -323,6 +326,24 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 cursor,
             )
         )
+
+    # Tanto a recusa na etapa 20 quanto o comentário na 21 podem enviar a 22.
+    # Respostas já gravadas são reaproveitadas; não precisam remontar a despedida.
+    if not resposta_bot_para_mensagem_atual and id_etapa_cliente in {
+        ETAPA_20_DECISAO_COMENTARIO,
+        ETAPA_21_COMENTARIO_SATISFACAO,
+    }:
+        contexto_finalizacao = buscar_contexto_etapa22(
+            id_conversa,
+            contexto_banco["id_unidade"],
+            cursor,
+        )
+        status_dependente = contexto_conversa.get("status_dependente")
+        if type(status_dependente) is not bool or status_dependente != (
+            contexto_finalizacao.pop("status_dependente_contexto_finalizacao")
+        ):
+            raise ValueError("Destino do atendimento inconsistente para a finalização")
+        contexto_especifico_etapa.update(contexto_finalizacao)
 
     if resposta_bot_para_mensagem_atual:
         id_etapa_resposta = resposta_bot_para_mensagem_atual["id_etapa"]

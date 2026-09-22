@@ -38,7 +38,7 @@ def buscar_contexto_etapa9(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    nome_cliente, nome_dependente, link_instagram = resultado
+    nome_titular, nome_dependente, link_instagram = resultado
 
     logger.debug(
         "contexto_etapa9_consultado | id_conversa=%s id_unidade=%s "
@@ -46,13 +46,13 @@ def buscar_contexto_etapa9(id_conversa, id_unidade, cursor):
         "instagram_configurado=%s",
         id_conversa,
         id_unidade,
-        bool(nome_cliente),
+        bool(nome_titular),
         bool(nome_dependente),
         bool(link_instagram),
     )
 
     return {
-        "nome_cliente": nome_cliente,
+        "nome_titular": nome_titular,
         "nome_dependente": nome_dependente,
         "link_instagram_unidade": link_instagram,
     }

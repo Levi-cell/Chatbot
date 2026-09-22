@@ -36,11 +36,13 @@ def enviar_etapa3(
     cliente_telefone,
     phone_id_unidade,
     status_dependente,
+    *,
+    repeticao=False,
 ):
     return _enviar_botoes_etapa3(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa3(status_dependente),
+        montar_mensagem_etapa3(status_dependente, repeticao=repeticao),
         evento="enviar_etapa3",
         status_dependente=status_dependente,
     )

@@ -1,22 +1,16 @@
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    RESPOSTAS_COMENTARIO_ACEITO,
     RESPOSTAS_COMENTARIO_RECUSADO,
     TIPOS_MENSAGEM_ACEITOS_ETAPA20,
     normalizar_resposta_comentario,
 )
 
 
-RESPOSTAS_GENERICAS_SEM_COMENTARIO = {
-    "ok",
-    "okay",
-    "certo",
-    "beleza",
-    *RESPOSTAS_COMENTARIO_ACEITO,
-}
-
-
 def normalizar_comentario_etapa21(conteudo_texto, tipo_mensagem):
-    """Preserva o comentário livre e rejeita confirmações sem conteúdo."""
+    """Prepara o texto para persistência, sem julgar se é um bom comentário.
+
+    Texto curto, emoji e pontuação são comentários válidos. Ausência de texto,
+    botão antigo ou recusa explícita resultam em NULL, sem impedir o encerramento.
+    """
     if tipo_mensagem != "text":
         return None
 
@@ -28,13 +22,7 @@ def normalizar_comentario_etapa21(conteudo_texto, tipo_mensagem):
     if not comentario:
         return None
 
-    resposta_normalizada = normalizar_resposta_comentario(comentario)
-
-    if (
-        not resposta_normalizada
-        or resposta_normalizada in RESPOSTAS_GENERICAS_SEM_COMENTARIO
-        or resposta_normalizada in RESPOSTAS_COMENTARIO_RECUSADO
-    ):
+    if recusou_comentario_etapa21(comentario, tipo_mensagem):
         return None
 
     return comentario

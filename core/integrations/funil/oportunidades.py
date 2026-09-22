@@ -160,10 +160,10 @@ def _montar_perguntas_e_respostas_triagem(dados_lead):
 
     if dados_lead["status_dependente"]:
         idade_pessoa = dados_lead["idade_dependente"]
-        nome_pessoa = dados_lead["nome_dependente"].strip()
+        nome_dependente = dados_lead["nome_dependente"].strip()
     else:
         idade_pessoa = dados_lead["idade_cliente"]
-        nome_pessoa = None
+        nome_dependente = None
 
     faixa_etaria = obter_faixa_etaria_triagem(idade_pessoa)
     blocos = []
@@ -172,7 +172,7 @@ def _montar_perguntas_e_respostas_triagem(dados_lead):
         pergunta = montar_pergunta_triagem(
             item["id_etapa"],
             faixa_etaria=faixa_etaria,
-            nome_pessoa=nome_pessoa,
+            nome_dependente=nome_dependente,
         )
         blocos.append(
             f"-Pergunta {numero}:\n\n"

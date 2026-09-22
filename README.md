@@ -47,6 +47,7 @@ Para desenvolver novas etapas, siga a
 | SQL de runtime | [core/repositories/README.md](core/repositories/README.md) |
 | Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
 | WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
+| Personalidade e composição das mensagens | [core/integrations/whatsapp/messages/README.md](core/integrations/whatsapp/messages/README.md) |
 | Funil de Vendas | [core/integrations/funil/README.md](core/integrations/funil/README.md) |
 
 ### Planejamento separado do runtime
@@ -273,7 +274,7 @@ e reversão de uma base existente.
 
 ## Follow-up em funcionamento
 
-O quarto serviço envia um único `Você viu a minha mensagem?` por ciclo para
+O quarto serviço envia um único lembrete, definido em `messages/followup_messages.py`, por ciclo para
 conversa ativa nas etapas 1–17, com `followup_stage = 0`, último envio confirmado
 do bot há pelo menos sete horas e última mensagem do cliente há menos de 24 horas
 (com um minuto de margem no código). A seleção também verifica unidade, fila e
@@ -281,7 +282,9 @@ bloqueios. A etapa 18 e as posteriores não recebem lembretes proativos.
 
 Na primeira reação aceita com stage positivo, o flow guarda a mensagem e repete
 a etapa com `Que bom te ver novamente`, sem usar essa reação como resposta da
-pergunta. O stage só volta a zero junto da persistência da repetição. Conversas
+pergunta. A etapa 8 é exceção: qualquer reação avança diretamente para a 9,
+sem repetir a 8 nem aceitar antecipadamente a oferta da 9. O stage só volta a
+zero junto da persistência da resposta e, nessa exceção, da transição. Conversas
 antigas ativas foram marcadas com stage 1 na migração inicial, sem disparo retroativo.
 
 Contratos: [regras de negócio](REGRAS_DE_NEGOCIO.md#follow-up-de-inatividade-e-reação-do-cliente),

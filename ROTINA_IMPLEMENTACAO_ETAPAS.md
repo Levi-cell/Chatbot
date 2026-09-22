@@ -161,6 +161,36 @@ identificam somente um evento.
 
 ### 4. Preparar mensagens
 
+Seguir o [contrato editorial de messages](core/integrations/whatsapp/messages/README.md):
+separar apresentação normal de tratamento com retomada, distinguir titular e
+dependente e revisar a fala completa com os prefixos de retorno. A etapa 1
+tem versões exclusivas de primeiro contato; as seis perguntas da triagem
+preservam seu contrato específico. Reorganizar texto não autoriza mudar
+validadores, transições ou elegibilidade de follow-up.
+
+Definir a mensagem padrão e a mensagem de repetição no arquivo da etapa.
+Importar os montadores de `messages/tratamentos/` e entregar a eles a repetição
+pura: tratamento primeiro, pergunta depois. Não copiar prefixos entre etapas.
+Usar `compor_mensagem_inicial` para apresentação + pergunta reutilizável e
+`compor_tratamento` somente para orientação + repetição. Não incluir a mensagem
+padrão completa em um tratamento, nem duplicar a pergunta dentro da apresentação.
+Quando houver variantes de participante, preservar ambas também nos tratamentos.
+**Exceção obrigatória para contexto inválido:** escrever uma mensagem própria
+que já explique como responder corretamente. Retorná-la sem `compor_tratamento`,
+sem apresentação e sem concatenar a pergunta de repetição. Preservar botões,
+opções e rodapés nativos; a saudação de inatividade de três horas pode antecedê-la
+quando elegível. A regra vale também para a triagem e a pesquisa de satisfação.
+O parâmetro `repeticao=True` seleciona a reapresentação neutra no follow-up;
+a etapa 8 avança diretamente para a 9 e não tem mensagem de repetição.
+Triagem e encerramento mantêm suas exceções. Inatividade de três horas continua
+compondo uma única saudação sobre o resultado da validação normal.
+
+Comentar os blocos seguindo a referência da etapa 7: apresentação, repetição,
+composição da inicial e tratamentos. Usar `###` nos títulos e comentários
+curtos para explicar reutilização, participante e exceções. Comentar apenas
+os blocos existentes, sem narrar cada linha. Os exemplos e critérios ficam
+na seção de comentários do contrato editorial de `messages`.
+
 Criar ou atualizar:
 
 ```text
@@ -574,12 +604,20 @@ em um estado sem atendimento.
 Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
 selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
 dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
-podem ser extraídos da reação que será ignorada. O catálogo atual repete 1–21.
+podem ser extraídos da reação que será ignorada. O catálogo atual repete 1–21,
+exceto a etapa 8, que retorna diretamente à 9.
 
-Esse caminho não chama validador, resolver, mapa de transições ou efeitos de
+Na repetição comum, esse caminho não chama validador, resolver, mapa ou efeitos de
 negócio. A saudação `Que bom te ver novamente` é aplicada ao conteúdo e aos
 botões existentes, e o flow persiste a repetição junto do reset do stage.
 Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
+
+Na exceção da 8, reutilizar `resolve_etapa8` e a transição `cliente_retornou → 9`.
+Qualquer reação processada apresenta a 9, sem aceitar antecipadamente sua oferta,
+repetir a 8 ou duplicar saudações. O cliente e o checkpoint ficam registrados na
+origem 8; o bot responde na 9. Usar a persistência normal da transição e concluir
+o follow-up validando o destino 9 no mesmo commit. Testar rollback dos dois
+efeitos e replay sem reenvio ou reset de ciclo posterior, nas duas rotas.
 
 Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
 atual é 1–17, antes do agendamento. Mudanças no mapa precisam revisar
@@ -754,7 +792,7 @@ Uma etapa está concluída somente quando:
 [ ] Django check passa
 [ ] compileall passa
 [ ] documentação continua coerente
-[ ] repetição de follow-up preserva conteúdo, botões, etapa e idempotência
+[ ] follow-up preserva conteúdo, botões e idempotência; repete a etapa ou avança 8 -> 9
 ```
 
 ## O que não fazer

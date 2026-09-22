@@ -1,11 +1,8 @@
-"""Lembrete proativo e saudação da retomada com stage positivo."""
+"""Lembrete proativo; a saudação de reação está em tratamentos/retorno_followup."""
 
-MENSAGEM_FOLLOWUP = "Você viu a minha mensagem?"
+from .tratamentos.retorno_followup import montar_saudacao_retomada_followup
 
+MENSAGEM_FOLLOWUP = ( "Olá, gostaria de continuar seu atendimento agora?"
+                      )
 
-def montar_saudacao_retomada_followup(nome=None):
-    """Formata o nome autorizado pelo worker; na etapa 1 ele deve passar None."""
-    nome_normalizado = " ".join(nome.split()) if isinstance(nome, str) else ""
-    if nome_normalizado:
-        return f"Que bom te ver novamente, {nome_normalizado}!\n\n"
-    return "Que bom te ver novamente!\n\n"
+__all__ = ["MENSAGEM_FOLLOWUP", "montar_saudacao_retomada_followup"]

@@ -12,7 +12,7 @@ def buscar_contexto_saudacao_retorno(
     """Busca nome e último envio confirmado do bot na conversa atual."""
     cursor.execute("""
         SELECT
-            NULLIF(BTRIM(cl.nome), '') AS nome_cliente,
+            NULLIF(BTRIM(cl.nome), '') AS nome_titular,
             (
                 SELECT hm.received_data_hora
                 FROM chatbot.historico_mensagens hm

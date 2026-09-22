@@ -6,6 +6,7 @@ from core.integrations.whatsapp.messages.etapa1_messages import (
     montar_mensagem_etapa1,
     montar_mensagem_financeiro_etapa1,
     montar_mensagem_financeiro_inicio,
+    montar_mensagem_informacoes_inicio,
     montar_mensagem_midia_etapa1,
     montar_mensagem_midia_inicio,
     montar_mensagem_reforco_escolar_etapa1,
@@ -33,19 +34,19 @@ TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 ###  CENARIO NORMAL
 
+
 def enviar_etapa1(
     cliente_telefone,
     phone_id_unidade,
     nome_unidade,
     nome_agente,
     genero,
+    *,
+    repeticao=False,
 ):
     saudacao = obter_saudacao_por_horario()
     mensagem_bot = montar_mensagem_etapa1(
-        saudacao,
-        nome_unidade,
-        nome_agente,
-        genero,
+        saudacao, nome_unidade, nome_agente, genero, repeticao=repeticao
     )
 
     return _enviar_texto_etapa1(
@@ -55,7 +56,28 @@ def enviar_etapa1(
         evento="enviar_etapa1",
     )
 
+
+### APRESENTAÇÃO EXPLICATIVA, SOMENTE NO PRIMEIRO CONTATO
+def enviar_etapa1_informacoes_inicio(
+    cliente_telefone,
+    phone_id_unidade,
+    nome_unidade,
+    nome_agente,
+    genero,
+):
+    mensagem_bot = montar_mensagem_informacoes_inicio(
+        obter_saudacao_por_horario(), nome_unidade, nome_agente, genero
+    )
+    return _enviar_texto_etapa1(
+        cliente_telefone,
+        phone_id_unidade,
+        mensagem_bot,
+        evento="enviar_etapa1_informacoes_inicio",
+    )
+
+
 ### PARA O WORKER QUANDO O CLIENTE INICIA COM MIDIA
+
 
 def enviar_etapa1_midia_inicio(
     cliente_telefone,
@@ -80,7 +102,9 @@ def enviar_etapa1_midia_inicio(
         tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
     )
 
+
 ### PARA O WORKER QUANDO O CLIENTE INICIA COM FINANCEIRO
+
 
 def enviar_etapa1_financeiro_inicio(
     cliente_telefone,
@@ -108,6 +132,7 @@ def enviar_etapa1_financeiro_inicio(
 
 ### PARA O WORKER QUANDO O CLIENTE INICIA PERGUNTANDO SOBRE REFORÇO ESCOLAR
 
+
 def enviar_etapa1_reforco_escolar_inicio(
     cliente_telefone,
     phone_id_unidade,
@@ -131,7 +156,9 @@ def enviar_etapa1_reforco_escolar_inicio(
         tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
+
 ## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO. com midia
+
 
 def enviar_etapa1_midia(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_midia_etapa1()
@@ -144,7 +171,9 @@ def enviar_etapa1_midia(cliente_telefone, phone_id_unidade):
         tipo_tratamento=TIPO_TRATAMENTO_MIDIA,
     )
 
+
 ## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO, com financeiro
+
 
 def enviar_etapa1_financeiro(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_financeiro_etapa1()
@@ -160,6 +189,7 @@ def enviar_etapa1_financeiro(cliente_telefone, phone_id_unidade):
 
 ## CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
 
+
 def enviar_etapa1_reforco_escolar(cliente_telefone, phone_id_unidade):
     mensagem_bot = montar_mensagem_reforco_escolar_etapa1()
 
@@ -171,7 +201,9 @@ def enviar_etapa1_reforco_escolar(cliente_telefone, phone_id_unidade):
         tipo_tratamento=TIPO_TRATAMENTO_REFORCO_ESCOLAR,
     )
 
+
 ## FUNCAO PARA O WORKER QUANDO O CLIENTE RESPONDE AO NOME ERRADO, fora do contexto
+
 
 def enviar_etapa1_contexto_nome_invalido(
     cliente_telefone,
@@ -191,6 +223,7 @@ def enviar_etapa1_contexto_nome_invalido(
 """AQUI É UM CONSTRUTOR SIMPLES DE ENVIO, A MENSAGEM QUE ELE ENVIA
  DEPENDE DO PARAMETRO QUE ELE RECEBE, ELE NÃO SUPORTA BOTÕES POIS FOI
  FEITO SÓ PARA ETAPA 1, CADA ETAPA TERÁ SEU CONSTRUTOR"""
+
 
 def _enviar_texto_etapa1(
     cliente_telefone,

@@ -95,6 +95,7 @@ def resolve_etapa17(contexto_historico):
         cliente_telefone,
         phone_id_unidade,
         link_agendamento,
+        nome_dependente=nome_dependente if status_dependente else None,
     )
     contexto_envio["resposta_triagem"] = resposta_triagem
 

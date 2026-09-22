@@ -1,34 +1,26 @@
-# ETAPA 21 - COMENTARIO DA PESQUISA DE SATISFACAO
+"""Etapa 21: comentário livre; somente mídia precisa de orientação para texto."""
 
-MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA21 = (
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+
+
+### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
+MENSAGEM_PADRAO_ETAPA21 = (
+    "Perfeito! 😊\n" "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
+)
+
+### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
+MENSAGEM_REPETICAO_ETAPA21 = (
     "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
 )
 
-MENSAGEM_ETAPA21 = (
-    "Perfeito! 😊\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA21}"
-)
 
-MENSAGEM_MIDIA_ETAPA21 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA21}"
-)
-
-MENSAGEM_CONTEXTO_INVALIDO_ETAPA21 = (
-    "Desculpe, não consegui entender seu comentário.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA21}"
-)
+def montar_mensagem_etapa21(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA21 if repeticao else MENSAGEM_PADRAO_ETAPA21
+    return mensagem
 
 
-def montar_mensagem_etapa21():
-    return MENSAGEM_ETAPA21
-
-
+### MÍDIA: ORIENTAÇÃO + REPETIÇÃO, SEM JULGAR O CONTEÚDO DO COMENTÁRIO
 def montar_mensagem_midia_etapa21():
-    return MENSAGEM_MIDIA_ETAPA21
-
-
-def montar_mensagem_contexto_invalido_etapa21():
-    return MENSAGEM_CONTEXTO_INVALIDO_ETAPA21
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA21)

@@ -2,7 +2,7 @@ import logging
 
 from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 from core.integrations.whatsapp.messages.etapa6_messages import (
-    montar_mensagem_contato_suporte_idoso_etapa6,
+    montar_mensagem_contato_comercial_etapa6,
 )
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa6 import (
@@ -68,7 +68,7 @@ def resolve_etapa6(contexto_historico):
     )
     bpa_ativo = bool(contexto_historico.get("bpa_ativo_unidade"))
     nome_dependente = contexto_historico.get("nome_dependente")
-    nome_cliente = contexto_historico.get("nome_cliente")
+    nome_titular = contexto_historico.get("nome_titular")
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -131,6 +131,10 @@ def resolve_etapa6(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             contexto_historico.get("numero_comercial_unidade"),
+            mensagem_comercial=_montar_mensagem_comercial(
+                contexto_historico,
+                resultado_idade.idade,
+            ),
         )
         return _anexar_encerramento(
             contexto_envio,
@@ -156,11 +160,9 @@ def resolve_etapa6(contexto_historico):
             phone_id_unidade,
             contexto_historico.get("numero_comercial_unidade"),
             idade_minima,
-            mensagem_comercial=montar_mensagem_contato_suporte_idoso_etapa6(
-                nome_agente=contexto_historico.get("nome_agente_unidade"),
-                genero_agente=contexto_historico.get("genero_agente_unidade"),
-                nome_cliente=nome_cliente,
-                idade_cliente=idade,
+            mensagem_comercial=_montar_mensagem_comercial(
+                contexto_historico,
+                idade,
             ),
         )
         return _anexar_encerramento(
@@ -222,13 +224,14 @@ def resolve_etapa6(contexto_historico):
         contexto_envio = enviar_etapa7_dependente(
             cliente_telefone,
             phone_id_unidade,
-            nome_dependente,
+            nome_titular=nome_titular,
+            nome_dependente=nome_dependente,
         )
     else:
         contexto_envio = enviar_etapa7_cliente(
             cliente_telefone,
             phone_id_unidade,
-            nome_cliente,
+            nome_titular=nome_titular,
         )
 
     contexto_envio["idade_aluno"] = idade
@@ -238,6 +241,20 @@ def resolve_etapa6(contexto_historico):
         contexto_envio,
         EVENTO_IDADE_VALIDA,
         etapa_destino,
+    )
+
+
+def _montar_mensagem_comercial(contexto_historico, idade_participante):
+    # A etapa 6 coleta a idade do participante. Não reutilizar idade antiga do banco
+    # nem atribuir ao titular a idade que ele informou sobre o dependente.
+    return montar_mensagem_contato_comercial_etapa6(
+        nome_agente=contexto_historico.get("nome_agente"),
+        genero_agente=contexto_historico.get("genero_agente_unidade"),
+        nome_unidade=contexto_historico.get("nome_unidade"),
+        nome_titular=contexto_historico.get("nome_titular"),
+        idade_participante=idade_participante,
+        status_dependente=contexto_historico.get("status_dependente"),
+        nome_dependente=contexto_historico.get("nome_dependente"),
     )
 
 

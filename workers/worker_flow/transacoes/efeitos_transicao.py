@@ -25,9 +25,11 @@ from core.repositories.fluxo.pesquisa_satisfacao import (
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
     validar_etapa19,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
+    TIPOS_MENSAGEM_ACEITOS_ETAPA20,
+)
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa21 import (
     normalizar_comentario_etapa21,
-    recusou_comentario_etapa21,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
@@ -1346,21 +1348,17 @@ def _persistir_comentario_satisfacao_da_etapa21(
     else:
         texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
         tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
-        desistiu = recusou_comentario_etapa21(
-            texto_cliente,
-            tipo_mensagem,
-        )
+        # Reconstruir o mesmo resultado do primeiro processamento, inclusive NULL
+        # quando não houve texto ou o cliente recusou comentar. Mídia não avança.
+        if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA20:
+            raise ValueError(
+                "Tipo de mensagem não permitido na transição 21 -> 22 "
+                f"(id_conversa={contexto_historico['id_conversa']})"
+            )
         comentario_satisfacao = normalizar_comentario_etapa21(
             texto_cliente,
             tipo_mensagem,
         )
-
-        if comentario_satisfacao is None and not desistiu:
-            raise ValueError(
-                "Comentario de satisfacao nao reconstruido na "
-                "transicao 21 -> 22 "
-                f"(id_conversa={contexto_historico['id_conversa']})"
-            )
 
     resultado = salvar_comentario_satisfacao(
         contexto_historico["id_conversa"],

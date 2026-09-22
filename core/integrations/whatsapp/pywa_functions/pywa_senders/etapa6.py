@@ -40,8 +40,13 @@ TIPO_TRATAMENTO_IDADE_INVALIDA = "idade_invalida"
 
 
 # CENARIO NORMAL: PERGUNTAR A IDADE DO PROPRIO CLIENTE
-def enviar_etapa6_cliente(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_idade_etapa6()
+def enviar_etapa6_cliente(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
+    mensagem_bot = montar_mensagem_idade_etapa6(repeticao=repeticao)
 
     return _enviar_texto_etapa6(
         cliente_telefone,
@@ -56,9 +61,11 @@ def enviar_etapa6_dependente(
     cliente_telefone,
     phone_id_unidade,
     nome_dependente,
+    *,
+    repeticao=False,
 ):
     mensagem_bot = montar_mensagem_idade_dependente_etapa6(
-        nome_dependente
+        nome_dependente, repeticao=repeticao
     )
 
     return _enviar_texto_etapa6(
@@ -88,9 +95,7 @@ def enviar_etapa6_dependente_midia(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = montar_mensagem_idade_dependente_etapa6_midia(
-        nome_dependente
-    )
+    mensagem_bot = montar_mensagem_idade_dependente_etapa6_midia(nome_dependente)
 
     return _enviar_texto_etapa6(
         cliente_telefone,
@@ -192,10 +197,8 @@ def enviar_etapa6_dependente_contexto_idade_invalida(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_contexto_idade_dependente_invalida_etapa6(
-            nome_dependente
-        )
+    mensagem_bot = montar_mensagem_contexto_idade_dependente_invalida_etapa6(
+        nome_dependente
     )
 
     return _enviar_texto_etapa6(
@@ -247,11 +250,13 @@ def enviar_etapa6_idade_acima_99(
     cliente_telefone,
     phone_id_unidade,
     numero_comercial,
+    *,
+    mensagem_comercial,
 ):
     mensagem_bot = montar_mensagem_idade_acima_99_etapa6()
     botao_url = URLButton(
         title=montar_botao_idade_acima_99_etapa6(),
-        url=montar_link_numero_comercial_whatsapp(numero_comercial),
+        url=montar_link_numero_comercial_whatsapp(numero_comercial, mensagem_comercial),
     )
 
     return _enviar_texto_etapa6(
@@ -326,9 +331,7 @@ def _enviar_texto_etapa6(
             "mensagem_bot": mensagem_bot,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": ID_ETAPA6,
-            "tipo_mensagem": (
-                "interactive_cta_url" if botao_url else "text"
-            ),
+            "tipo_mensagem": ("interactive_cta_url" if botao_url else "text"),
             "canal": "meta_whatsapp",
             "atualizar_conversa": True,
             "atualizar_last_from_bot": True,

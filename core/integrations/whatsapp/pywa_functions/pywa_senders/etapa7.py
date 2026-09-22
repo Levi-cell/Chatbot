@@ -40,9 +40,13 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_invalida"
 def enviar_etapa7_cliente(
     cliente_telefone,
     phone_id_unidade,
-    nome_cliente,
+    nome_titular,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_oferta_cliente_etapa7(nome_cliente)
+    mensagem_bot = montar_mensagem_oferta_cliente_etapa7(
+        nome_titular, repeticao=repeticao
+    )
 
     return _enviar_texto_etapa7(
         cliente_telefone,
@@ -56,10 +60,15 @@ def enviar_etapa7_cliente(
 def enviar_etapa7_dependente(
     cliente_telefone,
     phone_id_unidade,
+    nome_titular,
     nome_dependente,
+    *,
+    repeticao=False,
 ):
     mensagem_bot = montar_mensagem_oferta_dependente_etapa7(
-        nome_dependente,
+        nome_titular=nome_titular,
+        nome_dependente=nome_dependente,
+        repeticao=repeticao,
     )
 
     return _enviar_texto_etapa7(
@@ -161,10 +170,8 @@ def enviar_etapa7_dependente_reforco_escolar(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_oferta_dependente_reforco_escolar_etapa7(
-            nome_dependente,
-        )
+    mensagem_bot = montar_mensagem_oferta_dependente_reforco_escolar_etapa7(
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(
@@ -181,9 +188,7 @@ def enviar_etapa7_cliente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
 ):
-    mensagem_bot = (
-        montar_mensagem_oferta_cliente_contexto_invalido_etapa7()
-    )
+    mensagem_bot = montar_mensagem_oferta_cliente_contexto_invalido_etapa7()
 
     return _enviar_texto_etapa7(
         cliente_telefone,
@@ -200,10 +205,8 @@ def enviar_etapa7_dependente_contexto_invalido(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_oferta_dependente_contexto_invalido_etapa7(
-            nome_dependente,
-        )
+    mensagem_bot = montar_mensagem_oferta_dependente_contexto_invalido_etapa7(
+        nome_dependente,
     )
 
     return _enviar_texto_etapa7(

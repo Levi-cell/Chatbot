@@ -35,7 +35,7 @@ def resolve_etapa8(contexto_historico):
     status_dependente = bool(
         contexto_historico.get("status_dependente")
     )
-    nome_cliente = contexto_historico.get("nome_cliente")
+    nome_titular = contexto_historico.get("nome_titular")
     nome_dependente = contexto_historico.get("nome_dependente")
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
@@ -64,7 +64,7 @@ def resolve_etapa8(contexto_historico):
         contexto_envio = enviar_etapa9_dependente(
             cliente_telefone,
             phone_id_unidade,
-            nome_cliente,
+            nome_titular,
             nome_dependente,
             incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
         )
@@ -72,7 +72,7 @@ def resolve_etapa8(contexto_historico):
         contexto_envio = enviar_etapa9_cliente(
             cliente_telefone,
             phone_id_unidade,
-            nome_cliente,
+            nome_titular,
             incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
         )
 

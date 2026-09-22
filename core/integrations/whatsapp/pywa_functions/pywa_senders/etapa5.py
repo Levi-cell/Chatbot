@@ -26,8 +26,13 @@ TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 
 # CENARIO NORMAL: ATENDIMENTO PARA OUTRA PESSOA
-def enviar_etapa5(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_etapa5()
+def enviar_etapa5(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
+    mensagem_bot = montar_mensagem_etapa5(repeticao=repeticao)
 
     return _enviar_texto_etapa5(
         cliente_telefone,

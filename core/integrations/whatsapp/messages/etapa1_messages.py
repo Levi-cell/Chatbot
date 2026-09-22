@@ -1,166 +1,120 @@
+"""Etapa 1: único ponto com tratamentos de primeiro contato."""
+
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     RODAPE_ETAPA1_BOAS_VINDAS,
     montar_texto_com_rodape,
 )
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+)
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-### INICIO NORMAL
-
-MENSAGEM_ETAPA1 = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "assistente do {nome_unidade}! ☺️\n"
-    "Como você se chama?"
+### APRESENTAÇÃO EXCLUSIVA DO PRIMEIRO CONTATO
+APRESENTACAO_ETAPA1 = (
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! "
+    "☺️\n"
+    "Hoje vamos dar os primeiros passos para a sua primeira experiência Supera! 🧡"
 )
 
-def montar_mensagem_etapa1(saudacao, nome_unidade, nome_agente, genero):
-    return montar_texto_com_rodape(
-        MENSAGEM_ETAPA1.format(
-            **_montar_contexto_apresentacao(
-                saudacao,
-                nome_unidade,
-                nome_agente,
-                genero,
-            )
-        ),
-        RODAPE_ETAPA1_BOAS_VINDAS,
+### PERGUNTA QUE COMPLETA A MENSAGEM INICIAL
+MENSAGEM_PADRAO_ETAPA1 = "Como você se chama?"
+
+### PERGUNTA RETOMADA NOS TRATAMENTOS E NO FOLLOW-UP, SEM APRESENTAÇÃO
+MENSAGEM_REPETICAO_ETAPA1 = "Me diz, qual o seu primeiro nome?"
+
+
+### ABERTURA EXPLICATIVA: PEDIDO DE INFORMAÇÕES NO PRIMEIRO CONTATO
+# Mensagem completa: a própria orientação já pede o nome. Não concatenar
+# apresentação padrão, repetição ou rodapé à versão aprovada desta abertura.
+MENSAGEM_INFORMACOES_INICIO_ETAPA1 = (
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n\n"
+    "Hoje vou te ajudar a conhecer o Supera! 🧡\n\n"
+    "Pense no Supera como uma *academia para o cérebro*! "
+    "Aqui melhoramos a capacidade de aprender diferentes assuntos com mais "
+    "facilidade. 🧠💪\n\n"
+    "Para eu te orientar melhor e passar mais detalhes, me diz, como você se chama?"
+)
+
+
+def montar_mensagem_informacoes_inicio(saudacao, nome_unidade, nome_agente, genero):
+    return MENSAGEM_INFORMACOES_INICIO_ETAPA1.format(
+        **_montar_contexto_apresentacao(saudacao, nome_unidade, nome_agente, genero)
     )
 
 
-
-
-
-### INICIO PORÉM CLIENTE INICIA COM MIDA
-
-MENSAGEM_MIDIA_INICIO = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "assistente do {nome_unidade}! ☺️\n"
-    "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
-    "Me diz, qual o seu primeiro nome?"
-)
-
-def montar_mensagem_midia_inicio(
-    saudacao,
-    nome_unidade,
-    nome_agente,
-    genero,
+# APRESENTAÇÃO NORMAL OU REAPRESENTAÇÃO APÓS FOLLOW-UP
+def montar_mensagem_etapa1(
+    saudacao, nome_unidade, nome_agente, genero, *, repeticao=False
 ):
-    return montar_texto_com_rodape(
-        MENSAGEM_MIDIA_INICIO.format(
-            **_montar_contexto_apresentacao(
-                saudacao,
-                nome_unidade,
-                nome_agente,
-                genero,
-            )
-        ),
-        RODAPE_ETAPA1_BOAS_VINDAS,
+    if repeticao:
+        return MENSAGEM_REPETICAO_ETAPA1
+    return _montar_inicio(
+        saudacao, nome_unidade, nome_agente, genero, MENSAGEM_PADRAO_ETAPA1
     )
 
 
+# PRIMEIRO CONTATO COM TRATAMENTO
 
 
+def montar_mensagem_midia_inicio(saudacao, nome_unidade, nome_agente, genero):
+    mensagem = montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA1)
+    return _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem)
 
-### INICIO PORÈM CLIENTE INICIA COM PERGUNTA FINANCEIRA
 
-MENSAGEM_FINANCEIRO_INICIO = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-    "assistente do {nome_unidade}! ☺️\n\n"
-    + montar_mensagem_tratamento_financeiro("Me diz, qual o seu primeiro nome?")
-)
+def montar_mensagem_financeiro_inicio(saudacao, nome_unidade, nome_agente, genero):
+    mensagem = montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA1)
+    return _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem)
 
-# mensagem_final = MENSAGEM_FINANCEIRO_INICIO + Midia.santo_andre (Ideia futura)
 
-def montar_mensagem_financeiro_inicio(
-    saudacao,
-    nome_unidade,
-    nome_agente,
-    genero,
-):
-    return montar_texto_com_rodape(
-        MENSAGEM_FINANCEIRO_INICIO.format(
-            **_montar_contexto_apresentacao(
-                saudacao,
-                nome_unidade,
-                nome_agente,
-                genero,
-            )
-        ),
-        RODAPE_ETAPA1_BOAS_VINDAS,
-    )
+def montar_mensagem_reforco_escolar_inicio(saudacao, nome_unidade, nome_agente, genero):
+    mensagem = montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA1)
+    return _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem)
 
-### CLIENTE RESPONDE AO NOME COM MIDIA
 
-MENSAGEM_MIDIA_ETAPA1 = (
-    "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
-    "Me diz, qual o seu primeiro nome?"
-)
+# TRATAMENTOS APÓS A APRESENTAÇÃO
+
 
 def montar_mensagem_midia_etapa1():
-    return MENSAGEM_MIDIA_ETAPA1
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA1)
 
-
-
-### CLIENTE RESPONDE AO NOME COM FINANCEIRO
-
-MENSAGEM_FINANCEIRO_ETAPA1 = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual o seu primeiro nome?"
-)
 
 def montar_mensagem_financeiro_etapa1():
-    return MENSAGEM_FINANCEIRO_ETAPA1
-
-
-### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR NO INICIO
-
-MENSAGEM_RETOMADA_ETAPA1 = "Me diz, qual o seu primeiro nome?"
-
-
-def montar_mensagem_reforco_escolar_inicio(
-    saudacao,
-    nome_unidade,
-    nome_agente,
-    genero,
-):
-    apresentacao = (
-        "{saudacao}! Sou {artigo_agente} {nome_agente}, "
-        "assistente do {nome_unidade}! ☺️\n"
-    ).format(
-        **_montar_contexto_apresentacao(
-            saudacao,
-            nome_unidade,
-            nome_agente,
-            genero,
-        )
-    )
-    mensagem = (
-        f"{apresentacao}"
-        f"{montar_mensagem_tratamento_reforco_escolar(MENSAGEM_RETOMADA_ETAPA1)}"
-    )
-    return montar_texto_com_rodape(
-        mensagem,
-        RODAPE_ETAPA1_BOAS_VINDAS,
-    )
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA1)
 
 
 def montar_mensagem_reforco_escolar_etapa1():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_ETAPA1,
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA1)
+
+
+### EXCEÇÃO DE CONTEXTO: A ORIENTAÇÃO JÁ PEDE O NOME, SEM OUTRA PERGUNTA
+def montar_mensagem_contexto_nome_invalido_etapa1():
+    """Exceção: esta orientação já contém o pedido do primeiro nome."""
+    return (
+        "Olha, não consegui entender, "
+        "digite só seu primeiro nome, por exemplo: Pedro."
     )
 
 
-### CLIENTE RESPONDE AO NOME COM CONTEXTO INVALIDO
-
-MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA1 = (
-    "Não consegui entender o seu nome. Me fala só seu primeiro nome, "
-    "exemplo: Pedro"
-)
-
-def montar_mensagem_contexto_nome_invalido_etapa1():
-    return MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA1
+# Na abertura, o conteúdo pode ser a pergunta pura ou tratamento + pergunta.
+# A apresentação é acrescentada uma única vez, somente nesse primeiro contato.
+def _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem):
+    apresentacao = APRESENTACAO_ETAPA1.format(
+        **_montar_contexto_apresentacao(saudacao, nome_unidade, nome_agente, genero)
+    )
+    return montar_texto_com_rodape(
+        compor_mensagem_inicial(apresentacao, mensagem),
+        RODAPE_ETAPA1_BOAS_VINDAS,
+    )
 
 
 def _montar_contexto_apresentacao(

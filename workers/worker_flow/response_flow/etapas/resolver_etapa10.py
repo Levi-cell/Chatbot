@@ -136,6 +136,8 @@ def resolve_etapa10(contexto_historico):
     contexto_envio = enviar_etapa11(
         cliente_telefone,
         phone_id_unidade,
+        status_dependente=contexto_historico.get("status_dependente"),
+        nome_dependente=contexto_historico.get("nome_dependente"),
     )
     contexto_envio["email_cliente"] = resultado_email.email
     contexto_envio["resultado_coleta_email"] = (

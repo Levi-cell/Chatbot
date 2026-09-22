@@ -1,65 +1,49 @@
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+"""Etapa 5: apresentação, repetição e tratamentos compostos."""
+
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-### MENSAGENS EXCLUSIVA PARA DEPENDENTE
+### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
+MENSAGEM_PADRAO_ETAPA5 = (
 
-### MENSAGEM DE INICIO PERGUNTANDO O NOME
+    "Certo, qual é o *nome* do dependente?"
+)
 
-MENSAGEM_ETAPA5 = (
-    "Certo, agora me diz, qual o primeiro nome da pessoa que receberá o atendimento?"
+### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
+MENSAGEM_REPETICAO_ETAPA5 = "Me diz, qual o nome da pessoa?"
+
+ORIENTACAO_CONTEXTO_ETAPA5 = (
+    "Olha, não consegui entender, digite só o primeiro "
+    "nome, por exemplo: Pedro."
 )
 
 
-def montar_mensagem_etapa5():
-    return MENSAGEM_ETAPA5
+def montar_mensagem_etapa5(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA5 if repeticao else MENSAGEM_PADRAO_ETAPA5
+    return mensagem
 
 
-### CLIENTE RESPONDE AO NOME DA PESSOA COM MIDIA
-
-MENSAGEM_MIDIA_ETAPA5 = (
-    "Olha não reconhecemos ainda mensagem com mídia, apenas texto.\n"
-    "Me diz, qual o primeiro nome da pessoa?"
-)
+### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO, SEM A MENSAGEM INICIAL
+def montar_mensagem_financeiro_etapa5():
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA5)
 
 
 def montar_mensagem_midia_etapa5():
-    return MENSAGEM_MIDIA_ETAPA5
-
-
-### CLIENTE RESPONDE AO NOME DA PESSOA COM FINANCEIRO
-
-MENSAGEM_FINANCEIRO_ETAPA5 = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual o primeiro nome da pessoa que receberá o atendimento?"
-)
-
-
-def montar_mensagem_financeiro_etapa5():
-    return MENSAGEM_FINANCEIRO_ETAPA5
-
-
-### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
-
-MENSAGEM_RETOMADA_ETAPA5 = (
-    "Fala para mim, qual o primeiro nome da pessoa?"
-)
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA5)
 
 
 def montar_mensagem_reforco_escolar_etapa5():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_ETAPA5,
-    )
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA5)
 
 
-### CLIENTE RESPONDE O NOME DA PESSOA COM MENSAGEM FORA DE CONTEXTO
-
-MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA5 = (
-    "Não consegui entender o nome da pessoa. Me fala só o primeiro nome dela, "
-    "exemplo: Pedro"
-)
-
-
+### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_contexto_nome_invalido_etapa5():
-    return MENSAGEM_CONTEXTO_NOME_INVALIDO_ETAPA5
+    return ORIENTACAO_CONTEXTO_ETAPA5

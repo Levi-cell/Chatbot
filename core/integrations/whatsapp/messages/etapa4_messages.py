@@ -1,48 +1,48 @@
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+"""Etapa 4: apresentação, repetição e tratamentos compostos."""
+
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-MENSAGEM_ETAPA4 = "Antes de prosseguirmos, me fala, qual sua profissão hoje?"
-
-
-def montar_mensagem_etapa4():
-    return MENSAGEM_ETAPA4
-
-
-MENSAGEM_MIDIA_ETAPA4 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
+### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
+MENSAGEM_PADRAO_ETAPA4 = (
+    "Certo, agora me diz, qual é a sua *profissão*? "
 )
+
+### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
+MENSAGEM_REPETICAO_ETAPA4 = "Me diz, qual é a sua profissão?"
+
+ORIENTACAO_CONTEXTO_ETAPA4 = (
+    "Olha, não consegui entender. Me conta, com o que você "
+    "trabalha hoje?"
+)
+
+
+def montar_mensagem_etapa4(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA4 if repeticao else MENSAGEM_PADRAO_ETAPA4
+    return mensagem
+
+
+### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO, SEM A MENSAGEM INICIAL
+def montar_mensagem_financeiro_etapa4():
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA4)
 
 
 def montar_mensagem_midia_etapa4():
-    return MENSAGEM_MIDIA_ETAPA4
-
-
-MENSAGEM_FINANCEIRO_ETAPA4 = montar_mensagem_tratamento_financeiro(
-    "Me fala, qual sua profissão?"
-)
-
-
-def montar_mensagem_financeiro_etapa4():
-    return MENSAGEM_FINANCEIRO_ETAPA4
-
-
-MENSAGEM_RETOMADA_ETAPA4 = "Me fala novamente, qual sua profissão?"
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA4)
 
 
 def montar_mensagem_reforco_escolar_etapa4():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_ETAPA4,
-    )
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA4)
 
 
-MENSAGEM_CONTEXTO_PROFISSAO_INVALIDA_ETAPA4 = (
-    "Não consegui entender, por favor me diz novamente, qual sua profissão?"
-)
-
-
+### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_contexto_profissao_invalida_etapa4():
-    return MENSAGEM_CONTEXTO_PROFISSAO_INVALIDA_ETAPA4
+    return ORIENTACAO_CONTEXTO_ETAPA4

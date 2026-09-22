@@ -89,7 +89,7 @@ def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
     return dict(
         zip(
             (
-                "nome_cliente",
+                "nome_titular",
                 "nome_dependente",
                 "idade_dependente",
                 "nome_unidade",
@@ -140,7 +140,13 @@ def registrar_retomada(conversa, mensagem, cursor):
     )
 
 
-def concluir_retomada(contexto, data_bot, cursor):
+def concluir_retomada(contexto, data_bot, cursor, *, id_etapa_resultante=None):
+    """Conclui o ciclo após a resposta, na etapa repetida ou no destino autorizado."""
+    etapa_esperada = (
+        contexto["id_etapa_atual"]
+        if id_etapa_resultante is None
+        else id_etapa_resultante
+    )
     proteger_conversa(contexto["id_conversa"], contexto["lock_version"], cursor)
     cursor.execute(
         """
@@ -154,14 +160,14 @@ def concluir_retomada(contexto, data_bot, cursor):
             data_bot,
             contexto["id_conversa"],
             contexto["lock_version"],
-            contexto["id_etapa_atual"],
+            etapa_esperada,
             contexto["stage_anterior"],
             contexto["followup_em"],
         ),
     )
     if cursor.rowcount != 1:
         raise LockConversaPerdido(
-            "Ciclo de follow-up mudou antes da confirmação da repetição"
+            "Ciclo de follow-up mudou antes da confirmação da retomada"
         )
     msg = contexto["mensagem_cliente_atual"]
     cursor.execute(

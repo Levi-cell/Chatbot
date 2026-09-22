@@ -5,6 +5,7 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa1 import (
     enviar_etapa1_contexto_nome_invalido,
     enviar_etapa1_financeiro,
     enviar_etapa1_financeiro_inicio,
+    enviar_etapa1_informacoes_inicio,
     enviar_etapa1_midia,
     enviar_etapa1_midia_inicio,
     enviar_etapa1_reforco_escolar,
@@ -14,6 +15,9 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_etapa2,
 )
 from core.logging_config import short_value
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_inicio_etapa1 import (
+    validar_pedido_informacoes_supera,
+)
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     TIPO_TRATAMENTO_FINANCEIRO,
     validar_pergunta_financeira,
@@ -154,8 +158,18 @@ def resolve_etapa1(contexto_historico):
             phone_id_unidade,
         )
 
-    # Primeiro contato normal: inicializa a conversa na etapa 1.
+    # As duas aberturas inicializam a etapa 1 e aguardam o nome. A explicação
+    # só se aplica ao primeiro texto, depois dos tratamentos mais específicos;
+    # não substitui a validação do nome nem a repetição após follow-up.
     if conversa_sem_etapa:
+        if tipo_mensagem == "text" and validar_pedido_informacoes_supera(texto_cliente):
+            return enviar_etapa1_informacoes_inicio(
+                cliente_telefone,
+                phone_id_unidade,
+                nome_unidade,
+                nome_agente,
+                genero,
+            )
         return enviar_etapa1(
             cliente_telefone,
             phone_id_unidade,
@@ -199,7 +213,7 @@ def resolve_etapa1(contexto_historico):
     contexto_envio = enviar_etapa2(
         cliente_telefone,
         phone_id_unidade,
-        nome=resultado_nome.primeiro_nome,
+        nome_titular=resultado_nome.primeiro_nome,
     )
     contexto_envio["primeiro_nome_cliente"] = resultado_nome.primeiro_nome
 

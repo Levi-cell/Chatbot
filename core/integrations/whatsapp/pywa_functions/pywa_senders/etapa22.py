@@ -15,8 +15,17 @@ logger = logging.getLogger("whatsapp.etapa22")
 
 ID_ETAPA22 = 22
 # ETAPA TERMINAL: ENVIADA APOS COMENTARIO OU RECUSA EXPLICITA
-def enviar_etapa22(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_etapa22()
+def enviar_etapa22(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    status_dependente=False,
+    nome_dependente=None,
+):
+    mensagem_bot = montar_mensagem_etapa22(
+        status_dependente=status_dependente,
+        nome_dependente=nome_dependente,
+    )
 
     try:
         cliente_wa = conta_wa(phone_id_unidade)

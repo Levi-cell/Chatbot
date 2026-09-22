@@ -1,4 +1,4 @@
-"""Checkpoint de reação e persistência da repetição; nunca controla commits."""
+"""Checkpoint da reação: repetição ou exceção 8 -> 9; nunca controla commits."""
 
 import logging
 
@@ -13,6 +13,19 @@ from core.repositories.atendimento.historico import (
     buscar_resposta_bot_por_mensagem_cliente,
     inserir_historico_mensagem_cliente,
     inserir_historico_mensagem_bot,
+)
+
+from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
+from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
+    montar_contexto_transicao,
+)
+from workers.worker_flow.response_flow.transicoes.eventos import (
+    ETAPA_8_OFERTA_ADIADA,
+    ETAPA_9_RETORNO_OFERTA,
+    EVENTO_CLIENTE_RETORNOU,
+)
+from workers.worker_flow.transacoes.persistencia_resposta import (
+    atualizar_banco_com_contexto_final,
 )
 
 logger = logging.getLogger("worker.retorno_followup")
@@ -97,6 +110,7 @@ def preparar_retorno_followup(mensagem, contexto_banco, cursor):
     if resposta:
         resposta_normalizada = {
             "id_mensagem": resposta[0],
+            "id_etapa": resposta[2],
             "received_data_hora": resposta[3],
             "id_hash_msg": resposta[7],
         }
@@ -109,7 +123,7 @@ def preparar_retorno_followup(mensagem, contexto_banco, cursor):
         conversa["lock_version"],
         bool(resposta),
     )
-    return {
+    contexto = {
         "retorno_followup": True,
         "id_conversa": id_conversa,
         "id_cliente": contexto_banco["id_cliente"],
@@ -125,10 +139,23 @@ def preparar_retorno_followup(mensagem, contexto_banco, cursor):
         "mensagem_cliente_inserida": inserido,
         "resposta_bot_para_mensagem_atual": resposta_normalizada,
     }
+    if not resposta and retomada["id_etapa"] == ETAPA_8_OFERTA_ADIADA:
+        # A origem permanece 8 no histórico do cliente e no checkpoint.
+        # O resolver autoriza 8 -> 9 pelo mapa antes de enviar a resposta.
+        contexto.update(
+            montar_contexto_transicao(
+                ETAPA_8_OFERTA_ADIADA,
+                listar_transicoes_permitidas(ETAPA_8_OFERTA_ADIADA, cursor),
+            )
+        )
+        contexto["id_etapa_resposta"] = ETAPA_9_RETORNO_OFERTA
+    return contexto
 
 
 def persistir_retorno_followup(contexto, envio, cursor):
     resposta = contexto.get("resposta_bot_para_mensagem_atual")
+    if not resposta and contexto["id_etapa_atual"] == ETAPA_8_OFERTA_ADIADA:
+        return _persistir_retorno_etapa8(contexto, envio, cursor)
     if resposta:
         # Replay não zera um possível ciclo novo nem altera last_interaction_at.
         id_bot, data_bot, inserido = (
@@ -152,9 +179,36 @@ def persistir_retorno_followup(contexto, envio, cursor):
         "id_hash_msg_bot": envio["id_hash_msg_bot"],
         "id_historico_bot": id_bot,
         "data_historico_bot": data_bot,
-        "id_etapa_resultante": contexto["id_etapa_atual"],
+        # Um retry pode recuperar tanto a antiga repetição da 8 quanto o novo
+        # avanço para a 9. Nunca reinterpretar uma resposta já confirmada.
+        "id_etapa_resultante": (
+            resposta.get("id_etapa", contexto["id_etapa_atual"])
+            if resposta
+            else contexto["id_etapa_atual"]
+        ),
         "movimento_conversa": "sem_avanco",
         "atualizar_conversa": False,
         "atualizar_last_from_bot": not bool(resposta),
         "intencao_encerramento": None,
     }
+
+
+def _persistir_retorno_etapa8(contexto, envio, cursor):
+    """Grava a transição normal e conclui o follow-up no mesmo commit do worker."""
+    if (
+        not envio.get("enviou")
+        or envio.get("resposta_ja_existia")
+        or envio.get("tratamento")
+        or envio.get("id_etapa_origem_transicao") != ETAPA_8_OFERTA_ADIADA
+        or envio.get("evento_transicao") != EVENTO_CLIENTE_RETORNOU
+        or envio.get("id_etapa_resultante") != ETAPA_9_RETORNO_OFERTA
+    ):
+        raise ValueError("Retorno de follow-up da etapa 8 exige a transição 8 -> 9")
+    final = atualizar_banco_com_contexto_final(contexto, envio, cursor)
+    concluir_retomada(
+        contexto,
+        final["data_historico_bot"],
+        cursor,
+        id_etapa_resultante=ETAPA_9_RETORNO_OFERTA,
+    )
+    return final

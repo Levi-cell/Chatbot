@@ -62,6 +62,10 @@ Commit: `ec74d26398724e192f798397d71b189ed08c805c`
 
 Commit: `50e59879c4c2aa6e0f6cf676adf50d40aec8ca03`
 
+### V1.4.0 — Reservas aprimoradas, mensagens revisadas, encaminhamento contextualizado
+
+Commit: `701b834fc178efcd42591692b9c35ce5827b840c`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

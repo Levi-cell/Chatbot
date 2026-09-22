@@ -16,7 +16,8 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
             cl.nome,
             d.nome_dependente,
             u.nome_agente,
-            u.genero
+            u.genero,
+            u.nome_unidade
         FROM chatbot.unidade u
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
@@ -43,10 +44,11 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         numero_comercial,
         bpa_ativo,
         idade_minima_suporte,
-        nome_cliente,
+        nome_titular,
         nome_dependente,
         nome_agente,
         genero_agente,
+        nome_unidade,
     ) = resultado
 
     logger.debug(
@@ -58,7 +60,7 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         bool(numero_comercial),
         bool(bpa_ativo),
         idade_minima_suporte,
-        bool(nome_cliente),
+        bool(nome_titular),
         bool(nome_dependente),
     )
 
@@ -68,8 +70,9 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
         "numero_comercial_unidade": numero_comercial,
         "bpa_ativo_unidade": bool(bpa_ativo),
         "idade_minima_suporte": idade_minima_suporte,
-        "nome_cliente": nome_cliente,
+        "nome_titular": nome_titular,
         "nome_dependente": nome_dependente,
-        "nome_agente_unidade": nome_agente,
+        "nome_agente": nome_agente,
         "genero_agente_unidade": genero_agente,
+        "nome_unidade": nome_unidade,
     }

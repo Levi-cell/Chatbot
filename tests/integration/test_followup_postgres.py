@@ -10,7 +10,7 @@ from unittest.mock import patch
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
-from core.database.deploy_database import bank_script
+from core.database.deploy_database import bank_script, etapa_transicao_script
 from core.repositories.atendimento import followup as repo
 from core.repositories.atendimento.conversas import (
     tentar_lock_conversa,
@@ -75,6 +75,8 @@ class FollowupPostgresTests(unittest.TestCase):
             INSERT INTO chatbot.conversa(id_conversa, id_cliente, id_unidade, id_etapa_atual)
             VALUES (1, 1, 1, 11);
         """)
+        with patch.object(etapa_transicao_script, "transacao_deploy", transacao_local):
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
         cls.conn.commit()
 
     @classmethod
@@ -250,6 +252,12 @@ class FollowupPostgresTests(unittest.TestCase):
         self.assertEqual(self.cursor.fetchone(), (0, self.agora, 0, 11))
 
     def test_reacao_real_rollback_e_replay_preservam_ciclo_posterior(self):
+        self._verificar_reacao_real(origem=11, destino=11)
+
+    def test_reacao_etapa8_avanca_e_rollback_e_replay_preservam_ciclo(self):
+        self._verificar_reacao_real(origem=8, destino=9)
+
+    def _verificar_reacao_real(self, *, origem, destino):
         mensagem = {
             "id_mensagem": 10,
             "id_hash": "wamid.reacao",
@@ -263,10 +271,17 @@ class FollowupPostgresTests(unittest.TestCase):
         envio = {
             "enviou": True,
             "id_hash_msg_bot": "wamid.repeticao",
-            "id_etapa_resultante": 11,
+            "id_etapa_resultante": destino,
             "tipo_mensagem": "text",
             "mensagem_bot": "Que bom te ver novamente, Ana!\n\nPodemos começar?",
         }
+        if origem == 8:
+            envio.update(
+                id_etapa_origem_transicao=8,
+                evento_transicao="cliente_retornou",
+                tipo_mensagem="interactive_button",
+                mensagem_bot="Que bom te ver novamente, Ana!\n\nVamos reservar sua experiência?",
+            )
         self.cursor.execute(
             """
             INSERT INTO chatbot.fila_mensagens
@@ -282,8 +297,8 @@ class FollowupPostgresTests(unittest.TestCase):
             with self.subTest(legado=followup_em is None):
                 self.cursor.execute("SAVEPOINT ciclo_reacao")
                 self.cursor.execute(
-                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5",
-                    (followup_em,),
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5, id_etapa_atual=%s",
+                    (followup_em, origem),
                 )
                 _, versao = tentar_lock_conversa(1, self.cursor)
                 contexto_banco = repo.reler_conversa(
@@ -297,12 +312,14 @@ class FollowupPostgresTests(unittest.TestCase):
                 self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
                 self.assertEqual(self.cursor.fetchone()[0], 1)
 
-                # A falha após gravar a repetição deve reverter histórico e reset juntos.
+                # Uma falha deve reverter histórico, avanço (na etapa 8) e reset juntos.
                 self.cursor.execute("SAVEPOINT confirmacao")
                 persistir_retorno_followup(contexto, envio, self.cursor)
                 self.cursor.execute("ROLLBACK TO SAVEPOINT confirmacao")
-                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
-                self.assertEqual(self.cursor.fetchone()[0], 1)
+                self.cursor.execute(
+                    "SELECT followup_stage, id_etapa_atual, turnos_sem_avanco FROM chatbot.conversa"
+                )
+                self.assertEqual(self.cursor.fetchone(), (1, origem, 5))
                 self.cursor.execute(
                     "SELECT concluida_em FROM chatbot.followup_retomada"
                 )
@@ -314,15 +331,26 @@ class FollowupPostgresTests(unittest.TestCase):
                 self.cursor.execute(
                     "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
                 )
-                self.assertEqual(self.cursor.fetchone(), (0, followup_em, 5, 11))
-                self.cursor.execute(
-                    "SELECT conteudo_texto FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
+                self.assertEqual(
+                    self.cursor.fetchone(),
+                    (0, followup_em, 0 if origem == 8 else 5, destino),
                 )
-                self.assertEqual(self.cursor.fetchone()[0], envio["mensagem_bot"])
+                self.cursor.execute(
+                    "SELECT conteudo_texto, id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
+                )
+                self.assertEqual(self.cursor.fetchone(), (envio["mensagem_bot"], destino))
+                self.cursor.execute(
+                    "SELECT id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.reacao'"
+                )
+                self.assertEqual(self.cursor.fetchone()[0], origem)
+                self.cursor.execute("SELECT id_etapa, concluida_em FROM chatbot.followup_retomada")
+                etapa_checkpoint, concluida_em = self.cursor.fetchone()
+                self.assertEqual(etapa_checkpoint, origem)
+                self.assertIsNotNone(concluida_em)
 
                 # Simula recuperação da mesma fila após outro ciclo já ter começado.
                 self.cursor.execute(
-                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s",
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, id_etapa_atual=10",
                     (self.agora + timedelta(hours=1),),
                 )
                 self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
@@ -340,6 +368,7 @@ class FollowupPostgresTests(unittest.TestCase):
                     self.cursor,
                 )
                 self.assertTrue(final["resposta_ja_existia"])
+                self.assertEqual(final["id_etapa_resultante"], destino)
                 self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
                 self.assertEqual(self.cursor.fetchone()[0], antes_replay)
                 self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")

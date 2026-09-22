@@ -1,127 +1,95 @@
+"""Etapa 6: idade do participante e saídas por política da unidade."""
+
 from core.validacoes.suporte_por_idade import (
-    IDADES_MINIMAS_SUPORTE,
     validar_idade_minima_suporte,
 )
 
-
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    RODAPE_ETAPA6_IDADE_AVANCADA,
+    montar_texto_com_rodape,
+)
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-### ENTRADA NA ETAPA 6 - CLIENTE
+### PERGUNTA INICIAL DE IDADE: CLIENTE
+MENSAGEM_PADRAO_CLIENTE = "Agora me conta, *qual é a sua idade*? ☺️"
 
-MENSAGEM_IDADE_ETAPA6 = (
-    "Certo, agora me fala, qual é a sua idade?"
-)
-
-
-def montar_mensagem_idade_etapa6():
-    return MENSAGEM_IDADE_ETAPA6
+### REPETIÇÃO DA IDADE: CLIENTE, SEM A ABERTURA INICIAL
+MENSAGEM_REPETICAO_CLIENTE = "Me diz, qual é a sua idade?"
 
 
-### ENTRADA NA ETAPA 6 - DEPENDENTE
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6 = (
-    "Certo, qual é a idade de {nome}?"
-)
+def montar_mensagem_idade_etapa6(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_CLIENTE if repeticao else MENSAGEM_PADRAO_CLIENTE
+    return mensagem
 
 
-def montar_mensagem_idade_dependente_etapa6(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6.format(nome=nome)
-
-
-### CLIENTE RESPONDE À IDADE COM MÍDIA
-
-MENSAGEM_IDADE_ETAPA6_MIDIA = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Me diz, qual é a sua idade?"
-)
+### TRATAMENTOS DO CLIENTE: ORIENTAÇÃO + REPETIÇÃO DA IDADE
+def montar_mensagem_idade_etapa6_financeiro():
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_CLIENTE)
 
 
 def montar_mensagem_idade_etapa6_midia():
-    return MENSAGEM_IDADE_ETAPA6_MIDIA
-
-
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MÍDIA
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6_MIDIA = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Me diz, qual é a idade de {nome}?"
-)
-
-
-def montar_mensagem_idade_dependente_etapa6_midia(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6_MIDIA.format(nome=nome)
-
-
-### CLIENTE RESPONDE À IDADE COM PERGUNTA FINANCEIRA
-
-MENSAGEM_IDADE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual é a sua idade?"
-)
-
-
-def montar_mensagem_idade_etapa6_financeiro():
-    return MENSAGEM_IDADE_ETAPA6_FINANCEIRO
-
-
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM PERGUNTA FINANCEIRA
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual é a idade de {nome}?"
-)
-
-
-def montar_mensagem_idade_dependente_etapa6_financeiro(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO.format(nome=nome)
-
-
-### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
-
-MENSAGEM_RETOMADA_IDADE_ETAPA6 = "Me diz, qual é a sua idade?"
-MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6 = (
-    "Me diz, qual é a idade de {nome}?"
-)
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_CLIENTE)
 
 
 def montar_mensagem_idade_etapa6_reforco_escolar():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_IDADE_ETAPA6,
-    )
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_CLIENTE)
 
 
-def montar_mensagem_idade_dependente_etapa6_reforco_escolar(nome):
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6.format(nome=nome),
-    )
-
-
-### CLIENTE RESPONDE À IDADE COM MENSAGEM FORA DE CONTEXTO
-
-MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA6 = (
-    "Não consegui entender a sua idade. Digite apenas o número, exemplo: 25.\n"
-    "Me diz, qual é a sua idade?"
-)
-
-
+### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_contexto_idade_invalida_etapa6():
-    return MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA6
+    return (
+        "Olha, não consegui entender a sua idade. "
+        "Digite apenas o número, exemplo: 25."
+    )
 
 
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MENSAGEM FORA DE CONTEXTO
+### PERGUNTA INICIAL DE IDADE: DEPENDENTE
+MENSAGEM_PADRAO_DEPENDENTE = "E qual é a *idade de {nome_dependente}*? ☺️"
 
-MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA6 = (
-    "Não consegui entender a idade de {nome}. Digite apenas o número, "
-    "exemplo: 10.\n"
-    "Me diz, qual é a idade de {nome}?"
-)
+### REPETIÇÃO DA IDADE: DEPENDENTE, SEM A ABERTURA INICIAL
+MENSAGEM_REPETICAO_DEPENDENTE = "Me diz, qual é a idade de {nome_dependente}?"
 
 
-def montar_mensagem_contexto_idade_dependente_invalida_etapa6(nome):
-    return MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA6.format(
-        nome=nome,
+def montar_mensagem_idade_dependente_etapa6(nome_dependente, *, repeticao=False):
+    mensagem = (
+        MENSAGEM_REPETICAO_DEPENDENTE if repeticao else MENSAGEM_PADRAO_DEPENDENTE
+    )
+    return mensagem.format(nome_dependente=nome_dependente)
+
+
+### TRATAMENTOS DO DEPENDENTE: ORIENTAÇÃO + REPETIÇÃO DA IDADE
+def montar_mensagem_idade_dependente_etapa6_financeiro(nome_dependente):
+    return montar_mensagem_tratamento_financeiro(
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome_dependente=nome_dependente)
+    )
+
+
+def montar_mensagem_idade_dependente_etapa6_midia(nome_dependente):
+    return montar_mensagem_tratamento_midia(
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome_dependente=nome_dependente)
+    )
+
+
+def montar_mensagem_idade_dependente_etapa6_reforco_escolar(nome_dependente):
+    return montar_mensagem_tratamento_reforco_escolar(
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome_dependente=nome_dependente)
+    )
+
+
+### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
+def montar_mensagem_contexto_idade_dependente_invalida_etapa6(nome_dependente):
+    return (
+        f"Olha, não consegui entender a idade de {nome_dependente}. "
+        "Digite apenas o número, exemplo: 10."
     )
 
 
@@ -143,38 +111,48 @@ def montar_mensagem_cliente_menor_18_etapa6():
 
 MENSAGEM_DEPENDENTE_MENOR_5_ETAPA6 = (
     "No momento, esta unidade do Supera realiza treinamentos com crianças a "
-    "partir de {idade_minima} anos. Quando {nome} completar {idade_minima} "
+    "partir de {idade_minima} anos. Quando {nome_dependente} completar {idade_minima} "
     "anos, você poderá entrar em contato "
     "novamente.\n\n"
     "Um abraço e até logo! 👋☺️"
-
 )
 
 
 def montar_mensagem_dependente_menor_5_etapa6(
-    nome,
+    nome_dependente,
     idade_minima=5,
 ):
     return MENSAGEM_DEPENDENTE_MENOR_5_ETAPA6.format(
-        nome=nome,
+        nome_dependente=nome_dependente,
         idade_minima=idade_minima,
     )
 
 
-### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
-
-MENSAGEM_IDADE_ACIMA_99_ETAPA6 = (
-    "Entendi. Olha, para idades muito avançadas, é melhor falar com nossa "
-    "consultora especializada. Vou te passar o contato dela para continuar "
-    "o atendimento, tudo bem?\n\n"
-    "Basta clicar no botão abaixo."
+### ENCAMINHAMENTO DO TITULAR PELA FAIXA CONFIGURADA NA UNIDADE
+MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
+    "Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n\n"
+    "Para entrar em contato, basta clicar no botão abaixo."
 )
 
-BOTAO_FALAR_COM_CONSULTORA_ETAPA6 = "Falar com Consultora"
+
+### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
+# Regra geral, inclusive quando idade_minima_suporte está desativada.
+# Mensagem própria: orienta o contato com o consultor sem repetir a pergunta de idade.
+# A redação atende às duas rotas sem presumir que quem conversa é o participante.
+MENSAGEM_IDADE_ACIMA_99_ETAPA6 = (
+    "Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena "
+    "*anamnese* com um dos nossos consultores.\n\n"
+    "Basta clicar no botão abaixo para falar com nosso time! 😊"
+)
+
+BOTAO_FALAR_COM_CONSULTORA_ETAPA6 = "Falar com Consultor"
 
 
 def montar_mensagem_idade_acima_99_etapa6():
-    return MENSAGEM_IDADE_ACIMA_99_ETAPA6
+    return montar_texto_com_rodape(
+        MENSAGEM_IDADE_ACIMA_99_ETAPA6,
+        RODAPE_ETAPA6_IDADE_AVANCADA,
+    )
 
 
 def montar_botao_idade_acima_99_etapa6():
@@ -183,23 +161,8 @@ def montar_botao_idade_acima_99_etapa6():
 
 ### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
 
-MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
-    "Certo, olha, para idades mais avançadas oferecemos um atendimento "
-    "personalizado com o nosso time! 😊\n\n"
-    "Para entrar em contato, basta clicar no botão abaixo."
-)
-
 BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar agora"
 
-# Apenas para reconhecer respostas já enviadas antes da troca de texto.
-# Novos envios usam sempre MENSAGEM_SUPORTE_IDOSO_ETAPA6.
-_MENSAGEM_SUPORTE_IDOSO_LEGADA = (
-    "Entendi. Para oferecer um atendimento mais adequado, esta unidade "
-    "realiza o suporte a clientes com {idade_minima} anos ou mais diretamente com a "
-    "nossa equipe comercial.\n\n"
-    "Vou te passar o contato para continuar o atendimento. Basta clicar "
-    "no botão abaixo."
-)
 
 def montar_mensagem_suporte_idoso_etapa6(idade_minima):
     validar_idade_minima_suporte(idade_minima)
@@ -212,32 +175,88 @@ def montar_botao_suporte_idoso_etapa6():
     return BOTAO_SUPORTE_IDOSO_ETAPA6
 
 
-def montar_mensagem_contato_suporte_idoso_etapa6(
-    *, nome_agente, genero_agente, nome_cliente, idade_cliente,
+### TEXTO PRONTO NO WHATSAPP COMERCIAL: ORIGEM + PEDIDO DO PARTICIPANTE
+MENSAGEM_ORIGEM_CONTATO_COMERCIAL_ETAPA6 = (
+    "Olá, vim do atendimento com {artigo} {nome_agente}, "
+    "chatbot da unidade {nome_unidade}."
+)
+MENSAGEM_PEDIDO_COMERCIAL_TITULAR_ETAPA6 = (
+    "Me chamo {nome_titular}, tenho {idade_participante} anos "
+    "e gostaria de reservar minha experiência Supera gratuita."
+)
+MENSAGEM_PEDIDO_COMERCIAL_DEPENDENTE_ETAPA6 = (
+    "Me chamo {nome_titular} e gostaria de reservar uma experiência Supera gratuita "
+    "para {nome_dependente}, que tem {idade_participante} anos."
+)
+
+
+def montar_mensagem_contato_comercial_etapa6(
+    *,
+    nome_agente,
+    genero_agente,
+    nome_unidade,
+    nome_titular,
+    idade_participante,
+    status_dependente,
+    nome_dependente=None,
 ):
-    """Texto pré-preenchido do titular, usando a idade validada nesta resposta."""
+    """Identifica origem e participante usando a idade informada nesta resposta.
+
+    A elegibilidade do encaminhamento pertence ao worker. Na rota de dependente,
+    a idade é do participante, nunca do cliente que está conversando com o bot.
+    """
     artigo = {"feminino": "a", "masculino": "o"}.get(genero_agente)
     if artigo is None:
         raise ValueError("Gênero do agente inválido para contato comercial")
     if any(
-        not isinstance(nome, str) or not nome.strip()
-        for nome in (nome_agente, nome_cliente)
+        not isinstance(valor, str) or not valor.strip()
+        for valor in (nome_agente, nome_unidade, nome_titular)
     ):
-        raise ValueError("Nome do agente e do cliente são necessários")
-    if type(idade_cliente) is not int or not 50 <= idade_cliente <= 99:
-        raise ValueError("Idade do titular inválida para suporte por idade")
-    return (
-        f"Olá, vim do atendimento com {artigo} {nome_agente.strip()}, "
-        f"me chamo {nome_cliente.strip()}, tenho {idade_cliente} anos "
-        "e gostaria de reservar uma demonstração prática."
+        raise ValueError("Nome do agente, da unidade e do cliente são necessários")
+    if type(status_dependente) is not bool:
+        raise ValueError("Rota do participante inválida para contato comercial")
+    if status_dependente and (
+        not isinstance(nome_dependente, str) or not nome_dependente.strip()
+    ):
+        raise ValueError("Nome do dependente é necessário para contato comercial")
+    if type(idade_participante) is not int or idade_participante <= 0:
+        raise ValueError("Idade do participante inválida para contato comercial")
+
+    origem = MENSAGEM_ORIGEM_CONTATO_COMERCIAL_ETAPA6.format(
+        artigo=artigo,
+        nome_agente=nome_agente.strip(),
+        nome_unidade=nome_unidade.strip(),
     )
+    pedido = (
+        MENSAGEM_PEDIDO_COMERCIAL_DEPENDENTE_ETAPA6
+        if status_dependente
+        else MENSAGEM_PEDIDO_COMERCIAL_TITULAR_ETAPA6
+    ).format(
+        nome_titular=nome_titular.strip(),
+        nome_dependente=nome_dependente.strip() if status_dependente else None,
+        idade_participante=idade_participante,
+    )
+    return f"{origem} {pedido}"
+
+
+### COMPATIBILIDADE DE RECUPERAÇÃO COM A VERSÃO AINDA EM PRODUÇÃO
+# Texto emitido pela versão 701b834; nunca usar em novos envios desta versão.
+# Enquanto o próximo deploy não ocorrer, novas entradas podem receber esse corpo.
+# O retry o reconhece para concluir o encerramento sem reenviar a resposta.
+# Remover somente depois da troca de versão e da checagem de suas pendências.
+_MENSAGEM_SUPORTE_IDOSO_LEGADA_SEM_FAIXA = (
+    "Certo, olha, para idades mais avançadas oferecemos um atendimento "
+    "personalizado com o nosso time! 😊\n\n"
+    "Para entrar em contato, basta clicar no botão abaixo."
+)
 
 
 def reconhecer_mensagem_suporte_idoso_etapa6(conteudo):
-    """Reconhece o corpo atual ou legado, inclusive após uma saudação."""
+    """Reconhece resposta já persistida; não monta nem envia mensagem ao cliente."""
     texto = str(conteudo or "").strip()
-    mensagens = (MENSAGEM_SUPORTE_IDOSO_ETAPA6,) + tuple(
-        _MENSAGEM_SUPORTE_IDOSO_LEGADA.format(idade_minima=limite)
-        for limite in IDADES_MINIMAS_SUPORTE
+    mensagens = (
+        MENSAGEM_SUPORTE_IDOSO_ETAPA6,
+        _MENSAGEM_SUPORTE_IDOSO_LEGADA_SEM_FAIXA,
     )
+    # O prefixo de retorno pode anteceder o corpo salvo; não interpretar como envio novo.
     return texto.endswith(mensagens)

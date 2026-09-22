@@ -31,9 +31,11 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "satisfacao_invalida"
 def enviar_etapa19(
     cliente_telefone,
     phone_id_unidade,
-    nome_cliente,
+    nome_titular,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_etapa19(nome_cliente)
+    mensagem_bot = montar_mensagem_etapa19(nome_titular, repeticao=repeticao)
 
     return _enviar_lista_etapa19(
         cliente_telefone,

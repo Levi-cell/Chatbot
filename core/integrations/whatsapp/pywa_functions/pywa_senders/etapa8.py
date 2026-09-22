@@ -14,15 +14,16 @@ from core.logging_config import short_value
 logger = logging.getLogger("whatsapp.etapa8")
 
 ID_ETAPA8 = 8
-# CENARIO NORMAL: CLIENTE ADIOU A OFERTA NA ETAPA 7
+
+
+# ENTRADA NA ETAPA 8: CLIENTE ADIOU A OFERTA NA ETAPA 7 OU 9
+# O retorno, inclusive após follow-up, usa o sender da etapa 9.
 def enviar_etapa8(
     cliente_telefone,
     phone_id_unidade,
     link_instagram,
 ):
-    mensagem_bot = montar_mensagem_oferta_adiada_etapa8(
-        link_instagram
-    )
+    mensagem_bot = montar_mensagem_oferta_adiada_etapa8(link_instagram)
 
     return _enviar_texto_etapa8(
         cliente_telefone,

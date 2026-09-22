@@ -28,13 +28,21 @@ from workers.worker_flow.transacoes import efeitos_transicao, encerramento_atend
 
 LIMITES = (None, 50, 60, 70, 80, 90)
 
-# Amostra histórica independente do catálogo atual: precisa sobreviver ao deploy.
-MENSAGEM_LEGADA = (
-    'Entendi. Para oferecer um atendimento mais adequado, esta unidade '
-    'realiza o suporte a clientes com {limite} anos ou mais diretamente com a '
-    'nossa equipe comercial.\n\n'
-    'Vou te passar o contato para continuar o atendimento. Basta clicar '
-    'no botão abaixo.'
+# Amostra independente do catálogo atual: a produção ainda pode enviar esse texto.
+MENSAGEM_LEGADA_SEM_FAIXA = (
+    'Certo, olha, para idades mais avançadas oferecemos um atendimento '
+    'personalizado com o nosso time! 😊\n\n'
+    'Para entrar em contato, basta clicar no botão abaixo.'
+)
+MENSAGEM_ENCAMINHAMENTO_ATUAL = (
+    'Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n\n'
+    'Para entrar em contato, basta clicar no botão abaixo.'
+)
+MENSAGEM_ANAMNESE_100_MAIS = (
+    'Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena '
+    '*anamnese* com um dos nossos consultores.\n\n'
+    'Basta clicar no botão abaixo para falar com nosso time! 😊\n\n'
+    '_Nosso time vai orientar os próximos passos. 🧡_'
 )
 
 
@@ -46,11 +54,12 @@ class SuportePorIdadeTests(unittest.TestCase):
                 self.assertEqual(validar_idade_minima_suporte(limite), limite)
                 self.assertEqual(campo.clean(limite, Unidade()), limite)
                 contexto = buscar_contexto_etapa6(10, 1, FakeCursor(
-                    fetchone_result=('5571999999999', False, limite, 'Maria', None, 'Suh', 'feminino')
+                    fetchone_result=('5571999999999', False, limite, 'Maria', None, 'Suh', 'feminino', 'Supera Centro')
                 ))
                 self.assertEqual(contexto['idade_minima_suporte'], limite)
-                self.assertEqual(contexto['nome_agente_unidade'], 'Suh')
+                self.assertEqual(contexto['nome_agente'], 'Suh')
                 self.assertEqual(contexto['genero_agente_unidade'], 'feminino')
+                self.assertEqual(contexto['nome_unidade'], 'Supera Centro')
         self.assertEqual(list(campo.formfield().choices), [(None, 'Desativado')] + [
             (idade, f'{idade}+') for idade in LIMITES[1:]
         ])
@@ -59,7 +68,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                 validar_idade_minima_suporte(invalido)
         with self.assertRaises(ValueError):
             buscar_contexto_etapa6(10, 1, FakeCursor(
-                fetchone_result=(None, False, True, None, None, 'Suh', 'feminino')
+                fetchone_result=(None, False, True, None, None, 'Suh', 'feminino', 'Supera Centro')
             ))
 
     def test_admin_exige_contato_ao_ativar_e_ao_remover_numero(self):
@@ -99,7 +108,7 @@ class SuportePorIdadeTests(unittest.TestCase):
             'dependente': 'enviar_etapa7_dependente',
         }
         for limite in LIMITES:
-            idades = {4, 5, 17, 18, 49, 50, 59, 60, 69, 70, 79, 80, 89, 90, 99, 100}
+            idades = {4, 5, 17, 18, 49, 50, 59, 60, 69, 70, 79, 80, 89, 90, 99, 100, 105}
             for idade in sorted(idades):
                 for dependente in (False, True):
                     for bpa in (False, True):
@@ -133,19 +142,16 @@ class SuportePorIdadeTests(unittest.TestCase):
         conta.assert_not_called()
 
     def test_encaminhamento_completo_padroniza_faixas_e_preenche_contato(self):
-        mensagem_esperada = (
-            'Certo, olha, para idades mais avançadas oferecemos um atendimento '
-            'personalizado com o nosso time! 😊\n\n'
-            'Para entrar em contato, basta clicar no botão abaixo.'
-        )
+        mensagem_esperada = MENSAGEM_ENCAMINHAMENTO_ATUAL
         for limite in LIMITES[1:]:
             for genero, nome_agente, artigo in (('feminino', 'Mia', 'a'), ('masculino', 'Léo', 'o')):
                 with self.subTest(limite=limite, genero=genero), patch.object(sender, 'conta_wa') as conta:
                     conta.return_value.send_message.return_value = SimpleNamespace(id='wamid.teste')
                     contexto = contexto_etapa6(limite + 1, suporte=limite)
                     contexto.update(
-                        nome_agente_unidade=nome_agente, genero_agente_unidade=genero,
-                        nome_cliente='Ana & José', idade_cliente=20,
+                        nome_agente=nome_agente, genero_agente_unidade=genero,
+                        nome_titular='Ana & José', idade_cliente=20,
+                        nome_unidade='Supera São João & Centro + Sul',
                     )
                     envio = resolver_etapa6.resolve_etapa6(contexto)
                     enviado = conta.return_value.send_message.call_args.kwargs
@@ -156,8 +162,9 @@ class SuportePorIdadeTests(unittest.TestCase):
                     self.assertEqual((link.scheme, link.netloc, link.path), ('https', 'wa.me', '/5571999999999'))
                     self.assertEqual(parse_qs(link.query), {'text': [
                         f'Olá, vim do atendimento com {artigo} {nome_agente}, '
-                        f'me chamo Ana & José, tenho {limite + 1} anos '
-                        'e gostaria de reservar uma demonstração prática.'
+                        'chatbot da unidade Supera São João & Centro + Sul. '
+                        f'Me chamo Ana & José, tenho {limite + 1} anos '
+                        'e gostaria de reservar minha experiência Supera gratuita.'
                     ]})
                     self.assertEqual(envio['tipo_mensagem'], 'interactive_cta_url')
                     self.assertEqual(envio['motivo_encerramento'], 'encaminhado_suporte_idoso')
@@ -166,17 +173,70 @@ class SuportePorIdadeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             montar_mensagem_suporte_idoso_etapa6(None)
 
+    def test_acima_99_encaminha_ambas_rotas_com_anamnese_e_rodape(self):
+        for limite in LIMITES:
+            for dependente in (False, True):
+                with self.subTest(limite=limite, dependente=dependente), patch.object(
+                    sender, 'conta_wa'
+                ) as conta:
+                    conta.return_value.send_message.return_value = SimpleNamespace(id='wamid.cem')
+                    contexto = contexto_etapa6(100, suporte=limite, dependente=dependente)
+                    # Idades antigas não podem substituir a resposta atual.
+                    contexto.update(idade_cliente=40, idade_dependente=70)
+                    envio = resolver_etapa6.resolve_etapa6(contexto)
+                    enviado = conta.return_value.send_message.call_args.kwargs
+                    self.assertEqual(enviado['text'], MENSAGEM_ANAMNESE_100_MAIS)
+                    self.assertEqual(enviado['text'], envio['mensagem_bot'])
+                    link = urlsplit(enviado['buttons'].url)
+                    self.assertEqual((link.scheme, link.netloc, link.path), ('https', 'wa.me', '/5571999999999'))
+                    origem = (
+                        'Olá, vim do atendimento com a Suh, '
+                        'chatbot da unidade Supera Santo Antônio de Jesus. '
+                    )
+                    pedido = (
+                        'Me chamo Maria e gostaria de reservar uma experiência Supera gratuita '
+                        'para João, que tem 100 anos.'
+                        if dependente else
+                        'Me chamo Maria, tenho 100 anos '
+                        'e gostaria de reservar minha experiência Supera gratuita.'
+                    )
+                    self.assertEqual(parse_qs(link.query), {'text': [origem + pedido]})
+                    self.assertEqual(enviado['buttons'].title, 'Falar com Consultor')
+                    self.assertEqual(envio['motivo_encerramento'], 'idade_acima_99')
+                    self.assertEqual(envio['id_etapa_resultante'], 6)
+                    self.assertNotIn('evento_transicao', envio)
+                    conta.return_value.send_message.assert_called_once()
+
+                    # O motivo geral continua vindo da idade original no retry,
+                    # independentemente do corpo enviado antes da interrupção.
+                    contexto['resposta_bot_para_mensagem_atual'] = {
+                        'tipo_mensagem': 'interactive_cta_url',
+                        'conteudo_texto': enviado['text'],
+                    }
+                    intencao = encerramento_atendimento.resolver_intencao_encerramento(
+                        contexto, {'resposta_ja_existia': True}, object()
+                    )
+                    self.assertEqual(intencao['motivo'], 'idade_acima_99')
+                    self.assertEqual(intencao['motivo_encerramento'], 'idade_invalida')
+                    self.assertEqual(intencao['bloqueio_dias'], 0)
+
     def test_dados_ausentes_nao_geram_texto_incorreto_no_botao(self):
-        for campo, valor in (
-            ('nome_cliente', None), ('nome_agente_unidade', ''),
-            ('genero_agente_unidade', 'desconhecido'),
+        for idade, dependente, suporte in (
+            (71, False, 70), (100, False, None), (100, True, None),
         ):
-            contexto = contexto_etapa6(71, suporte=70)
-            contexto[campo] = valor
-            with self.subTest(campo=campo), patch.object(sender, 'conta_wa') as conta:
-                with self.assertRaises(ValueError):
-                    resolver_etapa6.resolve_etapa6(contexto)
-                conta.assert_not_called()
+            campos = [
+                ('nome_titular', None), ('nome_agente', ''),
+                ('genero_agente_unidade', 'desconhecido'), ('nome_unidade', ' '),
+            ]
+            if dependente:
+                campos.append(('nome_dependente', None))
+            for campo, valor in campos:
+                contexto = contexto_etapa6(idade, suporte=suporte, dependente=dependente)
+                contexto[campo] = valor
+                with self.subTest(idade=idade, dependente=dependente, campo=campo), patch.object(sender, 'conta_wa') as conta:
+                    with self.assertRaises(ValueError):
+                        resolver_etapa6.resolve_etapa6(contexto)
+                    conta.assert_not_called()
 
     def test_persistencia_50_a_99_e_encerramento_sem_bloqueio(self):
         for idade in (50, 59, 60, 99):
@@ -192,8 +252,10 @@ class SuportePorIdadeTests(unittest.TestCase):
             self.assertFalse(intencao['excluir_dependente'])
 
     def test_recuperacao_reconhece_variantes_mas_usa_limite_atual(self):
-        textos = [MENSAGEM_LEGADA.format(limite=limite) for limite in LIMITES[1:]]
-        textos.append(montar_mensagem_suporte_idoso_etapa6(50))
+        textos = [
+            MENSAGEM_LEGADA_SEM_FAIXA,
+            montar_mensagem_suporte_idoso_etapa6(50),
+        ]
         for texto_enviado in textos:
             for atual, idade, encerra in ((70, 65, False), (70, 75, True), (None, 95, False), (50, 55, True)):
                 contexto = contexto_etapa6(idade, suporte=atual)

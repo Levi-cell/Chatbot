@@ -1,7 +1,6 @@
 import logging
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa21 import (
-    enviar_etapa21_contexto_invalido,
     enviar_etapa21_midia,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa22 import (
@@ -28,7 +27,6 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 logger = logging.getLogger("worker.etapa21")
 
 TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
-TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "comentario_satisfacao_invalido"
 
 
 def resolve_etapa21(contexto_historico):
@@ -58,16 +56,8 @@ def resolve_etapa21(contexto_historico):
         tipo_mensagem,
     )
 
-    if not desistiu and comentario_satisfacao is None:
-        _logar_tratamento(
-            contexto_historico,
-            TIPO_TRATAMENTO_CONTEXTO_INVALIDO,
-        )
-        return enviar_etapa21_contexto_invalido(
-            cliente_telefone,
-            phone_id_unidade,
-        )
-
+    # Comentário livre não tem resposta certa: frases curtas, emojis e pontuação
+    # também concluem a etapa. Uma recusa explícita encerra com comentário NULL.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
         EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
@@ -90,6 +80,8 @@ def resolve_etapa21(contexto_historico):
     contexto_envio = enviar_etapa22(
         cliente_telefone,
         phone_id_unidade,
+        status_dependente=contexto_historico["status_dependente"],
+        nome_dependente=contexto_historico.get("nome_dependente"),
     )
     contexto_envio["comentario_satisfacao"] = comentario_satisfacao
 

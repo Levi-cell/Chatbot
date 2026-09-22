@@ -5,18 +5,21 @@ logger = logging.getLogger("db.contexto_etapa10")
 
 
 def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
-    """Carrega a política de e-mail e a pessoa atendida no mesmo snapshot."""
+    """Carrega a política de e-mail e o participante da introdução à triagem."""
     cursor.execute(
         """
         SELECT
             u.email_obrigatorio,
             c.status_dependente,
-            cl.idade
+            cl.idade,
+            d.nome_dependente
         FROM chatbot.conversa c
         JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
+        LEFT JOIN chatbot.dependente d
+          ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s
           AND c.id_unidade = %s
         LIMIT 1;
@@ -32,7 +35,7 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    email_obrigatorio, status_dependente, idade_cliente = resultado
+    email_obrigatorio, status_dependente, idade_cliente, nome_dependente = resultado
 
     if not isinstance(email_obrigatorio, bool):
         raise ValueError(
@@ -60,6 +63,14 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, idade={idade_cliente!r})"
         )
 
+    if status_dependente and (
+        not isinstance(nome_dependente, str) or not nome_dependente.strip()
+    ):
+        raise ValueError(
+            "Etapa 10 de dependente sem nome persistido para apresentar a triagem "
+            f"(id_conversa={id_conversa})"
+        )
+
     logger.debug(
         "contexto_etapa10_consultado | id_conversa=%s id_unidade=%s "
         "email_obrigatorio=%s status_dependente=%s "
@@ -75,4 +86,5 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
         "email_obrigatorio_unidade": email_obrigatorio,
         "status_dependente_contexto_email": status_dependente,
         "idade_cliente": idade_cliente,
+        "nome_dependente": nome_dependente.strip() if status_dependente else None,
     }

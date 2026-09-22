@@ -152,6 +152,10 @@ def _reconstruir_encerramento_etapa6(contexto_historico):
 
 
 def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
+    # Apenas recuperação da resposta desta entrada, chamada no ramo resposta_ja_existia.
+    # Reconhece o corpo atual e o da versão anterior ainda em produção, permitindo
+    # concluir o encerramento pendente sem reenviar. Não reabre conversas antigas
+    # nem escolhe o texto de novos envios. A política atual é validada pelo chamador.
     resposta_bot = (
         contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
     )

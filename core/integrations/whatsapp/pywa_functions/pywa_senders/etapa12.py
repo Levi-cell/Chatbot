@@ -40,7 +40,7 @@ def enviar_etapa12_dependente(
     )
 
 
-# RESPOSTA INVALIDA: REPETE A PERGUNTA 1 SOBRE O PROPRIO CLIENTE
+# RESPOSTA INVALIDA: ORIENTACAO PROPRIA PARA A PERGUNTA 1 DO CLIENTE
 def enviar_etapa12_cliente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
@@ -54,7 +54,7 @@ def enviar_etapa12_cliente_contexto_invalido(
     )
 
 
-# RESPOSTA INVALIDA: REPETE A PERGUNTA 1 SOBRE O DEPENDENTE
+# RESPOSTA INVALIDA: ORIENTACAO PROPRIA PARA A PERGUNTA 1 DO DEPENDENTE
 def enviar_etapa12_dependente_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,

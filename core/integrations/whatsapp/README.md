@@ -14,10 +14,18 @@ core/integrations/whatsapp/
 ├── exceptions.py
 ├── numero_comercial.py
 ├── messages/
+│   ├── README.md
 │   ├── etapa1_messages.py ... etapa22_messages.py
 │   ├── componentes_compartilhados.py
 │   ├── followup_messages.py
 │   ├── tratamentos_universais.py
+│   ├── tratamentos/
+│   │   ├── composicao.py
+│   │   ├── financeiro.py
+│   │   ├── midia.py
+│   │   ├── reforco_escolar.py
+│   │   ├── retorno_inatividade.py
+│   │   └── retorno_followup.py
 │   └── triagem_componentes.py
 ├── pywa_functions/
 │   ├── cliente.py
@@ -51,6 +59,11 @@ exceções da integração. Nenhum deles controla banco, fila, transição ou re
 
 ## Messages
 
+Antes de alterar textos ou montadores, seguir o
+[contrato de personalidade e composição do atendimento](messages/README.md).
+Ele distingue apresentação, tratamentos, a exceção de entrada da etapa 1,
+triagem e os dois tipos de retorno.
+
 Catálogo de conteúdo enviado:
 
 - textos;
@@ -62,17 +75,35 @@ Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
 mensagem não deve mover a responsabilidade de envio para `messages`.
 
 Cada etapa de 1 a 22 mantém seu próprio arquivo `etapaN_messages.py`.
+Nele ficam a mensagem padrão e a repetição pura, com variantes de titular e
+dependente quando pertinentes. Os montadores importados de `tratamentos/`
+compõem orientação, ponte quando necessária e repetição, nessa ordem.
+`compor_mensagem_inicial` une apresentação e pergunta reutilizável na entrada
+da etapa; `compor_tratamento` é exclusivo para orientação e repetição, sem
+a apresentação. As duas funções compartilham apenas a formatação dos parágrafos.
+Contexto inválido tem mensagem própria que já orienta a resposta correta:
+não usa `compor_tratamento` nem concatena a repetição. Conserva botões/opções e
+rodapés da etapa e aceita a saudação de três horas quando elegível.
+O follow-up seleciona a repetição neutra (`repeticao=True`); a triagem usa
+suas perguntas canônicas. A etapa 8 é exceção: qualquer reação ao follow-up
+avança diretamente para a 9, sem repetir a 8. Os retornos não duplicam apresentações, celebrações
+ou despedidas da entrada normal na etapa.
 
-As mensagens oferecem uma **experiência Supera gratuita**, com demonstração prática exclusiva
-e **sua reserva** de dia e horário. Os botões das etapas 7 e 9 exibem **Quero reservar**;
+As mensagens oferecem uma **experiência Supera gratuita**. Na etapa 7, a abertura
+saúda o titular pelo nome e destaca **demonstração prática gratuita**; a pergunta
+final convida a reservar sua **experiência Supera exclusiva**. A rota de dependente
+preserva seu nome como participante. Os montadores e contextos de atendimento
+distinguem `nome_titular`, `nome_dependente` e `nome_agente`, sem alterar o esquema
+do banco. Os botões das etapas 7 e 9 exibem **Quero reservar**;
 a etapa 18 usa **Já reservei**. O aceite por texto continua reconhecendo expressões
 antigas como `quero agendar` e `já agendei`, conforme a etapa. Perguntas sobre como
 reservar não são aceites; na etapa 18, intenção de reservar não comprova conclusão.
 
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
-O prefixo é compartilhado em `tratamentos_universais.py`; cada etapa fornece
+O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
 sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
+`tratamentos_universais.py` apenas reexporta os imports antigos por compatibilidade.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o
 texto efetivamente enviado. Respostas já persistidas não são reenviadas.
@@ -81,6 +112,14 @@ Os corpos das mensagens usam negrito do WhatsApp (`*texto*`) com moderação,
 priorizando a experiência oferecida e a ação principal. Evitar destacar todas
 as palavras ou repetir o convite completo nos tratamentos financeiros.
 Títulos de botões e valores usados pelos validadores permanecem sem marcação.
+
+O tom é acolhedor, com emojis discretos e orientação clara. A oferta usa
+**presentear**; **Maravilha! ☺️** aparece na apresentação normal da etapa 7,
+sem ser acrescentado aos tratamentos de mídia, contexto, financeiro ou reforço
+escolar. A etapa 1 não presume quem participará. Na apresentação do link,
+o participante é o titular ou o dependente identificado pelo nome, inclusive
+na repetição por follow-up e nos tratamentos. O contexto fornece esses dados ao sender; os
+montadores não consultam banco nem decidem transições.
 
 Na etapa 2, negativas sem destino alternativo repetem a pergunta. Uma
 correção explícita como `Não, é para mim` conserva a escolha indicada.
@@ -92,12 +131,19 @@ A retomada da etapa 9 usa uma única saudação, tanto após follow-up quanto
 após três horas de inatividade. As referências ao dependente permanecem
 explícitas; titular e dependente não trocam de papel.
 
-As apresentações inicial padrão, de mídia, financeira e de tratamento de
-reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
+As apresentações inicial padrão, explicativa, de mídia, financeira e de tratamento
+de reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` como
 argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
 formata o texto; não consulta o banco nem conhece a conversa.
 
-`componentes_compartilhados.py` também monta `Olá novamente, <nome>!` quando
+Antes da etapa 1 estar apresentada, um texto pedindo informações gerais sobre
+o Supera pode receber a abertura explicativa. O classificador
+`validadores_contexto/valida_inicio_etapa1.py` reconhece frases completas e só é
+usado após os tratamentos de mídia, reforço e financeiro. Essa variante pede
+o nome uma vez e converge para a mesma etapa 2, sem novas colunas ou transições.
+Depois da abertura e no follow-up, preserva-se a coleta do nome já existente.
+
+`tratamentos/retorno_inatividade.py` monta `Olá novamente, <nome>!` quando
 o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
 na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
 incompatíveis não interrompem o atendimento e não produzem prefixo.
@@ -130,11 +176,25 @@ O encaminhamento de suporte ao idoso é um sender da etapa 6 com botão para o
 número comercial, normalizado por `numero_comercial.py`. A decisão de usar
 `idade_minima_suporte`, comparar a idade do titular ao limite e encerrar o
 atendimento é do worker. O sender recebe o limite validado e o texto de contato
-montado pelo catálogo com agente, nome e idade atual do titular. Todas as faixas
+montado pelo catálogo com agente, unidade, nome e idade atual do titular. Todas as faixas
 usam a mesma mensagem de atendimento personalizado e o botão `Falar agora`.
 O link inclui o texto pré-preenchido com codificação de URL; o cliente ainda
-precisa confirmar o envio no WhatsApp. O reconhecimento do corpo atual e das
-cinco variantes antigas permite recuperar respostas sem reenviá-las.
+precisa confirmar o envio no WhatsApp. O reconhecimento do corpo atual e do
+texto ainda emitido pela versão em produção permite recuperar respostas sem
+reenviá-las. As variantes antigas que citavam a faixa foram removidas após
+verificação de ausência de pendências no banco.
+
+O encaminhamento geral de 100 anos ou mais mantém um sender próprio, usado
+para titular e dependente mesmo com suporte desativado. Seu catálogo apresenta
+a anamnese com o consultor e acrescenta um rodapé acolhedor, sem repetir a
+pergunta de idade. A decisão de encerrar continua pertencendo ao worker.
+Os dois senders exigem `mensagem_comercial` e usam o mesmo montador de texto
+pronto, `montar_mensagem_contato_comercial_etapa6`. O repositório da etapa 6
+consulta o nome da unidade vinculada à conversa. O worker fornece a rota e a
+idade da resposta atual; o catálogo adapta o pedido para titular ou dependente,
+sempre mencionando a experiência Supera gratuita. Não atribuir ao cliente a
+idade informada sobre seu dependente. Dados obrigatórios ausentes impedem
+montar um contato incorreto antes de qualquer envio à Meta.
 Da mesma forma, a política `email_obrigatorio` e a distinção entre
 aceite da oferta e pedido de informações não pertencem aos senders.
 
@@ -212,16 +272,21 @@ O núcleo transacional e os testes específicos estão descritos em
 
 ## Lembrete de follow-up
 
-`messages/followup_messages.py` também monta a saudação de retomada com stage
+`messages/tratamentos/retorno_followup.py` monta a saudação de retomada com stage
 positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
 O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
 Na etapa 1, o worker passa nome ausente ao formatador, mesmo com cadastro antigo:
 a saudação é sempre genérica, seguida da pergunta de nome do atendimento atual.
-O prefixo é aplicado no corpo da etapa repetida, preservado no histórico e removido
+O prefixo é aplicado no corpo da resposta, preservado no histórico e removido
 do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
 
-`messages/followup_messages.py` contém o único texto aprovado:
-`Você viu a minha mensagem?`.
+Na etapa 8, o worker reutiliza a transição normal para a 9 e seus senders de
+titular/dependente. A reação não vale como aceite da oferta da 9. Sua saudação
+própria é suprimida para conservar somente o prefixo de follow-up. A 8 possui
+apenas mensagem inicial, sem variante de repetição. Avanço e conclusão do ciclo
+são persistidos juntos pelo worker, sem decisões de fluxo nos montadores.
+
+`messages/followup_messages.py` contém o texto aprovado do lembrete proativo.
 `pywa_senders/followup.py` envia texto sem botões, sem saudação de retorno e sem
 id_mensagem_fila fictício. Usa sessão HTTP com timeout e sem retry automático;
 recebe destinatário e phone_id da unidade. `conta_wa` aceita sessão opcional sem

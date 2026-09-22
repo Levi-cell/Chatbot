@@ -28,8 +28,10 @@ TIPO_TRATAMENTO_EMAIL_INVALIDO = "email_invalido"
 def enviar_etapa10(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_email_etapa10()
+    mensagem_bot = montar_mensagem_email_etapa10(repeticao=repeticao)
 
     return _enviar_texto_etapa10(
         cliente_telefone,

@@ -3,6 +3,9 @@ from contextvars import ContextVar
 
 from pywa import WhatsApp
 
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    aplicar_prefixo_retorno,
+)
 from core.integrations.whatsapp.tools.config import (
     TOKEN_USUARIO_META,
     get_meta_graph_api_version,
@@ -46,13 +49,7 @@ def usar_prefixo_mensagem_bot(prefixo):
 def aplicar_prefixo_mensagem_bot(texto, prefixo=None):
     prefixo = prefixo if prefixo is not None else _PREFIXO_MENSAGEM_BOT.get()
 
-    if not prefixo or not isinstance(texto, str):
-        return texto
-
-    if texto.startswith(prefixo):
-        return texto
-
-    return f"{prefixo}{texto}"
+    return aplicar_prefixo_retorno(texto, prefixo)
 
 
 class _ClienteWhatsAppComPrefixo:

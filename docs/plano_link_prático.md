@@ -6,6 +6,14 @@
 > O tratamento financeiro usa explicação breve e retomada da pergunta;
 > os corpos destacam a experiência e a ação principal com negrito moderado.
 > O encerramento sem link não presume um dia/horário já confirmado.
+> Revisão de 21/09/2026: a oferta usa presentear e celebra somente na
+> apresentação normal. A etapa 1 acolhe sem presumir o participante;
+> o link menciona o dependente também na retomada por follow-up.
+> As mensagens das etapas 1, 2 e 7 e o prefixo financeiro são herdados
+> da base atual, sem substituição por este plano.
+> A organização em `messages/tratamentos/` e as repetições neutras também
+> são herdadas da base. Os arquivos completos substituídos aqui seguem esse
+> padrão, incluindo a nova escolha de turno e a entrega ao comercial.
 
 > Revisão de 20/09/2026: suporte por idade usa mensagem única e botão **Falar agora**,
 > com texto pré-preenchido de agente, titular e idade atual. Recuperação aceita também
@@ -17,7 +25,7 @@
 > a reação ao follow-up não vale como resposta nem autoriza avanço.
 
 
-Data da revisão: **20/09/2026**. Documento para aplicação futura.
+Data da revisão: **21/09/2026**. Documento para aplicação futura.
 
 Este plano contém o conteúdo completo de cada arquivo que deve ser criado ou
 substituído para introduzir a escolha de turno e a entrega ao comercial em
@@ -33,7 +41,7 @@ incluído em `bank_script.py` representa instalação nova, não atualização d
 
 ## Base e alcance
 
-HEAD de referência: `d65e4afd0572e7905b889369ba4ab4799dbc20a9`. A base também inclui as alterações locais ainda
+HEAD de referência: `701b834fc178efcd42591692b9c35ce5827b840c`. A base também inclui as alterações locais ainda
 não commitadas nessa data; usar apenas esse commit não reproduz toda a base.
 As impressões SHA-256 ao final permitem conferir cada arquivo anterior antes
 da aplicação. Elas são calculadas sobre texto UTF-8 com quebras normalizadas
@@ -44,6 +52,9 @@ Preservar a oferta da experiência Supera gratuita, o botão
 exceções de idade, BPA, e-mail, seis perguntas de triagem, profissão, histórico,
 locks, retries, follow-up, isolamento do monitoramento e exportações CSV.
 Não aplicar nem modificar os planos futuros de `user_id` nesta entrega.
+O contrato editorial em `core/integrations/whatsapp/messages/README.md` é
+herdado da base. Consultá-lo nas revisões e preservar as distinções entre
+apresentação, tratamento, inatividade e reação ao follow-up.
 Se outra funcionalidade for implementada antes deste plano, reconciliar seus
 arquivos completos com a nova base antes de substituir qualquer arquivo.
 
@@ -214,6 +225,20 @@ e as etapas deslocadas aparecem integralmente em seus novos caminhos.
 Não copiar o código de mensagens de uma etapa antiga para outra por conta
 própria: as constantes, imports, IDs, validadores e testes já estão ajustados.
 Os arquivos que não aparecem permanecem na versão da base indicada.
+
+### Validação da composição e personalidade de 21/09/2026
+
+- **247 testes descobertos na base atual: 227 aprovados e 20 integrações
+  condicionais não executadas por ausência de DSN**. A cobertura inclui
+  tratamento + repetição, retorno com e sem avanço, etapa 1, titular/dependente,
+  apresentação do link e igualdade entre texto enviado e histórico.
+- **92 testes aprovados** após extrair os 80 arquivos completos deste plano
+  em uma cópia isolada, preservando as rotas futuras com e sem link.
+- Tratamentos centralizados e repetições neutras preservados na escolha de
+  turno, entrega ao comercial, link e pesquisa, com sintaxe válida e
+  impressões da base conferidas.
+- Testes sem conexões externas; esta revisão não executou migração, testes
+  PostgreSQL nem envio real de mensagens.
 
 ### Validação da revisão de mensagens de 20/09/2026
 
@@ -1751,15 +1776,34 @@ def montar_mensagem_contato_comercial(
 ### Passo 7 — Atualizar `core/integrations/whatsapp/messages/etapa18_messages.py`
 
 ```python
-"""Escolha do turno de preferência para unidades sem plataforma de reserva."""
+"""Escolha de turno: padrão, repetição e tratamentos compartilhados."""
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     RODAPE_OPCAO_UNICA,
     montar_texto_com_rodape,
 )
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+    compor_tratamento,
+)
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
+    montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
+    montar_mensagem_tratamento_reforco_escolar,
+)
 
-from core.integrations.whatsapp.messages.tratamentos_universais import (
-    MENSAGEM_TRATAMENTO_FINANCEIRO,
+MENSAGEM_REPETICAO_ETAPA18 = (
+    "Qual turno fica melhor para reservar {participante}?\n\n"
+    "Mesmo que você possa em mais de um turno, escolha o de sua preferência. "
+    "Se precisar corrigir depois, basta combinar com nosso consultor."
+)
+MENSAGEM_PADRAO_ETAPA18 = compor_mensagem_inicial(
+    "Agradeço por responder às perguntas! ☺️",
+    MENSAGEM_REPETICAO_ETAPA18,
 )
 
 
@@ -1767,35 +1811,32 @@ def montar_botoes_etapa18():
     return ["Pela manhã", "Pela tarde", "Pela noite"]
 
 
-def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None):
+def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=False):
     participante = (
         f"a *experiência Supera gratuita* de {nome_dependente}"
         if nome_dependente
         else "sua *experiência Supera gratuita*"
     )
-    introducoes = {
-        None: "Obrigada por responder às perguntas! ☺️",
-        "contexto_invalido": "Para sua reserva, escolha *somente um turno*: manhã, tarde ou noite.",
-        "midia": "Não consigo interpretar essa mídia. Escolha um dos turnos abaixo, por favor. ☺️",
-        "financeiro": f"{MENSAGEM_TRATAMENTO_FINANCEIRO}\n\nMas bora lá:",
-        "reforco_escolar": (
-            "O SUPERA trabalha habilidades cognitivas, como atenção, memória e raciocínio; "
-            "não oferece reforço escolar."
-        ),
-    }
-    if tratamento not in introducoes:
-        raise ValueError("Tratamento desconhecido para escolha de turno")
+    pergunta = MENSAGEM_REPETICAO_ETAPA18.format(participante=participante)
     if tratamento == "financeiro":
-        participante = (
-            f"a experiência de {nome_dependente}"
-            if nome_dependente else "sua experiência"
+        texto = montar_mensagem_tratamento_financeiro(pergunta)
+    elif tratamento == "reforco_escolar":
+        texto = montar_mensagem_tratamento_reforco_escolar(pergunta)
+    elif tratamento == "midia":
+        texto = montar_mensagem_tratamento_midia(pergunta, aceita_botoes=True)
+    elif tratamento == "contexto_invalido":
+        texto = compor_tratamento(
+            "Para sua reserva, escolha *somente um turno*: manhã, tarde ou noite.",
+            pergunta,
         )
-    texto = (
-        f"{introducoes[tratamento]}\n\n"
-        f"Qual turno fica melhor para reservar {participante}?\n\n"
-        "Mesmo que você possa em mais de um turno, escolha o de sua preferência. "
-        "Se precisar corrigir depois, basta combinar com nosso consultor."
-    )
+    elif tratamento is None:
+        texto = (
+            pergunta
+            if repeticao
+            else MENSAGEM_PADRAO_ETAPA18.format(participante=participante)
+        )
+    else:
+        raise ValueError("Tratamento desconhecido para escolha de turno")
     return montar_texto_com_rodape(texto, RODAPE_OPCAO_UNICA)
 ```
 
@@ -1804,31 +1845,41 @@ def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None):
 ### Passo 8 — Atualizar `core/integrations/whatsapp/messages/etapa19_messages.py`
 
 ```python
-"""Entrega ao comercial: preferência registrada, dia e horário ainda a combinar."""
+"""Entrega ao comercial: dia e horário ainda serão combinados."""
 
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
 
 TITULO_BOTAO_COMERCIAL = "Falar com consultor"
+MENSAGEM_REPETICAO_ETAPA19 = (
+    "Nossa equipe entrará em contato para reservar {participante} na nossa unidade.\n\n"
+    "Você também pode falar com nosso consultor pelo botão abaixo "
+    "para combinar o melhor dia e horário para sua reserva.\n\n"
+    "Se quiser avaliar nosso atendimento, é só me avisar por aqui!"
+)
+MENSAGEM_PADRAO_ETAPA19 = compor_mensagem_inicial("Perfeito! ☺️", MENSAGEM_REPETICAO_ETAPA19)
 
 
-def montar_mensagem_etapa19(nome_dependente=None, *, pedir_texto=False):
+def montar_mensagem_etapa19(
+    nome_dependente=None, *, pedir_texto=False, repeticao=False
+):
     participante = (
         f"a *experiência Supera gratuita* de {nome_dependente}"
         if nome_dependente
         else "sua *experiência Supera gratuita*"
     )
-    texto = (
-        f"Perfeito! ☺️ Nossa equipe entrará em contato para reservar {participante} "
-        "na nossa unidade.\n\n"
-        "Você também pode falar com nosso consultor pelo botão abaixo "
-        "para combinar o melhor dia e horário para sua reserva.\n\n"
-        "Se quiser avaliar nosso atendimento, é só me avisar por aqui!"
-    )
+    pergunta = MENSAGEM_REPETICAO_ETAPA19.format(participante=participante)
     if pedir_texto:
-        return (
-            "Para começar a avaliação, envie uma mensagem de texto por aqui. ☺️\n\n"
-            + texto
-        )
-    return texto
+        return montar_mensagem_tratamento_midia(pergunta)
+    return (
+        pergunta
+        if repeticao
+        else MENSAGEM_PADRAO_ETAPA19.format(participante=participante)
+    )
 ```
 
 <a id="passo-9"></a>
@@ -1836,16 +1887,26 @@ def montar_mensagem_etapa19(nome_dependente=None, *, pedir_texto=False):
 ### Passo 9 — Atualizar `core/integrations/whatsapp/messages/etapa20_messages.py`
 
 ```python
+"""Etapa 20: sua reserva pelo link, apresentação e repetição."""
+
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_rodape,
 )
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+    compor_tratamento,
+)
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
-
-# ETAPA 20 - SUA RESERVA APÓS A TRIAGEM COGNITIVA
 
 TEXTO_BOTAO_JA_AGENDEI_ETAPA20 = "Já reservei"
 
@@ -1853,73 +1914,50 @@ RODAPE_ETAPA20_AGENDAMENTO = (
     "Depois de concluir sua reserva no link, volte aqui e toque em *Já reservei*."
 )
 
-MENSAGEM_ETAPA20 = (
-    "Agradeço por responder às perguntas! ☺️\n"
-    "\n"
-    "Para reservar sua *experiência Supera gratuita*, basta clicar neste link "
-    "para escolher o melhor dia e horário:\n"
-    "{link_agendamento}"
-)
-
-MENSAGEM_MIDIA_ETAPA20 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "\n"
-    "Para continuar, finalize *sua reserva* pelo link:\n"
-    "{link_agendamento}"
-)
-
-MENSAGEM_FINANCEIRO_ETAPA20 = montar_mensagem_tratamento_financeiro(
-    "Para continuar, conclua *sua reserva* pelo link:\n"
-    "{link_agendamento}"
-)
-
-MENSAGEM_CONTEXTO_INVALIDO_ETAPA20 = (
-    "Não consegui entender sua resposta.\n"
-    "\n"
-    "Escolha o melhor dia e horário e conclua *sua reserva* pelo link abaixo:\n"
-    "{link_agendamento}"
-)
-
-MENSAGEM_RETOMADA_ETAPA20 = (
-    "Para continuar, finalize *sua reserva* pelo link:\n"
+MENSAGEM_REPETICAO_ETAPA20 = (
+    "Para reservar {experiencia}, basta clicar neste link para escolher o melhor "
+    "dia e horário:\n"
     "{link_agendamento}"
 )
 
 
-def montar_mensagem_etapa20(link_agendamento):
-    return _montar_mensagem_com_link_e_rodape(
-        MENSAGEM_ETAPA20,
-        link_agendamento,
+def montar_mensagem_etapa20(link_agendamento, nome_dependente=None, *, repeticao=False):
+    mensagem = _montar_repeticao(link_agendamento, nome_dependente)
+    if not repeticao:
+        mensagem = compor_mensagem_inicial(
+            "Agradeço por responder às perguntas! ☺️", mensagem
+        )
+    return _com_rodape(mensagem)
+
+
+def montar_mensagem_midia_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_midia(
+        _montar_repeticao(link_agendamento, nome_dependente),
+        aceita_botoes=True,
     )
+    return _com_rodape(mensagem)
 
 
-def montar_mensagem_midia_etapa20(link_agendamento):
-    return _montar_mensagem_com_link_e_rodape(
-        MENSAGEM_MIDIA_ETAPA20,
-        link_agendamento,
+def montar_mensagem_financeiro_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_financeiro(
+        _montar_repeticao(link_agendamento, nome_dependente),
     )
+    return _com_rodape(mensagem)
 
 
-def montar_mensagem_financeiro_etapa20(link_agendamento):
-    return _montar_mensagem_com_link_e_rodape(
-        MENSAGEM_FINANCEIRO_ETAPA20,
-        link_agendamento,
+def montar_mensagem_reforco_escolar_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_reforco_escolar(
+        _montar_repeticao(link_agendamento, nome_dependente),
     )
+    return _com_rodape(mensagem)
 
 
-def montar_mensagem_reforco_escolar_etapa20(link_agendamento):
-    return _montar_mensagem_com_link_e_rodape(
-        montar_mensagem_tratamento_reforco_escolar(
-            MENSAGEM_RETOMADA_ETAPA20,
-        ),
-        link_agendamento,
-    )
-
-
-def montar_mensagem_contexto_invalido_etapa20(link_agendamento):
-    return _montar_mensagem_com_link_e_rodape(
-        MENSAGEM_CONTEXTO_INVALIDO_ETAPA20,
-        link_agendamento,
+def montar_mensagem_contexto_invalido_etapa20(link_agendamento, nome_dependente=None):
+    return _com_rodape(
+        compor_tratamento(
+            "Não consegui entender sua resposta.",
+            _montar_repeticao(link_agendamento, nome_dependente),
+        )
     )
 
 
@@ -1927,13 +1965,20 @@ def montar_botoes_etapa20():
     return (TEXTO_BOTAO_JA_AGENDEI_ETAPA20,)
 
 
-def _montar_mensagem_com_link_e_rodape(mensagem, link_agendamento):
-    link = _normalizar_link_agendamento(link_agendamento)
-    texto = mensagem.format(link_agendamento=link)
-    return montar_texto_com_rodape(
-        texto,
-        RODAPE_ETAPA20_AGENDAMENTO,
+def _montar_repeticao(link_agendamento, nome_dependente):
+    experiencia = "sua *experiência Supera gratuita*"
+    if nome_dependente is not None:
+        if not isinstance(nome_dependente, str) or not nome_dependente.strip():
+            raise ValueError("Nome do dependente inválido para apresentar sua reserva")
+        experiencia = f"a *experiência Supera gratuita* de {nome_dependente.strip()}"
+    return MENSAGEM_REPETICAO_ETAPA20.format(
+        experiencia=experiencia,
+        link_agendamento=_normalizar_link_agendamento(link_agendamento),
     )
+
+
+def _com_rodape(mensagem):
+    return montar_texto_com_rodape(mensagem, RODAPE_ETAPA20_AGENDAMENTO)
 
 
 def _normalizar_link_agendamento(link_agendamento):
@@ -1953,7 +1998,13 @@ def _normalizar_link_agendamento(link_agendamento):
 ### Passo 10 — Atualizar `core/integrations/whatsapp/messages/etapa21_messages.py`
 
 ```python
-# ETAPA 21 - NOTA DA PESQUISA DE SATISFACAO
+"""Etapa 21: avaliação do atendimento, sem confundir nota com aceite."""
+
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+    compor_tratamento,
+)
+
 
 OPCOES_SATISFACAO_ETAPA21 = (
     (5, "Excelente"),
@@ -1963,30 +2014,29 @@ OPCOES_SATISFACAO_ETAPA21 = (
     (1, "Muito ruim"),
 )
 
-MENSAGEM_ETAPA21 = (
-    "Maravilha {nome}! 😊\n\n"
-    "Antes de finalizarmos, qual seu grau de satisfação com o nosso "
-    "atendimento?"
-)
-
-MENSAGEM_CONTEXTO_INVALIDO_ETAPA21 = (
-    "Desculpe, não entendi. Sendo 5 excelente e 1 muito ruim, qual o seu "
-    "grau de satisfação?"
+MENSAGEM_REPETICAO_ETAPA21 = (
+    "Antes de finalizarmos, qual seu grau de satisfação com o nosso atendimento?"
 )
 
 
-def montar_mensagem_etapa21(nome):
-    return MENSAGEM_ETAPA21.format(nome=nome)
+def montar_mensagem_etapa21(nome, *, repeticao=False):
+    if repeticao:
+        return MENSAGEM_REPETICAO_ETAPA21
+    return compor_mensagem_inicial(
+        f"Maravilha, {nome}! 😊", MENSAGEM_REPETICAO_ETAPA21
+    )
 
 
 def montar_mensagem_contexto_invalido_etapa21():
-    return MENSAGEM_CONTEXTO_INVALIDO_ETAPA21
+    return compor_tratamento(
+        "Desculpe, não entendi. Escolha uma nota de 1 (muito ruim) a 5 (excelente).",
+        MENSAGEM_REPETICAO_ETAPA21,
+    )
 
 
 def montar_opcoes_satisfacao_etapa21():
     return [
-        (nota, f"{nota} - {descricao}")
-        for nota, descricao in OPCOES_SATISFACAO_ETAPA21
+        (nota, f"{nota} - {descricao}") for nota, descricao in OPCOES_SATISFACAO_ETAPA21
     ]
 ```
 
@@ -1995,59 +2045,59 @@ def montar_opcoes_satisfacao_etapa21():
 ### Passo 11 — Atualizar `core/integrations/whatsapp/messages/etapa22_messages.py`
 
 ```python
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+"""Etapa 22: apresentação, repetição e tratamentos compostos."""
+
+from core.integrations.whatsapp.messages.tratamentos.composicao import compor_tratamento
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-# ETAPA 22 - DECISAO SOBRE O COMENTARIO DA PESQUISA DE SATISFACAO
-
-TEXTO_BOTAO_COMENTAR_ETAPA22 = "Sim, quero comentar"
-TEXTO_BOTAO_SEM_COMENTARIO_ETAPA22 = "Prefiro não comentar"
-
-MENSAGEM_ETAPA22 = (
+MENSAGEM_PADRAO_ETAPA22 = (
     "Você tem algum comentário ou sugestão para melhorar nosso atendimento?\n"
     "Seu feedback é muito importante para nós! 😊"
 )
 
-MENSAGEM_MIDIA_ETAPA22 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_ETAPA22}"
+MENSAGEM_REPETICAO_ETAPA22 = (
+    "Você gostaria de deixar um comentário ou sugestão sobre nosso atendimento?"
 )
 
-MENSAGEM_FINANCEIRO_ETAPA22 = montar_mensagem_tratamento_financeiro(
-    MENSAGEM_ETAPA22,
-)
-
-MENSAGEM_CONTEXTO_INVALIDO_ETAPA22 = (
-    "Desculpe, não entendi.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_ETAPA22}"
-)
+ORIENTACAO_CONTEXTO_ETAPA22 = "Desculpe, não entendi."
 
 
-def montar_mensagem_etapa22():
-    return MENSAGEM_ETAPA22
-
-
-def montar_mensagem_midia_etapa22():
-    return MENSAGEM_MIDIA_ETAPA22
+def montar_mensagem_etapa22(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA22 if repeticao else MENSAGEM_PADRAO_ETAPA22
+    return mensagem
 
 
 def montar_mensagem_financeiro_etapa22():
-    return MENSAGEM_FINANCEIRO_ETAPA22
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA22)
 
 
-def montar_mensagem_reforco_escolar_etapa22():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_ETAPA22,
+def montar_mensagem_midia_etapa22():
+    return montar_mensagem_tratamento_midia(
+        MENSAGEM_REPETICAO_ETAPA22, aceita_botoes=True
     )
 
 
+def montar_mensagem_reforco_escolar_etapa22():
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA22)
+
+
 def montar_mensagem_contexto_invalido_etapa22():
-    return MENSAGEM_CONTEXTO_INVALIDO_ETAPA22
+    return compor_tratamento(ORIENTACAO_CONTEXTO_ETAPA22, MENSAGEM_REPETICAO_ETAPA22)
+
+
+TEXTO_BOTAO_COMENTAR_ETAPA22 = "Sim, quero comentar"
+
+
+TEXTO_BOTAO_SEM_COMENTARIO_ETAPA22 = "Prefiro não comentar"
 
 
 def montar_botoes_etapa22():
@@ -2062,40 +2112,36 @@ def montar_botoes_etapa22():
 ### Passo 12 — Criar `core/integrations/whatsapp/messages/etapa23_messages.py`
 
 ```python
-# ETAPA 23 - COMENTARIO DA PESQUISA DE SATISFACAO
+"""Etapa 23: apresentação, repetição e tratamentos compostos."""
 
-MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA23 = (
+from core.integrations.whatsapp.messages.tratamentos.composicao import compor_tratamento
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+
+
+MENSAGEM_PADRAO_ETAPA23 = (
+    "Perfeito! 😊\n" "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
+)
+
+MENSAGEM_REPETICAO_ETAPA23 = (
     "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
 )
 
-MENSAGEM_ETAPA23 = (
-    "Perfeito! 😊\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA23}"
-)
-
-MENSAGEM_MIDIA_ETAPA23 = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA23}"
-)
-
-MENSAGEM_CONTEXTO_INVALIDO_ETAPA23 = (
-    "Desculpe, não consegui entender seu comentário.\n\n"
-    "Mas bora lá:\n\n"
-    f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA23}"
-)
+ORIENTACAO_CONTEXTO_ETAPA23 = "Desculpe, não consegui entender seu comentário."
 
 
-def montar_mensagem_etapa23():
-    return MENSAGEM_ETAPA23
+def montar_mensagem_etapa23(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA23 if repeticao else MENSAGEM_PADRAO_ETAPA23
+    return mensagem
 
 
 def montar_mensagem_midia_etapa23():
-    return MENSAGEM_MIDIA_ETAPA23
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_ETAPA23)
 
 
 def montar_mensagem_contexto_invalido_etapa23():
-    return MENSAGEM_CONTEXTO_INVALIDO_ETAPA23
+    return compor_tratamento(ORIENTACAO_CONTEXTO_ETAPA23, MENSAGEM_REPETICAO_ETAPA23)
 ```
 
 <a id="passo-13"></a>
@@ -2207,8 +2253,13 @@ TIPO_TRATAMENTO_IDADE_INVALIDA = "idade_invalida"
 
 
 # CENARIO NORMAL: PERGUNTAR A IDADE DO PROPRIO CLIENTE
-def enviar_etapa6_cliente(cliente_telefone, phone_id_unidade):
-    mensagem_bot = montar_mensagem_idade_etapa6()
+def enviar_etapa6_cliente(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
+    mensagem_bot = montar_mensagem_idade_etapa6(repeticao=repeticao)
 
     return _enviar_texto_etapa6(
         cliente_telefone,
@@ -2223,9 +2274,11 @@ def enviar_etapa6_dependente(
     cliente_telefone,
     phone_id_unidade,
     nome_dependente,
+    *,
+    repeticao=False,
 ):
     mensagem_bot = montar_mensagem_idade_dependente_etapa6(
-        nome_dependente
+        nome_dependente, repeticao=repeticao
     )
 
     return _enviar_texto_etapa6(
@@ -2255,9 +2308,7 @@ def enviar_etapa6_dependente_midia(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = montar_mensagem_idade_dependente_etapa6_midia(
-        nome_dependente
-    )
+    mensagem_bot = montar_mensagem_idade_dependente_etapa6_midia(nome_dependente)
 
     return _enviar_texto_etapa6(
         cliente_telefone,
@@ -2359,10 +2410,8 @@ def enviar_etapa6_dependente_contexto_idade_invalida(
     phone_id_unidade,
     nome_dependente,
 ):
-    mensagem_bot = (
-        montar_mensagem_contexto_idade_dependente_invalida_etapa6(
-            nome_dependente
-        )
+    mensagem_bot = montar_mensagem_contexto_idade_dependente_invalida_etapa6(
+        nome_dependente
     )
 
     return _enviar_texto_etapa6(
@@ -2495,9 +2544,7 @@ def _enviar_texto_etapa6(
             "mensagem_bot": mensagem_bot,
             "id_hash_msg_bot": id_hash_msg_bot,
             "id_etapa_resultante": ID_ETAPA6,
-            "tipo_mensagem": (
-                "interactive_cta_url" if botao_url else "text"
-            ),
+            "tipo_mensagem": ("interactive_cta_url" if botao_url else "text"),
             "canal": "meta_whatsapp",
             "atualizar_conversa": True,
             "atualizar_last_from_bot": True,
@@ -2554,9 +2601,10 @@ def enviar_etapa18(
     nome_dependente=None,
     *,
     tratamento=None,
+    repeticao=False,
 ):
     texto = montar_mensagem_etapa18(
-        nome_dependente, tratamento=tratamento
+        nome_dependente, tratamento=tratamento, repeticao=repeticao
     )
     try:
         resposta = conta_wa(phone_id_unidade).send_message(
@@ -2624,9 +2672,10 @@ def enviar_etapa19(
     nome_dependente=None,
     *,
     pedir_texto=False,
+    repeticao=False,
 ):
     texto = montar_mensagem_etapa19(
-        nome_dependente, pedir_texto=pedir_texto
+        nome_dependente, pedir_texto=pedir_texto, repeticao=repeticao
     )
     botao = URLButton(
         title=TITULO_BOTAO_COMERCIAL,
@@ -2702,8 +2751,13 @@ def enviar_etapa20(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    nome_dependente=None,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_etapa20(link_agendamento)
+    mensagem_bot = montar_mensagem_etapa20(
+        link_agendamento, nome_dependente, repeticao=repeticao
+    )
 
     return _enviar_texto_etapa20(
         cliente_telefone,
@@ -2718,8 +2772,12 @@ def enviar_etapa20_midia(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
-    mensagem_bot = montar_mensagem_midia_etapa20(link_agendamento)
+    mensagem_bot = montar_mensagem_midia_etapa20(
+        link_agendamento, nome_dependente=nome_dependente
+    )
 
     return _enviar_texto_etapa20(
         cliente_telefone,
@@ -2735,9 +2793,11 @@ def enviar_etapa20_financeiro(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_financeiro_etapa20(
-        link_agendamento,
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa20(
@@ -2754,9 +2814,11 @@ def enviar_etapa20_reforco_escolar(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_reforco_escolar_etapa20(
-        link_agendamento
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa20(
@@ -2773,9 +2835,11 @@ def enviar_etapa20_contexto_invalido(
     cliente_telefone,
     phone_id_unidade,
     link_agendamento,
+    *,
+    nome_dependente=None,
 ):
     mensagem_bot = montar_mensagem_contexto_invalido_etapa20(
-        link_agendamento
+        link_agendamento, nome_dependente=nome_dependente
     )
 
     return _enviar_texto_etapa20(
@@ -2900,8 +2964,10 @@ def enviar_etapa21(
     cliente_telefone,
     phone_id_unidade,
     nome_cliente,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_etapa21(nome_cliente)
+    mensagem_bot = montar_mensagem_etapa21(nome_cliente, repeticao=repeticao)
 
     return _enviar_lista_etapa21(
         cliente_telefone,
@@ -3060,11 +3126,13 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "opcao_comentario_invalida"
 def enviar_etapa22(
     cliente_telefone,
     phone_id_unidade,
+    *,
+    repeticao=False,
 ):
     return _enviar_botoes_etapa22(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa22(),
+        montar_mensagem_etapa22(repeticao=repeticao),
         evento="enviar_etapa22",
     )
 
@@ -3221,11 +3289,16 @@ TIPO_TRATAMENTO_CONTEXTO_INVALIDO = "comentario_satisfacao_invalido"
 
 
 # CENARIO NORMAL: SOLICITA O TEXTO DO COMENTARIO
-def enviar_etapa23(cliente_telefone, phone_id_unidade):
+def enviar_etapa23(
+    cliente_telefone,
+    phone_id_unidade,
+    *,
+    repeticao=False,
+):
     return _enviar_texto_etapa23(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa23(),
+        montar_mensagem_etapa23(repeticao=repeticao),
         evento="enviar_etapa23",
     )
 
@@ -3530,17 +3603,21 @@ logger = logging.getLogger("db.contexto_etapa20")
 
 
 def buscar_contexto_etapa20(id_conversa, id_unidade, cursor):
-    """Carrega o agendamento e o cliente vinculados à conversa."""
+    """Carrega link, cliente e participante para apresentar ou repetir sua reserva."""
     cursor.execute(
         """
         SELECT
             u.link_agendamento,
-            cl.nome
+            cl.nome,
+            c.status_dependente,
+            d.nome_dependente
         FROM chatbot.conversa c
         JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
+        LEFT JOIN chatbot.dependente d
+          ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s
           AND c.id_unidade = %s
         LIMIT 1;
@@ -3556,12 +3633,18 @@ def buscar_contexto_etapa20(id_conversa, id_unidade, cursor):
             f"(id_conversa={id_conversa}, id_unidade={id_unidade})"
         )
 
-    link_agendamento, nome_cliente = resultado
+    link_agendamento, nome_cliente, status_dependente, nome_dependente = resultado
+
+    if not isinstance(status_dependente, bool):
+        raise ValueError("Destino do atendimento ausente para sua reserva")
+    if status_dependente and (
+        not isinstance(nome_dependente, str) or not nome_dependente.strip()
+    ):
+        raise ValueError("Nome do dependente ausente para sua reserva")
 
     if not link_agendamento or not str(link_agendamento).strip():
         raise ValueError(
-            "Unidade sem link de agendamento configurado "
-            f"(id_unidade={id_unidade})"
+            "Unidade sem link de agendamento configurado " f"(id_unidade={id_unidade})"
         )
 
     if not nome_cliente or not str(nome_cliente).strip():
@@ -3582,6 +3665,7 @@ def buscar_contexto_etapa20(id_conversa, id_unidade, cursor):
     return {
         "link_agendamento_unidade": str(link_agendamento).strip(),
         "nome_cliente": str(nome_cliente).strip(),
+        "nome_dependente": nome_dependente.strip() if status_dependente else None,
     }
 ```
 
@@ -4491,6 +4575,7 @@ def resolve_etapa17(contexto_historico):
     else:
         contexto_envio = enviar_etapa20(
             cliente_telefone, phone_id_unidade, link_agendamento,
+            nome_dependente=nome_dependente if status_dependente else None,
         )
     contexto_envio["resposta_triagem"] = resposta_triagem
     logger.info("triagem_concluida | id_conversa=%s destino=%s", contexto_historico["id_conversa"], etapa_destino)
@@ -4737,15 +4822,18 @@ logger = logging.getLogger("worker.etapa20")
 def resolve_etapa20(contexto_historico):
     tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
-    link_agendamento = contexto_historico.get(
-        "link_agendamento_unidade"
-    )
+    link_agendamento = contexto_historico.get("link_agendamento_unidade")
     nome_cliente = contexto_historico.get("nome_cliente")
+    nome_dependente = (
+        contexto_historico.get("nome_dependente")
+        if contexto_historico.get("status_dependente")
+        else None
+    )
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-# VALIDANDO MIDIA NA ETAPA 20
+    # VALIDANDO MIDIA NA ETAPA 20
     if validar_midia(tipo_mensagem):
         _logar_tipo_nao_suportado(contexto_historico)
 
@@ -4753,6 +4841,7 @@ def resolve_etapa20(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     if validar_duvida_reforco_escolar(texto_cliente):
@@ -4765,9 +4854,10 @@ def resolve_etapa20(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
-# VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 20
+    # VALIDANDO PERGUNTA FINANCEIRA NA ETAPA 20
     if validar_pergunta_financeira(texto_cliente, referencia_experiencia=True):
         _logar_tratamento_texto(
             contexto_historico,
@@ -4778,6 +4868,7 @@ def resolve_etapa20(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     # VALIDANDO A CONFIRMACAO DE AGENDAMENTO
@@ -4793,6 +4884,7 @@ def resolve_etapa20(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
             link_agendamento,
+            nome_dependente=nome_dependente,
         )
 
     # VALIDANDO DESTINO
@@ -5588,14 +5680,17 @@ def _resolver_com_saudacao(resolver, contexto_historico):
 
 ```python
 from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa18, etapa19
-from core.integrations.whatsapp.messages.contato_comercial import montar_mensagem_contato_comercial
+from core.integrations.whatsapp.messages.contato_comercial import (
+    montar_mensagem_contato_comercial,
+)
 from core.validacoes.turno import validar_turno
+
 """Repete conteúdo de etapa sem interpretar a reação nem resolver transições."""
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_cabecalho,
 )
-from core.integrations.whatsapp.messages.followup_messages import (
+from core.integrations.whatsapp.messages.tratamentos.retorno_followup import (
     montar_saudacao_retomada_followup,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import (
@@ -5739,19 +5834,33 @@ def _selecionar_sender(etapa, dados):
             else (etapa9.enviar_etapa9_cliente, (nome,))
         )
     if etapa == ETAPA_18_ESCOLHA_TURNO:
-        return etapa18.enviar_etapa18, (_texto(dados, "nome_dependente") if dependente else None,)
+        return etapa18.enviar_etapa18, (
+            _texto(dados, "nome_dependente") if dependente else None,
+        )
     if etapa == ETAPA_19_ENCAMINHAMENTO_COMERCIAL:
         # Suporte à retomada já registrada, sem ampliar a elegibilidade proativa.
         turno = validar_turno(dados.get("turno"))
         nome_dependente = _texto(dados, "nome_dependente") if dependente else None
         texto = montar_mensagem_contato_comercial(
-            nome_agente=_texto(dados, "nome_agente"), genero_agente=_texto(dados, "genero"),
-            nome_cliente=_texto(dados, "nome_cliente"), nome_dependente=nome_dependente,
-            idade_aluno=dados.get("idade_dependente" if dependente else "idade_cliente"), turno=turno,
+            nome_agente=_texto(dados, "nome_agente"),
+            genero_agente=_texto(dados, "genero"),
+            nome_cliente=_texto(dados, "nome_cliente"),
+            nome_dependente=nome_dependente,
+            idade_aluno=dados.get(
+                "idade_dependente" if dependente else "idade_cliente"
+            ),
+            turno=turno,
         )
-        return etapa19.enviar_etapa19, (_texto(dados, "numero_comercial"), texto, nome_dependente)
+        return etapa19.enviar_etapa19, (
+            _texto(dados, "numero_comercial"),
+            texto,
+            nome_dependente,
+        )
     if etapa == ETAPA_20_AGENDAMENTO:
-        return etapa20.enviar_etapa20, (_texto(dados, "link_agendamento"),)
+        return etapa20.enviar_etapa20, (
+            _texto(dados, "link_agendamento"),
+            _texto(dados, "nome_dependente") if dependente else None,
+        )
     if etapa == ETAPA_21_PESQUISA_SATISFACAO:
         return etapa21.enviar_etapa21, (_texto(dados, "nome_cliente"),)
     raise ValueError(f"Etapa não repetível: {etapa}")
@@ -5777,19 +5886,18 @@ def enviar_repeticao_followup(contexto):
         if contexto["id_etapa_atual"] == ETAPA_1_NOME_CLIENTE
         else contexto["dados_repeticao"].get("nome_cliente")
     )
-    saudacao = montar_saudacao_retomada_followup(
-        nome_saudacao
-    )
-    # O prefixo substitui a saudação própria da etapa 9.
+    saudacao = montar_saudacao_retomada_followup(nome_saudacao)
+    # A triagem reapresenta sua pergunta canônica; as demais etapas usam
+    # a repetição neutra, inclusive a escolha de turno e a entrega ao comercial.
     opcoes_envio = (
-        {"incluir_saudacao": False}
-        if contexto["id_etapa_atual"] == ETAPA_9_RETORNO_OFERTA
-        else {}
+        {} if contexto["id_etapa_atual"] in SENDERS_TRIAGEM else {"repeticao": True}
     )
     with usar_prefixo_mensagem_bot(saudacao):
         envio = sender(
-            mensagem["cliente_telefone"], mensagem["id_phone_unidade"],
-            *extras, **opcoes_envio,
+            mensagem["cliente_telefone"],
+            mensagem["id_phone_unidade"],
+            *extras,
+            **opcoes_envio,
         )
     # O cabeçalho já foi ao WhatsApp no corpo. O histórico recebe o mesmo texto.
     texto = envio["mensagem_bot"]
@@ -7236,7 +7344,7 @@ from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
 
 
 from core.logging_config import short_value
-from core.integrations.whatsapp.messages.componentes_compartilhados import (
+from core.integrations.whatsapp.messages.tratamentos.retorno_inatividade import (
     montar_saudacao_retorno,
 )
 from core.repositories.atendimento.conversas import (
@@ -7340,16 +7448,13 @@ def valida_historico(mensagem, contexto_banco, cursor):
     )
 
     saudacao_retorno = None
-    if (
-        not resposta_bot_para_mensagem_atual
-        and contexto_conversa.get("id_etapa_atual") not in {None, 1}
-    ):
-        nome_cliente, ultima_mensagem_bot_em = (
-            buscar_contexto_saudacao_retorno(
-                id_conversa,
-                contexto_banco["id_cliente"],
-                cursor,
-            )
+    if not resposta_bot_para_mensagem_atual and contexto_conversa.get(
+        "id_etapa_atual"
+    ) not in {None, 1}:
+        nome_cliente, ultima_mensagem_bot_em = buscar_contexto_saudacao_retorno(
+            id_conversa,
+            contexto_banco["id_cliente"],
+            cursor,
         )
         saudacao_retorno = montar_saudacao_retorno(
             nome_cliente,
@@ -7401,17 +7506,13 @@ def valida_historico(mensagem, contexto_banco, cursor):
             contexto_conversa.get("status_dependente")
             and not contexto_especifico_etapa["nome_dependente"]
         ):
-            raise ValueError(
-                "Etapa 6 de dependente sem nome persistido"
-            )
+            raise ValueError("Etapa 6 de dependente sem nome persistido")
 
         if (
             not contexto_conversa.get("status_dependente")
             and not contexto_especifico_etapa["nome_cliente"]
         ):
-            raise ValueError(
-                "Etapa 6 do cliente sem nome persistido"
-            )
+            raise ValueError("Etapa 6 do cliente sem nome persistido")
 
     if id_etapa_cliente == ETAPA_7_OFERTA_AULA:
         contexto_especifico_etapa = buscar_contexto_etapa7(
@@ -7427,8 +7528,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
         )
         if not contexto_especifico_etapa[chave_nome]:
             raise ValueError(
-                "Etapa 7 sem nome do aluno persistido "
-                f"(campo={chave_nome})"
+                "Etapa 7 sem nome do aluno persistido " f"(campo={chave_nome})"
             )
 
     if id_etapa_cliente in {
@@ -7462,13 +7562,9 @@ def valida_historico(mensagem, contexto_banco, cursor):
             contexto_banco["id_unidade"],
             cursor,
         )
-        status_dependente_email = contexto_email.pop(
-            "status_dependente_contexto_email"
-        )
+        status_dependente_email = contexto_email.pop("status_dependente_contexto_email")
 
-        if status_dependente_email != contexto_conversa.get(
-            "status_dependente"
-        ):
+        if status_dependente_email != contexto_conversa.get("status_dependente"):
             raise ValueError(
                 "Etapa 10 com destino de atendimento inconsistente "
                 f"(id_conversa={id_conversa})"
@@ -7507,9 +7603,7 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
             )
 
-        idade_pessoa_triagem = contexto_especifico_etapa[
-            "idade_pessoa_triagem"
-        ]
+        idade_pessoa_triagem = contexto_especifico_etapa["idade_pessoa_triagem"]
         if (
             isinstance(idade_pessoa_triagem, bool)
             or not isinstance(idade_pessoa_triagem, int)
@@ -7542,19 +7636,24 @@ def valida_historico(mensagem, contexto_banco, cursor):
                 f"(etapa={id_etapa_cliente}, id_conversa={id_conversa})"
             )
 
-        contexto_especifico_etapa.pop(
-            "status_dependente_contexto_triagem"
-        )
+        contexto_especifico_etapa.pop("status_dependente_contexto_triagem")
 
     # A fotografia atual da unidade decide somente a saída da etapa 17.
     # Quem já entrou nas etapas 18/19 conclui essa rota, mesmo se um link for adicionado.
     if id_etapa_cliente in {
-        ETAPA_17_TRIAGEM_PERGUNTA_6, ETAPA_18_ESCOLHA_TURNO,
+        ETAPA_17_TRIAGEM_PERGUNTA_6,
+        ETAPA_18_ESCOLHA_TURNO,
         ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
     }:
-        dados_reserva = buscar_contexto_etapa18(id_conversa, contexto_banco["id_unidade"], cursor)
-        if dados_reserva.pop("status_dependente_reserva") != contexto_conversa.get("status_dependente"):
-            raise ValueError("Destino de atendimento divergente na preparação de sua reserva")
+        dados_reserva = buscar_contexto_etapa18(
+            id_conversa, contexto_banco["id_unidade"], cursor
+        )
+        if dados_reserva.pop("status_dependente_reserva") != contexto_conversa.get(
+            "status_dependente"
+        ):
+            raise ValueError(
+                "Destino de atendimento divergente na preparação de sua reserva"
+            )
         contexto_especifico_etapa.update(dados_reserva)
     elif id_etapa_cliente == ETAPA_20_AGENDAMENTO:
         contexto_especifico_etapa.update(
@@ -7611,12 +7710,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
         # Compatibilidade apenas para logs existentes. Este campo nunca decide
         # uma transição e pode ser None quando há mais de um destino.
         "id_etapa_resposta": id_etapa_resposta,
-        "id_etapa_origem_transicao": contexto_transicao[
-            "id_etapa_origem_transicao"
-        ],
-        "transicoes_permitidas": contexto_transicao[
-            "transicoes_permitidas"
-        ],
+        "id_etapa_origem_transicao": contexto_transicao["id_etapa_origem_transicao"],
+        "transicoes_permitidas": contexto_transicao["transicoes_permitidas"],
         "status_dependente": contexto_conversa.get("status_dependente"),
         "last_message_from": last_message_from_saida,
         "last_message_from_entrada": last_message_from_entrada,
@@ -8342,9 +8437,14 @@ class RepeticaoTests(unittest.TestCase):
                     with patch.object(cliente, "WhatsApp", return_value=fake):
                         envio = repeticao.enviar_repeticao_followup(cx)
                     self.assertTrue(
-                        envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                        envio["mensagem_bot"].startswith(
+                            "Que bom te ver novamente!\n\n"
+                        )
                     )
-                    self.assertIn("Como você se chama?", envio["mensagem_bot"])
+                    self.assertIn(
+                        "Me diz, qual o seu primeiro nome?", envio["mensagem_bot"]
+                    )
+                    self.assertNotIn("assistente do", envio["mensagem_bot"])
                     if nome_antigo:
                         self.assertNotIn(nome_antigo, envio["mensagem_bot"])
                     self.assertNotIn("Opa", envio["mensagem_bot"])
@@ -8352,7 +8452,8 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("evento_transicao", envio)
                     self.assertEqual(cx["dados_repeticao"]["nome_cliente"], nome_antigo)
                     self.assertEqual(
-                        envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
+                        envio["mensagem_bot"],
+                        fake.send_message.call_args.kwargs["text"],
                     )
 
     def test_todas_etapas_repetiveis_usam_senders_existentes(self):
@@ -8383,9 +8484,7 @@ class RepeticaoTests(unittest.TestCase):
                         if etapa == 1
                         else "Que bom te ver novamente, Ana!\n\n"
                     )
-                    self.assertTrue(
-                        envio["mensagem_bot"].startswith(saudacao_esperada)
-                    )
+                    self.assertTrue(envio["mensagem_bot"].startswith(saudacao_esperada))
                     self.assertEqual(
                         envio["mensagem_bot"].count("Que bom te ver novamente"), 1
                     )
@@ -11217,7 +11316,7 @@ class FluxoReservaTests(unittest.TestCase):
         envio = resolver_etapa19.resolve_etapa19(ctx)
         self.assertEqual(envio["id_etapa_resultante"], 19)
         self.assertNotIn("evento_transicao", envio)
-        self.assertIn("envie uma mensagem de texto", envio["mensagem_bot"])
+        self.assertIn("responda por texto", envio["mensagem_bot"])
         botao = self.http.send_message.call_args.kwargs["buttons"]
         mensagem = parse_qs(urlparse(botao.url).query)["text"][0]
         self.assertIn("João, que tem 12 anos", mensagem)
@@ -12768,11 +12867,20 @@ from core.repositories.atendimento.followup import buscar_contexto_repeticao
 from tests.unit.test_followup import contexto as contexto_followup
 from workers.worker_flow.response_flow import repeticao_followup
 from workers.worker_flow.response_flow.etapas import resolver_etapa2, resolver_etapa7
+from workers.worker_flow.response_flow.etapas import resolver_etapa17
 from workers.worker_flow.response_flow.flow_sender import flow_sender
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import validar_etapa2
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7 import validar_etapa7
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import validar_etapa9
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import validar_etapa20
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa2 import (
+    validar_etapa2,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7 import (
+    validar_etapa7,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
+    validar_etapa9,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
+    validar_etapa20,
+)
 from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
     validar_pergunta_financeira_etapa4,
 )
@@ -12780,18 +12888,42 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
     validar_pergunta_financeira,
 )
 
+from core.integrations.whatsapp.messages import etapa1_messages as etapa1
+from core.integrations.whatsapp.messages import etapa3_messages as etapa3
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
+    MENSAGEM_TRATAMENTO_FINANCEIRO,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    MENSAGEM_TRATAMENTO_MIDIA_COM_BOTOES,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
+    MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR,
+)
+from core.repositories.fluxo.contextos.etapa20 import buscar_contexto_etapa20
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 
 def contexto_resposta(etapa, texto, transicoes, *, dependente=False):
     return {
-        'id_conversa': 1, 'id_etapa_atual': etapa, 'id_etapa_cliente': etapa,
-        'id_etapa_origem_transicao': etapa, 'transicoes_permitidas': transicoes,
-        'texto_cliente_atual': texto, 'tipo_mensagem_atual': 'text',
-        'status_dependente': dependente, 'nome_cliente': 'Maria',
-        'nome_dependente': 'Lucas', 'retry_count': 0,
-        'resposta_bot_para_mensagem_atual': None,
-        'mensagem_cliente_atual': {
-            'cliente_telefone': '5511999999999', 'id_phone_unidade': 'phone',
-            'id_mensagem_fila': 10, 'id_hash_msg': 'wamid.entrada',
+        "id_conversa": 1,
+        "id_etapa_atual": etapa,
+        "id_etapa_cliente": etapa,
+        "id_etapa_origem_transicao": etapa,
+        "transicoes_permitidas": transicoes,
+        "texto_cliente_atual": texto,
+        "tipo_mensagem_atual": "text",
+        "status_dependente": dependente,
+        "nome_cliente": "Maria",
+        "nome_dependente": "Lucas",
+        "retry_count": 0,
+        "resposta_bot_para_mensagem_atual": None,
+        "mensagem_cliente_atual": {
+            "cliente_telefone": "5511999999999",
+            "id_phone_unidade": "phone",
+            "id_mensagem_fila": 10,
+            "id_hash_msg": "wamid.entrada",
         },
     }
 
@@ -12799,146 +12931,247 @@ def contexto_resposta(etapa, texto, transicoes, *, dependente=False):
 class DestinoAtendimentoTests(unittest.TestCase):
     def test_negativa_sem_destino_alternativo_repete_pergunta(self):
         for texto in (
-            'Não é para mim', 'não é para meu filho', 'Não para minha mãe',
-            'não é para a minha filha', 'não é para um dependente',
-            'não é para outra pessoa', 'não',
+            "Não é para mim",
+            "não é para meu filho",
+            "Não para minha mãe",
+            "não é para a minha filha",
+            "não é para um dependente",
+            "não é para outra pessoa",
+            "não",
         ):
             with self.subTest(texto=texto):
                 self.assertIsNone(validar_etapa2(texto))
 
     def test_destino_explicito_e_correcao_com_virgula_continuam_validos(self):
         casos = {
-            'Para mim': 'para_mim', 'Para um dependente': 'para_outra_pessoa',
-            'Não, é para mim': 'para_mim', 'não, para minha filha': 'para_outra_pessoa',
-            'Não é para mim, é para meu filho': 'para_outra_pessoa',
-            'É para minha mãe': 'para_outra_pessoa', 'meu neto': 'para_outra_pessoa',
+            "Para mim": "para_mim",
+            "Para um dependente": "para_outra_pessoa",
+            "Não, é para mim": "para_mim",
+            "não, para minha filha": "para_outra_pessoa",
+            "Não é para mim, é para meu filho": "para_outra_pessoa",
+            "É para minha mãe": "para_outra_pessoa",
+            "meu neto": "para_outra_pessoa",
         }
         for texto, esperado in casos.items():
             with self.subTest(texto=texto):
                 self.assertEqual(validar_etapa2(texto), esperado)
 
     def test_negativa_nao_gera_evento_nem_escolha_de_destino(self):
-        ctx = contexto_resposta(2, 'Não é para mim', {'destino_atendimento_definido': 3})
-        with patch.object(resolver_etapa2, 'enviar_etapa2_contexto_opcao_invalida',
-                          return_value={'id_etapa_resultante': 2, 'tratamento': True}), \
-                patch.object(resolver_etapa2, 'enviar_etapa3') as confirmar:
+        ctx = contexto_resposta(
+            2, "Não é para mim", {"destino_atendimento_definido": 3}
+        )
+        with patch.object(
+            resolver_etapa2,
+            "enviar_etapa2_contexto_opcao_invalida",
+            return_value={"id_etapa_resultante": 2, "tratamento": True},
+        ), patch.object(resolver_etapa2, "enviar_etapa3") as confirmar:
             envio = resolver_etapa2.resolve_etapa2(ctx)
         confirmar.assert_not_called()
-        self.assertTrue(envio['tratamento'])
-        self.assertNotIn('evento_transicao', envio)
-        self.assertNotIn('status_dependente', envio)
+        self.assertTrue(envio["tratamento"])
+        self.assertNotIn("evento_transicao", envio)
+        self.assertNotIn("status_dependente", envio)
 
 
 class GratuidadeExperienciaTests(unittest.TestCase):
     def test_duvida_explicita_sobre_a_atividade_inclusive_na_profissao(self):
-        for texto in ('A demonstração prática é gratuita?', 'A experiência Supera é gratuita',
-                      'É gratuita a demonstração?', 'Demonstração gratuita?'):
+        for texto in (
+            "A demonstração prática é gratuita?",
+            "A experiência Supera é gratuita",
+            "É gratuita a demonstração?",
+            "Demonstração gratuita?",
+        ):
             with self.subTest(texto=texto):
                 self.assertTrue(validar_pergunta_financeira(texto))
                 self.assertTrue(validar_pergunta_financeira_etapa4(texto))
 
     def test_pergunta_curta_exige_contexto_de_oferta(self):
-        for texto in ('É gratuita?', 'Gratuita mesmo?', 'Quero reservar, é gratuita?'):
+        for texto in ("É gratuita?", "Gratuita mesmo?", "Quero reservar, é gratuita?"):
             with self.subTest(texto=texto):
                 self.assertFalse(validar_pergunta_financeira(texto))
-                self.assertTrue(validar_pergunta_financeira(texto, referencia_experiencia=True))
-        for texto in ('A consulta médica é gratuita?', 'Quero reservar minha experiência Supera gratuita',
-                      'Trabalho com distribuição gratuita de alimentos'):
+                self.assertTrue(
+                    validar_pergunta_financeira(texto, referencia_experiencia=True)
+                )
+        for texto in (
+            "A consulta médica é gratuita?",
+            "Quero reservar minha experiência Supera gratuita",
+            "Trabalho com distribuição gratuita de alimentos",
+        ):
             with self.subTest(texto=texto):
-                self.assertFalse(validar_pergunta_financeira(texto, referencia_experiencia=True))
+                self.assertFalse(
+                    validar_pergunta_financeira(texto, referencia_experiencia=True)
+                )
                 self.assertFalse(validar_pergunta_financeira_etapa4(texto))
 
     def test_duvida_na_oferta_recebe_esclarecimento_sem_avancar(self):
         wa = MagicMock()
-        wa.send_message.return_value = SimpleNamespace(id='wamid.financeiro')
+        wa.send_message.return_value = SimpleNamespace(id="wamid.financeiro")
         for dependente in (False, True):
-            ctx = contexto_resposta(7, 'Quero reservar, é gratuita?',
-                                    {'oferta_aceita': 10}, dependente=dependente)
-            with self.subTest(dependente=dependente), patch.object(cliente, 'WhatsApp', return_value=wa):
+            ctx = contexto_resposta(
+                7,
+                "Quero reservar, é gratuita?",
+                {"oferta_aceita": 10},
+                dependente=dependente,
+            )
+            with self.subTest(dependente=dependente), patch.object(
+                cliente, "WhatsApp", return_value=wa
+            ):
                 envio = resolver_etapa7.resolve_etapa7(ctx)
-            self.assertEqual(envio['id_etapa_resultante'], 7)
-            self.assertEqual(envio['tipo_tratamento'], 'pergunta_financeira')
-            self.assertNotIn('evento_transicao', envio)
-            self.assertIn('*experiência Supera gratuita*', envio['mensagem_bot'])
-            self.assertIn('valores de investimento', envio['mensagem_bot'])
+            self.assertEqual(envio["id_etapa_resultante"], 7)
+            self.assertEqual(envio["tipo_tratamento"], "pergunta_financeira")
+            self.assertNotIn("evento_transicao", envio)
+            self.assertIn("*experiência Supera gratuita*", envio["mensagem_bot"])
+            self.assertIn("valores de investimento", envio["mensagem_bot"])
 
 
 class MensagensReservaTests(unittest.TestCase):
     def test_dependente_continua_sendo_quem_participa(self):
-        oferta = etapa7_messages.montar_mensagem_oferta_dependente_etapa7('Lucas')
-        self.assertIn('convidar Lucas', oferta)
-        self.assertIn('*experiência Supera gratuita* de Lucas?', oferta)
-        self.assertIn('Lucas também participará', oferta)
-        self.assertNotIn('Você também participará', oferta)
-        financeiro = etapa6_messages.montar_mensagem_idade_dependente_etapa6_financeiro('Lucas')
-        self.assertIn('*experiência Supera gratuita*', financeiro)
-        self.assertIn('qual é a idade de Lucas?', financeiro)
-        retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9('Maria', 'Lucas')
-        self.assertIn('sua reserva para a *experiência Supera gratuita* de Lucas', retorno)
+        oferta = etapa7_messages.montar_mensagem_oferta_dependente_etapa7("Lucas")
+        self.assertIn("presentear Lucas", oferta)
+        self.assertIn("*experiência Supera gratuita* de Lucas?", oferta)
+        self.assertIn("Lucas também participará", oferta)
+        self.assertNotIn("Você também participará", oferta)
+        financeiro = etapa6_messages.montar_mensagem_idade_dependente_etapa6_financeiro(
+            "Lucas"
+        )
+        self.assertIn("*experiência Supera gratuita*", financeiro)
+        self.assertIn("qual é a idade de Lucas?", financeiro)
+        retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9(
+            "Maria", "Lucas"
+        )
+        self.assertIn(
+            "sua reserva para a *experiência Supera gratuita* de Lucas", retorno
+        )
+
+    def test_fim_da_triagem_apresenta_reserva_para_o_participante_correto(self):
+        for dependente in (False, True):
+            with self.subTest(dependente=dependente):
+                ctx = contexto_resposta(
+                    17,
+                    "Nunca",
+                    {"triagem_pergunta_6_respondida": 20},
+                    dependente=dependente,
+                )
+                ctx.update(
+                    idade_pessoa_triagem=12 if dependente else 40,
+                    link_agendamento_unidade="https://example.com/horarios",
+                )
+                wa = MagicMock()
+                wa.send_message.return_value = SimpleNamespace(id="wamid.reserva")
+                with patch.object(cliente, "WhatsApp", return_value=wa):
+                    envio = resolver_etapa17.resolve_etapa17(ctx)
+                self.assertEqual(envio["id_etapa_resultante"], 20)
+                self.assertEqual(
+                    envio["evento_transicao"], "triagem_pergunta_6_respondida"
+                )
+                self.assertEqual(wa.send_message.call_count, 1)
+                self.assertEqual(
+                    wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
+                )
+                experiencia = (
+                    "a *experiência Supera gratuita* de Lucas"
+                    if dependente
+                    else "sua *experiência Supera gratuita*"
+                )
+                self.assertIn(f"Para reservar {experiencia}", envio["mensagem_bot"])
+                self.assertNotIn("{", envio["mensagem_bot"])
+                if not dependente:
+                    self.assertNotIn("Lucas", envio["mensagem_bot"])
 
     def test_texto_enviado_e_historico_permanecem_identicos(self):
         for modulo, enviar, extra in (
-            (etapa7, etapa7.enviar_etapa7_cliente, 'Maria'),
-            (etapa20, etapa20.enviar_etapa20, 'https://example.com/horarios'),
+            (etapa7, etapa7.enviar_etapa7_cliente, "Maria"),
+            (etapa20, etapa20.enviar_etapa20, "https://example.com/horarios"),
         ):
             with self.subTest(modulo=modulo.__name__):
                 wa = MagicMock()
-                wa.send_message.return_value = SimpleNamespace(id='wamid.novo')
-                with patch.object(modulo, 'conta_wa', return_value=wa):
-                    envio = enviar('5511999999999', 'phone', extra)
-                self.assertEqual(wa.send_message.call_args.kwargs['text'], envio['mensagem_bot'])
-                self.assertIn('experiência Supera gratuita', envio['mensagem_bot'])
-                self.assertNotRegex(envio['mensagem_bot'].lower(), r'cortesia|agendamento|aula\s+\*?gratuita')
+                wa.send_message.return_value = SimpleNamespace(id="wamid.novo")
+                with patch.object(modulo, "conta_wa", return_value=wa):
+                    envio = enviar("5511999999999", "phone", extra)
+                self.assertEqual(
+                    wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
+                )
+                self.assertIn("experiência Supera gratuita", envio["mensagem_bot"])
+                self.assertNotRegex(
+                    envio["mensagem_bot"].lower(),
+                    r"cortesia|agendamento|aula\s+\*?gratuita",
+                )
 
     def test_followup_mantem_etapa_e_envia_uma_unica_saudacao(self):
         for numero in (7, 9, 20):
             for dependente in (False, True):
                 with self.subTest(etapa=numero, dependente=dependente):
                     ctx = contexto_followup()
-                    ctx['id_etapa_atual'] = numero
-                    ctx['dados_repeticao'].update(status_dependente=dependente, nome_cliente='Maria', nome_dependente='Lucas')
+                    ctx["id_etapa_atual"] = numero
+                    ctx["dados_repeticao"].update(
+                        status_dependente=dependente,
+                        nome_cliente="Maria",
+                        nome_dependente="Lucas",
+                    )
                     wa = MagicMock()
-                    wa.send_message.return_value = SimpleNamespace(id='wamid.followup')
-                    with patch.object(cliente, 'WhatsApp', return_value=wa):
+                    wa.send_message.return_value = SimpleNamespace(id="wamid.followup")
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
                         envio = repeticao_followup.enviar_repeticao_followup(ctx)
-                    self.assertEqual(envio['id_etapa_resultante'], numero)
+                    self.assertEqual(envio["id_etapa_resultante"], numero)
                     self.assertEqual(wa.send_message.call_count, 1)
-                    self.assertEqual(wa.send_message.call_args.kwargs['text'], envio['mensagem_bot'])
-                    self.assertEqual(envio['mensagem_bot'].count('novamente'), 1)
-                    self.assertIn('experiência Supera gratuita', envio['mensagem_bot'])
-                    self.assertNotIn('evento_transicao', envio)
+                    self.assertEqual(
+                        wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
+                    )
+                    self.assertEqual(envio["mensagem_bot"].count("novamente"), 1)
+                    self.assertIn("experiência Supera gratuita", envio["mensagem_bot"])
+                    self.assertNotIn("evento_transicao", envio)
+                    if numero == 20:
+                        experiencia = (
+                            "a *experiência Supera gratuita* de Lucas"
+                            if dependente
+                            else "sua *experiência Supera gratuita*"
+                        )
+                        self.assertIn(
+                            f"Para reservar {experiencia}", envio["mensagem_bot"]
+                        )
 
     def test_retorno_da_espera_preserva_uma_saudacao_com_ou_sem_inatividade(self):
         for dependente in (False, True):
-            for saudacao in (None, 'Olá novamente, Maria!\n\n'):
+            for saudacao in (None, "Olá novamente, Maria!\n\n"):
                 with self.subTest(dependente=dependente, saudacao=saudacao):
-                    ctx = contexto_resposta(8, 'Olá', {'cliente_retornou': 9}, dependente=dependente)
-                    ctx['saudacao_retorno'] = saudacao
+                    ctx = contexto_resposta(
+                        8, "Olá", {"cliente_retornou": 9}, dependente=dependente
+                    )
+                    ctx["saudacao_retorno"] = saudacao
                     wa = MagicMock()
-                    wa.send_message.return_value = SimpleNamespace(id='wamid.retorno')
-                    with patch.object(cliente, 'WhatsApp', return_value=wa):
+                    wa.send_message.return_value = SimpleNamespace(id="wamid.retorno")
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
                         envio = flow_sender(ctx)
-                    self.assertEqual(envio['id_etapa_resultante'], 9)
-                    self.assertEqual(envio['mensagem_bot'].count('novamente'), 1)
-                    self.assertEqual(wa.send_message.call_args.kwargs['text'], envio['mensagem_bot'])
+                    self.assertEqual(envio["id_etapa_resultante"], 9)
+                    self.assertEqual(envio["mensagem_bot"].count("novamente"), 1)
+                    self.assertEqual(
+                        wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
+                    )
 
     def test_resposta_persistida_nao_envia_novamente(self):
         ctx = contexto_followup()
-        ctx['resposta_bot_para_mensagem_atual'] = {'id_hash_msg': 'wamid.antigo'}
-        with patch.object(repeticao_followup, '_selecionar_sender') as selecionar:
+        ctx["resposta_bot_para_mensagem_atual"] = {"id_hash_msg": "wamid.antigo"}
+        with patch.object(repeticao_followup, "_selecionar_sender") as selecionar:
             envio = repeticao_followup.enviar_repeticao_followup(ctx)
         selecionar.assert_not_called()
-        self.assertFalse(envio['enviou'])
-        self.assertEqual(envio['id_hash_msg_bot'], 'wamid.antigo')
+        self.assertFalse(envio["enviou"])
+        self.assertEqual(envio["id_hash_msg_bot"], "wamid.antigo")
 
     def test_contexto_repeticao_preserva_barreira_terminal_sem_responsavel(self):
         cursor = MagicMock()
         cursor.fetchone.return_value = (
-            'Titular', 'Aluno', 12, 'Unidade', 'Bot', 'masculino',
-            'https://example.com', None, True, False,
+            "Titular",
+            "Aluno",
+            12,
+            "Unidade",
+            "Bot",
+            "masculino",
+            "https://example.com",
+            None,
+            True,
+            False,
         )
         dados = buscar_contexto_repeticao(8, 2, cursor)
-        self.assertTrue(dados['status_dependente'])
+        self.assertTrue(dados["status_dependente"])
         self.assertEqual(cursor.execute.call_args.args[1], (8, 2))
         cursor.fetchone.return_value = (*cursor.fetchone.return_value[:-1], True)
         with self.assertRaises(ValueError):
@@ -12947,22 +13180,212 @@ class MensagensReservaTests(unittest.TestCase):
 
 class AceiteReservaTests(unittest.TestCase):
     def test_botao_novo_e_textos_legados_preservam_o_aceite_flexivel(self):
-        for validar, esperado in ((validar_etapa7, 'oferta_aceita'), (validar_etapa9, 'retorno_confirmado')):
-            for texto in ('Quero reservar', 'quero', 'Quero agendar', 'Pode reservar', 'sim',
-                          'Quero reservar!', 'Quero pensar melhor', 'Gostaria de desistir'):
+        for validar, esperado in (
+            (validar_etapa7, "oferta_aceita"),
+            (validar_etapa9, "retorno_confirmado"),
+        ):
+            for texto in (
+                "Quero reservar",
+                "quero",
+                "Quero agendar",
+                "Pode reservar",
+                "sim",
+                "Quero reservar!",
+                "Quero pensar melhor",
+                "Gostaria de desistir",
+            ):
                 with self.subTest(validador=validar.__name__, texto=texto):
                     self.assertEqual(validar(texto), esperado)
-            for texto in ('não quero reservar', 'como reservar?', 'quero saber como reservar', 'quero mais informações'):
+            for texto in (
+                "não quero reservar",
+                "como reservar?",
+                "quero saber como reservar",
+                "quero mais informações",
+            ):
                 with self.subTest(validador=validar.__name__, texto=texto):
                     self.assertIsNone(validar(texto))
-        self.assertEqual(validar_etapa7('Talvez mais tarde'), 'oferta_adiada')
-        self.assertEqual(validar_etapa9('Talvez mais tarde'), 'retorno_adiado')
+        self.assertEqual(validar_etapa7("Talvez mais tarde"), "oferta_adiada")
+        self.assertEqual(validar_etapa9("Talvez mais tarde"), "retorno_adiado")
 
     def test_etapa20_so_avanca_com_conclusao(self):
-        for texto in (*etapa20_messages.montar_botoes_etapa20(), 'já reservei!', 'Já agendei', 'agendamento feito'):
-            self.assertEqual(validar_etapa20(texto), 'agendamento_confirmado')
-        for texto in ('Quero reservar', 'Quero agendar', 'não reservei', 'vou reservar', 'sim'):
+        for texto in (
+            *etapa20_messages.montar_botoes_etapa20(),
+            "já reservei!",
+            "Já agendei",
+            "agendamento feito",
+        ):
+            self.assertEqual(validar_etapa20(texto), "agendamento_confirmado")
+        for texto in (
+            "Quero reservar",
+            "Quero agendar",
+            "não reservei",
+            "vou reservar",
+            "sim",
+        ):
             self.assertIsNone(validar_etapa20(texto))
+
+
+def cliente_simulado():
+    wa = MagicMock()
+    wa.send_message.return_value = SimpleNamespace(id="wamid.composicao")
+    return wa
+
+
+class ComposicaoTratamentosTests(unittest.TestCase):
+    def test_confirmacao_reutiliza_repeticao_e_mantem_destinatario(self):
+        for dependente in (False, True):
+            repeticao = etapa3.montar_mensagem_etapa3(dependente, repeticao=True)
+            for montar, prefixo in (
+                (
+                    etapa3.montar_mensagem_financeiro_etapa3,
+                    MENSAGEM_TRATAMENTO_FINANCEIRO,
+                ),
+                (
+                    etapa3.montar_mensagem_midia_etapa3,
+                    MENSAGEM_TRATAMENTO_MIDIA_COM_BOTOES,
+                ),
+                (
+                    etapa3.montar_mensagem_reforco_escolar_etapa3,
+                    MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR,
+                ),
+            ):
+                with self.subTest(dependente=dependente, montar=montar.__name__):
+                    mensagem = montar(dependente)
+                    self.assertTrue(mensagem.startswith(prefixo))
+                    self.assertTrue(mensagem.endswith(repeticao))
+                    self.assertEqual(mensagem.count(repeticao), 1)
+                    self.assertNotIn("Você confirma", mensagem)
+                    self.assertEqual("um dependente" in mensagem, dependente)
+
+    def test_etapa1_apresenta_uma_vez_e_depois_so_retoma_pergunta(self):
+        for motivo in ("midia", "financeiro", "reforco_escolar"):
+            with self.subTest(motivo=motivo):
+                inicio = getattr(etapa1, f"montar_mensagem_{motivo}_inicio")(
+                    "Boa tarde",
+                    "Supera Teste",
+                    "Mia",
+                    "feminino",
+                )
+                repeticao = getattr(etapa1, f"montar_mensagem_{motivo}_etapa1")()
+                self.assertEqual(inicio.count("Sou a Mia"), 1)
+                self.assertEqual(inicio.count(etapa1.MENSAGEM_REPETICAO_ETAPA1), 1)
+                self.assertIn(repeticao, inicio)
+                self.assertNotIn("Sou a Mia", repeticao)
+                self.assertNotIn(
+                    "opções abaixo", repeticao
+                )  # Coleta de nome não tem botões.
+
+    def test_inatividade_compoe_tratamentos_mas_ainda_permite_avancar(self):
+        casos = (
+            ("Quero reservar", "text", 10, None),
+            ("Quanto custa?", "text", 7, "pergunta_financeira"),
+            ("É reforço escolar?", "text", 7, "duvida_reforco_escolar"),
+            ("", "image", 7, "tipo_mensagem_nao_suportado"),
+            ("batata", "text", 7, "opcao_invalida"),
+        )
+        for dependente in (False, True):
+            for texto, tipo, destino, tratamento in casos:
+                with self.subTest(dependente=dependente, texto=texto, tipo=tipo):
+                    ctx = contexto_resposta(
+                        7, texto, {"oferta_aceita": 10}, dependente=dependente
+                    )
+                    ctx.update(
+                        tipo_mensagem_atual=tipo,
+                        saudacao_retorno="Olá novamente, Maria!\n\n",
+                    )
+                    wa = cliente_simulado()
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
+                        envio = flow_sender(ctx)
+                    self.assertEqual(envio["id_etapa_resultante"], destino)
+                    self.assertEqual(envio["mensagem_bot"].count("Olá novamente"), 1)
+                    self.assertEqual(
+                        envio["mensagem_bot"], wa.send_message.call_args.kwargs["text"]
+                    )
+                    if tratamento:
+                        self.assertEqual(envio["tipo_tratamento"], tratamento)
+                        self.assertNotIn("evento_transicao", envio)
+                        self.assertNotIn("Maravilha", envio["mensagem_bot"])
+                        self.assertEqual("Lucas" in envio["mensagem_bot"], dependente)
+                    else:
+                        self.assertEqual(envio["evento_transicao"], "oferta_aceita")
+
+    def test_followup_nao_repete_apresentacao_nem_despedida(self):
+        for numero in (1, 2, 7, 8):
+            for entrada in ("Quanto custa?", "Quero reservar", ""):
+                with self.subTest(etapa=numero, entrada=entrada):
+                    ctx = contexto_followup()
+                    ctx["id_etapa_atual"] = numero
+                    ctx["mensagem_cliente_atual"]["conteudo_texto"] = entrada
+                    wa = cliente_simulado()
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
+                        envio = enviar_repeticao_followup(ctx)
+                    mensagem = envio["mensagem_bot"]
+                    self.assertEqual(envio["id_etapa_resultante"], numero)
+                    self.assertNotIn("evento_transicao", envio)
+                    self.assertNotIn("tratamento", envio)
+                    self.assertEqual(mensagem, wa.send_message.call_args.kwargs["text"])
+                    for indevido in (
+                        "Prazer,",
+                        "nos falamos novamente em breve",
+                        "Maravilha",
+                        "assistente do",
+                        "valores de investimento",
+                    ):
+                        self.assertNotIn(indevido, mensagem)
+
+    def test_reserva_em_tratamento_preserva_dependente_e_prefixo(self):
+        for dependente in (False, True):
+            for texto, tipo in (
+                ("Quanto custa?", "text"),
+                ("É reforço escolar?", "text"),
+                ("", "image"),
+                ("Ainda não reservei", "text"),
+            ):
+                with self.subTest(dependente=dependente, texto=texto, tipo=tipo):
+                    ctx = contexto_resposta(
+                        20, texto, {"agendamento_confirmado": 21}, dependente=dependente
+                    )
+                    ctx.update(
+                        tipo_mensagem_atual=tipo,
+                        link_agendamento_unidade="https://example.com",
+                        saudacao_retorno="Olá novamente, Maria!\n\n",
+                    )
+                    wa = cliente_simulado()
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
+                        envio = flow_sender(ctx)
+                    self.assertEqual(envio["id_etapa_resultante"], 20)
+                    self.assertNotIn("evento_transicao", envio)
+                    self.assertEqual("de Lucas" in envio["mensagem_bot"], dependente)
+                    self.assertEqual(
+                        envio["mensagem_bot"].count("https://example.com"), 1
+                    )
+                    self.assertEqual(
+                        envio["mensagem_bot"], wa.send_message.call_args.kwargs["text"]
+                    )
+
+
+class ContextoReservaTests(unittest.TestCase):
+    def test_rele_participante_da_mesma_conversa_e_unidade(self):
+        for dependente in (False, True):
+            cursor = MagicMock()
+            cursor.fetchone.return_value = (
+                "https://example.com",
+                "Maria",
+                dependente,
+                "Lucas",
+            )
+            dados = buscar_contexto_etapa20(10, 2, cursor)
+            self.assertEqual(dados["nome_dependente"], "Lucas" if dependente else None)
+            sql, params = cursor.execute.call_args.args
+            self.assertEqual(params, (10, 2))
+            self.assertIn("d.id_conversa = c.id_conversa", sql)
+            self.assertIn("c.id_unidade = %s", sql)
+
+    def test_dependente_sem_nome_nao_vira_mensagem_para_titular(self):
+        cursor = MagicMock()
+        cursor.fetchone.return_value = ("https://example.com", "Maria", True, None)
+        with self.assertRaisesRegex(ValueError, "Nome do dependente"):
+            buscar_contexto_etapa20(10, 2, cursor)
 ```
 
 <a id="passo-63"></a>
@@ -14749,6 +15172,7 @@ Para desenvolver novas etapas, siga a
 | SQL de runtime | [core/repositories/README.md](core/repositories/README.md) |
 | Integrações externas | [core/integrations/README.md](core/integrations/README.md) |
 | WhatsApp, Meta e PyWa | [core/integrations/whatsapp/README.md](core/integrations/whatsapp/README.md) |
+| Personalidade e composição das mensagens | [core/integrations/whatsapp/messages/README.md](core/integrations/whatsapp/messages/README.md) |
 | Funil de Vendas | [core/integrations/funil/README.md](core/integrations/funil/README.md) |
 
 ### Planejamento separado do runtime
@@ -15606,11 +16030,33 @@ mantêm seus textos próprios.
 
 ### Linguagem da experiência Supera e sua reserva
 
+A composição das falas, a personalidade acolhedora e a organização dos
+arquivos seguem o [contrato editorial de messages](core/integrations/whatsapp/messages/README.md).
+Ele deve ser consultado em revisões de textos, tratamentos e retomadas,
+preservando as regras operacionais deste documento.
+
+Cada etapa separa sua mensagem padrão da repetição pura. Financeiro, mídia
+e reforço escolar vêm de módulos próprios e são compostos antes dessa repetição.
+Inatividade de três horas mantém a validação normal (podendo avançar ou tratar);
+a reação ao follow-up apenas acolhe e repete, sem interpretar o conteúdo naquele
+ciclo. O retorno não soma saudações nem repete apresentação ou despedida.
+
 A oferta apresenta uma **demonstração prática exclusiva**, uma avaliação
 de habilidades e o convite para reservar uma **experiência Supera gratuita**.
 Quando o atendimento é para um dependente, ele é identificado como o
 participante. Gratuidade da experiência não significa curso ou matrícula
 gratuitos. Não há nome/gênero de diretor ou novas colunas para essa oferta.
+
+O atendimento deve ser acolhedor e convidativo, com frases naturais, emojis
+discretos e negrito moderado. A oferta usa **presentear**, e a comemoração
+**Maravilha! ☺️** pertence à apresentação normal: não aparece após avisos de
+mídia, dúvidas ou respostas não compreendidas. Nesses casos, o bot acolhe a
+mensagem e orienta como continuar, sem atribuir o erro ao cliente.
+
+Na etapa 1, a apresentação não presume quem participará da experiência.
+Na oferta e na apresentação do link de reserva, o dependente é mencionado
+pelo nome quando for o participante, inclusive na repetição por follow-up.
+Esses ajustes de linguagem não alteram validação, transição ou elegibilidade.
 
 Uma negativa sem alternativa na etapa 2 repete a pergunta, sem escolher
 um destino. Correções explícitas com vírgula e destinos alternativos
@@ -15651,8 +16097,10 @@ Mensagem esperada, usando uma das duas primeiras linhas conforme o gênero do
 agente:
 
 ```text
-Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
-Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}, seja bem-vindo ao início da sua experiência Supera! ☺️
+Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}! ☺️
+Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}! ☺️
+Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
+
 Olha não reconhecemos ainda mensagem com mídia, apenas texto.
 Me diz, qual o seu primeiro nome?
 ```
@@ -15712,7 +16160,9 @@ duas primeiras linhas conforme o gênero do agente:
 Masculino: Bom dia/Boa tarde/Boa noite! Sou o {nome_agente}, assistente do {nome_unidade}! ☺️
 Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome_unidade}! ☺️
 
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
+
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Mas bora lá:
 
@@ -15726,7 +16176,7 @@ Se a etapa 1 já tiver sido apresentada e o cliente responder perguntando sobre
 valor, a mensagem esperada será:
 
 ```text
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada.
+Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Mas bora lá:
 
@@ -16658,6 +17108,24 @@ Uma origem e um evento possuem somente um destino. Uma origem e um destino
 identificam somente um evento.
 
 ### 4. Preparar mensagens
+
+Seguir o [contrato editorial de messages](core/integrations/whatsapp/messages/README.md):
+separar apresentação normal de tratamento com retomada, distinguir titular e
+dependente e revisar a fala completa com os prefixos de retorno. A etapa 1
+tem versões exclusivas de primeiro contato; as seis perguntas da triagem
+preservam seu contrato específico. Reorganizar texto não autoriza mudar
+validadores, transições ou elegibilidade de follow-up.
+
+Definir a mensagem padrão e a mensagem de repetição no arquivo da etapa.
+Importar os montadores de `messages/tratamentos/` e entregar a eles a repetição
+pura: tratamento primeiro, pergunta depois. Não copiar prefixos entre etapas.
+Usar `compor_mensagem_inicial` para apresentação + pergunta reutilizável e
+`compor_tratamento` somente para orientação + repetição. Não incluir a mensagem
+padrão completa em um tratamento, nem duplicar a pergunta dentro da apresentação.
+Quando houver variantes de participante, preservar ambas também nos tratamentos.
+O parâmetro `repeticao=True` seleciona a reapresentação neutra no follow-up;
+triagem e encerramento mantêm suas exceções. Inatividade de três horas continua
+compondo uma única saudação sobre o resultado da validação normal.
 
 Criar ou atualizar:
 
@@ -18166,10 +18634,18 @@ core/integrations/whatsapp/
 ├── exceptions.py
 ├── numero_comercial.py
 ├── messages/
+│   ├── README.md
 │   ├── etapa1_messages.py ... etapa24_messages.py
 │   ├── componentes_compartilhados.py
 │   ├── followup_messages.py
 │   ├── tratamentos_universais.py
+│   ├── tratamentos/
+│   │   ├── composicao.py
+│   │   ├── financeiro.py
+│   │   ├── midia.py
+│   │   ├── reforco_escolar.py
+│   │   ├── retorno_inatividade.py
+│   │   └── retorno_followup.py
 │   └── triagem_componentes.py
 ├── pywa_functions/
 │   ├── cliente.py
@@ -18203,6 +18679,11 @@ exceções da integração. Nenhum deles controla banco, fila, transição ou re
 
 ## Messages
 
+Antes de alterar textos ou montadores, seguir o
+[contrato de personalidade e composição do atendimento](messages/README.md).
+Ele distingue apresentação, tratamentos, a exceção de entrada da etapa 1,
+triagem e os dois tipos de retorno.
+
 Catálogo de conteúdo enviado:
 
 - textos;
@@ -18214,6 +18695,15 @@ Textos de WhatsApp não devem ser escritos diretamente no worker. Alterar uma
 mensagem não deve mover a responsabilidade de envio para `messages`.
 
 Cada etapa de 1 a 24 mantém seu próprio arquivo `etapaN_messages.py`.
+Nele ficam a mensagem padrão e a repetição pura, com variantes de titular e
+dependente quando pertinentes. Os montadores importados de `tratamentos/`
+compõem orientação, ponte quando necessária e repetição, nessa ordem.
+`compor_mensagem_inicial` une apresentação e pergunta reutilizável na entrada
+da etapa; `compor_tratamento` é exclusivo para orientação e repetição, sem
+a apresentação. As duas funções compartilham apenas a formatação dos parágrafos.
+O follow-up seleciona a repetição neutra (`repeticao=True`); a triagem usa
+suas perguntas canônicas. Os retornos não duplicam apresentações, celebrações
+ou despedidas da entrada normal na etapa.
 
 As mensagens oferecem uma **experiência Supera gratuita**, com demonstração prática exclusiva
 e **sua reserva** de dia e horário. Os botões das etapas 7 e 9 exibem **Quero reservar**;
@@ -18223,7 +18713,7 @@ reservar não são aceites; na etapa 20, intenção de reservar não comprova co
 
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
-O prefixo é compartilhado em `tratamentos_universais.py`; cada etapa fornece
+O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
 sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o
@@ -18233,6 +18723,14 @@ Os corpos das mensagens usam negrito do WhatsApp (`*texto*`) com moderação,
 priorizando a experiência oferecida e a ação principal. Evitar destacar todas
 as palavras ou repetir o convite completo nos tratamentos financeiros.
 Títulos de botões e valores usados pelos validadores permanecem sem marcação.
+
+O tom é acolhedor, com emojis discretos e orientação clara. A oferta usa
+**presentear**; **Maravilha! ☺️** aparece na apresentação normal da etapa 7,
+sem ser acrescentado aos tratamentos de mídia, contexto, financeiro ou reforço
+escolar. A etapa 1 não presume quem participará. Na apresentação do link,
+o participante é o titular ou o dependente identificado pelo nome, inclusive
+na repetição por follow-up e nos tratamentos. O contexto fornece esses dados ao sender; os
+montadores não consultam banco nem decidem transições.
 
 Na etapa 2, negativas sem destino alternativo repetem a pergunta. Uma
 correção explícita como `Não, é para mim` conserva a escolha indicada.
@@ -18249,7 +18747,7 @@ reforço escolar da etapa 1 recebem `nome_unidade`, `nome_agente` e `genero` com
 argumentos já validados pelo worker. `messages` apenas escolhe `o` ou `a` e
 formata o texto; não consulta o banco nem conhece a conversa.
 
-`componentes_compartilhados.py` também monta `Olá novamente, <nome>!` quando
+`tratamentos/retorno_inatividade.py` monta `Olá novamente, <nome>!` quando
 o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
 na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
 incompatíveis não interrompem o atendimento e não produzem prefixo.
@@ -18361,7 +18859,7 @@ O núcleo transacional e os testes específicos estão descritos em
 
 ## Lembrete de follow-up
 
-`messages/followup_messages.py` também monta a saudação de retomada com stage
+`messages/tratamentos/retorno_followup.py` monta a saudação de retomada com stage
 positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
 O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
 Na etapa 1, o worker passa nome ausente ao formatador mesmo com cadastro antigo;
@@ -19062,6 +19560,11 @@ Sem `FOLLOWUP_TEST_DSN`, a descoberta pula a integração PostgreSQL.
 `test_mensagens_reserva.py` cobre negativas na escolha do participante,
 gratuidade contextual, preservação do aceite flexível, retomada com uma
 saudação, barreira terminal e igualdade entre texto enviado e histórico.
+Também verifica a composição tratamento + repetição para titular/dependente,
+as apresentações exclusivas da etapa 1, inatividade com avanço ou tratamento,
+follow-up sem nova apresentação/despedida e participante preservado na reserva.
+Os envios são simulados; a consulta do participante é conferida com cursor
+substituído, sem conexão com banco de produção.
 
 O teste de monitoramento executa o SQL de autorização em SQLite em memória,
 adaptando apenas os placeholders, com um cliente compartilhado por duas
@@ -19578,130 +20081,90 @@ antes de iniciar estes workers; o seed de instalação limpa não substitui isso
 Substituir pelo arquivo completo abaixo.
 
 ````python
+"""Etapa 6: idade do participante e saídas por política da unidade."""
+
 from core.validacoes.suporte_por_idade import (
     IDADES_MINIMAS_SUPORTE,
     validar_idade_minima_suporte,
 )
 
-
-from core.integrations.whatsapp.messages.tratamentos_universais import (
+from core.integrations.whatsapp.messages.tratamentos.composicao import compor_tratamento
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-### ENTRADA NA ETAPA 6 - CLIENTE
+MENSAGEM_PADRAO_CLIENTE = "Agora me conta: *qual é a sua idade*? ☺️"
 
-MENSAGEM_IDADE_ETAPA6 = (
-    "Certo, agora me fala, qual é a sua idade?"
-)
+MENSAGEM_REPETICAO_CLIENTE = "Me diz, qual é a sua idade?"
 
 
-def montar_mensagem_idade_etapa6():
-    return MENSAGEM_IDADE_ETAPA6
-
-
-### ENTRADA NA ETAPA 6 - DEPENDENTE
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6 = (
-    "Certo, qual é a idade de {nome}?"
-)
-
-
-def montar_mensagem_idade_dependente_etapa6(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6.format(nome=nome)
-
-
-### CLIENTE RESPONDE À IDADE COM MÍDIA
-
-MENSAGEM_IDADE_ETAPA6_MIDIA = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Me diz, qual é a sua idade?"
-)
-
-
-def montar_mensagem_idade_etapa6_midia():
-    return MENSAGEM_IDADE_ETAPA6_MIDIA
-
-
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MÍDIA
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6_MIDIA = (
-    "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Me diz, qual é a idade de {nome}?"
-)
-
-
-def montar_mensagem_idade_dependente_etapa6_midia(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6_MIDIA.format(nome=nome)
-
-
-### CLIENTE RESPONDE À IDADE COM PERGUNTA FINANCEIRA
-
-MENSAGEM_IDADE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual é a sua idade?"
-)
+def montar_mensagem_idade_etapa6(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_CLIENTE if repeticao else MENSAGEM_PADRAO_CLIENTE
+    return mensagem
 
 
 def montar_mensagem_idade_etapa6_financeiro():
-    return MENSAGEM_IDADE_ETAPA6_FINANCEIRO
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_CLIENTE)
 
 
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM PERGUNTA FINANCEIRA
-
-MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO = montar_mensagem_tratamento_financeiro(
-    "Me diz, qual é a idade de {nome}?"
-)
-
-
-def montar_mensagem_idade_dependente_etapa6_financeiro(nome):
-    return MENSAGEM_IDADE_DEPENDENTE_ETAPA6_FINANCEIRO.format(nome=nome)
-
-
-### CLIENTE PERGUNTA SE O SUPERA É REFORÇO ESCOLAR
-
-MENSAGEM_RETOMADA_IDADE_ETAPA6 = "Me diz, qual é a sua idade?"
-MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6 = (
-    "Me diz, qual é a idade de {nome}?"
-)
+def montar_mensagem_idade_etapa6_midia():
+    return montar_mensagem_tratamento_midia(MENSAGEM_REPETICAO_CLIENTE)
 
 
 def montar_mensagem_idade_etapa6_reforco_escolar():
-    return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_IDADE_ETAPA6,
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_CLIENTE)
+
+
+def montar_mensagem_contexto_idade_invalida_etapa6():
+    return compor_tratamento(
+        "Não consegui entender a sua idade. Digite apenas o número, exemplo: 25.",
+        MENSAGEM_REPETICAO_CLIENTE,
+    )
+
+
+MENSAGEM_PADRAO_DEPENDENTE = "E qual é a *idade de {nome}*? ☺️"
+
+MENSAGEM_REPETICAO_DEPENDENTE = "Me diz, qual é a idade de {nome}?"
+
+
+def montar_mensagem_idade_dependente_etapa6(nome, *, repeticao=False):
+    mensagem = (
+        MENSAGEM_REPETICAO_DEPENDENTE if repeticao else MENSAGEM_PADRAO_DEPENDENTE
+    )
+    return mensagem.format(nome=nome)
+
+
+def montar_mensagem_idade_dependente_etapa6_financeiro(nome):
+    return montar_mensagem_tratamento_financeiro(
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome=nome)
+    )
+
+
+def montar_mensagem_idade_dependente_etapa6_midia(nome):
+    return montar_mensagem_tratamento_midia(
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome=nome)
     )
 
 
 def montar_mensagem_idade_dependente_etapa6_reforco_escolar(nome):
     return montar_mensagem_tratamento_reforco_escolar(
-        MENSAGEM_RETOMADA_IDADE_DEPENDENTE_ETAPA6.format(nome=nome),
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome=nome)
     )
 
 
-### CLIENTE RESPONDE À IDADE COM MENSAGEM FORA DE CONTEXTO
-
-MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA6 = (
-    "Não consegui entender a sua idade. Digite apenas o número, exemplo: 25.\n"
-    "Me diz, qual é a sua idade?"
-)
-
-
-def montar_mensagem_contexto_idade_invalida_etapa6():
-    return MENSAGEM_CONTEXTO_IDADE_INVALIDA_ETAPA6
-
-
-### CLIENTE RESPONDE À IDADE DO DEPENDENTE COM MENSAGEM FORA DE CONTEXTO
-
-MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA6 = (
-    "Não consegui entender a idade de {nome}. Digite apenas o número, "
-    "exemplo: 10.\n"
-    "Me diz, qual é a idade de {nome}?"
-)
-
-
 def montar_mensagem_contexto_idade_dependente_invalida_etapa6(nome):
-    return MENSAGEM_CONTEXTO_IDADE_DEPENDENTE_INVALIDA_ETAPA6.format(
-        nome=nome,
+    return compor_tratamento(
+        "Não consegui entender a idade de {nome}. Digite apenas o número, exemplo: 10.".format(
+            nome=nome
+        ),
+        MENSAGEM_REPETICAO_DEPENDENTE.format(nome=nome),
     )
 
 
@@ -19727,7 +20190,6 @@ MENSAGEM_DEPENDENTE_MENOR_5_ETAPA6 = (
     "anos, você poderá entrar em contato "
     "novamente.\n\n"
     "Um abraço e até logo! 👋☺️"
-
 )
 
 
@@ -19781,6 +20243,7 @@ _MENSAGEM_SUPORTE_IDOSO_LEGADA = (
     "no botão abaixo."
 )
 
+
 def montar_mensagem_suporte_idoso_etapa6(idade_minima):
     validar_idade_minima_suporte(idade_minima)
     if idade_minima is None:
@@ -19793,7 +20256,11 @@ def montar_botao_suporte_idoso_etapa6():
 
 
 def montar_mensagem_contato_suporte_idoso_etapa6(
-    *, nome_agente, genero_agente, nome_cliente, idade_cliente,
+    *,
+    nome_agente,
+    genero_agente,
+    nome_cliente,
+    idade_cliente,
 ):
     """Texto pré-preenchido do titular, usando a idade validada nesta resposta."""
     artigo = {"feminino": "a", "masculino": "o"}.get(genero_agente)
@@ -20052,24 +20519,24 @@ preservar mudanças posteriores. `Novo` significa ausente na base capturada.
 | `core/database/deploy_database/povoar_etapas.py` | `da1481e4e07134e7a5d8e6728d2e64c93c1b9bdc58425208fc4eddd5b6917b1a` |
 | `callback/webhook/models.py` | `5e2f77be77792a021216f1a3b6f416d67fc7409de18a432112e74fab39396f69` |
 | `core/integrations/whatsapp/messages/contato_comercial.py` | `Novo` |
-| `core/integrations/whatsapp/messages/etapa18_messages.py` | `c2af4480e5421d3fd066bd3a9f8ff053a7d82676de83fd6a6dd2c9060db24d4d` |
-| `core/integrations/whatsapp/messages/etapa19_messages.py` | `f866d9ef412cf316f549840d4c1f5dd7f8062f2b873ab42bfdce6e906b4a7302` |
-| `core/integrations/whatsapp/messages/etapa20_messages.py` | `f4bb4e267ad3c943e0b846209938bc4da030289a23ba21cc9806c7b9c88edd86` |
-| `core/integrations/whatsapp/messages/etapa21_messages.py` | `04b9e2d878b482becb8a737a9c511d8e9d270329a21f00bac07279ac9e8dd2f6` |
+| `core/integrations/whatsapp/messages/etapa18_messages.py` | `9b1f205b5d1ddf20a72bed3cd02e805975933a1d3f073a168d29e3cbe9c4dfa6` |
+| `core/integrations/whatsapp/messages/etapa19_messages.py` | `6717bc4a0f0b389b8caca1e0418ad529b76a5afef5b7de2992130b5e064aee34` |
+| `core/integrations/whatsapp/messages/etapa20_messages.py` | `8c6341b427cec557c6c1ce127c218cb825e38d504cb3e5e046a4894771facecd` |
+| `core/integrations/whatsapp/messages/etapa21_messages.py` | `5d086a836e1136e225e35270a8ecb9ed088182b0da323f5ca7d579966610aa8f` |
 | `core/integrations/whatsapp/messages/etapa22_messages.py` | `b3c4acc289114c2cc2ca3b94b2d00752324572aad132644eeea743b3d6a1f78f` |
 | `core/integrations/whatsapp/messages/etapa23_messages.py` | `Novo` |
 | `core/integrations/whatsapp/messages/etapa24_messages.py` | `Novo` |
 | `core/integrations/whatsapp/numero_comercial.py` | `f9cf0f285c4fa212c70718ab3a458078561f04301a5ea0dd1fd4940c0b70e13a` |
-| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa6.py` | `86ff40f9e267978b187898c6fd6f254750a166ec2810e506ccab7cad95449c1f` |
-| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa18.py` | `f74ddf4362bad693907988cfc70e938496976002d5cc5cd8a70aaed3c9b90293` |
-| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa19.py` | `43832fcf0395bcd4216a8341eed93599e450f7f2f864c5a52cc0b86a5f9f6d41` |
-| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa20.py` | `d293b214fdb9eb1e7d3dd96c1c106c200d1736138143ee6eca7eb543973692b6` |
-| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa21.py` | `251f08b6194a9832b52ba0464d2c7178342c253fe8fff3d743ebdbdc65dc882a` |
+| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa6.py` | `9d3bef44ef304c0338d5746b1a0ff94695490d90995e00c9c06a34bf082f285e` |
+| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa18.py` | `4149db6ca9585d3d6ce73f27f210481e5eb70ab17b7dee5e535c649c069b113d` |
+| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa19.py` | `19405364da3f3181eca6fba73f82b1811ffe45ec94661b5115374643a537957e` |
+| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa20.py` | `31eaea227ea0543c18fd9f0429fdb12ca30b729b46f4921ae2fb15e0d5ce83c8` |
+| `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa21.py` | `a660bbbffb128f057624c8688bf3ca5b57b3c3bb5aff9b64e6693123b7c272a1` |
 | `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa22.py` | `dd8b6cc5c94752001a2f6c311a49868e7b3cc6aad6e1b2db8d5205012e4ee1af` |
 | `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa23.py` | `Novo` |
 | `core/integrations/whatsapp/pywa_functions/pywa_senders/etapa24.py` | `Novo` |
 | `core/repositories/fluxo/contextos/etapa6.py` | `c00ce139c6fc5a3a4eab06a115917332241b41f3b4f41955ac4de9d19871570a` |
-| `core/repositories/fluxo/contextos/etapa18.py` | `f17dbc381db05c6681eef0e83234bf1ceff86ba742473f70b636e3d0d3190697` |
+| `core/repositories/fluxo/contextos/etapa18.py` | `17a3e920819a15dc47ffae3130821937f3255680886e4caea2b1621f013dba43` |
 | `core/repositories/fluxo/contextos/etapa20.py` | `Novo` |
 | `core/repositories/atendimento/turnos.py` | `Novo` |
 | `workers/worker_flow/response_flow/transicoes/eventos.py` | `1d74f8e066e7a04d8253bc243cfbfe216e3be9cd2c7aab32a3ea2417f32f34e7` |
@@ -20081,19 +20548,19 @@ preservar mudanças posteriores. `Novo` significa ausente na base capturada.
 | `workers/worker_flow/response_flow/etapas/validadores_contexto/valida_etapa23.py` | `Novo` |
 | `workers/worker_flow/response_flow/contato_comercial.py` | `Novo` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa6.py` | `c5765d33485c30e6b36460f6afe583aecd86d8ef2641599a2ce8347f9bbe8391` |
-| `workers/worker_flow/response_flow/etapas/resolver_etapa17.py` | `4888632d98f81dc2a1e3715f151bc845e768e1555636b3609866382a8bf354a5` |
-| `workers/worker_flow/response_flow/etapas/resolver_etapa18.py` | `e1effff9213a8c135a5376fcc0b825714fd8607880a4c627625d48902e735a6a` |
+| `workers/worker_flow/response_flow/etapas/resolver_etapa17.py` | `81baa3f3529d0b4417a24e527b9a3fee2b9f5c825ba2444c465cbb4c43c35311` |
+| `workers/worker_flow/response_flow/etapas/resolver_etapa18.py` | `a16daae19faa80e88fbb90b2c299798105bb6a4db1f3186f3de633bac30036ff` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa19.py` | `91a08342070a50c029db3f8c4fbb7620f59174632f8ed57774facd7212bd8956` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa20.py` | `9b1099a031fa9fa415de082a654fe848516b7c10e15d20a1419e5acc0cbf7ead` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa21.py` | `7ff87721d71f31a867eb07f94314d3805e98fd69d5e89aec32432b346b0ee974` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa22.py` | `Novo` |
 | `workers/worker_flow/response_flow/etapas/resolver_etapa23.py` | `Novo` |
 | `workers/worker_flow/response_flow/flow_sender.py` | `354fadff6ce894cc87ffe55410fa1eb4f5628f282457f810c87441fef2556622` |
-| `workers/worker_flow/response_flow/repeticao_followup.py` | `60230c8a9e81d5a0e74aba47755938286aa4ddcbaa7a213711a15f6f018088da` |
+| `workers/worker_flow/response_flow/repeticao_followup.py` | `5e37d7d77cb6c0e100d0a045c25b725fe0fa95abb55970c610e8df67b0479732` |
 | `workers/worker_flow/transacoes/efeitos_transicao.py` | `e8684d7c365d06411a3538ba4fb094c26ac9181332586acbafbf0d4f88209f09` |
-| `workers/worker_flow/valida_historico.py` | `ff9e9957ce3b6294d0bb04bba8226a4de0baa5a2242ab9f0d9116624739f97ed` |
+| `workers/worker_flow/valida_historico.py` | `9683b4e76bd8d50a2135ff5f45160284c6e89938a06e894fd9cec22ed22c730f` |
 | `core/repositories/atendimento/followup.py` | `e6fb4a0a15d7464229a673ca2aca5d05b8db8cffd401f676fed3815b84c919f9` |
-| `tests/unit/test_followup.py` | `76c4280e5ea7ffa547b2c39d68bd4000c30242240796010d4f39e906a031ba9f` |
+| `tests/unit/test_followup.py` | `b3e53152c84131fe669bb4ab2bc362ceaa48b0e328a803104a714bc275f68f18` |
 | `core/integrations/funil/oportunidades.py` | `b3ef9c47df41fa6ca047ac08aa346464b89903e65a1d195a725ed6de5154b2a3` |
 | `core/repositories/funil/envios.py` | `60420b5f4c26831beb0324845f67de630358a2049f59025edc3a061391085c6a` |
 | `core/repositories/funil/leads.py` | `32b13697de9e475d87e98b1cd910f9d47bcc8aaab42e0606705b024aa8fc0d3b` |
@@ -20107,24 +20574,24 @@ preservar mudanças posteriores. `Novo` significa ausente na base capturada.
 | `tests/unit/test_monitoramento_painel.py` | `c292d2005a02d02039e542bfb799cdfdd24c27fc4cce3d80d06bc4612eaca6d5` |
 | `tests/unit/test_monitoramento_unidade.py` | `4fbae93a0921594bb877e1442bd1a661b43f9154b4889c872112ebeaacdbe376` |
 | `tests/unit/test_persistencia_essencial.py` | `92b3318c3ad744e42a079c72ce6fef8d2a53ce47b58f983d2b360af40a2e4006` |
-| `tests/unit/test_mensagens_reserva.py` | `6e95b1ca6ea9e1f4da017896363e331be23b47b92dae02db9ff47b3b3b8e02ea` |
+| `tests/unit/test_mensagens_reserva.py` | `c353e782d3cdd0d2d47a58d0b73df63ac73740cb0843b22ba9ead8bec08f6ce3` |
 | `tests/unit/test_suporte_idoso_email_obrigatorio.py` | `919c0204f3768b1498b48ca4be88169c3b0a9b1669ae8e38bff6a201f96cb85a` |
 | `tests/unit/test_suporte_por_idade.py` | `aebc93a05a5b68b7f10cfa358c626f687fb0fe169207ac4dabe41ff3cb7c61e0` |
 | `PADROES_DE_ARQUITETURA.md` | `6b3733f9bfd9e1db8d6e2e78e6745658a50d5cb26770297212245eb714c61d81` |
-| `README.md` | `9697bd5b318bf8759642358e22b289d875b6270fae0d0f5a6fb669b3d81a1637` |
-| `REGRAS_DE_NEGOCIO.md` | `67a332e8e3b9591e6ad348360a9987734dcb975a8fac590c382805bd94bd8d7a` |
-| `ROTINA_IMPLEMENTACAO_ETAPAS.md` | `10683c12094ce852d6d9ae4c53fd8bc139d73e123c5379d4c913ca6b92466ee9` |
+| `README.md` | `04cf31c4142a77d0b8b2d84ab7a567380c8dc1fabd9404fdfe6c37463e0bc4b3` |
+| `REGRAS_DE_NEGOCIO.md` | `b50a832bcbe056caf67be90d829417902e6cd0aac1070e83bb9f26e9d2252020` |
+| `ROTINA_IMPLEMENTACAO_ETAPAS.md` | `2e7256112fc1730e862a6364f80c9411e799468ea4d38bcfa5f3afccd8d5b9a8` |
 | `callback/README.md` | `c9ee7ee5f367a011178292e41d13b2f7abaa6b58618cf89ebb3de2203d229f80` |
 | `core/README.md` | `f71a588dd85f183642632892c5724bfa6054591c566f4bc26a78107995b0ff32` |
 | `core/database/README.md` | `eb42ae6e7ebf0c9fcca002037c17567a054687fa7a6d86afd2ea7cd63fbe4eba` |
 | `core/integrations/funil/README.md` | `794b35f0bc4c3533785ea2b210e8d315eb14421ce5eb45ac8184d6374dff0d43` |
-| `core/integrations/whatsapp/README.md` | `94a0eb4b82351f14944f245e5cfe7ab79bf5d6563e72c8cee7067d3ed7bd0992` |
+| `core/integrations/whatsapp/README.md` | `2d04b3d6849802834b6f60a7e22d7f31352afca2c889bf09f050f0a7fe52d305` |
 | `core/integrations/whatsapp/pywa_functions/ferramentas.md` | `2af4a275c5495e0d05631f5aeaf595e94af779f9e2be9b4c38e5b39c4839327a` |
 | `core/repositories/README.md` | `ebad86fe709e406303ccbe7ce9f7dd9faf69fd367340151322ff3013239e386d` |
 | `deploy/README.md` | `be4a251b280888e44cc6e8e55e8df17d1da0872176b86c6f31679cb9bf52cbe2` |
-| `tests/README.md` | `88bd2bba278a971d7491eed02770be15304e2de4c9bcda4ca21fb2c530511aab` |
+| `tests/README.md` | `263aeed5ac27e59564c2c78fbfbaa5b2f34471d51a9e1e35aa16b3d57d2679df` |
 | `workers/README.md` | `c9963a99452061850f4e33384c15e27cfaaccf6e551ce9d00edb276b672d8ae5` |
-| `core/integrations/whatsapp/messages/etapa6_messages.py` | `cf4d060e52b1ef056b0d37d76ef5059e49138e43573ac9818fa6b7dcb3123e41` |
+| `core/integrations/whatsapp/messages/etapa6_messages.py` | `c12684721ef20e728e546ff328e9e844ca5fd289ba2ed040489ee7db3a74b37d` |
 | `workers/worker_flow/transacoes/encerramento_atendimento.py` | `47cdd2259a20b742e45c821095182a29c96a6ecad0248f73a2ffe7245b5f695c` |
 
 ## Critérios para encerrar a aplicação futura

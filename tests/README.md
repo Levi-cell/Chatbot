@@ -36,6 +36,7 @@ tests/unit/test_suporte_idoso_email_obrigatorio.py
 tests/unit/test_saudacao_retorno.py
 tests/unit/test_valida_etapa7.py
 tests/unit/test_mensagens_reserva.py
+tests/unit/test_inicio_informacoes_supera.py
 tests/unit/test_valida_etapa11.py
 tests/unit/test_validador_profissao.py
 tests/unit/test_gerar_monitoramento_unidades.py
@@ -61,6 +62,18 @@ Sem `FOLLOWUP_TEST_DSN`, a descoberta pula a integração PostgreSQL.
 `test_mensagens_reserva.py` cobre negativas na escolha do participante,
 gratuidade contextual, preservação do aceite flexível, retomada com uma
 saudação, barreira terminal e igualdade entre texto enviado e histórico.
+Também verifica a composição tratamento + repetição para titular/dependente,
+as apresentações exclusivas da etapa 1, inatividade com avanço ou tratamento,
+follow-up sem nova apresentação/despedida e participante preservado na reserva.
+Os envios são simulados; a consulta do participante é conferida com cursor
+substituído, sem conexão com banco de produção.
+
+`test_inicio_informacoes_supera.py` cobre os pedidos de apresentação com e sem
+saudação, acentos e interrogação, rejeição de palavras isoladas e outros assuntos,
+prioridade de mídia/reforço/financeiro e envio do texto aprovado com os dados da
+unidade. Verifica a inicialização da etapa 1, convergência das duas aberturas para
+a etapa 2, follow-up sem reapresentação e retry sem novo envio. Meta e banco são
+substituídos nos testes; não são feitas chamadas reais.
 
 O teste de monitoramento executa o SQL de autorização em SQLite em memória,
 adaptando apenas os placeholders, com um cliente compartilhado por duas
@@ -89,14 +102,29 @@ internacional no Google CSV; não remove o DDD nem altera os dados de origem.
 
 ## Follow-up
 
+`unit/test_mensagens_etapa11.py` cobre a introdução da triagem para titular e
+dependente: nome carregado na entrada 10→11, mensagem inicial, tratamentos,
+contexto autônomo, inatividade e follow-up. Verifica falha antes do envio para
+dependente sem nome e a preservação do participante nas seis perguntas,
+inclusive dependente adulto, sem alterar as regras de confirmação e avanço.
+
+`unit/test_mensagens_contexto.py` cobre a mensagem autônoma de contexto em
+todas as etapas: não usa compositores de tratamento ou perguntas de repetição.
+Também verifica titular/dependente, ausência de avanço, botões/rodapés, link,
+dados de apresentação e o prefixo único de inatividade, com envio simulado.
+
 `unit/test_followup.py` cobre envio exato, reação, etapas e botões reais com HTTP
 substituído, recuperação, falta de lock, falhas e parâmetros SQL. O teste de runtime
-do flow cobre o novo caminho sem chamar validadores ou persistência de transição.
+do flow cobre a repetição comum sem chamar validadores ou persistência de transição.
 Cobre saudação com e sem nome, texto enviado igual ao histórico, isolamento do
 prefixo sob exceção, retorno legado sem data de envio e falha sem interromper o lote.
 Na etapa 1, cobre cliente antigo com nome salvo: saudação genérica, coleta de nome
 mantida, reação ignorada e cadastro preservado. Também verifica nome novo aceito
 no fluxo normal, personalização nas etapas seguintes e retry sem novo envio.
+Na etapa 8, cobre qualquer reação indo diretamente à 9, sem repetir a 8 nem
+consumir aceite, para titular e dependente. Verifica saudação única, botões,
+mapa obrigatório antes do envio, persistência da transição antes do reset e
+recuperação de respostas antigas da 8 ou novas da 9 sem alterar outro ciclo.
 
 `integration/test_followup_postgres.py` exige explicitamente FOLLOWUP_TEST_DSN com
 host loopback e banco vazio chamado `test_chatbot_followup`. Ele cria e remove seu
@@ -107,8 +135,11 @@ Também executa o SQL integral de migração sobre uma base antiga descartável:
 marca somente ativas, audita os valores anteriores, preserva os demais dados,
 não produz histórico/envio, recusa reaplicação e reverte diante de legado terminal.
 O retorno completo também usa fila e histórico reais nesse banco descartável:
-rollback preserva stage positivo, a confirmação mantém a etapa e os contadores,
-e recuperar a mesma reação não reseta um ciclo posterior. Cobre tanto o lembrete
+rollback preserva stage positivo, etapa e contadores. A confirmação mantém a
+etapa e os contadores na repetição comum; na exceção da 8, avança para a 9 e
+zera os turnos sem avanço junto da conclusão do follow-up. Verifica histórico
+do cliente e checkpoint na origem, resposta no destino e recuperação da mesma
+reação sem reset de um ciclo posterior. Cobre tanto o lembrete
 confirmado quanto o legado sem data de envio.
 Meta permanece simulada; a confirmação de entrega real exige homologação manual.
 
