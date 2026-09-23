@@ -70,6 +70,10 @@ Commit: `701b834fc178efcd42591692b9c35ce5827b840c`
 
 Commit: `8b8a0f8f2783dc7f137f389d96bb88f3f4f4acb5`
 
+### V1.5.1 — Correções nas mensagens de atendimento
+
+Commit: `d001d674bb7fb08f8b70980aec5cacfb326009d2`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

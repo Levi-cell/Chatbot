@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa2 import (
     enviar_etapa2_contexto_opcao_invalida,
     enviar_etapa2_financeiro,
@@ -79,6 +83,8 @@ def resolve_etapa2(contexto_historico):
     opcao_atendimento = validar_etapa2(texto_cliente)
 
     if opcao_atendimento is None:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento(
             contexto_historico,
             TIPO_TRATAMENTO_CONTEXTO_INVALIDO,

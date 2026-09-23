@@ -165,7 +165,7 @@ class GratuidadeExperienciaTests(unittest.TestCase):
             self.assertEqual(envio["id_etapa_resultante"], 7)
             self.assertEqual(envio["tipo_tratamento"], "pergunta_financeira")
             self.assertNotIn("evento_transicao", envio)
-            self.assertIn("*experiência Supera gratuita*", envio["mensagem_bot"])
+            self.assertIn("*experiência supera gratuita*", envio["mensagem_bot"].casefold())
             self.assertIn("valores de investimento", envio["mensagem_bot"])
 
 
@@ -266,7 +266,7 @@ class MensagensReservaTests(unittest.TestCase):
         financeiro = etapa6_messages.montar_mensagem_idade_dependente_etapa6_financeiro(
             "Lucas"
         )
-        self.assertIn("*experiência Supera gratuita*", financeiro)
+        self.assertIn("*experiência supera gratuita*", financeiro.casefold())
         self.assertIn("qual é a idade de Lucas?", financeiro)
         retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9(
             "Maria", "Lucas"

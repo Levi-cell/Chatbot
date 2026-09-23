@@ -11,6 +11,8 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as s
 from workers.worker_followup import followup_worker as worker
 from workers.worker_flow.response_flow import repeticao_followup as repeticao
 from workers.worker_flow.transacoes import retorno_followup as retorno
+from workers.worker_flow import valida_historico as historico
+from core.database.deploy_database.etapa_transicao_script import TRANSICOES_INICIAIS
 
 AGORA = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
 
@@ -23,6 +25,7 @@ def banco(stage=1):
             "id_conversa": 1,
             "id_etapa_atual": 11,
             "status_ativa": True,
+            "status_dependente": False,
             "followup_stage": stage,
             "followup_last_sent_at": AGORA,
             "lock_version": 4,
@@ -40,6 +43,7 @@ def mensagem(tipo="text"):
         "conteudo_texto": "Começar triagem",
         "tipo_mensagem": tipo,
         "received_data_hora": AGORA,
+        "retry_count": 1,
     }
 
 
@@ -53,7 +57,14 @@ def dados():
         "genero": "feminino",
         "link_agendamento": "https://example.com/agendar",
         "link_instagram": "https://example.com/rede",
+        "link_instagram_unidade": "https://example.com/rede",
+        "link_agendamento_unidade": "https://example.com/agendar",
         "status_dependente": False,
+        "idade_cliente": 35,
+        "idade_minima_suporte": None,
+        "bpa_ativo_unidade": False,
+        "numero_comercial_unidade": "5511999990000",
+        "genero_agente_unidade": "feminino",
     }
 
 
@@ -92,15 +103,23 @@ def candidato():
 
 class RetornoTests(unittest.TestCase):
     def preparar(
-        self, stage=1, tipo="text", retomada=None, resposta=None, enviado_em=AGORA,
+        self,
+        stage=1,
+        tipo="text",
+        retomada=None,
+        resposta=None,
+        enviado_em=AGORA,
         etapa=11,
+        dependente=False,
+        texto=None,
     ):
         with ExitStack() as stack:
             mocks = {}
+            dados_etapa = dict(dados(), status_dependente=dependente)
             valores = {
                 "buscar_retomada": retomada,
                 "buscar_resposta_bot_por_mensagem_cliente": resposta,
-                "buscar_contexto_repeticao": dados(),
+                "buscar_contexto_repeticao": dados_etapa,
                 "registrar_retomada": None,
                 "inserir_historico_mensagem_cliente": (
                     6,
@@ -108,19 +127,53 @@ class RetornoTests(unittest.TestCase):
                     (retomada or {}).get("id_etapa", etapa),
                     not bool(resposta),
                 ),
-                "atualizar_conversa_mensagem_cliente": None,
-                "listar_transicoes_permitidas": {"cliente_retornou": 9},
             }
             for nome, valor in valores.items():
                 mocks[nome] = stack.enter_context(
                     patch.object(retorno, nome, return_value=valor)
                 )
+            valores_historico = {
+                "inserir_historico_mensagem_cliente": valores[
+                    "inserir_historico_mensagem_cliente"
+                ],
+                "buscar_resposta_bot_por_mensagem_cliente": None,
+                "atualizar_conversa_mensagem_cliente": None,
+                "buscar_contexto_saudacao_retorno": ("Ana", AGORA),
+                "listar_transicoes_permitidas": {
+                    evento: destino
+                    for origem, evento, destino in TRANSICOES_INICIAIS
+                    if origem == etapa
+                },
+                **{
+                    f"buscar_contexto_etapa{n}": dict(dados_etapa)
+                    for n in (6, 7, 9, 18)
+                },
+                "buscar_contexto_etapa10": dict(
+                    dados_etapa,
+                    status_dependente_contexto_email=dependente,
+                    email_obrigatorio=False,
+                ),
+                "buscar_contexto_etapa22": dict(
+                    dados_etapa, status_dependente_contexto_finalizacao=dependente
+                ),
+                "buscar_contexto_triagem": dict(
+                    dados_etapa,
+                    status_dependente_contexto_triagem=dependente,
+                    idade_pessoa_triagem=12 if dependente else 35,
+                ),
+            }
+            for nome, valor in valores_historico.items():
+                mocks[nome] = stack.enter_context(
+                    patch.object(historico, nome, return_value=valor)
+                )
             cx_banco = banco(stage)
+            cx_banco["conversa"]["status_dependente"] = dependente
             cx_banco["conversa"]["id_etapa_atual"] = etapa
             cx_banco["conversa"]["followup_last_sent_at"] = enviado_em
-            result = retorno.preparar_retorno_followup(
-                mensagem(tipo), cx_banco, MagicMock()
-            )
+            msg = mensagem(tipo)
+            if texto is not None:
+                msg["conteudo_texto"] = texto
+            result = retorno.preparar_retorno_followup(msg, cx_banco, MagicMock())
         return result, mocks
 
     def test_zero_preserva_caminho_normal(self):
@@ -128,15 +181,18 @@ class RetornoTests(unittest.TestCase):
         self.assertIsNone(result)
         mocks["inserir_historico_mensagem_cliente"].assert_not_called()
 
-    def test_reacoes_nao_passam_por_validacao(self):
+    def test_reacoes_carregam_contexto_normal_sem_saudacao_de_tres_horas(self):
         for stage in (1, 2, 3, 9):
             for tipo in ("text", "interactive", "image", "audio", "unsupported"):
                 with self.subTest(stage=stage, tipo=tipo):
                     result, mocks = self.preparar(stage=stage, tipo=tipo)
-                    self.assertEqual(result["id_etapa_resposta"], 11)
+                    self.assertEqual(result["id_etapa_resposta"], 12)
                     self.assertTrue(result["retorno_followup"])
-                    self.assertNotIn("transicoes_permitidas", result)
-                    self.assertNotIn("saudacao_retorno", result)
+                    self.assertEqual(
+                        result["transicoes_permitidas"], {"triagem_iniciada": 12}
+                    )
+                    self.assertIsNone(result["saudacao_retorno"])
+                    mocks["buscar_contexto_saudacao_retorno"].assert_not_called()
                     self.assertEqual(
                         result["mensagem_cliente_atual"]["tipo_mensagem"], tipo
                     )
@@ -150,7 +206,7 @@ class RetornoTests(unittest.TestCase):
         result, mocks = self.preparar(enviado_em=None)
         self.assertTrue(result["retorno_followup"])
         self.assertIsNone(result["followup_em"])
-        self.assertEqual(result["id_etapa_resposta"], 11)
+        self.assertEqual(result["id_etapa_resposta"], 12)
         mocks["registrar_retomada"].assert_called_once()
 
     def test_retry_nao_zera_ciclo_posterior(self):
@@ -180,7 +236,7 @@ class RetornoTests(unittest.TestCase):
         mocks["buscar_contexto_repeticao"].assert_not_called()
         mocks["atualizar_conversa_mensagem_cliente"].assert_not_called()
         with patch.object(retorno, "concluir_retomada") as concluir, patch.object(
-            retorno, "inserir_historico_mensagem_bot"
+            retorno, "atualizar_banco_com_contexto_final"
         ) as inserir:
             final = retorno.persistir_retorno_followup(
                 result, {"id_hash_msg_bot": "wamid.bot"}, MagicMock()
@@ -207,10 +263,17 @@ class RetornoTests(unittest.TestCase):
         }
         with patch.object(
             retorno,
-            "inserir_historico_mensagem_bot",
-            side_effect=lambda *_: eventos.append("historico") or (7, AGORA, True),
+            "atualizar_banco_com_contexto_final",
+            side_effect=lambda *_: eventos.append("historico")
+            or {
+                "data_historico_bot": AGORA,
+                "id_etapa_resultante": 11,
+                "intencao_encerramento": None,
+            },
         ), patch.object(
-            retorno, "concluir_retomada", side_effect=lambda *_: eventos.append("reset")
+            retorno,
+            "concluir_retomada",
+            side_effect=lambda *_, **kw: eventos.append("reset"),
         ):
             final = retorno.persistir_retorno_followup(contexto(), envio, MagicMock())
         self.assertEqual(eventos, ["historico", "reset"])
@@ -221,7 +284,7 @@ class RetornoTests(unittest.TestCase):
     def test_falha_historico_nao_chega_ao_reset(self):
         envio = {"enviou": True, "id_etapa_resultante": 11}
         with patch.object(
-            retorno, "inserir_historico_mensagem_bot", side_effect=RuntimeError
+            retorno, "atualizar_banco_com_contexto_final", side_effect=RuntimeError
         ), patch.object(retorno, "concluir_retomada") as concluir:
             with self.assertRaises(RuntimeError):
                 retorno.persistir_retorno_followup(contexto(), envio, MagicMock())
@@ -245,9 +308,11 @@ class RepeticaoTests(unittest.TestCase):
                     with patch.object(cliente, "WhatsApp", return_value=fake):
                         envio = repeticao.enviar_repeticao_followup(cx)
                     self.assertTrue(
-                        envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                        envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n\n")
                     )
-                    self.assertIn("Me diz, qual o seu primeiro nome?", envio["mensagem_bot"])
+                    self.assertIn(
+                        "Me diz, qual o seu primeiro nome?", envio["mensagem_bot"]
+                    )
                     self.assertNotIn("assistente do", envio["mensagem_bot"])
                     if nome_antigo:
                         self.assertNotIn(nome_antigo, envio["mensagem_bot"])
@@ -256,7 +321,8 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("evento_transicao", envio)
                     self.assertEqual(cx["dados_repeticao"]["nome_titular"], nome_antigo)
                     self.assertEqual(
-                        envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
+                        envio["mensagem_bot"],
+                        fake.send_message.call_args.kwargs["text"],
                     )
 
     def test_todas_etapas_repetiveis_usam_senders_existentes(self):
@@ -285,15 +351,13 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("tratamento", envio)
                     self.assertNotIn("Olá novamente", envio["mensagem_bot"])
                     saudacao_esperada = (
-                        "Que bom te ver novamente!\n\n"
+                        "Bom te ver novamente ☺️\n\n"
                         if etapa == 1
-                        else "Que bom te ver novamente, Ana!\n\n"
+                        else "Bom te ver novamente, Ana ☺️\n\n"
                     )
-                    self.assertTrue(
-                        envio["mensagem_bot"].startswith(saudacao_esperada)
-                    )
+                    self.assertTrue(envio["mensagem_bot"].startswith(saudacao_esperada))
                     self.assertEqual(
-                        envio["mensagem_bot"].count("Que bom te ver novamente"), 1
+                        envio["mensagem_bot"].count("Bom te ver novamente"), 1
                     )
 
     def test_sem_nome_usa_saudacao_generica_e_preserva_texto_enviado(self):
@@ -312,7 +376,7 @@ class RepeticaoTests(unittest.TestCase):
                     ):
                         envio = repeticao.enviar_repeticao_followup(cx)
                 self.assertTrue(
-                    envio["mensagem_bot"].startswith("Que bom te ver novamente!\n\n")
+                    envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n\n")
                 )
                 self.assertEqual(
                     envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
@@ -361,7 +425,8 @@ class RepeticaoTests(unittest.TestCase):
             "mensagem_cliente_atual": contexto()["mensagem_cliente_atual"],
         }
         with patch.object(
-            resolver_etapa1, "enviar_etapa2",
+            resolver_etapa1,
+            "enviar_etapa2",
             return_value={"enviou": True, "id_etapa_resultante": 2},
         ) as enviar:
             envio = resolver_etapa1.resolve_etapa1(cx)
@@ -391,7 +456,10 @@ class RetornoEtapa8Tests(unittest.TestCase):
             self.assertEqual(cx["transicoes_permitidas"], {"cliente_retornou": 9})
             mocks["listar_transicoes_permitidas"].assert_called_once()
             self.assertEqual(
-                mocks["inserir_historico_mensagem_cliente"].call_args.args[2], 8
+                mocks["inserir_historico_mensagem_cliente"].call_args.kwargs[
+                    "id_etapa"
+                ],
+                8,
             )
 
     def test_qualquer_reacao_apresenta_9_sem_repetir_8_nem_consumir_aceite(self):
@@ -429,7 +497,7 @@ class RetornoEtapa8Tests(unittest.TestCase):
                     self.assertEqual(envio["evento_transicao"], "cliente_retornou")
                     self.assertNotIn("tratamento", envio)
                     self.assertEqual(
-                        envio["mensagem_bot"].count("Que bom te ver novamente"), 1
+                        envio["mensagem_bot"].count("Bom te ver novamente"), 1
                     )
                     self.assertNotIn(
                         "Que bom ver você aqui novamente", envio["mensagem_bot"]
@@ -523,6 +591,7 @@ class RetornoEtapa8Tests(unittest.TestCase):
             self.assertEqual(envio["id_etapa_resultante"], destino)
             self.assertEqual(final["id_etapa_resultante"], destino)
             self.assertFalse(final["atualizar_last_from_bot"])
+
 
 class ProativoTests(unittest.TestCase):
     def test_texto_exato_e_numero_da_unidade(self):

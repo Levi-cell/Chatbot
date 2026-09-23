@@ -78,6 +78,7 @@ def atualizar_banco_com_contexto_final(
         movimento=movimento,
         tratamento=bool(contexto_envio.get("tratamento")),
         historico_bot_inserido=historico_bot_inserido,
+        retorno_followup=bool(contexto_historico.get("retorno_followup")),
         cursor=cursor,
     )
 
@@ -143,6 +144,7 @@ def _persistir_turnos_sem_avanco(
     tratamento,
     historico_bot_inserido,
     cursor,
+    retorno_followup=False,
 ):
     if movimento == MOVIMENTO_TRANSICAO:
         return resetar_turnos_sem_avanco(id_conversa, cursor)
@@ -150,6 +152,8 @@ def _persistir_turnos_sem_avanco(
     if (
         movimento == MOVIMENTO_SEM_AVANCO
         and tratamento
+        # A primeira reação ao lembrete não penaliza o cliente.
+        and not retorno_followup
         and historico_bot_inserido
     ):
         return incrementar_turnos_sem_avanco(id_conversa, cursor)

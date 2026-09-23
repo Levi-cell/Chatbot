@@ -143,7 +143,7 @@ usado após os tratamentos de mídia, reforço e financeiro. Essa variante pede
 o nome uma vez e converge para a mesma etapa 2, sem novas colunas ou transições.
 Depois da abertura e no follow-up, preserva-se a coleta do nome já existente.
 
-`tratamentos/retorno_inatividade.py` monta `Olá novamente, <nome>!` quando
+`tratamentos/retorno_inatividade.py` monta `Bom te ver novamente, <nome> ☺️` quando
 o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
 na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
 incompatíveis não interrompem o atendimento e não produzem prefixo.
@@ -273,10 +273,11 @@ O núcleo transacional e os testes específicos estão descritos em
 ## Lembrete de follow-up
 
 `messages/tratamentos/retorno_followup.py` monta a saudação de retomada com stage
-positivo: `Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!`.
-O nome vem do cadastro persistido; não é extraído da reação que será desconsiderada.
+positivo: `Bom te ver novamente, <nome> ☺️` ou `Bom te ver novamente ☺️`.
+O nome do prefixo vem do cadastro persistido, quando autorizado pela etapa.
 Na etapa 1, o worker passa nome ausente ao formatador, mesmo com cadastro antigo:
-a saudação é sempre genérica, seguida da pergunta de nome do atendimento atual.
+a saudação é sempre genérica. Um nome válido recebido na reação avança para a 2;
+tratamentos específicos seguem normais; sem ambos, reapresenta a pergunta.
 O prefixo é aplicado no corpo da resposta, preservado no histórico e removido
 do escopo ao sair do sender, inclusive em falhas. O proativo continua sem saudação.
 

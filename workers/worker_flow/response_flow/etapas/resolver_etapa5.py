@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa5 import (
     enviar_etapa5_contexto_nome_invalido,
     enviar_etapa5_financeiro,
@@ -96,6 +100,8 @@ def resolve_etapa5(contexto_historico):
     resultado_nome = validar_nome_cliente(texto_cliente)
 
     if not resultado_nome.valido:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_NOME_INVALIDO,

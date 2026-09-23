@@ -1,5 +1,9 @@
 import logging
 
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_texto_com_cabecalho,
+)
+
 from core.integrations.whatsapp.pywa_functions.cliente import (
     aplicar_prefixo_mensagem_bot,
     usar_prefixo_mensagem_bot,
@@ -158,7 +162,7 @@ def flow_sender(contexto_historico):
         )
 
     if id_etapa_atual is None or id_etapa_atual == 1:
-        return resolve_etapa1(contexto_historico)
+        return _resolver_com_saudacao(resolve_etapa1, contexto_historico)
 
     if id_etapa_atual == 2:
         return _resolver_com_saudacao(
@@ -302,8 +306,15 @@ def _resolver_com_saudacao(resolver, contexto_historico):
 
     if saudacao_retorno and contexto_envio.get("mensagem_bot"):
         contexto_envio = dict(contexto_envio)
+        texto = contexto_envio["mensagem_bot"]
+        if contexto_envio.get("cabecalho_mensagem"):
+            # O sender enviou este cabeçalho no corpo, antes de aplicar o prefixo.
+            # O histórico deve refletir exatamente a mesma ordem do WhatsApp.
+            texto = montar_texto_com_cabecalho(
+                texto, contexto_envio["cabecalho_mensagem"]
+            )
         contexto_envio["mensagem_bot"] = aplicar_prefixo_mensagem_bot(
-            contexto_envio["mensagem_bot"],
+            texto,
             saudacao_retorno,
         )
         contexto_envio["saudacao_retorno_aplicada"] = True

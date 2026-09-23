@@ -202,8 +202,9 @@ O [diagnóstico sem envio](../../utilitarios/README.md#diagnóstico-de-follow-up
 confere as consultas; ele não comprova as permissões de escrita.
 
 Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo.
-Histórico da repetição, conclusão da retomada e reset do stage são confirmados
-juntos pelo flow. A chamada à Meta ocorre fora dessa atomicidade local;
+Histórico da resposta, efeitos da etapa, conclusão da retomada, reset do stage,
+eventual encerramento e finalização da fila são confirmados juntos pelo flow.
+A chamada à Meta ocorre fora dessa atomicidade local;
 aceite externo seguido de falha no commit ainda pode gerar duplicidade.
 
 ## Atomicidade

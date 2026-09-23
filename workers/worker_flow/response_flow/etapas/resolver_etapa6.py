@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 from core.integrations.whatsapp.messages.etapa6_messages import (
     montar_mensagem_contato_comercial_etapa6,
@@ -114,6 +118,8 @@ def resolve_etapa6(contexto_historico):
     resultado_idade = validar_idade(texto_cliente)
 
     if not resultado_idade.valida and not resultado_idade.acima_limite:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento(
             contexto_historico,
             "idade_invalida",

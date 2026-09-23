@@ -349,7 +349,7 @@ Implementação principal:
   Conversas encerradas apenas consultadas no painel não dependem desse código. O texto
   identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
   usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
-  avanço sem resposta correspondente. A reação ao follow-up apenas repete a etapa.
+  avanço sem resposta correspondente. A reação ao follow-up também aplica essas regras quando a idade é validada.
 - Na etapa 10, mídia, reforço escolar e financeiro continuam precedendo a
   coleta de e-mail. A exigência efetiva é a configuração da unidade, exceto
   para o titular de 60 a 99 anos, cujo e-mail é universalmente opcional quando
@@ -597,9 +597,10 @@ e rodapés nativos, assim como titular/dependente. A regra também vale na triag
 e na pesquisa. Pode receber o prefixo de inatividade de três horas quando elegível;
 não recebe outro tratamento ou prefixo de follow-up nesse mesmo ciclo.
 Inatividade de três horas mantém a validação normal (podendo avançar ou tratar);
-a reação ao follow-up acolhe e repete, sem interpretar o conteúdo naquele
-ciclo, exceto na etapa 8, que avança diretamente para a 9. O retorno não soma
-saudações nem repete apresentação ou despedida.
+a reação ao follow-up acolhe e valida a resposta. Quando não há resposta válida
+nem tratamento específico, reapresenta a pergunta neutra. A etapa 8 continua
+avançando diretamente para a 9. O retorno não soma saudações; quando repete a
+etapa, usa sua pergunta neutra sem repetir apresentação ou despedida.
 
 A oferta inicial da etapa 7 destaca **demonstração prática gratuita** logo na
 abertura, antes da explicação da avaliação de habilidades, e termina com o
@@ -842,10 +843,10 @@ tratamento futuro que reapresente conteúdo da etapa.
 
 Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
 na mesma conversa pelo menos três horas após o último envio confirmado do bot
-deverá fazer a resposta começar com `Olá novamente, {nome}!` no caminho normal
+deverá fazer a resposta começar com `Bom te ver novamente, {nome} ☺️` no caminho normal
 com `followup_stage = 0`. Stage positivo ou retomada já registrada segue o
-[contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com a
-saudação própria e repetição da etapa, com exceção do avanço direto de 8 para 9.
+[contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com o
+prefixo de retorno e a validação da resposta; a etapa 8 avança diretamente para a 9.
 
 O intervalo é inclusivo (`>= 3 horas`) e deve comparar o horário original do
 evento atual do cliente com a última linha `sent` do bot no histórico da mesma
@@ -1412,15 +1413,24 @@ a ela, precisa estar dentro de 23h59. Bot há oito horas com cliente há 25 hora
 
 O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece até uma
 reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.
-A primeira entrada aceita com stage positivo é armazenada, mas seu conteúdo não é
-interpretado como resposta da etapa. A repetição começa com `Que bom te ver novamente,
-<nome>!` ou `Que bom te ver novamente!` quando não há nome persistido.
-Na etapa 1, usar sempre `Que bom te ver novamente!`, mesmo que o cadastro tenha
-nome de atendimento anterior. A coleta do nome ainda está pendente nesta conversa;
-repetir sua pergunta sem personalização, sem usar a reação como nome e sem avançar.
-Não apagar o cadastro anterior para aplicar essa regra. Essa saudação
-independe do tempo de retorno e não se soma a `Olá novamente`. Na repetição comum,
-não há tratamento, transição, alteração de turnos_sem_avanco, funil ou encerramento.
+A primeira entrada aceita com stage positivo é armazenada e validada pelos
+mesmos resolvers do atendimento normal. Respeitar as prioridades de cada etapa:
+tratamentos específicos existentes (mídia, financeiro e reforço) permanecem;
+resposta válida segue seu evento, efeitos e destino; resposta sem validação nem
+tratamento específico reapresenta a pergunta neutra, sem reprimenda de contexto.
+A triagem mantém apenas suas opções canônicas, sem ganhar tratamentos novos.
+
+A resposta começa com `Bom te ver novamente, <nome> ☺️` ou a forma sem nome
+`Bom te ver novamente ☺️`. Na etapa 1, nunca usar o nome de atendimento anterior:
+um nome válido recebido agora é salvo e avança para a 2; caso contrário, tratar
+ou repetir conforme a regra acima. O cadastro antigo não é apagado para saudação.
+O prefixo independe do tempo de retorno, aparece uma vez e substitui a saudação
+de três horas. No retorno comum por três horas, o processamento continua normal,
+inclusive o tratamento de contexto inválido; só a redação do prefixo é igual.
+
+Sem avanço, essa primeira reação não incrementa `turnos_sem_avanco`, inclusive
+quando recebe tratamento específico. Uma transição válida zera esse contador
+normalmente. A resposta seguinte volta à contagem normal de tratamentos.
 
 **Exceção da etapa 8:** qualquer reação processada com follow-up pendente provoca
 `8 → cliente_retornou → 9`, reutilizando o resolver e o mapa do retorno normal.
@@ -1445,18 +1455,18 @@ nem altera followup_last_sent_at. Stage positivo passa a indicar retomada penden
 por envio real ou marcação inicial; somente o histórico/recibo comprova envio.
 Novas conversas continuam com stage zero. O setup limpo não marca conversas.
 
-Histórico da resposta, marcação da retomada e reset para zero pertencem ao mesmo
-commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
+Histórico, efeitos normais, marcação da retomada, reset para zero, eventual
+encerramento e finalização da fila pertencem ao mesmo commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
 concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
 seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
 novo ciclo somente nas etapas 1–17 e com as demais condições de envio atendidas.
 Stage maior que um segue a mesma recuperação; negativo falha fechado.
 
-Essa desconsideração semântica é uma exceção deliberada à interpretação normal da
-entrada. Stage zero preserva os validadores, o mapa e a saudação reativa de três horas.
+A exceção deliberada é a repetição neutra diante de contexto inválido genérico
+no primeiro retorno. Stage zero preserva o processamento normal por inteiro.
 O registro proativo não possui fila nem hash de cliente de origem e não prova que
 uma fila A/B/C foi respondida. Os recibos próprios identificam a conversa e a âncora
-do ciclo; registros de retomada identificam a entrada ignorada para recuperação.
+do ciclo; registros de retomada identificam a entrada processada para recuperação.
 
 Os dois workers compartilham o lock de 110 segundos e seu fencing. Entrada aceita
 após o último teste pré-envio pode cruzar com a chamada da Meta: confirmamos o

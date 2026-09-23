@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa17 import (
     enviar_etapa17_cliente_contexto_invalido,
     enviar_etapa17_dependente_contexto_invalido,
@@ -55,6 +59,8 @@ def resolve_etapa17(contexto_historico):
     )
 
     if resposta_triagem is None:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento_contexto(contexto_historico)
 
         if status_dependente:

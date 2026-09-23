@@ -30,4 +30,4 @@ def montar_saudacao_retorno(
         return None
     if intervalo < INTERVALO_SAUDACAO_RETORNO:
         return None
-    return montar_prefixo_retorno(f"Olá novamente, {nome_titular}!")
+    return montar_prefixo_retorno(f"Bom te ver novamente, {nome_titular} ☺️")

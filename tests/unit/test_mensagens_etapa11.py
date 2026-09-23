@@ -109,19 +109,19 @@ class MensagensEtapa11Tests(unittest.TestCase):
                             self.assertIn("Olha, não consegui entender", texto)
                             self.assertEqual(texto.count("saúde"), 1)
 
-    def test_followup_repete_a_triagem_da_pessoa_sem_consumir_confirmacao(self):
+    def test_repeticao_neutra_followup_preserva_pessoa_da_triagem(self):
         for dependente in (False, True):
             with self.subTest(dependente=dependente):
                 cx = contexto_followup()
                 cx["dados_repeticao"].update(
                     status_dependente=dependente, nome_dependente="Lucas"
                 )
-                cx["mensagem_cliente_atual"]["conteudo_texto"] = "Começar triagem"
+                cx["mensagem_cliente_atual"]["conteudo_texto"] = "???"
                 wa = cliente_simulado()
                 with patch.object(cliente, "WhatsApp", return_value=wa):
                     envio = enviar_repeticao_followup(cx)
                 texto = self.conferir_envio(
-                    envio, wa, dependente, "Que bom te ver novamente, Ana!\n\n"
+                    envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n\n"
                 )
                 self.assertEqual(envio["mensagem_bot"], texto)
                 self.assertNotIn("antes de prosseguir", texto)

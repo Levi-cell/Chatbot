@@ -63,4 +63,5 @@ O follow-up usa `repositories/atendimento/followup.py` para elegibilidade,
 fencing e registros de envio/retomada; conteúdo e transporte pertencem a
 `integrations/whatsapp`. A criação das tabelas fica em `database/deploy_database`,
 e a migração de uma base existente em `deploy/migrations`. O laço proativo e a
-decisão de repetir a etapa no retorno continuam nos respectivos workers.
+validação da reação do cliente continuam nos respectivos workers: o retorno
+pode avançar, receber um tratamento específico ou repetir a pergunta neutra.

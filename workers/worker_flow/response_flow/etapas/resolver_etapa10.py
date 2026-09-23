@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa10 import (
     enviar_etapa10_contexto_email_invalido,
     enviar_etapa10_financeiro,
@@ -100,6 +104,8 @@ def resolve_etapa10(contexto_historico):
     )
 
     if not resultado_email.aceita:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_EMAIL_INVALIDO,

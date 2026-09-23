@@ -61,7 +61,7 @@ ETAPAS_TRIAGEM = {
 }
 
 
-def valida_historico(mensagem, contexto_banco, cursor):
+def valida_historico(mensagem, contexto_banco, cursor, *, retorno_followup=False):
     contexto_conversa = contexto_banco["conversa"]
     id_conversa = contexto_conversa["id_conversa"]
 
@@ -108,7 +108,8 @@ def valida_historico(mensagem, contexto_banco, cursor):
 
     saudacao_retorno = None
     if (
-        not resposta_bot_para_mensagem_atual
+        not retorno_followup
+        and not resposta_bot_para_mensagem_atual
         and contexto_conversa.get("id_etapa_atual") not in {None, 1}
     ):
         nome_titular, ultima_mensagem_bot_em = (

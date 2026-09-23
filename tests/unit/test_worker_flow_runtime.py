@@ -79,7 +79,111 @@ def contexto_final():
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
 
-    def test_reacao_followup_desvia_validadores_e_persistencia_normal(self):
+    def test_followup_confirma_efeitos_encerramento_e_fila_no_mesmo_commit(self):
+        conn = FakeConn(FakeCursor())
+        commits = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, [])
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "preparar_retorno_followup",
+                    return_value=dict(contexto_historico(), retorno_followup=True),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "enviar_retorno_followup",
+                    return_value=contexto_envio(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "persistir_retorno_followup",
+                    side_effect=lambda *_: commits.append(("efeitos", conn.commits))
+                    or contexto_final(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=lambda *_: commits.append(
+                        ("encerramento_e_fila", conn.commits)
+                    )
+                    or {"atendimento_encerrado": True},
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "registrar_cache_bloqueio_apos_commit",
+                    side_effect=lambda *_: commits.append(("cache", conn.commits)),
+                )
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        self.assertEqual(
+            commits, [("efeitos", 5), ("encerramento_e_fila", 5), ("cache", 6)]
+        )
+        self.assertEqual(conn.rollbacks, 0)
+
+    def test_falha_finalizacao_followup_reverte_resposta_efeitos_e_checkpoint(self):
+        conn = FakeConn(FakeCursor())
+        commits = []
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, [])
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "preparar_retorno_followup",
+                    return_value=dict(contexto_historico(), retorno_followup=True),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "enviar_retorno_followup",
+                    return_value=contexto_envio(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "persistir_retorno_followup",
+                    side_effect=lambda *_: commits.append(conn.commits)
+                    or contexto_final(),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "finalizar_mensagem_processada",
+                    side_effect=RuntimeError("falha ao finalizar"),
+                )
+            )
+            erro = stack.enter_context(
+                patch.object(
+                    flow_worker,
+                    "handle_erro_generico",
+                    side_effect=lambda *_: commits.append(conn.commits),
+                )
+            )
+            cache = stack.enter_context(
+                patch.object(flow_worker, "registrar_cache_bloqueio_apos_commit")
+            )
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        self.assertEqual(commits, [5, 5])
+        self.assertEqual(conn.rollbacks, 1)
+        self.assertIsInstance(
+            erro.call_args.args[2], flow_worker.BancoFalhouAposEnvioMeta
+        )
+        cache.assert_not_called()
+
+    def test_reacao_followup_usa_orquestrador_e_checkpoint_proprios(self):
         conn = FakeConn(FakeCursor())
         eventos = []
         with ExitStack() as stack:
@@ -100,7 +204,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
             repetir = stack.enter_context(
                 patch.object(
                     flow_worker,
-                    "enviar_repeticao_followup",
+                    "enviar_retorno_followup",
                     return_value=contexto_envio(),
                 )
             )

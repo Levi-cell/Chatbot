@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
@@ -20,6 +21,8 @@ from workers.worker_flow.transacoes.retorno_followup import (
     preparar_retorno_followup,
     persistir_retorno_followup,
 )
+from workers.worker_flow.response_flow.retomada_followup import enviar_retorno_followup
+from core.integrations.whatsapp.pywa_functions import cliente as cliente_wa
 
 DSN = os.environ.get("FOLLOWUP_TEST_DSN")
 MIGRACAO = (
@@ -59,14 +62,15 @@ class FollowupPostgresTests(unittest.TestCase):
             bank_script.criar_tabelas()
             bank_script.criar_funcoes_lock()
         # Colunas reais usadas nas barreiras; não simula o comportamento da Meta.
-        cls.cursor.execute("""
+        cls.cursor.execute(
+            """
             CREATE TABLE chatbot.cliente_bloqueado_meta
                 (wa_id_cliente VARCHAR(100), phone_id_unidade VARCHAR(100));
             CREATE TABLE chatbot.webhook_flood_evento
                 (wa_id_cliente VARCHAR(100), phone_id_unidade VARCHAR(100), received_at TIMESTAMPTZ);
             INSERT INTO chatbot.etapa(id_etapa, nome_etapa)
             SELECT etapa, 'Etapa de teste ' || etapa::text FROM generate_series(1, 22) AS etapa;
-            INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome) VALUES (1, '5511999999999', 'Ana');
+            INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome, idade) VALUES (1, '5511999999999', 'Ana', 35);
             INSERT INTO chatbot.unidade
                 (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel,
                  telefone, waba_id, phone_number_id, link_agendamento)
@@ -74,7 +78,8 @@ class FollowupPostgresTests(unittest.TestCase):
                     '5511888888888', 'waba-teste', 'phone-teste', 'https://example.com/agendar');
             INSERT INTO chatbot.conversa(id_conversa, id_cliente, id_unidade, id_etapa_atual)
             VALUES (1, 1, 1, 11);
-        """)
+        """
+        )
         with patch.object(etapa_transicao_script, "transacao_deploy", transacao_local):
             etapa_transicao_script.criar_e_povoar_transicoes_etapa()
         cls.conn.commit()
@@ -257,7 +262,16 @@ class FollowupPostgresTests(unittest.TestCase):
     def test_reacao_etapa8_avanca_e_rollback_e_replay_preservam_ciclo(self):
         self._verificar_reacao_real(origem=8, destino=9)
 
-    def _verificar_reacao_real(self, *, origem, destino):
+    def test_nome_valido_avanca_e_grava_cliente_com_reset_atomico(self):
+        self._verificar_reacao_real(origem=1, destino=2, texto="Antonia")
+
+    def test_triagem_valida_avanca_e_grava_resposta_com_reset_atomico(self):
+        self._verificar_reacao_real(origem=12, destino=13, texto="Às vezes")
+
+    def test_tratamento_especifico_preserva_etapa_e_contador(self):
+        self._verificar_reacao_real(origem=6, destino=6, texto="Quanto custa?")
+
+    def _verificar_reacao_real(self, *, origem, destino, texto="???"):
         mensagem = {
             "id_mensagem": 10,
             "id_hash": "wamid.reacao",
@@ -266,32 +280,19 @@ class FollowupPostgresTests(unittest.TestCase):
             "id_phone_unidade": "phone-teste",
             "unidade_telefone": "5511888888888",
             "tipo_mensagem": "text",
-            "conteudo_texto": "Pode começar",
+            "conteudo_texto": texto,
+            "retry_count": 1,
         }
-        envio = {
-            "enviou": True,
-            "id_hash_msg_bot": "wamid.repeticao",
-            "id_etapa_resultante": destino,
-            "tipo_mensagem": "text",
-            "mensagem_bot": "Que bom te ver novamente, Ana!\n\nPodemos começar?",
-        }
-        if origem == 8:
-            envio.update(
-                id_etapa_origem_transicao=8,
-                evento_transicao="cliente_retornou",
-                tipo_mensagem="interactive_button",
-                mensagem_bot="Que bom te ver novamente, Ana!\n\nVamos reservar sua experiência?",
-            )
         self.cursor.execute(
             """
             INSERT INTO chatbot.fila_mensagens
                 (id_mensagem, id_conversa, received_data_hora, cliente_telefone,
                  conteudo_texto, tipo_mensagem, id_hash_msg, id_phone_unidade,
                  unidade_telefone, status)
-            VALUES (10, 1, %s, '5511999999999', 'Pode começar', 'text',
+            VALUES (10, 1, %s, '5511999999999', %s, 'text',
                     'wamid.reacao', 'phone-teste', '5511888888888', 'processing');
             """,
-            (self.agora,),
+            (self.agora, texto),
         )
         for followup_em in (None, self.agora):
             with self.subTest(legado=followup_em is None):
@@ -309,6 +310,12 @@ class FollowupPostgresTests(unittest.TestCase):
                 contexto = preparar_retorno_followup(
                     mensagem, contexto_banco, self.cursor
                 )
+                with patch.object(cliente_wa, "WhatsApp") as wa:
+                    wa.return_value.send_message.return_value = SimpleNamespace(
+                        id="wamid.repeticao"
+                    )
+                    envio = enviar_retorno_followup(contexto)
+                self.assertEqual(envio["id_etapa_resultante"], destino)
                 self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
                 self.assertEqual(self.cursor.fetchone()[0], 1)
 
@@ -333,17 +340,31 @@ class FollowupPostgresTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     self.cursor.fetchone(),
-                    (0, followup_em, 0 if origem == 8 else 5, destino),
+                    (0, followup_em, 0 if origem != destino else 5, destino),
                 )
+                if origem == 1:
+                    self.cursor.execute(
+                        "SELECT nome FROM chatbot.cliente WHERE id_cliente=1"
+                    )
+                    self.assertEqual(self.cursor.fetchone()[0], "Antonia")
+                if origem == 12:
+                    self.cursor.execute(
+                        "SELECT resposta FROM chatbot.respostas_desafios WHERE id_conversa=1 AND id_etapa=12"
+                    )
+                    self.assertEqual(self.cursor.fetchone()[0], "às vezes")
                 self.cursor.execute(
                     "SELECT conteudo_texto, id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
                 )
-                self.assertEqual(self.cursor.fetchone(), (envio["mensagem_bot"], destino))
+                self.assertEqual(
+                    self.cursor.fetchone(), (envio["mensagem_bot"], destino)
+                )
                 self.cursor.execute(
                     "SELECT id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.reacao'"
                 )
                 self.assertEqual(self.cursor.fetchone()[0], origem)
-                self.cursor.execute("SELECT id_etapa, concluida_em FROM chatbot.followup_retomada")
+                self.cursor.execute(
+                    "SELECT id_etapa, concluida_em FROM chatbot.followup_retomada"
+                )
                 etapa_checkpoint, concluida_em = self.cursor.fetchone()
                 self.assertEqual(etapa_checkpoint, origem)
                 self.assertIsNotNone(concluida_em)
@@ -411,12 +432,14 @@ class MigracaoLegadoPostgresTests(unittest.TestCase):
         self.cursor.execute(
             "DROP TABLE chatbot.followup_envio, chatbot.followup_retomada, chatbot.followup_legado"
         )
-        self.cursor.execute("""
+        self.cursor.execute(
+            """
             INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome)
             VALUES (2,'5511999999992','Bia'), (3,'5511999999993','Caio'), (4,'5511999999994','Davi');
             INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,status_ativa,followup_stage)
             VALUES (2,2,1,18,TRUE,NULL), (3,3,1,11,FALSE,0), (4,4,1,11,TRUE,2);
-        """)
+        """
+        )
         self.conn.commit()
 
     def limpar_banco(self):
@@ -454,11 +477,13 @@ class MigracaoLegadoPostgresTests(unittest.TestCase):
         self.cursor.execute(
             "UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=1"
         )
-        self.cursor.execute("""
+        self.cursor.execute(
+            """
             INSERT INTO chatbot.cliente(id_cliente,waid_telefone) VALUES(5,'5511999999995');
             INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
             VALUES(5,5,1,1);
-        """)
+        """
+        )
         self.conn.commit()
         with self.assertRaises(psycopg.errors.DuplicateTable):
             self.executar_migracao()

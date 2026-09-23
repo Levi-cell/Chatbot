@@ -70,7 +70,7 @@ dequeue
 -> vincular fila à conversa
 -> reler conversa sob lock e reconhecer retomada de follow-up
 -> persistir histórico do cliente
--> retomar follow-up (repetir etapa ou avançar 8 -> 9); nos demais casos, rotear resposta
+-> validar a reação ao follow-up ou a resposta normal pelo mesmo fluxo
 -> persistir histórico/contexto do bot
 -> marcar fila como sent
 -> liberar lock e fechar conexão
@@ -145,8 +145,9 @@ fila sem duplicar o envio.
 ## Response flow
 
 - `flow_worker.py`: transação, checkpoints e handlers.
-- `repeticao_followup.py`: reapresentação da etapa na reação ao follow-up ou
-  legado marcado, com avanço direto de 8 para 9 e recuperação da resposta existente;
+- `retomada_followup.py`: valida a reação com o fluxo normal e a saudação de retorno;
+- `repeticao_followup.py`: repetição neutra para contexto inválido no retorno,
+  compatibilidade da etapa 8 e recuperação da resposta existente;
 - `flow_sender.py`: preserva `resposta_bot_atual` e seleciona o resolver da
   etapa atual;
 - `etapas/resolver_etapa<n>.py`: valida a resposta, aplica tratamentos e
@@ -215,7 +216,7 @@ No caminho normal com `followup_stage = 0`, após a etapa 1,
 `valida_historico.py` compara o horário da mensagem atual do
 cliente com o último envio do bot confirmado como `sent` na mesma conversa.
 Com intervalo de pelo menos três horas e nome disponível, `flow_sender.py`
-prefixa a resposta com `Olá novamente, <nome>!`, inclusive quando ela é um
+prefixa a resposta com `Bom te ver novamente, <nome> ☺️`, inclusive quando ela é um
 tratamento. O texto enviado e o histórico recebem o mesmo prefixo uma vez.
 
 Essa saudação não é follow-up nem disparo por inatividade: depende de uma nova
@@ -356,33 +357,36 @@ registra `followup_commit_falhou` como crítico.
 
 ### Retomada pelo flow
 
-No flow, o contexto é relido depois do lock. `transacoes/retorno_followup.py` registra
-a reação e recupera a prova da resposta. `response_flow/repeticao_followup.py`
-chama os senders normais da etapa; na exceção da 8, reutiliza `resolve_etapa8`
-para autorizar pelo mapa o avanço para a 9 antes de enviar. A renovação do lock
-antes do envio acrescenta um checkpoint; persistência final e finalização da fila
-validam a posse antes de alterar dados. Repositórios não controlam commits.
-Stage positivo, por lembrete ou migração inicial, prefixa a repetição com
-`Que bom te ver novamente, <nome>!` ou `Que bom te ver novamente!` sem nome salvo.
-Na etapa 1, o worker sempre omite o nome, inclusive para cliente antigo com nome
-no cadastro, e mantém a pergunta de nome desse atendimento. A reação não valida
-o nome nem avança a etapa; o cadastro anterior não é apagado.
-O histórico guarda exatamente o texto enviado. Stage zero mantém `Olá novamente`
-na regra existente de três horas.
+No flow, o contexto é relido sob lock. `transacoes/retorno_followup.py` registra
+um checkpoint e reutiliza `valida_historico.py` para os dados da etapa, sem
+calcular outra saudação de três horas. `retomada_followup.py` chama o `flow_sender`
+normal com o prefixo `Bom te ver novamente, <nome> ☺️`. Na etapa 1, omite o nome
+antigo; um nome válido na reação é salvo e permite avançar para a 2.
 
-A primeira reação é guardada sem validar seu conteúdo. Fora da etapa 8, a repetição
-mantém botões e dados persistidos; não altera `turnos_sem_avanco`, Funil ou
-encerramento. Stage zero, histórico da repetição e conclusão do marcador só são
-confirmados juntos após o envio. `followup_last_sent_at` permanece como auditoria.
-Falha preserva a retomada; replay concluído não reenvia nem zera um ciclo posterior.
-Na etapa 8, qualquer reação leva diretamente à 9 pelo evento `cliente_retornou`,
-sem enviar a 8. Não interpreta a entrada como aceite da 9. O prefixo aparece uma
-vez, com a oferta e os botões corretos para titular ou dependente. A persistência
-normal grava a resposta na 9, avança e zera os turnos sem avanço; `concluir_retomada`
-valida a etapa de destino 9 e conclui o ciclo no mesmo commit. O histórico do
-cliente e o checkpoint mantêm a origem 8. Rollback e replay preservam esse contrato.
-O legado marcado também pode repetir etapas 18–21, embora elas não recebam
-proativos. A etapa terminal 22 não é repetível por esse caminho.
+Os resolvers preservam seus validadores e prioridades: resposta válida avança;
+mídia, financeiro e reforço recebem os tratamentos já existentes naquela etapa;
+contexto inválido genérico usa `repeticao_followup.py` para a pergunta neutra.
+A triagem continua aceitando somente as opções canônicas, sem novos tratamentos.
+Botões, rodapés e participante são preservados. O prefixo aparece uma vez no
+envio e no histórico, inclusive nas mensagens com cabeçalho.
+
+A persistência normal aplica os efeitos, transições e encerramentos cabíveis.
+Sem avanço, a primeira reação não incrementa `turnos_sem_avanco`; com transição,
+o contador é zerado normalmente. `concluir_retomada` verifica a etapa resultante
+e zera `followup_stage`, mantendo `followup_last_sent_at` como auditoria.
+Histórico, efeitos, checkpoint, eventual encerramento e fila `sent` são
+confirmados **na mesma transação**, sem commit intermediário. Falha reverte todos
+esses efeitos. Cache de bloqueio só é publicado após o commit.
+
+Replay de uma resposta já concluída reutiliza seu destino gravado, sem enviar,
+reinterpretar a reação, refazer efeitos ou zerar um ciclo posterior. Respostas
+da versão antiga continuam recuperáveis, mesmo que tenham repetido a etapa.
+
+Na etapa 8, qualquer reação leva à 9 pelo evento `cliente_retornou`, sem repetir
+a 8 nem interpretar a reação como resposta à 9. O histórico do cliente e o
+checkpoint mantêm a origem 8; a resposta registra o destino 9.
+Stage positivo legado nas etapas 18–21 também usa a validação normal, embora
+essas etapas continuem inelegíveis para novos lembretes. A etapa 22 é terminal.
 
 ### Operação e logs
 

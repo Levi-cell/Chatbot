@@ -280,11 +280,12 @@ do bot há pelo menos sete horas e última mensagem do cliente há menos de 24 h
 (com um minuto de margem no código). A seleção também verifica unidade, fila e
 bloqueios. A etapa 18 e as posteriores não recebem lembretes proativos.
 
-Na primeira reação aceita com stage positivo, o flow guarda a mensagem e repete
-a etapa com `Que bom te ver novamente`, sem usar essa reação como resposta da
-pergunta. A etapa 8 é exceção: qualquer reação avança diretamente para a 9,
+Na primeira reação aceita com stage positivo, o flow valida a mensagem:
+resposta válida avança; tratamento específico mantém sua orientação; sem ambos,
+repete a pergunta neutra. Todos recebem `Bom te ver novamente ☺️`, com nome
+quando autorizado. A etapa 8 é exceção: qualquer reação avança diretamente para a 9,
 sem repetir a 8 nem aceitar antecipadamente a oferta da 9. O stage só volta a
-zero junto da persistência da resposta e, nessa exceção, da transição. Conversas
+zero junto da resposta, efeitos, eventual encerramento e finalização da fila. Conversas
 antigas ativas foram marcadas com stage 1 na migração inicial, sem disparo retroativo.
 
 Contratos: [regras de negócio](REGRAS_DE_NEGOCIO.md#follow-up-de-inatividade-e-reação-do-cliente),

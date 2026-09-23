@@ -11,8 +11,8 @@ from core.repositories.atendimento.followup import (
     proteger_conversa,
     reler_conversa,
 )
-from workers.worker_flow.response_flow.repeticao_followup import (
-    enviar_repeticao_followup,
+from workers.worker_flow.response_flow.retomada_followup import (
+    enviar_retorno_followup,
 )
 from workers.worker_flow.transacoes.retorno_followup import (
     preparar_retorno_followup,
@@ -208,7 +208,7 @@ def worker_flow():
             proteger_conversa(id_conversa, lock_version, cursor_ciclo, renovar=True)
             conn_ciclo.commit()
             if contexto_historico.get("retorno_followup"):
-                contexto_envio = enviar_repeticao_followup(contexto_historico)
+                contexto_envio = enviar_retorno_followup(contexto_historico)
             else:
                 contexto_envio = flow_sender(contexto_historico)
 
@@ -222,6 +222,18 @@ def worker_flow():
                 contexto_final = persistir(
                     contexto_historico, contexto_envio, cursor_ciclo
                 )
+                if contexto_historico.get("retorno_followup"):
+                    # O retorno agora pode encerrar por idade ou finalizar o fluxo.
+                    # Histórico, efeitos, stage=0, encerramento e fila são atômicos:
+                    # um retry não pode encontrar um checkpoint concluído sem
+                    # que o encerramento correspondente também esteja confirmado.
+                    resultado_encerramento = finalizar_mensagem_processada(
+                        mensagem,
+                        contexto_banco,
+                        lock_version,
+                        cursor_ciclo,
+                        contexto_final,
+                    )
                 conn_ciclo.commit()
 
             except Exception as erro:
@@ -247,15 +259,16 @@ def worker_flow():
                 contexto_envio.get("tipo_tratamento"),
             )
 
-            proteger_conversa(id_conversa, lock_version, cursor_ciclo)
-            resultado_encerramento = finalizar_mensagem_processada(
-                mensagem,
-                contexto_banco,
-                lock_version,
-                cursor_ciclo,
-                contexto_final,
-            )
-            conn_ciclo.commit()
+            if not contexto_historico.get("retorno_followup"):
+                proteger_conversa(id_conversa, lock_version, cursor_ciclo)
+                resultado_encerramento = finalizar_mensagem_processada(
+                    mensagem,
+                    contexto_banco,
+                    lock_version,
+                    cursor_ciclo,
+                    contexto_final,
+                )
+                conn_ciclo.commit()
 
             registrar_cache_bloqueio_apos_commit(
                 mensagem,

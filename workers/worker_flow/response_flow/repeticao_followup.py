@@ -1,4 +1,8 @@
-"""Retoma após follow-up: repete a etapa, exceto a 8, que avança para a 9."""
+"""Repetição neutra para retorno sem resposta válida nem tratamento específico.
+
+A validação fica nos resolvers normais. Mantém também a recuperação sem envio
+de respostas já confirmadas e a compatibilidade do retorno especial 8 -> 9.
+"""
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_cabecalho,

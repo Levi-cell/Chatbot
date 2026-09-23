@@ -61,7 +61,7 @@ etapa**, **repetir sua pergunta** e **acolher um retorno** são situações dife
 | Mídia, financeiro ou reforço em etapa apresentada | Orientação específica + retomada neutra da pergunta atual | O tratamento não autoriza avançar. |
 | Contexto inválido em etapa apresentada | Mensagem própria que já pede a resposta correta, sem concatenar a repetição | Permanece na etapa atual. |
 | Retorno por inatividade, sem follow-up pendente | Uma saudação de retorno + resposta que o fluxo normal produziria | A resposta do cliente continua sendo validada; pode avançar ou receber tratamento. |
-| Reação a follow-up pendente, exceto na etapa 8 | Uma saudação de retorno + reapresentação da etapa atual | A reação não é interpretada como resposta e não gera transição. |
+| Reação a follow-up pendente, exceto na etapa 8 | Uma saudação + destino válido, tratamento específico ou repetição neutra | Usa os validadores normais; contexto inválido genérico apenas reapresenta a pergunta. |
 | Reação a follow-up pendente na etapa 8 | Uma saudação de retorno + mensagem da etapa 9 | Avança diretamente de 8 para 9, sem repetir a 8 nem interpretar a reação como aceite da oferta. |
 | Retry com resposta já persistida | Reutilização do registro existente | Não montar nem enviar outra mensagem. |
 
@@ -143,10 +143,11 @@ Regras específicas:
   o seu nome. Digite só seu primeiro nome, por exemplo: Pedro.` já contém o
   pedido e o exemplo. Enviá-la sozinha, sem concatenar `MENSAGEM_REPETICAO_ETAPA1`
   nem usar `compor_tratamento`. A exceção é apenas de redação: permanece na
-  etapa 1 aguardando um nome válido. Mídia, financeiro, reforço e follow-up
-  conservam suas respectivas composições com a pergunta.
-- Na reação ao follow-up da etapa 1, usar `Que bom te ver novamente!`, sem nome.
-  A pergunta do nome é reapresentada; a reação não vale como nome informado.
+  etapa 1 aguardando um nome válido. Mídia, financeiro e reforço conservam suas composições com a pergunta.
+  No follow-up, somente a resposta sem validação nem tratamento específico usa a repetição neutra.
+- Na reação ao follow-up da etapa 1, usar `Bom te ver novamente ☺️`, sem nome antigo.
+  Um nome válido informado na reação é aproveitado e leva à etapa 2; caso contrário,
+  aplicar o tratamento específico identificado ou reapresentar a pergunta sem reprimenda.
 - A saudação normal por três horas de inatividade não se aplica à etapa 1.
 - Só a etapa 1 possui as variantes de **primeiro contato com tratamento**.
   Não reproduzir essa exceção automaticamente nas demais etapas.
@@ -193,8 +194,8 @@ continuam identificando a etapa; não são outra pergunta ou apresentação.
 A única saudação de retorno que pode acompanhar esse tratamento é a de
 **inatividade a partir de três horas**, quando elegível: saudação + mensagem
 própria de contexto. Não acrescentar a repetição depois. A etapa 1 continua
-fora da saudação de três horas. Na reação a follow-up pendente, o fluxo não
-valida contexto: envia saudação de follow-up + repetição normal da etapa.
+fora da saudação de três horas. Na reação a follow-up pendente, o fluxo valida a resposta; se ela não for válida
+nem corresponder a um tratamento específico, envia saudação + repetição neutra.
 
 É uma regra de composição, não de validação. Botões, aceites por texto,
 prioridades de classificação e eventos permanecem os mesmos. Não transformar
@@ -308,7 +309,7 @@ composição é coordenada pelo worker e aplicada ao envio e ao histórico.
 ### Inatividade normal: a partir de três horas
 
 Com `followup_stage = 0`, o retorno **a partir de três horas**, inclusive,
-desde o último envio confirmado do bot pode receber `Olá novamente, {nome_titular}!`.
+desde o último envio confirmado do bot pode receber `Bom te ver novamente, {nome_titular} ☺️`.
 O código não usa “até três horas”, nem envia uma mensagem automaticamente
 quando esse prazo passa. Nome válido e horários compatíveis são necessários.
 
@@ -329,14 +330,19 @@ atendidos. Uma revisão de estilo não autoriza ampliar a elegibilidade do envio
 
 Na primeira reação aceita com follow-up pendente:
 
-1. usar `Que bom te ver novamente, {nome_titular}!` ou a forma sem nome da etapa 1;
-2. reapresentar a etapa atual, com pergunta, botões e participante corretos,
-   exceto na etapa 8, cujo destino é a etapa 9;
-3. não interpretar a reação como resposta da etapa, nem classificá-la como
-   financeiro, mídia ou reforço escolar naquele ciclo;
-4. não produzir transição, mesmo que o conteúdo pareça uma resposta válida,
-   salvo o retorno obrigatório de 8 para 9;
-5. preservar o encerramento transacional do ciclo e a recuperação de retries.
+1. usar `Bom te ver novamente, {nome_titular} ☺️` ou `Bom te ver novamente ☺️`
+   na etapa 1/sem nome autorizado, sempre uma única vez;
+2. reutilizar os validadores e a ordem de prioridade dos tratamentos da etapa;
+3. resposta válida: avançar normalmente, com saudação + mensagem de destino;
+4. tratamento específico reconhecido: saudação + tratamento + pergunta atual;
+5. sem resposta válida nem tratamento específico: saudação + repetição neutra,
+   preservando participante, botões e rodapés nativos, sem orientação de contexto inválido;
+6. na triagem, aceitar somente as opções canônicas; respostas inválidas repetem a
+   pergunta, sem introduzir tratamentos financeiros, de mídia ou reforço;
+7. zerar `followup_stage` no sucesso, junto dos efeitos, histórico e finalização da fila.
+   Se não avançar, essa primeira reação não incrementa `turnos_sem_avanco`.
+   Uma transição válida zera o contador normalmente; as próximas respostas seguem
+   as regras normais. Uma falha reverte a transação inteira.
 
 **Exceção da etapa 8 — oferta adiada:** qualquer reação processada pelo flow
 com follow-up pendente leva diretamente à etapa 9. Não enviar novamente a
@@ -394,8 +400,8 @@ Revisões de texto devem conferir também a continuidade nas perguntas 12–17,
 que citam o nome do dependente tanto na faixa infantil quanto na adulta.
 
 As seis perguntas continuam sujeitas aos dois caminhos de retorno:
-inatividade normal valida a resposta; reação ao follow-up reapresenta a
-pergunta sem consumi-la como resposta. Manter o número da pergunta, a faixa
+ambos validam a resposta; no follow-up, uma opção válida avança e é salva,
+enquanto uma entrada inválida reapresenta a pergunta sem tratamento genérico. Manter o número da pergunta, a faixa
 etária, o nome do dependente e o rodapé de opção única. Não acrescentar oferta
 comercial ou celebração a cada resposta da triagem.
 
@@ -572,8 +578,9 @@ artificiais. A exceção de contexto vale para todas as etapas, não só para no
 Nos retornos, a saudação é aplicada uma única vez pelo transporte coordenado
 pelo worker. Isso preserva a ordem **retorno → tratamento, se o fluxo normal
 o escolher → repetição** na inatividade, exceto contexto: **retorno → mensagem
-própria de contexto**. Na reação ao follow-up, o worker
-seleciona `repeticao=True` e não classifica financeiro, mídia ou reforço.
+própria de contexto**. No follow-up, o worker usa os mesmos validadores e
+tratamentos específicos; somente a resposta inválida sem tratamento específico
+seleciona a repetição neutra (`repeticao=True`) sem mensagem de contexto.
 Na triagem, usa a pergunta canônica sem esse parâmetro. A etapa 9 suprime
 sua saudação própria quando recebe repetição ou `incluir_saudacao=False`.
 
@@ -596,7 +603,7 @@ necessários para montar a apresentação. Senders e worker devem conservar no
 histórico a mesma fala que foi enviada, inclusive prefixos e cabeçalhos.
 
 O controle do prefixo está em `pywa_functions/cliente.py`; sua aplicação aos
-fluxos está em `flow_sender.py` e `repeticao_followup.py`. Essa separação deve
+fluxos está em `flow_sender.py`, `retomada_followup.py` e `repeticao_followup.py`. Essa separação deve
 permanecer. Não criar uma cópia dos fluxos dentro da pasta de mensagens.
 
 ## 8. Como revisar uma alteração
@@ -608,8 +615,8 @@ não apenas uma constante isolada. Conferir os cenários pertinentes:
 - titular e dependente, sem trocar destinatário, nome ou idade;
 - retorno por inatividade com resposta válida e com resposta inválida;
 - contexto inválido completo por si só, sem concatenar a pergunta de repetição;
-- reação ao follow-up com uma única saudação, repetindo a etapa ou avançando
-  de 8 para 9 na exceção da oferta adiada;
+- reação ao follow-up com saudação única: avanço válido, tratamento específico
+  ou repetição neutra; preservar a exceção de 8 para 9;
 - botões e rodapés, sem repetição e com a mesma ação aceita pelo validador;
 - nomes ausentes e dados de atendimentos anteriores;
 - texto efetivamente enviado e registro no histórico;
@@ -634,7 +641,8 @@ de etapas de um plano não deve ser antecipada no código em produção.
 - **Etapas 3–6:** a confirmação e a coleta de profissão, nome do dependente
   e idade ganharam acolhimento moderado, sem alterar o que é perguntado.
 
-Exceto pelo avanço de 8 para 9, os retornos usam a repetição neutra das etapas: não reapresentam o agente
-na etapa 1, não comemoram novamente a oferta e não agradecem outra vez pelas
-perguntas antes do link. O follow-up continua sem consumir a reação como
-resposta; validadores, eventos e elegibilidade mantêm seus contratos.
+Quando precisarem repetir a etapa, os retornos usam a repetição neutra: não
+reapresentam o agente na etapa 1, não comemoram novamente a oferta e não agradecem
+outra vez pelas perguntas antes do link. Desde a revisão de 23/09/2026, a reação
+ao follow-up é validada normalmente, com a exceção da etapa 8 descrita acima.
+Os validadores, eventos e critérios de elegibilidade permanecem os mesmos.

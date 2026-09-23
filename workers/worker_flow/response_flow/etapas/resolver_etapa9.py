@@ -1,5 +1,9 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa8 import (
     enviar_etapa8,
 )
@@ -135,6 +139,8 @@ def resolve_etapa9(contexto_historico):
     evento_transicao = validar_etapa9(texto_cliente)
 
     if evento_transicao is None:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
         _logar_tratamento_texto(
             contexto_historico,
             TIPO_TRATAMENTO_CONTEXTO_INVALIDO,

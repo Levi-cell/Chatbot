@@ -135,13 +135,22 @@ Também executa o SQL integral de migração sobre uma base antiga descartável:
 marca somente ativas, audita os valores anteriores, preserva os demais dados,
 não produz histórico/envio, recusa reaplicação e reverte diante de legado terminal.
 O retorno completo também usa fila e histórico reais nesse banco descartável:
-rollback preserva stage positivo, etapa e contadores. A confirmação mantém a
-etapa e os contadores na repetição comum; na exceção da 8, avança para a 9 e
-zera os turnos sem avanço junto da conclusão do follow-up. Verifica histórico
+rollback preserva stage positivo, etapa, efeitos e contadores. Respostas válidas
+avançam e são salvas; repetição neutra ou tratamento específico preservam a etapa
+e o contador na primeira reação. A transição válida zera os turnos sem avanço
+junto da conclusão do follow-up, inclusive no retorno da 8 para a 9. Verifica histórico
 do cliente e checkpoint na origem, resposta no destino e recuperação da mesma
 reação sem reset de um ciclo posterior. Cobre tanto o lembrete
 confirmado quanto o legado sem data de envio.
 Meta permanece simulada; a confirmação de entrega real exige homologação manual.
+
+`unit/test_retomada_followup.py` percorre os validadores e senders reais nas
+rotas titular/dependente: avanço válido, repetição neutra, tratamentos específicos,
+triagem, idade, confirmação do destinatário e contagem após o retorno. Confere
+prefixo único e igualdade entre texto enviado e histórico, inclusive cabeçalhos.
+Os testes de runtime verificam o commit único de efeitos, checkpoint,
+encerramento e fila, com rollback quando a finalização falha. A inatividade
+de três horas mantém o tratamento normal de contexto inválido.
 
 ## Suporte por idade
 
