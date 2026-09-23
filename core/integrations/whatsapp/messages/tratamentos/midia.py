@@ -4,11 +4,11 @@ from .composicao import compor_tratamento
 
 
 MENSAGEM_TRATAMENTO_MIDIA = (
-    "Olha ainda não reconhecemos áudio e mensagens com mídia, apenas texto. "
+    "Olha ainda não consigo reconhecer áudio e mensagens com mídia, apenas texto. "
 
 )
 MENSAGEM_TRATAMENTO_MIDIA_COM_BOTOES = (
-    "Olha ainda não reconhecemos áudio e mensagens com mídia, apenas texto. "
+    "Olha ainda não consigo reconhecer áudio e mensagens com mídia, apenas texto. "
 
 )
 

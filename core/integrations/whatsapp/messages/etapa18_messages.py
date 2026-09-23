@@ -26,7 +26,7 @@ RODAPE_ETAPA18_AGENDAMENTO = (
 
 ### TRECHO COM O LINK, REUTILIZADO NA INICIAL E NOS TRATAMENTOS
 MENSAGEM_REPETICAO_ETAPA18 = (
-    "Para reservar {experiencia}, basta clicar neste link para escolher o melhor "
+    "Para reservar {experiencia}, basta clicar neste link e escolher o melhor "
     "dia e horário:\n"
     "{link_agendamento}"
 )

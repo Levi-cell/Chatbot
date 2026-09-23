@@ -4,9 +4,9 @@ from .composicao import compor_tratamento
 
 
 MENSAGEM_TRATAMENTO_FINANCEIRO = (
-    "Olha, os valores de investimento são definidos após a "
-    "*experiência Supera gratuita* na unidade. Assim, nossa equipe poderá "
-    "orientar você sobre a opção mais adequada. ☺️"
+    "Olha, demais informações como valores de investimento são *exclusivas* para cada aluno e"
+    "só são possíveis de determinar após a"
+    "sua *experiência supera gratuita* na unidade."
 )
 
 

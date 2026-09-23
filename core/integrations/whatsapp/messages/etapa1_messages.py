@@ -23,7 +23,6 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 APRESENTACAO_ETAPA1 = (
     "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! "
     "☺️\n"
-    "Hoje vamos dar os primeiros passos para a sua primeira experiência Supera! 🧡"
 )
 
 ### PERGUNTA QUE COMPLETA A MENSAGEM INICIAL
@@ -37,12 +36,8 @@ MENSAGEM_REPETICAO_ETAPA1 = "Me diz, qual o seu primeiro nome?"
 # Mensagem completa: a própria orientação já pede o nome. Não concatenar
 # apresentação padrão, repetição ou rodapé à versão aprovada desta abertura.
 MENSAGEM_INFORMACOES_INICIO_ETAPA1 = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n\n"
-    "Hoje vou te ajudar a conhecer o Supera! 🧡\n\n"
-    "Pense no Supera como uma *academia para o cérebro*! "
-    "Aqui melhoramos a capacidade de aprender diferentes assuntos com mais "
-    "facilidade. 🧠💪\n\n"
-    "Para eu te orientar melhor e passar mais detalhes, me diz, como você se chama?"
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n"
+    "Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?"
 )
 
 
