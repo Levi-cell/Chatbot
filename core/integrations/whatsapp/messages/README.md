@@ -384,9 +384,14 @@ após mais 7h sem resposta desde o envio real do primeiro.
 
 O primeiro lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
 no atendimento; na etapa 1, usa `Olá! ☺️`, sem aproveitar nomes antigos.
-Começa com “Queremos muito continuar te ajudando!” e convida a receber a
-**experiência Supera gratuita** na unidade. Após `\n\n`, pergunta “Podemos continuar
-seu atendimento por aqui?”. Para titular, usa “receber você”; para dependente com nome, “receber
+Une “Queremos muito continuar te ajudando” ao convite para receber a
+**experiência Supera gratuita** na unidade. Após `\n\n`, nas etapas 1–6 pergunta
+“Podemos continuar seu atendimento por aqui?”. Nas etapas 7–17, após a oferta,
+pergunta “Podemos continuar por aqui para reservar sua experiência?”; para
+dependente, usa “reservar a experiência de {nome_dependente}” ou, se faltar o
+nome, “reservar a experiência”. A pergunta convida a reservar, sem sugerir que
+já existe uma reserva confirmada. Essa variação não altera a elegibilidade do envio.
+No convite, para titular usa “receber você”; para dependente com nome, “receber
 você e {nome_dependente}”; para dependente ainda sem nome, “receber vocês”, sem
 presumir que a experiência será para o titular. O rodapé de todas as variantes é
 `Estaremos te esperando!`, sem emoji.
