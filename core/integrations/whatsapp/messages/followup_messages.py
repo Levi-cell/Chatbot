@@ -8,9 +8,8 @@ MENSAGEM_FOLLOWUP = ( "Olá, gostaria de continuar seu atendimento agora?"
 MENSAGEM_ENCERRAMENTO_FOLLOWUP = (
     "{saudacao}\n\n"
     "Entendo que neste momento você não está preparado(a) para aproveitar todos os benefícios "
-    "{beneficios}. Então eu vou liberar {vaga} para a próxima pessoa, tudo bem?\n"
-    "Ficamos à disposição 🙂\n\n"
-    "Abraços, {nome_agente}. 👋"
+    "{beneficios}. Então eu vou liberar {vaga} para a próxima pessoa, tudo bem?\n\n"
+    "Ficamos à disposição. Abraços, {nome_agente}. 🧡👋"
 )
 
 MENSAGEM_ENCERRAMENTO_FOLLOWUP_DEPENDENTE = (
@@ -18,8 +17,7 @@ MENSAGEM_ENCERRAMENTO_FOLLOWUP_DEPENDENTE = (
     "Entendo que neste momento você e {nome_dependente} não estão preparados para "
     "aproveitar todos os benefícios que o Supera pode oferecer. Então eu vou liberar "
     "a vaga para a próxima pessoa, tudo bem?\n\n"
-    "Ficamos à disposição 🙂\n\n"
-    "Abraços, {nome_agente}. 👋"
+    "Ficamos à disposição. Abraços, {nome_agente}. 🧡👋"
 )
 
 def montar_mensagem_encerramento_followup(
