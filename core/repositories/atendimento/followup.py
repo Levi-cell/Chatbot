@@ -192,11 +192,14 @@ def concluir_retomada(contexto, data_bot, cursor, *, id_etapa_resultante=None):
 CONSULTA_ELEGIVEIS = """
     SELECT c.id_conversa, c.id_cliente, c.id_unidade, c.id_etapa_atual,
            cl.waid_telefone, u.phone_number_id, u.telefone,
-           b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em
+           b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em,
+           COALESCE(c.followup_stage, 0), cl.nome, u.nome_agente,
+           c.status_dependente, d.nome_dependente
     FROM chatbot.conversa c
     JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
     JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
     JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
+    LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
     JOIN LATERAL (
         SELECT h.id_mensagem, h.received_data_hora
         FROM chatbot.historico_mensagens h
@@ -205,7 +208,7 @@ CONSULTA_ELEGIVEIS = """
     ) b ON TRUE
     WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
       AND c.id_etapa_atual BETWEEN 1 AND 17 AND e.encerra_automaticamente IS FALSE
-      AND COALESCE(c.followup_stage, 0) = 0 AND c.last_message_from = 'bot'
+      AND COALESCE(c.followup_stage, 0) IN (0, 1) AND c.last_message_from = 'bot'
       AND c.last_interaction_at = b.received_data_hora
       AND b.received_data_hora <= clock_timestamp() - INTERVAL '7 hours'
       AND c.turnos_sem_avanco < 12 AND u.status_pagamento IS TRUE
@@ -248,8 +251,27 @@ CONSULTA_ELEGIVEIS = """
       )
       AND NOT EXISTS (
           SELECT 1 FROM chatbot.followup_envio f WHERE f.id_conversa = c.id_conversa
-            AND ((f.id_ancora = b.id_mensagem AND f.ancora_em = b.received_data_hora)
-              OR (f.id_historico_bot = b.id_mensagem AND f.enviado_em = b.received_data_hora))
+            AND f.id_ancora = b.id_mensagem AND f.ancora_em = b.received_data_hora
+      )
+      AND (
+          (COALESCE(c.followup_stage, 0) = 0 AND NOT EXISTS (
+              SELECT 1 FROM chatbot.followup_envio f WHERE f.id_conversa = c.id_conversa
+                AND f.id_historico_bot = b.id_mensagem AND f.enviado_em = b.received_data_hora
+          ))
+          OR (c.followup_stage = 1 AND c.followup_last_sent_at = b.received_data_hora
+              AND EXISTS (
+                  -- Stage legado sozinho não comprova um primeiro envio.
+                  SELECT 1 FROM chatbot.followup_envio primeiro
+                  WHERE primeiro.id_conversa = c.id_conversa
+                    AND primeiro.id_historico_bot = b.id_mensagem
+                    AND primeiro.enviado_em = b.received_data_hora
+                    AND NOT EXISTS (
+                        SELECT 1 FROM chatbot.followup_envio anterior
+                        WHERE anterior.id_conversa = primeiro.id_conversa
+                          AND anterior.id_historico_bot = primeiro.id_ancora
+                          AND anterior.enviado_em = primeiro.ancora_em
+                    )
+              ))
       )
       AND NOT EXISTS (
           SELECT 1 FROM chatbot.followup_retomada r
@@ -271,6 +293,11 @@ COLUNAS_ELEGIVEL = (
     "unidade_telefone",
     "id_ancora",
     "ancora_em",
+    "followup_stage",
+    "nome_titular",
+    "nome_agente",
+    "status_dependente",
+    "nome_dependente",
 )
 
 
@@ -293,6 +320,10 @@ def reler_elegivel(id_conversa, cursor):
 
 
 def persistir_followup(dados, envio, lock_version, cursor):
+    stage_anterior = dados["followup_stage"]
+    if stage_anterior not in (0, 1):
+        raise ValueError("Follow-up proativo só pode partir dos stages 0 ou 1")
+    stage = stage_anterior + 1
     proteger_conversa(dados["id_conversa"], lock_version, cursor)
     if not envio.get("id_hash_msg_bot") or not envio.get("enviou"):
         raise ValueError("Follow-up sem confirmação da Meta")
@@ -332,23 +363,34 @@ def persistir_followup(dados, envio, lock_version, cursor):
         ),
     )
     # Uma entrada nova na fila após o despacho não invalida a confirmação da Meta.
-    # O flow aguardará este lock e lerá stage 1 ao consumir aquela entrada.
+    # O flow aguardará este lock: stage 1 retoma; stage 2 abre outra conversa.
+    # Confirmação, histórico e encerramento pertencem à mesma transação.
     cursor.execute(
         """
         UPDATE chatbot.conversa
-        SET followup_stage = 1, followup_last_sent_at = %s,
-            last_message_from = 'bot', last_interaction_at = %s
+        SET followup_stage = %s, followup_last_sent_at = %s,
+            last_message_from = 'bot', last_interaction_at = %s,
+            status_ativa = CASE WHEN %s = 2 THEN FALSE ELSE status_ativa END,
+            finalizou_em = CASE WHEN %s = 2 THEN %s ELSE finalizou_em END,
+            motivo_encerramento = CASE WHEN %s = 2 THEN 'followup_sem_resposta'
+                                      ELSE motivo_encerramento END
         WHERE id_conversa = %s AND lock_version = %s AND processing IS TRUE
           AND status_ativa IS TRUE AND finalizou_em IS NULL AND id_etapa_atual = %s
-          AND COALESCE(followup_stage, 0) = 0 AND last_message_from = 'bot'
+          AND COALESCE(followup_stage, 0) = %s AND last_message_from = 'bot'
           AND last_interaction_at = %s;
     """,
         (
+            stage,
             data_bot,
             data_bot,
+            stage,
+            stage,
+            data_bot,
+            stage,
             dados["id_conversa"],
             lock_version,
             dados["id_etapa"],
+            stage_anterior,
             dados["ancora_em"],
         ),
     )
@@ -365,22 +407,42 @@ def configurar_consulta_followup(cursor, *, sessao=False):
         cursor.execute("SET LOCAL statement_timeout = '15s'")
 
 
-def consultar_diagnostico(cursor):
-    cursor.execute("SET TRANSACTION READ ONLY")
-    configurar_consulta_followup(cursor)
+def validar_schema_followup(cursor):
+    """Recusa despachos antes da migração, sem depender de uma falha pós-Meta."""
     cursor.execute(
         "SELECT to_regclass('chatbot.followup_envio'), to_regclass('chatbot.followup_retomada'), to_regclass('chatbot.followup_legado')"
     )
     if not all(cursor.fetchone()):
         raise ValueError("SCHEMA_FOLLOWUP_AUSENTE")
     cursor.execute("""
-        SELECT COUNT(*) FILTER (WHERE followup_stage > 0),
+        SELECT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'chatbot.conversa'::regclass
+              AND conname = 'ck_conversa_motivo_encerramento'
+              AND contype = 'c' AND convalidated
+              AND POSITION('followup_sem_resposta' IN pg_get_constraintdef(oid)) > 0
+        );
+    """)
+    if not cursor.fetchone()[0]:
+        raise ValueError(
+            "SCHEMA_SEGUNDO_FOLLOWUP_AUSENTE: aplicar 20260924_segundo_followup.sql"
+        )
+
+
+def consultar_diagnostico(cursor):
+    cursor.execute("SET TRANSACTION READ ONLY")
+    configurar_consulta_followup(cursor)
+    validar_schema_followup(cursor)
+    cursor.execute("""
+        SELECT COUNT(*) FILTER (WHERE followup_stage > 0 AND status_ativa IS TRUE),
                COUNT(*) FILTER (WHERE followup_stage < 0),
-               COUNT(*) FILTER (WHERE followup_stage > 1),
-               COUNT(*) FILTER (WHERE last_interaction_at > clock_timestamp())
+               COUNT(*) FILTER (WHERE followup_stage > 2),
+               COUNT(*) FILTER (WHERE last_interaction_at > clock_timestamp()),
+               COUNT(*) FILTER (WHERE followup_stage = 2 AND status_ativa IS FALSE
+                                 AND motivo_encerramento = 'followup_sem_resposta')
         FROM chatbot.conversa;
     """)
-    positivos, negativos, legados, futuros = cursor.fetchone()
+    positivos, negativos, legados, futuros, encerrados = cursor.fetchone()
     cursor.execute("SELECT COUNT(*) FROM chatbot.followup_legado")
     marcadas_na_migracao = cursor.fetchone()[0]
     candidatos = listar_elegiveis(cursor, 10)
@@ -388,7 +450,8 @@ def consultar_diagnostico(cursor):
         "ciclos_aguardando_reacao": positivos,
         "conversas_marcadas_na_migracao": marcadas_na_migracao,
         "stages_negativos": negativos,
-        "stages_maiores_que_um": legados,
+        "stages_maiores_que_dois": legados,
+        "encerradas_no_segundo_followup": encerrados,
         "horarios_futuros": futuros,
         "amostra_elegiveis": [
             {k: item[k] for k in ("id_conversa", "id_unidade", "id_etapa")}

@@ -269,6 +269,8 @@ existência de contas. Contas inativas, administrativas ou sem unidade não entr
 - `GET /dados/conversas/`: resumo e lista consolidada dos contatos.
 - `GET /dados/conversas/<id_cliente>/`: histórico do contato dentro da unidade.
 - `GET /dados/relatorio/`: indicadores, perfis, satisfação, atividade e etapas.
+- `GET /dados/relatorio/faixa-etaria/`: consulta por `idade_minima`, `publico`
+  (`titulares`, `dependentes` ou `todos`) e `periodo`, somente na unidade autorizada.
 - `GET /contatos.csv`: exporta todos os contatos ou somente os elegíveis.
   Por padrão, o arquivo segue as 36 colunas, a grafia e a ordem do modelo oficial do Google
   Contacts para que e-mail, telefone, observações e marcador sejam reconhecidos.
@@ -325,6 +327,34 @@ Inclui históricos, sem filtrar pela política atual, sem duplicar conversas e s
 misturar os casos 100+. Não comprova clique, atendimento humano ou matrícula.
 Tags 18–59, 60+ e de dependentes continuam fixas. Quantidades e taxas do Funil
 mantêm todos os envios registrados mesmo quando a configuração atual mudou.
+
+### Consulta de faixa etária personalizada
+
+O card fica abaixo de Evolução da demanda/Satisfação e antes de Perfil dos
+atendimentos. Enter e Consultar executam a mesma consulta. Aceita idade inteira
+positiva de até três dígitos e somente um público; a API também recusa parâmetros
+duplicados. Não exige migração nem altera dados.
+
+- Usa as idades atualmente cadastradas, não uma reconstrução histórica. Considera
+  conversas com mensagem do cliente no período selecionado, em `[início, fim)`;
+  sete dias são 168 horas. Idades ausentes não são estimadas.
+- Titular conta uma vez por cliente/unidade, mesmo com várias conversas. Somente
+  conversas da rota titular contribuem para sua idade e seu envio ao funil.
+- Cada `id_dependente` identificado conta separadamente, inclusive nomes iguais
+  em conversas diferentes, por decisão explícita do produto. Não deduplicar por
+  nome. O total de participantes pode superar o de números de contato, mostrado
+  separadamente no resultado. A idade considerada é a do dependente atendido.
+- Funil conta apenas `funil_envios.status = 'sent'`, com `enviado_em` no mesmo
+  período, ligado às conversas consideradas. Não transfere o envio entre titular
+  e dependentes, nem confunde elegibilidade ou encaminhamento comercial com envio.
+- O card Dependentes por titular agrupa a quantidade desses cadastros por titular
+  no período, independentemente da idade mínima consultada. Placeholders ainda
+  sem nome e idade não entram; dependente identificado sem idade entra nessa
+  distribuição, mas não na consulta de faixa etária.
+- Atualizações automáticas preservam formulário, foco e resultado. A consulta
+  mostra o horário da leitura; para atualizá-la, clicar novamente em Consultar.
+  Mudar idade/público/período limpa o resultado anterior; respostas atrasadas são
+  descartadas. Falhas mostram um aviso, nunca um zero inventado.
 
 Não há cadastro, recuperação/troca de senha nem bloqueio por número de tentativas
 no portal. Contas e senhas continuam administradas pelo proprietário no Django

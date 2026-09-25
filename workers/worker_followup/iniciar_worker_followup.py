@@ -19,7 +19,7 @@ def main():
     from workers.worker_followup.followup_worker import executar_worker
 
     logger.info(
-        "followup_iniciado | lote=%s intervalo=%s lembretes_por_ciclo=1",
+        "followup_iniciado | lote=%s intervalo=%s lembretes_por_ciclo=2",
         config.lote,
         config.intervalo,
     )

@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     LoginMonitoramentoView, LogoutMonitoramentoView, contatos_csv,
     dados_conversas, dados_mensagens, dados_relatorio, painel,
+    dados_faixa_etaria,
 )
 
 
@@ -15,5 +16,6 @@ urlpatterns = [
     path('dados/conversas/', dados_conversas, name='dados_conversas'),
     path('dados/conversas/<int:id_cliente>/', dados_mensagens, name='dados_mensagens'),
     path('dados/relatorio/', dados_relatorio, name='dados_relatorio'),
+    path('dados/relatorio/faixa-etaria/', dados_faixa_etaria, name='dados_faixa_etaria'),
     path('contatos.csv', contatos_csv, name='contatos_csv'),
 ]

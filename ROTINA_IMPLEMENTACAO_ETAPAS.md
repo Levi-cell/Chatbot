@@ -599,17 +599,20 @@ testes
 Uma aresta ativa apontando para resolver ou sender inexistente deixa a conversa
 em um estado sem atendimento.
 
-### 11. Conferir a repetição após follow-up
+### 11. Conferir a reação após follow-up
 
 Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
 selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
 dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
-podem ser extraídos da reação que será ignorada. O catálogo atual repete 1–21,
+substituem a validação da resposta atual. O catálogo de repetição contempla 1–21,
 exceto a etapa 8, que retorna diretamente à 9.
 
-Na repetição comum, esse caminho não chama validador, resolver, mapa ou efeitos de
-negócio. A saudação `Que bom te ver novamente` é aplicada ao conteúdo e aos
-botões existentes, e o flow persiste a repetição junto do reset do stage.
+Antes do segundo envio, a reação passa pelos resolvers normais: resposta válida
+avança; tratamento específico mantém sua orientação; somente contexto inválido
+genérico repete a pergunta neutra. A saudação `Bom te ver novamente ☺️`, com nome
+quando autorizado, aparece uma vez. O flow persiste resposta, efeitos, reset do
+stage e conclusão da fila juntos. Sem avanço, a primeira reação não incrementa
+o contador; as respostas seguintes voltam às regras normais.
 Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
 
 Na exceção da 8, reutilizar `resolve_etapa8` e a transição `cliente_retornou → 9`.
@@ -622,6 +625,11 @@ efeitos e replay sem reenvio ou reset de ciclo posterior, nas duas rotas.
 Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
 atual é 1–17, antes do agendamento. Mudanças no mapa precisam revisar
 explicitamente esse limite, o catálogo de repetição, as regras e os testes.
+
+A segunda camada chega após mais 7h desde o primeiro envio real sem reação,
+mantendo as guardas de elegibilidade. Seu envio confirmado encerra a conversa em
+stage 2, sem bloqueio de 30 dias. Outra mensagem abre nova conversa e recebe a
+abertura da etapa 1 sem prefixo. Não reaproveitar a retomada do atendimento fechado.
 O comportamento normal com stage zero conserva a saudação de três horas.
 
 ## Subfluxo da integração WhatsApp
@@ -665,7 +673,8 @@ core/integrations/whatsapp/
 
 O diagrama abaixo é o caminho normal. Antes dele, `flow_worker.py` relê a
 conversa sob lock e consulta a retomada: stage positivo ou marcador da entrada
-pode desviar para `repeticao_followup.py` e `transacoes/retorno_followup.py`.
+pode passar por `retomada_followup.py` e `transacoes/retorno_followup.py`, reutilizando
+o fluxo normal. `repeticao_followup.py` é apenas a repetição neutra ou recuperação.
 
 ```text
 valida_historico
@@ -792,7 +801,7 @@ Uma etapa está concluída somente quando:
 [ ] Django check passa
 [ ] compileall passa
 [ ] documentação continua coerente
-[ ] follow-up preserva conteúdo, botões e idempotência; repete a etapa ou avança 8 -> 9
+[ ] reação ao primeiro follow-up valida, trata ou repete; 8 -> 9; segundo encerra e retorno abre nova conversa sem prefixo
 ```
 
 ## O que não fazer

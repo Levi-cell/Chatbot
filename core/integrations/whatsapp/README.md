@@ -287,10 +287,11 @@ própria é suprimida para conservar somente o prefixo de follow-up. A 8 possui
 apenas mensagem inicial, sem variante de repetição. Avanço e conclusão do ciclo
 são persistidos juntos pelo worker, sem decisões de fluxo nos montadores.
 
-`messages/followup_messages.py` contém o texto aprovado do lembrete proativo.
+`messages/followup_messages.py` contém o primeiro lembrete e a despedida do segundo,
+com nome do titular após a etapa 1 e adaptação para dependente.
 `pywa_senders/followup.py` envia texto sem botões, sem saudação de retorno e sem
 id_mensagem_fila fictício. Usa sessão HTTP com timeout e sem retry automático;
-recebe destinatário e phone_id da unidade. `conta_wa` aceita sessão opcional sem
+recebe destinatário, phone_id da unidade e o texto montado pelo worker. `conta_wa` aceita sessão opcional sem
 alterar os clientes existentes. A sessão usa timeout de 20 segundos por operação,
 com conexão limitada a 5 segundos. Stage e persistência pertencem ao worker/repositório.
 O ID retornado confirma o aceite da API; os eventos `sent`, `delivered` e `read`

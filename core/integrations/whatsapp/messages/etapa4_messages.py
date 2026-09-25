@@ -11,13 +11,22 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 )
 
 
-### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
-MENSAGEM_PADRAO_ETAPA4 = (
-    "Certo, agora me diz, qual é a sua *profissão*? "
+### MENSAGEM INICIAL DO TITULAR: EXPLICAÇÃO + PERGUNTA DA PROFISSÃO
+MENSAGEM_PADRAO_TITULAR_ETAPA4 = (
+    "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
+    "conhecer melhor seu perfil, ok?\n"
+    "Me diz, qual a sua *profissão*?"
 )
 
-### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
-MENSAGEM_REPETICAO_ETAPA4 = "Me diz, qual é a sua profissão?"
+### MENSAGEM INICIAL DO DEPENDENTE: A PROFISSÃO CONTINUA SENDO DO TITULAR
+MENSAGEM_PADRAO_DEPENDENTE_ETAPA4 = (
+    "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
+    "conhecer melhor o seu perfil e o perfil da outra pessoa, ok?\n"
+    "Me diz, qual a sua *profissão* hoje?"
+)
+
+### REPETIÇÃO COMUM ÀS DUAS ROTAS, SEM REAPRESENTAR A ABERTURA
+MENSAGEM_REPETICAO_ETAPA4 = "Me diz, qual a sua *profissão* hoje?"
 
 ORIENTACAO_CONTEXTO_ETAPA4 = (
     "Olha, não consegui entender. Me conta, com o que você "
@@ -25,9 +34,14 @@ ORIENTACAO_CONTEXTO_ETAPA4 = (
 )
 
 
-def montar_mensagem_etapa4(*, repeticao=False):
-    mensagem = MENSAGEM_REPETICAO_ETAPA4 if repeticao else MENSAGEM_PADRAO_ETAPA4
-    return mensagem
+def montar_mensagem_etapa4(*, status_dependente=False, repeticao=False):
+    if repeticao:
+        return MENSAGEM_REPETICAO_ETAPA4
+    return (
+        MENSAGEM_PADRAO_DEPENDENTE_ETAPA4
+        if status_dependente
+        else MENSAGEM_PADRAO_TITULAR_ETAPA4
+    )
 
 
 ### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO, SEM A MENSAGEM INICIAL

@@ -19,9 +19,8 @@ APRESENTACAO_TITULAR = (
     "Maravilha, {nome_titular}! ☺️ "
     "Queremos te presentear com uma *demonstração prática gratuita* na nossa "
     "unidade!\n"
-    "\n"
     "Você também participará de uma avaliação cognitiva para conhecer melhor suas "
-    "habilidades de memória, atenção, concentração e raciocínio lógico."
+    "habilidades de memória, atenção, concentração e raciocínio lógico.\n"
 )
 
 ### É USADA NA APRESENTAÇÃO E NA REPETIÇÃO
@@ -42,9 +41,8 @@ APRESENTACAO_DEPENDENTE = (
     "Maravilha, {nome_titular}! ☺️ "
     "Queremos presentear {nome_dependente} com uma *demonstração prática gratuita* na "
     "nossa unidade!\n"
-    "\n"
     "{nome_dependente} também participará de uma avaliação cognitiva para conhecer melhor as "
-    "habilidades de memória, atenção, concentração e raciocínio lógico."
+    "habilidades de memória, atenção, concentração e raciocínio lógico.\n"
 )
 
 ### TRECHO DO DEPENDENTE USADO NA INICIAL E NA REPETIÇÃO

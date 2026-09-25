@@ -74,6 +74,10 @@ Commit: `8b8a0f8f2783dc7f137f389d96bb88f3f4f4acb5`
 
 Commit: `d001d674bb7fb08f8b70980aec5cacfb326009d2`
 
+### V1.5.2 — Correção da retomada após follow-up
+
+Commit: `e5a2b45a5a71b487b6aa6a6f0aa9253e87185581`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

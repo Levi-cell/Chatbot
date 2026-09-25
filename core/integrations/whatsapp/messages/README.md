@@ -40,9 +40,45 @@ formulário nem pressioná-la a continuar.
   pelos validadores têm outro papel e permanecem compatíveis.
 - Usar negrito do WhatsApp (`*texto*`) para a oferta ou ação mais importante,
   sem destacar o parágrafo inteiro ou toda ocorrência de uma palavra.
-- Separar acolhimento, explicação e pergunta com parágrafos curtos (`\n\n`).
+- Separar acolhimento, explicação e pergunta com quebras controladas no texto
+  final, sem acrescentar linhas vazias automaticamente a cada fragmento.
   Cabeçalhos e rodapés devem aparecer uma vez; títulos de botão não levam
   asteriscos de formatação.
+
+### Espaçamento: declarar nas variáveis e conferir o resultado
+
+**As quebras de linha pertencem às variáveis de mensagens e aos modelos
+visuais, não às funções que recebem textos para compor.** `\n` muda de linha;
+`\n\n` deixa uma linha vazia; `\n\n\n` deixa duas. Dividir uma string em
+várias linhas do arquivo Python não insere quebras nem espaços no envio.
+
+- `compor_mensagem_inicial` e `compor_tratamento` apenas concatenam os
+  fragmentos. Não inserem separadores, não removem quebras e não usam `strip()`
+  no texto pronto. A apresentação, a orientação e a ponte declaram sua
+  separação final; a pergunta reutilizável pode ser enviada sozinha.
+- Por exemplo, `APRESENTACAO_ETAPA1` termina em `\n\n`, deixando uma linha
+  vazia antes da pergunta. O compositor não acrescenta uma terceira quebra.
+  Na etapa 7, a própria apresentação declara as quebras entre oferta,
+  explicação e pergunta; os tratamentos continuam usando apenas a pergunta.
+- As saudações de retorno têm sua quebra final nas constantes de
+  `tratamentos/retorno_followup.py` e `tratamentos/retorno_inatividade.py`.
+  Aplicar o prefixo apenas o concatena, uma única vez.
+- Cabeçalhos e rodapés usam os modelos `MENSAGEM_COM_CABECALHO` e
+  `MENSAGEM_COM_RODAPE`, em `componentes_compartilhados.py`. Suas funções
+  apenas preenchem esses modelos. Os rótulos usados nos metadados continuam
+  separados da formatação visual do corpo.
+- Não colocar `"\n" + mensagem`, `mensagem + "\n"` ou `"\n".join(...)`
+  dentro de uma função para decidir espaçamento. Declarar o formato na
+  variável correspondente, perto do texto que será revisado.
+- Conferir a mensagem completa nas rotas de titular, dependente, repetição,
+  tratamento e retorno. Evitar quebras nos dois lados da mesma junção,
+  palavras coladas e a união de blocos que precisam continuar separados.
+  Preservar links completos, perguntas, negritos, botões e rodapés.
+- A redução de espaçamento feita anteriormente não é uma regra automática
+  de envio. Não diminuir novamente todas as quebras nem achatar parágrafos.
+  Ao mover a formatação para variáveis, comparar o resultado antes e depois.
+- Mensagens já persistidas não são reformatadas. A recuperação da etapa 6
+  reconhece também o espaçamento anterior, exclusivamente para concluir retries.
 
 Entusiasmo não pode afirmar algo que ainda não aconteceu. `Quero reservar`
 expressa intenção; não significa que o dia e horário já foram escolhidos.
@@ -220,6 +256,10 @@ nomes de eventos já usados pelo mapa de transição ou contratos do painel e fu
 - Nas saudações de retorno, dirigir-se ao **cliente que está conversando**;
   no conteúdo seguinte, identificar o **participante** corretamente.
 - Profissão e e-mail do cliente não passam a ser do dependente por causa da rota.
+- A abertura da etapa 4 explica a coleta do perfil do titular ou dos dois perfis,
+  conforme o destino confirmado na etapa 3. Nas duas rotas, a profissão pedida
+  é de quem conversa. Tratamentos e repetição neutra usam somente a pergunta
+  curta, sem repetir a explicação inicial; contexto inválido mantém sua orientação.
 - `Sua reserva para a experiência de Lucas` é coerente: quem conversa realiza
   a reserva, enquanto Lucas participa da experiência.
 - Na etapa de escolha do destinatário, o nome do dependente ainda pode não ter
@@ -328,6 +368,18 @@ O texto do lembrete proativo é definido em `followup_messages.py`. Ele é envia
 após sete horas e somente quando os demais critérios de elegibilidade forem
 atendidos. Uma revisão de estilo não autoriza ampliar a elegibilidade do envio.
 
+Existem duas camadas nas etapas 1–17, inclusive 8: o lembrete após 7h e a despedida
+após mais 7h sem resposta desde o envio real do primeiro. A despedida usa
+“para todos os benefícios” nas duas rotas e assina com `{nome_agente}`. Na etapa 1,
+nunca usa nome de cadastro anterior. Na rota dependente, cita `{nome_dependente}`;
+se o nome ainda não foi coletado, usa “a outra pessoa”. Não acrescenta prefixo de
+retorno, tratamento, pergunta da etapa, rodapé ou botões à despedida.
+
+O segundo envio confirmado encerra a conversa, preservando stage 2. Uma mensagem
+posterior inicia outro atendimento com a mensagem inicial da etapa 1, sem prefixo
+de retorno. As regras de reação abaixo valem para a conversa ainda ativa, antes
+desse encerramento, e para recuperações legadas.
+
 Na primeira reação aceita com follow-up pendente:
 
 1. usar `Bom te ver novamente, {nome_titular} ☺️` ou `Bom te ver novamente ☺️`
@@ -425,7 +477,7 @@ passa pelo compositor de orientação + repetição.
 | `tratamentos/retorno_followup.py` | Saudação da reação ao follow-up, inclusive a forma sem nome. |
 | `tratamentos/composicao.py` | Compositores distintos para mensagem inicial e tratamento, com formatação compartilhada e aplicação única do prefixo de retorno. |
 | `componentes_compartilhados.py` | Cabeçalhos e rodapés compartilhados. Mantém os imports antigos de inatividade por compatibilidade. |
-| `followup_messages.py` | Texto do lembrete proativo. Reexporta a saudação antiga por compatibilidade. |
+| `followup_messages.py` | Primeiro lembrete e despedida personalizada do segundo. Reexporta a saudação antiga por compatibilidade. |
 | `tratamentos_universais.py` | Fachada de compatibilidade dos imports antigos; não possui outra cópia dos textos. |
 | `triagem_componentes.py` | Opções, rodapé e orientação autônoma de contexto comuns às seis perguntas; não contém as perguntas canônicas. |
 | `README.md` | Este contrato de composição, personalidade e revisão. |
@@ -467,7 +519,7 @@ Exemplo de composição com um fragmento compartilhado:
 ### APRESENTAÇÃO INICIAL DO TITULAR
 APRESENTACAO_TITULAR = (
     "Maravilha, {nome_titular}! ☺️ Queremos te presentear com uma "
-    "*demonstração prática gratuita* na nossa unidade!"
+    "*demonstração prática gratuita* na nossa unidade!\n"
 )
 
 ### TRECHO USADO NA MENSAGEM INICIAL E NA REPETIÇÃO
@@ -525,6 +577,10 @@ Quando a pergunta da repetição também encerra a mensagem inicial, declarar
 esse fragmento uma única vez e compartilhá-lo:
 
 ```python
+APRESENTACAO = "Vamos conhecer o Supera! ☺️\n"
+ORIENTACAO = "Olha, responda por texto para continuarmos.\n"
+MENSAGEM_REPETICAO = "Me diz, qual é a sua profissão?"
+
 MENSAGEM_PADRAO = compor_mensagem_inicial(
     APRESENTACAO,
     MENSAGEM_REPETICAO,
@@ -541,8 +597,9 @@ MENSAGEM_TRATAMENTO = compor_tratamento(
 - `compor_tratamento` monta **orientação + ponte opcional + repetição**.
   Recebe apenas a pergunta reutilizável, nunca a mensagem padrão completa.
   Não é usado em contexto inválido, cuja mensagem já contém a orientação completa.
-- Ambas reutilizam `_unir_paragrafos` internamente. Esse auxiliar cuida só
-  da formatação; não escolhe o cenário nem decide o fluxo.
+- Ambas reutilizam `_concatenar_fragmentos` internamente. Esse auxiliar
+  apenas concatena: os espaços e as quebras estão nas variáveis de mensagens.
+  Não escolhe o cenário nem decide o fluxo.
 
 Não inserir a pergunta em `APRESENTACAO` se ela já será acrescentada pelo
 compositor: isso duplicaria o trecho final. Quando apresentação e repetição

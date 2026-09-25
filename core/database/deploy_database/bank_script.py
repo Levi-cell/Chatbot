@@ -302,7 +302,8 @@ def criar_tabelas():
                     OR motivo_encerramento IN (
                         'idade_invalida',
                         'foi_agendado',
-                        'encaminhado_suporte_idoso'
+                        'encaminhado_suporte_idoso',
+                        'followup_sem_resposta'
                     )
                 ),
 

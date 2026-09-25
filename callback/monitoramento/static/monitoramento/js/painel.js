@@ -1,8 +1,9 @@
 (() => {
   'use strict';
   const corpo=document.body, ids=id=>document.getElementById(id);
-  const urls={conversas:corpo.dataset.urlConversas,mensagens:corpo.dataset.urlMensagens,relatorio:corpo.dataset.urlRelatorio,csv:corpo.dataset.urlCsv,login:corpo.dataset.urlLogin};
+  const urls={conversas:corpo.dataset.urlConversas,mensagens:corpo.dataset.urlMensagens,relatorio:corpo.dataset.urlRelatorio,faixaEtaria:corpo.dataset.urlFaixaEtaria,csv:corpo.dataset.urlCsv,login:corpo.dataset.urlLogin};
   const estado={secao:'conversas',periodo:'total',filtro:'todas',busca:'',conversas:[],selecionada:null,regras:{},carregandoConversas:false,recarregarConversas:false,carregandoRelatorio:false,recarregarRelatorio:false,sequenciaConversas:0,sequenciaRelatorio:0};
+  const consultaIdade={cartao:null,sequencia:0,carregando:false};
   const criar=(tag,classe='',texto='')=>{const n=document.createElement(tag);if(classe)n.className=classe;if(texto!==''&&texto!==null)n.textContent=texto;return n;};
   const numero=new Intl.NumberFormat('pt-BR'), data=new Intl.DateTimeFormat('pt-BR',{dateStyle:'short',timeZone:'America/Sao_Paulo'}), dia=new Intl.DateTimeFormat('pt-BR',{dateStyle:'long',timeZone:'America/Sao_Paulo'}), hora=new Intl.DateTimeFormat('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'}), curto=new Intl.DateTimeFormat('pt-BR',{day:'2-digit',month:'short',timeZone:'America/Sao_Paulo'});
   const cores=['#37663d','#5d568f','#a35b38','#44758a','#8a4f67','#4d7468','#7b683b'];
@@ -22,7 +23,7 @@
     adulto:{curto:'18–59',completo:'Titular de 18 a 59 anos'},
     idoso:{curto:'60+',completo:'Titular com 60 anos ou mais'},
   };
-  function visivel(i){if(estado.filtro==='continuacoes'&&i.ids_conversa.length<2)return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
+  function visivel(i){if(estado.filtro==='continuacoes'&&i.ids_conversa.length<2)return false;if(estado.filtro==='followup'&&![1,2].includes(i.followup_stage))return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
   function mini(pai,texto,classe=''){pai.appendChild(criar('span','mini-tag '+classe,texto));}
   function renderLista(){
     const lista=ids('listaConversas');
@@ -63,6 +64,7 @@
 
       const tags=criar('div','mini-tags');
       if(item.ids_conversa.length>1)mini(tags,item.ids_conversa.length+' conversas');
+      if([1,2].includes(item.followup_stage))mini(tags,'Follow-up '+item.followup_stage,'followup');
       if(item.foi_funil)mini(tags,'Funil','funil');
       if(item.avaliada)mini(tags,'Avaliada','nota');
       corpo.appendChild(tags);
@@ -188,6 +190,136 @@
   function politicaSuporte(limite){
     return limite===null?'Encaminhamento por idade: desativado':'Encaminhamento ao comercial: '+limite+'+';
   }
+  function invalidarConsultaIdade(mensagem='Informe a idade mínima, escolha o público e clique em Consultar.'){
+    consultaIdade.sequencia++;
+    consultaIdade.carregando=false;
+    if(!consultaIdade.cartao)return;
+    consultaIdade.botao.disabled=false;
+    consultaIdade.botao.textContent='Consultar';
+    consultaIdade.idade.removeAttribute('aria-invalid');
+    consultaIdade.resultado.className='resultado-faixa vazio';
+    consultaIdade.resultado.setAttribute('aria-busy','false');
+    consultaIdade.resultado.replaceChildren(criar('p','',mensagem));
+  }
+  function validarResultadoFaixa(d,idade,publico,periodo){
+    const grupos=[d.titulares,d.dependentes];
+    const valido=d.idade_minima===idade&&d.publico===publico&&d.periodo?.chave===periodo
+      &&Number.isSafeInteger(d.total)&&d.total>=0&&Number.isSafeInteger(d.contatos)&&d.contatos>=0
+      &&grupos.every(g=>g&&Number.isSafeInteger(g.leads)&&g.leads>=0&&Number.isSafeInteger(g.funil)&&g.funil>=0&&g.funil<=g.leads)
+      &&d.total===grupos[0].leads+grupos[1].leads&&d.contatos<=d.total
+      &&!Number.isNaN(new Date(d.periodo.fim).getTime());
+    if(!valido)throw new Error('Não foi possível conferir o resultado. Consulte novamente.');
+  }
+  function mostrarResultadoFaixa(d){
+    const t=d.titulares,p=d.dependentes,idade=numero.format(d.idade_minima)+(d.idade_minima===1?' ano':' anos');
+    const contar=(n,singular,plural)=>numero.format(n)+' '+(n===1?singular:plural);
+    let texto;
+    if(d.publico==='titulares'){
+      texto='Você tem '+contar(t.leads,'lead titular','leads titulares')+' com idade igual ou superior a '+idade+'. '
+        +contar(t.funil,'foi enviado','foram enviados')+' ao funil.';
+    }else if(d.publico==='dependentes'){
+      texto='Você tem '+contar(p.leads,'lead para dependente','leads para dependentes')+' com idade igual ou superior a '+idade+'. '
+        +contar(p.funil,'foi enviado','foram enviados')+' ao funil.';
+    }else{
+      texto='Você tem um total de '+contar(d.total,'lead','leads')+' com idade igual ou superior a '+idade+', sendo '
+        +contar(t.leads,'titular','titulares')+' e '+contar(p.leads,'dependente','dependentes')+'. '
+        +numero.format(t.funil)+' desses titulares e '+numero.format(p.funil)+' desses dependentes foram enviados ao funil.';
+    }
+    const detalhe=contar(d.contatos,'contato representado','contatos representados')+' · '+d.periodo.rotulo
+      +' · Consultado em '+data.format(new Date(d.periodo.fim))+' às '+hora.format(new Date(d.periodo.fim));
+    consultaIdade.resultado.className='resultado-faixa';
+    consultaIdade.resultado.replaceChildren(criar('p','resumo-faixa',texto),criar('p','detalhe-faixa',detalhe));
+  }
+  async function consultarIdade(evento){
+    evento.preventDefault();
+    if(consultaIdade.carregando)return;
+    const texto=consultaIdade.idade.value.trim();
+    if(!/^[0-9]{1,3}$/.test(texto)||Number(texto)<1){
+      invalidarConsultaIdade('Informe uma idade inteira entre 1 e 999 anos.');
+      consultaIdade.resultado.classList.add('erro');
+      consultaIdade.idade.setAttribute('aria-invalid','true');
+      consultaIdade.idade.focus();
+      return;
+    }
+    const idade=Number(texto),publico=consultaIdade.publico.value,periodo=estado.periodo;
+    const sequencia=++consultaIdade.sequencia;
+    consultaIdade.carregando=true;
+    consultaIdade.botao.disabled=true;
+    consultaIdade.botao.textContent='Consultando…';
+    consultaIdade.resultado.className='resultado-faixa vazio';
+    consultaIdade.resultado.setAttribute('aria-busy','true');
+    consultaIdade.resultado.replaceChildren(criar('p','','Consultando os leads deste período…'));
+    try{
+      const parametros=new URLSearchParams({periodo,idade_minima:String(idade),publico});
+      const d=await json(urls.faixaEtaria+'?'+parametros);
+      if(sequencia!==consultaIdade.sequencia||periodo!==estado.periodo)return;
+      validarResultadoFaixa(d,idade,publico,periodo);
+      mostrarResultadoFaixa(d);
+    }catch(e){
+      if(sequencia!==consultaIdade.sequencia||periodo!==estado.periodo)return;
+      consultaIdade.resultado.className='resultado-faixa erro';
+      consultaIdade.resultado.replaceChildren(criar('p','',e.message));
+    }finally{
+      if(sequencia===consultaIdade.sequencia){
+        consultaIdade.carregando=false;
+        consultaIdade.botao.disabled=false;
+        consultaIdade.botao.textContent='Consultar';
+        consultaIdade.resultado.setAttribute('aria-busy','false');
+      }
+    }
+  }
+  function faixaEtariaPersonalizada(){
+    // Reutilizar o formulário preserva digitação, seleção e resultado nos refreshes.
+    if(consultaIdade.cartao)return consultaIdade.cartao;
+    const cartao=criar('article','cartao consulta-faixa');
+    cartao.id='consultaFaixaEtaria';
+    cartao.appendChild(titulo('Consulta de faixa etária personalizada','Encontre leads a partir de uma idade e confira quantos foram para o funil.'));
+    const formulario=criar('form','formulario-faixa');formulario.noValidate=true;
+    const campoIdade=criar('label','campo-faixa','Idade mínima (anos)');
+    const idade=criar('input');idade.id='idadeMinimaConsulta';idade.name='idade_minima';
+    idade.type='text';idade.inputMode='numeric';idade.maxLength=3;idade.placeholder='Ex.: 60';idade.required=true;
+    idade.setAttribute('aria-describedby','resultadoFaixaEtaria');campoIdade.appendChild(idade);
+    const campoPublico=criar('label','campo-faixa','Público');
+    const publico=criar('select');publico.id='publicoConsulta';publico.name='publico';
+    [['titulares','Apenas titulares'],['dependentes','Apenas dependentes'],['todos','Todos']].forEach(([valor,rotulo])=>{
+      const opcao=criar('option','',rotulo);opcao.value=valor;publico.appendChild(opcao);
+    });
+    publico.value='todos';campoPublico.appendChild(publico);
+    const botao=criar('button','botao-consultar','Consultar');botao.type='submit';
+    formulario.append(campoIdade,campoPublico,botao);
+    const resultado=criar('div','resultado-faixa vazio');resultado.id='resultadoFaixaEtaria';
+    resultado.setAttribute('role','status');resultado.setAttribute('aria-live','polite');
+    resultado.setAttribute('aria-atomic','true');
+    cartao.append(formulario,resultado,criar('p','nota-faixa',
+      'Titulares contam uma vez; cada cadastro de dependente conta separadamente. Considera apenas idades informadas e envios ao funil confirmados no período.'));
+    Object.assign(consultaIdade,{cartao,idade,publico,botao,resultado});
+    formulario.addEventListener('submit',consultarIdade);
+    idade.addEventListener('input',()=>invalidarConsultaIdade());
+    publico.addEventListener('change',()=>invalidarConsultaIdade());
+    invalidarConsultaIdade();
+    return cartao;
+  }
+  function dependentesPorTitular(d){
+    const cartao=criar('article','cartao dependentes-titular');
+    cartao.appendChild(titulo('Dependentes por titular','Distribuição no período selecionado, considerando todas as idades.'));
+    if(!d||!Array.isArray(d.grupos)){
+      cartao.appendChild(criar('p','nota-faixa','A distribuição está indisponível. Atualize o relatório.'));
+      return cartao;
+    }
+    if(!d.grupos.length){
+      cartao.appendChild(criar('p','nota-faixa','Nenhum dependente identificado nos atendimentos deste período.'));
+      return cartao;
+    }
+    const grupos=criar('ul','grupos-dependentes');
+    d.grupos.forEach(g=>{
+      const item=criar('li','grupo-dependentes');
+      item.append(criar('strong','',numero.format(g.titulares)+(g.titulares===1?' titular':' titulares')),
+        criar('span','','com '+numero.format(g.dependentes_por_titular)+(g.dependentes_por_titular===1?' dependente':' dependentes')+' cada'));
+      grupos.appendChild(item);
+    });
+    cartao.append(grupos,criar('p','nota-faixa','Cada cadastro de dependente conta separadamente, inclusive quando o mesmo titular tem atendimentos diferentes. Cadastros ainda sem nome e idade não entram nesta distribuição.'));
+    return cartao;
+  }
   function encaminhamentos(d){
     if(!Number.isSafeInteger(d.encaminhados_comercial_por_idade)||d.encaminhados_comercial_por_idade<0){
       throw new Error('Não foi possível obter o total de encaminhamentos.');
@@ -202,8 +334,10 @@
     cartao.append(descricao,criar('strong','total-comercial',numero.format(d.encaminhados_comercial_por_idade)));
     return cartao;
   }
-  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','Encaminhados ao comercial conta leads únicos pelo encerramento por suporte de idade no período, inclusive históricos. Não confirma clique, atendimento humano, matrícula ou venda; não inclui o tratamento de 100+. A data considerada é a do encaminhamento, e não a da mensagem recebida.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
+  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Na consulta de faixa etária personalizada, cada titular conta uma vez e cada cadastro de dependente conta separadamente. O total pode superar o número de contatos. As idades são as atualmente cadastradas.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','Encaminhados ao comercial conta leads únicos pelo encerramento por suporte de idade no período, inclusive históricos. Não confirma clique, atendimento humano, matrícula ou venda; não inclui o tratamento de 100+. A data considerada é a do encaminhamento, e não a da mensagem recebida.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
   function renderRelatorio(d){
+    const foco=consultaIdade.cartao?.contains(document.activeElement)?document.activeElement:null;
+    const selecao=foco===consultaIdade.idade?[foco.selectionStart,foco.selectionEnd]:null;
     ids('periodoRelatorios').textContent=d.periodo.texto;
     const relatorio=ids('conteudoRelatorio');
     const metricasRelatorio=d.metricas;
@@ -231,17 +365,20 @@
       gradeKpis,
       encaminhamentos(d),
       gradeRelatorio,
+      faixaEtariaPersonalizada(),
       perfis(d.perfis),
+      dependentesPorTitular(d.dependentes_por_titular),
       etapas(d.etapas),
       exportacao(),
       exportacao('essencial'),
       interpretar(metricasRelatorio),
     );
+    if(foco){foco.focus({preventScroll:true});if(selecao)foco.setSelectionRange(...selecao);}
   }
   async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
   function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';window.scrollTo({top:0});secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
   document.querySelectorAll('[data-secao]').forEach(b=>b.addEventListener('click',()=>trocar(b.dataset.secao)));
-  document.querySelectorAll('[data-periodo]').forEach(s=>s.addEventListener('change',()=>{estado.periodo=s.value;estado.selecionada=null;estado.sequenciaConversas++;estado.sequenciaRelatorio++;document.querySelectorAll('[data-periodo]').forEach(o=>o.value=s.value);estado.secao==='relatorios'?carregarRelatorio():carregarConversas();}));
+  document.querySelectorAll('[data-periodo]').forEach(s=>s.addEventListener('change',()=>{estado.periodo=s.value;invalidarConsultaIdade('Período alterado. Clique em Consultar para obter os números desta janela.');estado.selecionada=null;estado.sequenciaConversas++;estado.sequenciaRelatorio++;document.querySelectorAll('[data-periodo]').forEach(o=>o.value=s.value);estado.secao==='relatorios'?carregarRelatorio():carregarConversas();}));
   document.querySelectorAll('[data-filtro]').forEach(b=>b.addEventListener('click',()=>{estado.filtro=b.dataset.filtro;document.querySelectorAll('[data-filtro]').forEach(x=>x.classList.toggle('ativo',x===b));renderLista();}));
   ids('buscaConversas').addEventListener('input',e=>{estado.busca=e.target.value;renderLista();});
   ids('voltarConversas').addEventListener('click',()=>document.querySelector('.app-conversas').classList.remove('chat-aberto'));
@@ -267,4 +404,3 @@
   }
   carregarConversas();
 })();
-

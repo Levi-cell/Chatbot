@@ -21,8 +21,9 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### APRESENTAÇÃO EXCLUSIVA DO PRIMEIRO CONTATO
 APRESENTACAO_ETAPA1 = (
+    # A separação completa fica no texto; o compositor apenas concatena.
     "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! "
-    "☺️\n"
+    "☺️\n\n"
 )
 
 ### PERGUNTA QUE COMPLETA A MENSAGEM INICIAL
@@ -36,7 +37,7 @@ MENSAGEM_REPETICAO_ETAPA1 = "Me diz, qual o seu primeiro nome?"
 # Mensagem completa: a própria orientação já pede o nome. Não concatenar
 # apresentação padrão, repetição ou rodapé à versão aprovada desta abertura.
 MENSAGEM_INFORMACOES_INICIO_ETAPA1 = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n"
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️ "
     "Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?"
 )
 

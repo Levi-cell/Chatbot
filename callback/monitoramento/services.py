@@ -14,6 +14,7 @@ from .apresentacao import (
     consolidar_conversas,
     montar_relatorio,
 )
+from .faixa_etaria import consultar_faixa_etaria, distribuir_dependentes_por_titular
 
 
 FUSO_PAINEL = ZoneInfo('America/Sao_Paulo')
@@ -199,6 +200,7 @@ def carregar_relatorio(acesso, periodo):
         encaminhados_comercial_por_idade=encaminhados,
     )
     relatorio.update({
+        'dependentes_por_titular': distribuir_dependentes_por_titular(perfis_brutos),
         'unidade': {
             'nome': unidade['nome_unidade'],
             'idade_minima_suporte': validar_idade_minima_suporte(unidade['idade_minima_suporte']),
@@ -207,6 +209,19 @@ def carregar_relatorio(acesso, periodo):
         'atualizado_em': _iso(periodo.fim),
     })
     return relatorio
+
+
+def carregar_faixa_etaria(acesso, periodo, idade_minima, publico):
+    with connection.cursor() as cursor:
+        linhas = repositorio.buscar_perfis(
+            acesso.id_unidade, periodo.inicio, periodo.fim, cursor,
+        )
+    resultado = consultar_faixa_etaria(linhas, idade_minima, publico)
+    resultado['periodo'] = {
+        'chave': periodo.chave, 'rotulo': periodo.rotulo,
+        'inicio': _iso(periodo.inicio), 'fim': _iso(periodo.fim),
+    }
+    return resultado
 
 
 def carregar_contatos(acesso, periodo):

@@ -13,19 +13,19 @@ from core.integrations.whatsapp.pywa_functions.resposta_envio import (
 )
 
 
-def enviar_followup(cliente_telefone, phone_id_unidade):
+def enviar_followup(cliente_telefone, phone_id_unidade, *, mensagem=MENSAGEM_FOLLOWUP):
     try:
         # Sem retry HTTP automático: resultado incerto exige observação no worker.
         with httpx.Client(timeout=httpx.Timeout(20, connect=5)) as session:
             with usar_prefixo_mensagem_bot(None):
                 cliente = conta_wa(phone_id_unidade, session=session)
                 retorno = cliente.send_message(
-                    to=cliente_telefone, text=MENSAGEM_FOLLOWUP
+                    to=cliente_telefone, text=mensagem
                 )
         return {
             "enviou": True,
             "id_hash_msg_bot": extrair_id_hash_msg_bot(retorno),
-            "mensagem_bot": MENSAGEM_FOLLOWUP,
+            "mensagem_bot": mensagem,
             "tipo_mensagem": "text",
         }
     except Exception as exc:

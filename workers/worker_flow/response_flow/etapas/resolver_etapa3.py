@@ -132,6 +132,8 @@ def resolve_etapa3(contexto_historico):
     contexto_envio = enviar_etapa4(
         cliente_telefone,
         phone_id_unidade,
+        # A confirmação pode ter invertido a rota escolhida anteriormente.
+        status_dependente=status_dependente_final,
     )
 
     # O efeito transacional usa SET para este valor absoluto. Não carregamos

@@ -102,6 +102,15 @@ internacional no Google CSV; não remove o DDD nem altera os dados de origem.
 
 ## Follow-up
 
+A segunda camada é coberta em `unit/test_followup.py` (redação por rota, nomes e
+falha de envio) e `integration/test_followup_postgres.py` (7h contadas do primeiro
+envio real, etapas 1–17 incluindo 8, guardas de silêncio/fila/janela, encerramento
+atômico com rollback, ausência de terceiro envio e reabertura sem prefixo).
+O teste do painel usa as consultas reais para provar que outra conversa do mesmo
+chat invalida o stage antigo, mesmo fora do período selecionado. A migração de
+segundo follow-up é executada integralmente no PostgreSQL descartável, verificando
+preservação dos dados e o novo domínio do motivo de encerramento.
+
 `unit/test_mensagens_etapa11.py` cobre a introdução da triagem para titular e
 dependente: nome carregado na entrada 10→11, mensagem inicial, tratamentos,
 contexto autônomo, inatividade e follow-up. Verifica falha antes do envio para
@@ -151,6 +160,16 @@ prefixo único e igualdade entre texto enviado e histórico, inclusive cabeçalh
 Os testes de runtime verificam o commit único de efeitos, checkpoint,
 encerramento e fila, com rollback quando a finalização falha. A inatividade
 de três horas mantém o tratamento normal de contexto inválido.
+
+## Consulta de faixa etária no painel
+
+`unit/test_faixa_etaria_monitoramento.py` cobre a consulta personalizada do painel:
+titular único em várias conversas, dependentes por cadastro (inclusive nomes
+iguais), distribuição por titular, idade inclusiva e dados ausentes. Executa o
+SQL real em SQLite descartável para validar unidade, contato no período,
+fronteiras de data/hora e envio confirmado ao funil da pessoa atendida. Exercita
+também sessão/autorização, parâmetros duplicados, público único e falhas da API.
+Nenhum teste acessa a base de produção.
 
 ## Suporte por idade
 

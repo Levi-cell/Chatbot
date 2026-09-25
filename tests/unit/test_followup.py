@@ -6,7 +6,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from core.repositories.atendimento import followup as repo
-from core.integrations.whatsapp.messages.followup_messages import MENSAGEM_FOLLOWUP
+from core.integrations.whatsapp.messages.followup_messages import (
+    MENSAGEM_FOLLOWUP,
+    montar_mensagem_encerramento_followup,
+)
 from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as sender
 from workers.worker_followup import followup_worker as worker
 from workers.worker_flow.response_flow import repeticao_followup as repeticao
@@ -98,6 +101,11 @@ def candidato():
         "unidade_telefone": "5511888888888",
         "id_ancora": 8,
         "ancora_em": AGORA,
+        "followup_stage": 0,
+        "nome_titular": "Ana",
+        "nome_dependente": "Bia",
+        "status_dependente": False,
+        "nome_agente": "Suh",
     }
 
 
@@ -308,7 +316,7 @@ class RepeticaoTests(unittest.TestCase):
                     with patch.object(cliente, "WhatsApp", return_value=fake):
                         envio = repeticao.enviar_repeticao_followup(cx)
                     self.assertTrue(
-                        envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n\n")
+                        envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n")
                     )
                     self.assertIn(
                         "Me diz, qual o seu primeiro nome?", envio["mensagem_bot"]
@@ -351,9 +359,9 @@ class RepeticaoTests(unittest.TestCase):
                     self.assertNotIn("tratamento", envio)
                     self.assertNotIn("Olá novamente", envio["mensagem_bot"])
                     saudacao_esperada = (
-                        "Bom te ver novamente ☺️\n\n"
+                        "Bom te ver novamente ☺️\n"
                         if etapa == 1
-                        else "Bom te ver novamente, Ana ☺️\n\n"
+                        else "Bom te ver novamente, Ana ☺️\n"
                     )
                     self.assertTrue(envio["mensagem_bot"].startswith(saudacao_esperada))
                     self.assertEqual(
@@ -376,7 +384,7 @@ class RepeticaoTests(unittest.TestCase):
                     ):
                         envio = repeticao.enviar_repeticao_followup(cx)
                 self.assertTrue(
-                    envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n\n")
+                    envio["mensagem_bot"].startswith("Bom te ver novamente ☺️\n")
                 )
                 self.assertEqual(
                     envio["mensagem_bot"], fake.send_message.call_args.kwargs["text"]
@@ -594,6 +602,25 @@ class RetornoEtapa8Tests(unittest.TestCase):
 
 
 class ProativoTests(unittest.TestCase):
+    def test_despedida_preserva_nome_da_rota_e_oculta_cadastro_antigo_na_etapa1(self):
+        for etapa, dependente, nome_dependente, inicio, beneficio in (
+            (1, False, None, "Oi, tudo certo?", "pode te oferecer"),
+            (2, False, None, "Oi Ana, tudo certo?", "pode te oferecer"),
+            (11, True, "Bia", "Oi Ana, tudo certo?", "pode oferecer para Bia"),
+            (5, True, None, "Oi Ana, tudo certo?", "pode oferecer para a outra pessoa"),
+        ):
+            with self.subTest(etapa=etapa, dependente=dependente):
+                texto = montar_mensagem_encerramento_followup(
+                    id_etapa=etapa, nome_titular="Ana", nome_agente="Suh",
+                    status_dependente=dependente, nome_dependente=nome_dependente,
+                )
+                self.assertTrue(texto.startswith(inicio))
+                self.assertIn(beneficio, texto)
+                self.assertIn("para todos os benefícios", texto)
+                self.assertTrue(texto.endswith("Abraços, Suh."))
+                if etapa == 1:
+                    self.assertNotIn("Ana", texto)
+
     def test_texto_exato_e_numero_da_unidade(self):
         wa = MagicMock()
         wa.send_message.return_value = SimpleNamespace(id="wamid.bot")
@@ -608,7 +635,8 @@ class ProativoTests(unittest.TestCase):
         self.assertEqual(result["mensagem_bot"], MENSAGEM_FOLLOWUP)
 
     def _processar(
-        self, *, elegivel=True, lock=True, erro_envio=None, erro_banco=None, parar=False
+        self, *, elegivel=True, lock=True, erro_envio=None, erro_banco=None, parar=False,
+        stage=0,
     ):
         conn = MagicMock()
         stop = Event()
@@ -624,7 +652,7 @@ class ProativoTests(unittest.TestCase):
                 patch.object(
                     worker,
                     "reler_elegivel",
-                    return_value=candidato() if elegivel else None,
+                    return_value=dict(candidato(), followup_stage=stage) if elegivel else None,
                 )
             )
             enviar = stack.enter_context(
@@ -655,6 +683,19 @@ class ProativoTests(unittest.TestCase):
         unlock.assert_called_once()
         conn.close.assert_called_once()
         conn.rollback.assert_not_called()
+
+    def test_segundo_envia_despedida_e_so_persiste_apos_confirmacao(self):
+        ok, _, enviar, persistir, _, _ = self._processar(stage=1)
+        self.assertTrue(ok)
+        self.assertIn("Oi Ana, tudo certo?", enviar.call_args.kwargs["mensagem"])
+        self.assertIn("Abraços, Suh.", enviar.call_args.kwargs["mensagem"])
+        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 1)
+        ok, conn, _, persistir, _, _ = self._processar(
+            stage=1, erro_envio=RuntimeError("Meta")
+        )
+        self.assertFalse(ok)
+        persistir.assert_not_called()
+        conn.rollback.assert_called_once()
 
     def test_cliente_chegou_antes_do_envio(self):
         ok, _, enviar, persistir, _, _ = self._processar(elegivel=False)

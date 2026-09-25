@@ -20,11 +20,15 @@ MENSAGEM_REPETICAO_ETAPA19 = (
 
 
 ### MENSAGEM INICIAL: ACOLHIMENTO + PERGUNTA; REPETIÇÃO SEM NOVA CELEBRAÇÃO
+APRESENTACAO_ETAPA19 = "Maravilha, {nome_titular}! 😊\n"
+
+
 def montar_mensagem_etapa19(nome_titular, *, repeticao=False):
     if repeticao:
         return MENSAGEM_REPETICAO_ETAPA19
     return compor_mensagem_inicial(
-        f"Maravilha, {nome_titular}! 😊", MENSAGEM_REPETICAO_ETAPA19
+        APRESENTACAO_ETAPA19.format(nome_titular=nome_titular),
+        MENSAGEM_REPETICAO_ETAPA19,
     )
 
 

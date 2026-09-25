@@ -13,7 +13,7 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
 MENSAGEM_PADRAO_ETAPA20 = (
-    "Você tem algum comentário ou sugestão para melhorar nosso atendimento?\n"
+    "Você tem algum comentário ou sugestão para melhorar nosso atendimento? "
     "Seu feedback é muito importante para nós! 😊"
 )
 

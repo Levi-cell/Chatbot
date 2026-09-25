@@ -62,6 +62,13 @@ def listar_conversas(id_unidade, inicio, fim, cursor):
                cl.email, cl.idade AS idade_titular,
                cl.profissao AS profissao_cliente, c.profissao AS profissao_conversa,
                d.nome_dependente, d.idade AS idade_dependente,
+               CASE WHEN c.followup_stage IN (1, 2) AND NOT EXISTS (
+                   -- Considera atendimentos novos até fora do período selecionado.
+                   SELECT 1 FROM chatbot.conversa posterior
+                   WHERE posterior.id_cliente = c.id_cliente
+                     AND posterior.id_unidade = c.id_unidade
+                     AND posterior.id_conversa > c.id_conversa
+               ) THEN c.followup_stage ELSE 0 END AS followup_stage_atual,
                EXISTS (SELECT 1 FROM chatbot.funil_envios f
                         WHERE f.id_conversa = c.id_conversa AND f.status = 'sent'
                         {filtro_funil}) AS foi_funil,
@@ -166,6 +173,7 @@ def buscar_perfis(id_unidade, inicio, fim, cursor):
     cursor.execute(f"""
         SELECT DISTINCT c.id_cliente, c.id_conversa, c.status_dependente,
                cl.idade AS idade_titular, d.idade AS idade_dependente,
+               d.id_dependente, d.nome_dependente,
                EXISTS (SELECT 1 FROM chatbot.funil_envios f
                         WHERE f.id_conversa=c.id_conversa AND f.status='sent'
                         {filtro_funil}) AS foi_funil

@@ -1,24 +1,19 @@
 """Composição pura, sem decisão de fluxo, envio ou acesso a dados."""
 
 
-def _unir_paragrafos(*partes):
-    """Compartilha a formatação sem atribuir significado aos fragmentos."""
-    return "\n\n".join(parte for parte in partes if parte)
+def _concatenar_fragmentos(*partes):
+    """Preserva o texto literal; os fragmentos declaram espaços e quebras."""
+    return "".join(parte for parte in partes if parte)
 
 
 def compor_mensagem_inicial(apresentacao, mensagem_repeticao):
     """Monta a entrada na etapa com apresentação e pergunta reutilizável."""
-    return _unir_paragrafos(apresentacao, mensagem_repeticao)
+    return _concatenar_fragmentos(apresentacao, mensagem_repeticao)
 
 
 def compor_tratamento(prefixo, mensagem_repeticao, *, ponte=None):
     """Monta orientação + repetição; contexto inválido usa mensagem própria."""
-    return _unir_paragrafos(prefixo, ponte, mensagem_repeticao)
-
-
-def montar_prefixo_retorno(saudacao):
-    """Reserva o parágrafo que será aplicado à fala escolhida pelo worker."""
-    return f"{saudacao}\n\n"
+    return _concatenar_fragmentos(prefixo, ponte, mensagem_repeticao)
 
 
 def aplicar_prefixo_retorno(texto, prefixo):

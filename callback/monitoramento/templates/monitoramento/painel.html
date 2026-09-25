@@ -8,12 +8,13 @@
   <meta name="theme-color" content="#1c321d">
   <meta name="referrer" content="same-origin">
   <title>Monitoramento · ESL Tech</title>
-  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260911">
-  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260911" defer></script>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260924-faixa">
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260924-faixa" defer></script>
 </head>
 <body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
       data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
       data-url-relatorio="{% url 'monitoramento:dados_relatorio' %}"
+      data-url-faixa-etaria="{% url 'monitoramento:dados_faixa_etaria' %}"
       data-url-csv="{% url 'monitoramento:contatos_csv' %}"
       data-url-login="{% url 'monitoramento:login' %}">
   <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
@@ -58,6 +59,7 @@
           <nav class="filtros-conversas" aria-label="Filtrar conversas">
             <button type="button" class="ativo" data-filtro="todas">Todas</button>
             <button type="button" data-filtro="continuacoes">Continuações</button>
+            <button type="button" data-filtro="followup">Follow-up</button>
             <button type="button" data-filtro="funil">Funil</button>
             <button type="button" data-filtro="avaliadas">Avaliadas</button>
           </nav>

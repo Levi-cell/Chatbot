@@ -4,6 +4,10 @@ import logging
 from datetime import timedelta
 from time import monotonic
 
+from core.integrations.whatsapp.messages.followup_messages import (
+    MENSAGEM_FOLLOWUP,
+    montar_mensagem_encerramento_followup,
+)
 from core.database.connection_aws import get_conn
 from core.repositories.atendimento.conversas import (
     tentar_lock_conversa,
@@ -15,6 +19,7 @@ from core.repositories.atendimento.followup import (
     persistir_followup,
     proteger_conversa,
     reler_elegivel,
+    validar_schema_followup,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.followup import (
     enviar_followup,
@@ -27,6 +32,7 @@ def obter_lote(limite, depois=None):
     with get_conn(application_name="worker_followup_scan", connect_timeout=10) as conn:
         with conn.cursor() as cursor:
             configurar_consulta_followup(cursor)
+            validar_schema_followup(cursor)
             return listar_elegiveis(cursor, limite, depois)
 
 
@@ -58,13 +64,26 @@ def processar_candidato(candidato, parar):
                     versao,
                 )
                 return False
+            stage_anterior = dados["followup_stage"]
+            stage = stage_anterior + 1
+            mensagem = MENSAGEM_FOLLOWUP
+            if stage == 2:
+                mensagem = montar_mensagem_encerramento_followup(
+                    id_etapa=dados["id_etapa"],
+                    nome_titular=dados["nome_titular"],
+                    nome_agente=dados["nome_agente"],
+                    status_dependente=dados["status_dependente"],
+                    nome_dependente=dados["nome_dependente"],
+                )
             logger.info(
                 "followup_despacho | conversa=%s cliente_id=%s unidade=%s etapa=%s "
-                "stage_anterior=0 stage_proposto=1 ancora_id=%s ancora_em=%s vence_em=%s versao=%s",
+                "stage_anterior=%s stage_proposto=%s ancora_id=%s ancora_em=%s vence_em=%s versao=%s",
                 id_conversa,
                 dados["id_cliente"],
                 dados["id_unidade"],
                 dados["id_etapa"],
+                stage_anterior,
+                stage,
                 dados["id_ancora"],
                 dados["ancora_em"],
                 dados["ancora_em"] + timedelta(hours=7),
@@ -72,15 +91,16 @@ def processar_candidato(candidato, parar):
             )
             # Releitura já inclui histórico, fila, bloqueios, unidade e janela Meta.
             envio = enviar_followup(
-                dados["cliente_telefone"], dados["id_phone_unidade"]
+                dados["cliente_telefone"], dados["id_phone_unidade"], mensagem=mensagem
             )
             id_bot, _ = persistir_followup(dados, envio, versao, cursor)
             conn.commit()
             logger.info(
-                "followup_confirmado | conversa=%s unidade=%s etapa=%s stage=1 versao=%s historico=%s",
+                "followup_confirmado | conversa=%s unidade=%s etapa=%s stage=%s versao=%s historico=%s",
                 id_conversa,
                 dados["id_unidade"],
                 dados["id_etapa"],
+                stage,
                 versao,
                 id_bot,
             )

@@ -1,6 +1,11 @@
 import unittest
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
+from core.integrations.whatsapp.pywa_functions import cliente
+from tests.unit import test_followup as fixtures
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+from workers.worker_flow.response_flow.retomada_followup import enviar_retorno_followup
 from workers.worker_flow.response_flow.etapas import resolver_etapa4
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4 import (
     MOTIVO_PROFISSAO_FORA_CONTEXTO,
@@ -24,6 +29,58 @@ RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = (
 
 
 class ValidadorProfissaoTests(unittest.TestCase):
+    def test_abertura_profissao_usa_rota_confirmada_em_entradas_e_retornos(self):
+        for retorno in (None, "inatividade", "followup"):
+            for dependente in (False, True):
+                for resposta in ("Sim", "Não"):
+                    with self.subTest(
+                        retorno=retorno, dependente=dependente, resposta=resposta
+                    ):
+                        contexto, _ = fixtures.RetornoTests().preparar(
+                            etapa=3, texto=resposta, dependente=dependente
+                        )
+                        prefixo = (
+                            "Bom te ver novamente, Ana ☺️\n" if retorno else ""
+                        )
+                        if retorno != "followup":
+                            contexto.pop("retorno_followup")
+                            contexto["saudacao_retorno"] = prefixo or None
+
+                        wa = MagicMock()
+                        wa.send_message.return_value = SimpleNamespace(
+                            id="wamid.bot"
+                        )
+                        with patch.object(cliente, "WhatsApp", return_value=wa):
+                            envio = (
+                                enviar_retorno_followup(contexto)
+                                if retorno == "followup"
+                                else flow_sender(contexto)
+                            )
+
+                        rota_final = (
+                            dependente if resposta == "Sim" else not dependente
+                        )
+                        texto = envio["mensagem_bot"]
+                        wa.send_message.assert_called_once()
+                        self.assertEqual(
+                            texto, wa.send_message.call_args.kwargs["text"]
+                        )
+                        self.assertTrue(
+                            texto.startswith(prefixo + "Olha, antes de continuar")
+                        )
+                        self.assertEqual(
+                            texto.count("Bom te ver novamente"), bool(retorno)
+                        )
+                        self.assertEqual(
+                            texto.count("vou precisar fazer algumas perguntas"), 1
+                        )
+                        self.assertIn("sua *profissão*", texto)
+                        self.assertEqual(
+                            "perfil da outra pessoa" in texto, rota_final
+                        )
+                        self.assertEqual(envio["status_dependente_final"], rota_final)
+                        self.assertEqual(envio["id_etapa_resultante"], 4)
+
     def test_rejeita_somente_respostas_fora_contexto_ja_observadas(self):
         for resposta in RESPOSTAS_FORA_CONTEXTO_OBSERVADAS:
             with self.subTest(resposta=resposta):

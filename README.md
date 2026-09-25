@@ -77,7 +77,7 @@ PostgreSQL: conversa em etapa elegível
 PostgreSQL: conversa elegível sem resposta ao bot por sete horas
     -> workers/worker_followup
     -> core/integrations/whatsapp
-    -> Meta/WhatsApp: um lembrete por ciclo
+    -> Meta/WhatsApp: lembrete e, após mais 7h sem resposta, despedida
 
 Franqueado autenticado
     -> callback/monitoramento
@@ -274,11 +274,19 @@ e reversão de uma base existente.
 
 ## Follow-up em funcionamento
 
-O quarto serviço envia um único lembrete, definido em `messages/followup_messages.py`, por ciclo para
+O quarto serviço envia o primeiro lembrete, definido em `messages/followup_messages.py`, por ciclo para
 conversa ativa nas etapas 1–17, com `followup_stage = 0`, último envio confirmado
 do bot há pelo menos sete horas e última mensagem do cliente há menos de 24 horas
 (com um minuto de margem no código). A seleção também verifica unidade, fila e
 bloqueios. A etapa 18 e as posteriores não recebem lembretes proativos.
+
+Após outras sete horas sem resposta desde o primeiro envio confirmado, envia a
+despedida personalizada, grava stage 2 e encerra a conversa, sem bloqueio de 30 dias.
+Ambas as camadas incluem a etapa 8 e preservam a janela de envio e as demais guardas.
+Sem confirmação do envio, não há encerramento. Uma mensagem posterior abre outra
+conversa na etapa 1, sem prefixo de retorno. O painel agrupa o histórico no mesmo
+chat; o filtro **Follow-up** considera stages 1/2 somente da conversa mais recente.
+Uma conversa nova oculta o stage antigo, mesmo fora do período selecionado.
 
 Na primeira reação aceita com stage positivo, o flow valida a mensagem:
 resposta válida avança; tratamento específico mantém sua orientação; sem ambos,

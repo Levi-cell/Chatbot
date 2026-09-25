@@ -15,13 +15,13 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 MENSAGEM_PADRAO_CLIENTE_ETAPA11 = (
     "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
-    "do seu cérebro. 🔎🧠\n\n"
+    "do seu cérebro. 🔎🧠\n"
     "Dessa forma podemos preparar uma experiência personalizada, vamos começar? ☺️"
 )
 MENSAGEM_PADRAO_DEPENDENTE_ETAPA11 = (
     "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
-    "do cérebro de {nome_dependente}. 🔎🧠\n\n"
+    "do cérebro de {nome_dependente}. 🔎🧠\n"
     "Dessa forma podemos preparar uma experiência personalizada, vamos começar? ☺️"
 )
 

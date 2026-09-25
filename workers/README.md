@@ -331,11 +331,14 @@ há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janel
 | `FOLLOWUP_POLL_SECONDS` | `60` | 5–3.600 segundos de espera após cada lote. |
 | `FOLLOWUP_BATCH_SIZE` | `20` | 1–100 candidatas por lote; processamento sequencial. |
 
-O texto é `Você viu a minha mensagem?`. Para despachar, todas as condições
+O primeiro texto é `Olá, gostaria de continuar seu atendimento agora?`.
+O segundo é a despedida personalizada em `messages/followup_messages.py`.
+Para despachar, todas as condições
 precisam continuar válidas na releitura após adquirir o lock:
 
 - conversa ativa, sem finalização, em etapa 1–17 não terminal;
-- `followup_stage = 0` (`NULL` é tratado como zero);
+- primeiro envio: `followup_stage = 0` (`NULL` equivale a zero); segundo: stage 1
+  com recibo do primeiro correspondente ao último bot e ao `followup_last_sent_at`;
 - última mensagem da conversa é do bot, confirmada como `sent`, com pelo menos
   sete horas, e `last_interaction_at` corresponde a essa mensagem;
 - última mensagem do cliente tem menos de 23h59, reservando um minuto da janela
@@ -343,19 +346,29 @@ precisam continuar válidas na releitura após adquirir o lock:
 - unidade adimplente, destinatário e números da unidade presentes;
 - menos de 12 turnos sem avanço, sem bloqueio persistido ou flood no banco;
 - nenhuma fila `pending`/`processing` do par cliente/unidade, inclusive sem vínculo;
-- nenhum recibo que já cubra a âncora ou o próprio lembrete, nem retomada aberta com fila pendente.
+- nenhum recibo que já cubra a âncora, nem retomada aberta com fila pendente.
+  No segundo, a âncora é o primeiro follow-up, sem encadear um terceiro envio.
 
 Exemplo: bot há 8 horas e cliente há 25 horas não permitem envio; bot há 8 horas
 e cliente há 9 horas permitem, se os demais critérios forem atendidos.
 O relógio de elegibilidade vem do PostgreSQL. Os limites de etapa e de tempo
 são regras do código/SQL, não novas variáveis de ambiente.
 
-O sucesso persiste histórico, recibo e stage 1 no mesmo commit. Não há segunda
-mensagem enquanto o cliente não reagir. Uma confirmação da Meta seguida de
+O primeiro sucesso persiste histórico, recibo e stage 1 no mesmo commit. Após
+outras 7h sem resposta, contadas desse envio, a segunda mensagem persiste histórico,
+recibo, stage 2 e encerramento no mesmo commit. Mantém a etapa de origem e não
+gera bloqueio de 30 dias. Sem janela de envio, não envia nem encerra silenciosamente.
+As duas camadas incluem a etapa 8. Marcações legadas sem recibo não geram despedida.
+Uma confirmação da Meta seguida de
 falha no commit local ainda pode resultar em duplicidade no retry; o worker
 registra `followup_commit_falhou` como crítico.
 
 ### Retomada pelo flow
+
+Depois do segundo envio confirmado, o atendimento está encerrado. `valida_banco`
+abre nova conversa, sem etapa persistida e com stage zero; o fluxo inicial pede
+o nome sem prefixo de retorno. Uma leitura da conversa antiga antes do encerramento
+é recusada na releitura sob lock e reagendada sem consumir retry.
 
 No flow, o contexto é relido sob lock. `transacoes/retorno_followup.py` registra
 um checkpoint e reutiliza `valida_historico.py` para os dados da etapa, sem

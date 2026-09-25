@@ -198,6 +198,19 @@ Para interromper os lembretes, parar e desabilitar a unit de follow-up. Isso man
 o flow apto a tratar retornos de lembretes ou do legado marcado. Não apagar recibos, resetar
 stages em massa nem reverter o flow incompatível enquanto existirem ciclos positivos.
 
+## Segunda camada de follow-up
+
+Aplicar [`migrations/20260924_segundo_followup.sql`](migrations/20260924_segundo_followup.sql)
+com os workers parados, antes de iniciar o código novo. O arquivo amplia somente
+o motivo de encerramento permitido; não fecha conversas nem altera stages existentes.
+Não repetir `followup_registros.sql`. Instalação limpa usa o DDL atualizado.
+
+A segunda camada usa o mesmo serviço, após mais 7h desde o primeiro envio real,
+mantendo a janela de envio. Recibos antigos válidos podem se tornar elegíveis ao
+iniciar o worker; marcações de legado sem recibo não geram despedida.
+Atualizar também os estáticos do painel (`collectstatic`) para publicar o filtro
+**Follow-up**. Validar o diagnóstico sem envio, reiniciar o flow e só então o follow-up.
+
 ## Suporte por idade mínima
 
 O [procedimento de suporte por idade](idade_minima_suporte.md) coordena schema,

@@ -109,13 +109,17 @@ def consolidar_conversas(linhas):
             'profissao': linha.get('profissao_cliente') or linha.get('profissao_conversa') or '',
             'ids_conversa': [], 'perfis': set(), 'perfis_resumidos': set(),
             'dependentes': set(),
-            'foi_funil': False, 'avaliada': False,
+            'foi_funil': False, 'avaliada': False, 'followup_stage': 0,
             'ultima_atividade': None, 'ultima_mensagem': '',
             'ultima_mensagem_id': None,
         })
         cliente['ids_conversa'].append(linha['id_conversa'])
         cliente['foi_funil'] |= bool(linha.get('foi_funil'))
         cliente['avaliada'] |= bool(linha.get('avaliada'))
+        # A consulta já exclui o follow-up de atendimentos substituídos por outro.
+        cliente['followup_stage'] = max(
+            cliente['followup_stage'], linha.get('followup_stage_atual') or 0,
+        )
         status_dependente = linha.get('status_dependente')
         dependente = status_dependente is True
         if dependente:

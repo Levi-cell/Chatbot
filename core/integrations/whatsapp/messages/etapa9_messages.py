@@ -26,6 +26,9 @@ MENSAGEM_REPETICAO_DEPENDENTE = (
 
 
 ### MENSAGEM INICIAL DA ETAPA: SAUDAÇÃO PRÓPRIA + PERGUNTA
+APRESENTACAO_ETAPA9 = "Que bom ver você aqui novamente, {nome_titular}!\n"
+
+
 def montar_mensagem_retorno_cliente_etapa9(
     nome_titular, *, incluir_saudacao=True, repeticao=False
 ):
@@ -45,7 +48,7 @@ def montar_mensagem_retorno_dependente_etapa9(
 def _montar_retorno(mensagem, nome_titular, incluir_saudacao):
     if incluir_saudacao:
         return compor_mensagem_inicial(
-            f"Que bom ver você aqui novamente, {nome_titular}!", mensagem
+            APRESENTACAO_ETAPA9.format(nome_titular=nome_titular), mensagem
         )
     return mensagem
 

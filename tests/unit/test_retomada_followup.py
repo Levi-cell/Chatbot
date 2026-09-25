@@ -31,9 +31,9 @@ class RetomadaValidadaTests(unittest.TestCase):
         self.assertEqual(texto_enviado.count("Bom te ver novamente"), 1)
         self.assertNotIn("Que bom te ver novamente", texto_enviado)
         if contexto["id_etapa_atual"] == 1:
-            self.assertTrue(texto_enviado.startswith("Bom te ver novamente ☺️\n\n"))
+            self.assertTrue(texto_enviado.startswith("Bom te ver novamente ☺️\n"))
         else:
-            self.assertTrue(texto_enviado.startswith("Bom te ver novamente, Ana ☺️\n\n"))
+            self.assertTrue(texto_enviado.startswith("Bom te ver novamente, Ana ☺️\n"))
         return envio, fake.send_message.call_args.kwargs
 
     def test_respostas_validas_avancam_e_preservam_dados_das_duas_rotas(self):
@@ -131,7 +131,7 @@ class RetomadaValidadaTests(unittest.TestCase):
     def test_inatividade_segue_contexto_invalido_normal(self):
         cx = self.preparar(6, "???", True)
         cx.pop("retorno_followup")
-        cx["saudacao_retorno"] = "Bom te ver novamente, Ana ☺️\n\n"
+        cx["saudacao_retorno"] = "Bom te ver novamente, Ana ☺️\n"
         envio, _ = self.enviar(cx, normal=True)
         self.assertTrue(envio["tratamento"])
         self.assertEqual(envio["tipo_tratamento"], "idade_invalida")

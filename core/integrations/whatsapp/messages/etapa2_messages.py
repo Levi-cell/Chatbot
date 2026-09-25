@@ -14,12 +14,10 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 ### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
 MENSAGEM_PADRAO_ETAPA2 = (
     "Prazer, {nome_titular}! ☺️\n"
-    "\n"
     "O Supera é um curso de *estimulação cognitiva* que trabalha habilidades "
     "cognitivas e socioemocionais por meio de atividades que estimulam atenção, "
     "concentração, memória, raciocínio e outras funções importantes para o dia a "
-    "dia.\n"
-    "\n"
+    "dia.\n\n"
     "Para eu entender melhor como podemos ajudar, me conta, *esse atendimento é "
     "para você ou para um dependente?*"
 )

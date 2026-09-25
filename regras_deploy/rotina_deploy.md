@@ -18,7 +18,7 @@ Procedimento para atualizar a aplicação na Lightsail. Referência atual:
 | `chatbot-webhook.service` | Gunicorn/Django: webhook, Admin e monitoramento. |
 | `chatbot-worker-flow.service` | Consome a fila, atende e trata a retomada após follow-up. |
 | `chatbot-worker-funil.service` | Publica oportunidades no CRM. |
-| `chatbot-worker-followup.service` | Consulta inatividade e envia um lembrete por ciclo elegível. |
+| `chatbot-worker-followup.service` | Envia o primeiro lembrete e, após mais 7h sem resposta, a despedida que encerra o atendimento. |
 
 O painel compartilha o serviço web; seu polling não cria outro processo.
 Há uma instância de cada worker. O follow-up é um processo contínuo, com lotes
@@ -116,6 +116,12 @@ investigue; não aplique apenas fragmentos para contornar a falha.
 deploy. Esse número é histórico, não uma condição para verificações futuras.
 Não reexecute esse arquivo nos próximos deploys. Novas conversas e retomadas
 alteram os contadores normalmente.
+
+**Segunda camada de follow-up:** aplicar apenas a nova migração pendente
+`deploy/migrations/20260924_segundo_followup.sql`, que libera o motivo
+`followup_sem_resposta` sem alterar conversas existentes. O diagnóstico e o worker
+recusam envios se essa migração estiver ausente. Publicar os estáticos do painel
+para disponibilizar o filtro **Follow-up**.
 
 `manage.py migrate` cuida somente dos modelos gerenciados pelo Django; não
 substitui as migrações de negócio. `setup_database.py` serve à instalação limpa,

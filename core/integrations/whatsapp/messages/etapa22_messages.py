@@ -2,18 +2,18 @@
 
 ### ENCERRAMENTO DO TITULAR: QUEM CONVERSA TAMBÉM FARÁ A EXPERIÊNCIA
 MENSAGEM_ETAPA22_TITULAR = (
-    "Perfeito, foi um prazer falar com você! 🥰\n\n"
-    "Estamos ansiosos para te receber na nossa unidade! 🧡\n\n"
-    "No próximo dia útil, nossa equipe entrará em contato.\n"
+    "Perfeito, foi um prazer falar com você! 🥰\n"
+    "Estamos ansiosos para te receber na nossa unidade! 🧡\n"
+    "No próximo dia útil, nossa equipe entrará em contato. "
     "Até breve! 👋🏼😉"
 )
 
 
 ### ENCERRAMENTO DO DEPENDENTE: ACOLHER O CLIENTE E O PARTICIPANTE PELO NOME
 MENSAGEM_ETAPA22_DEPENDENTE = (
-    "Perfeito, foi um prazer falar com você! 🥰\n\n"
-    "Estamos ansiosos para receber você e {nome_dependente} na nossa unidade! 🧡\n\n"
-    "No próximo dia útil, nossa equipe entrará em contato.\n"
+    "Perfeito, foi um prazer falar com você! 🥰\n"
+    "Estamos ansiosos para receber você e {nome_dependente} na nossa unidade! 🧡\n"
+    "No próximo dia útil, nossa equipe entrará em contato. "
     "Até breve! 👋🏼😉"
 )
 

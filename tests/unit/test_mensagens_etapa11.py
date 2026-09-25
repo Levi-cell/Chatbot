@@ -121,7 +121,7 @@ class MensagensEtapa11Tests(unittest.TestCase):
                 with patch.object(cliente, "WhatsApp", return_value=wa):
                     envio = enviar_repeticao_followup(cx)
                 texto = self.conferir_envio(
-                    envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n\n"
+                    envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n"
                 )
                 self.assertEqual(envio["mensagem_bot"], texto)
                 self.assertNotIn("antes de prosseguir", texto)

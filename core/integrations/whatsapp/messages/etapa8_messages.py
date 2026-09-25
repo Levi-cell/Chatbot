@@ -8,10 +8,10 @@ from core.integrations.whatsapp.messages.componentes_compartilhados import (
 
 ### MENSAGEM INICIAL QUANDO A OFERTA É ADIADA
 MENSAGEM_PADRAO_ETAPA8 = (
-    "Tudo bem! Podemos continuar no seu ritmo. 🧡☺️\n"
-    "Quando quiser retomar sua reserva, é só me avisar por aqui.\n\n"
+    "Tudo bem! Podemos continuar no seu ritmo. 🧡☺️ "
+    "Quando quiser retomar sua reserva, é só me avisar por aqui.\n"
     "Enquanto isso, nos siga no nosso Instagram e acompanhe nossas atualizações. "
-    "Um abraço! 🧡🤗\n"
+    "Um abraço! 🧡🤗 "
     "{link_instagram}"
 )
 

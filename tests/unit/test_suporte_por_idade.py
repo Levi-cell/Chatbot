@@ -35,13 +35,13 @@ MENSAGEM_LEGADA_SEM_FAIXA = (
     'Para entrar em contato, basta clicar no botão abaixo.'
 )
 MENSAGEM_ENCAMINHAMENTO_ATUAL = (
-    'Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n\n'
+    'Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n'
     'Para entrar em contato, basta clicar no botão abaixo.'
 )
 MENSAGEM_ANAMNESE_100_MAIS = (
     'Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena '
-    '*anamnese* com um dos nossos consultores.\n\n'
-    'Basta clicar no botão abaixo para falar com nosso time! 😊\n\n'
+    '*anamnese* com um dos nossos consultores.\n'
+    'Basta clicar no botão abaixo para falar com nosso time! 😊\n'
     '_Nosso time vai orientar os próximos passos. 🧡_'
 )
 
@@ -254,6 +254,9 @@ class SuportePorIdadeTests(unittest.TestCase):
     def test_recuperacao_reconhece_variantes_mas_usa_limite_atual(self):
         textos = [
             MENSAGEM_LEGADA_SEM_FAIXA,
+            # Corpo salvo pela V1.5.2, antes da redução de espaçamento.
+            'Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n\n'
+            'Para entrar em contato, basta clicar no botão abaixo.',
             montar_mensagem_suporte_idoso_etapa6(50),
         ]
         for texto_enviado in textos:

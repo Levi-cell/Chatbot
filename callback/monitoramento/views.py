@@ -16,6 +16,7 @@ from django.views.decorators.cache import never_cache
 from core.validacoes.email import validar_email_estrutural
 
 from .forms import LoginMonitoramentoForm
+from .faixa_etaria import validar_consulta_faixa_etaria
 from .monitoramento_guard import exigir_acesso_monitoramento
 from .periodos import PERIODOS, resolver_periodo
 from .services import (
@@ -23,6 +24,7 @@ from .services import (
     carregar_conversas,
     carregar_mensagens,
     carregar_relatorio,
+    carregar_faixa_etaria,
 )
 from .apresentacao import (
     CABECALHO_CSV_ESSENCIAL,
@@ -199,6 +201,29 @@ def dados_relatorio(request):
         return _headers_privados(JsonResponse(carregar_relatorio(acesso, periodo)))
     except DatabaseError:
         logger.error('monitoramento_relatorio_banco_indisponivel')
+        return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
+
+
+@never_cache
+@require_GET
+def dados_faixa_etaria(request):
+    acesso, resposta = _acesso(request, api=True)
+    if resposta:
+        return resposta
+    if len(request.GET.getlist('periodo')) > 1:
+        return _headers_privados(JsonResponse({'erro': 'Selecione apenas um período.'}, status=400))
+    periodo = _resolver_periodo_request(request)
+    if periodo is None:
+        return _headers_privados(JsonResponse({'erro': 'Período inválido.'}, status=400))
+    try:
+        idade_minima, publico = validar_consulta_faixa_etaria(request.GET)
+    except ValueError as erro:
+        return _headers_privados(JsonResponse({'erro': str(erro)}, status=400))
+    try:
+        dados = carregar_faixa_etaria(acesso, periodo, idade_minima, publico)
+        return _headers_privados(JsonResponse(dados))
+    except DatabaseError:
+        logger.error('monitoramento_faixa_etaria_banco_indisponivel')
         return _headers_privados(JsonResponse({'erro': MENSAGEM_DADOS_INDISPONIVEIS}, status=503))
 
 

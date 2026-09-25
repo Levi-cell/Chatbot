@@ -201,7 +201,15 @@ permissões de leitura e escrita nas novas tabelas, por propriedade ou grants.
 O [diagnóstico sem envio](../../utilitarios/README.md#diagnóstico-de-follow-up)
 confere as consultas; ele não comprova as permissões de escrita.
 
-Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo.
+Para habilitar a segunda camada em base existente, aplicar
+[`20260924_segundo_followup.sql`](../../deploy/migrations/20260924_segundo_followup.sql).
+Ela só amplia `ck_conversa_motivo_encerramento` com `followup_sem_resposta` e
+preserva todas as conversas. O DDL de instalação limpa já inclui esse motivo.
+Não há novas colunas ou tabelas. O segundo recibo usa o ID/data do primeiro envio
+como âncora, preservando a unicidade e a rastreabilidade de cada camada.
+
+Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo; no segundo,
+o mesmo commit grava stage 2, status inativo, horário e motivo de encerramento.
 Histórico da resposta, efeitos da etapa, conclusão da retomada, reset do stage,
 eventual encerramento e finalização da fila são confirmados juntos pelo flow.
 A chamada à Meta ocorre fora dessa atomicidade local;

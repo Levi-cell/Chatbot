@@ -1371,7 +1371,7 @@ Implementação principal:
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Follow-up antes do agendamento | Implementada | Um lembrete por ciclo nas etapas 1–17, após sete horas sem resposta e dentro da janela do cliente; retomada repete a etapa, exceto na 8, que avança diretamente para a 9. |
+| Follow-up antes do agendamento | Implementada | Primeiro lembrete após 7h; despedida e encerramento após outras 7h sem resposta, nas etapas 1–17, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
 | Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
@@ -1411,9 +1411,27 @@ do bot há pelo menos sete horas, e a mensagem mais recente do cliente, anterior
 a ela, precisa estar dentro de 23h59. Bot há oito horas com cliente há 25 horas
 é inelegível; bot há oito horas com cliente há nove horas pode ser elegível.
 
-O worker produz apenas 0 → 1 e não zera o ciclo. Stage positivo permanece até uma
-reação do cliente. Não há segundo ou terceiro lembrete, nem fechamento pelo silêncio.
-A primeira entrada aceita com stage positivo é armazenada e validada pelos
+O worker produz 0 → 1 no primeiro envio. Após outras sete horas sem resposta,
+contadas do primeiro envio confirmado, produz 1 → 2 com a despedida e encerra a
+conversa (`status_ativa = false`, `finalizou_em` e motivo `followup_sem_resposta`).
+Mantém a etapa de origem, sem aplicar o bloqueio de 30 dias. Não há terceiro envio.
+Histórico, recibo, stage 2 e encerramento são gravados na mesma transação, somente
+após confirmação da Meta. Falha no envio mantém a conversa aberta em stage 1.
+Se a janela de 23h59 já expirou, não envia nem simula encerramento.
+
+O segundo envio exige recibo real do primeiro, correspondente ao último bot e ao
+`followup_last_sent_at`; marcação de legado sem recibo não permite uma despedida.
+As duas camadas são restritas às etapas 1–17, incluindo a 8. Uma reação antes do
+segundo envio cancela sua elegibilidade e mantém o processamento descrito abaixo.
+Depois do encerramento, outra mensagem abre novo ID de conversa, com stage zero
+e mensagem inicial da etapa 1, sem prefixo de retorno nem nome de cadastro antigo.
+
+O filtro **Follow-up** do painel considera stage 1 ou 2 da conversa mais recente
+do mesmo cliente/unidade. Uma conversa posterior invalida o marcador antigo,
+inclusive se estiver fora do período selecionado. O chat continua reunindo todo
+o histórico permitido pelo período; excluir do filtro não apaga atendimento.
+
+A primeira entrada aceita com stage positivo em conversa ainda ativa é armazenada e validada pelos
 mesmos resolvers do atendimento normal. Respeitar as prioridades de cada etapa:
 tratamentos específicos existentes (mídia, financeiro e reforço) permanecem;
 resposta válida segue seu evento, efeitos e destino; resposta sem validação nem
@@ -1460,7 +1478,8 @@ encerramento e finalização da fila pertencem ao mesmo commit. followup_last_se
 concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
 seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
 novo ciclo somente nas etapas 1–17 e com as demais condições de envio atendidas.
-Stage maior que um segue a mesma recuperação; negativo falha fechado.
+Stage maior que um em conversa legada ainda ativa segue a mesma recuperação;
+stage 2 encerrado pelo novo proativo permanece como auditoria; negativo falha fechado.
 
 A exceção deliberada é a repetição neutra diante de contexto inválido genérico
 no primeiro retorno. Stage zero preserva o processamento normal por inteiro.
@@ -1470,5 +1489,7 @@ do ciclo; registros de retomada identificam a entrada processada para recuperaç
 
 Os dois workers compartilham o lock de 110 segundos e seu fencing. Entrada aceita
 após o último teste pré-envio pode cruzar com a chamada da Meta: confirmamos o
-lembrete e o flow lê stage positivo quando obtiver o lock. A janela entre aceite
+envio. No primeiro, o flow lê stage positivo ao obter o lock; no segundo, relê
+o estado encerrado e abre outro atendimento, reagendando uma leitura obsoleta sem
+consumir retry. A janela entre aceite
 externo e commit local continua sujeita à duplicidade rara já aceita na V1.

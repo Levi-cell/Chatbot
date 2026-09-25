@@ -131,7 +131,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
                 ) as validar_nome:
                     envio = flow_sender(contexto)
                 esperado = (
-                    f"Boa tarde! Sou {artigo} {nome_agente}, assistente do Supera Teste! ☺️\n"
+                    f"Boa tarde! Sou {artigo} {nome_agente}, assistente do Supera Teste! ☺️ "
                     "Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?"
                 )
                 wa.send_message.assert_called_once()
@@ -182,7 +182,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             self.assertEqual(proxima["primeiro_nome_cliente"], "Maria")
             self.assertTrue(
                 proxima["mensagem_bot"].startswith(
-                    "Prazer, Maria! ☺️\n\nO Supera"
+                    "Prazer, Maria! ☺️\nO Supera"
                 )
             )
 
@@ -229,7 +229,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             retorno = enviar_repeticao_followup(contexto)
         self.assertEqual(
             retorno["mensagem_bot"],
-            "Bom te ver novamente ☺️\n\n" + etapa1_messages.MENSAGEM_REPETICAO_ETAPA1,
+            "Bom te ver novamente ☺️\n" + etapa1_messages.MENSAGEM_REPETICAO_ETAPA1,
         )
         self.assertNotIn("evento_transicao", retorno)
 

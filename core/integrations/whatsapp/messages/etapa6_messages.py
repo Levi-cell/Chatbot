@@ -97,8 +97,8 @@ def montar_mensagem_contexto_idade_dependente_invalida_etapa6(nome_dependente):
 
 MENSAGEM_CLIENTE_MENOR_18_ETAPA6 = (
     "Como você tem menos de 18 anos, este atendimento precisa ser realizado "
-    "por um adulto responsável.\n\n"
-    "Peça a um adulto para retornar nosso atendimento.\n"
+    "por um adulto responsável.\n"
+    "Peça a um adulto para retornar nosso atendimento. "
     "Um abraço e até logo! 👋☺️"
 )
 
@@ -113,7 +113,7 @@ MENSAGEM_DEPENDENTE_MENOR_5_ETAPA6 = (
     "No momento, esta unidade do Supera realiza treinamentos com crianças a "
     "partir de {idade_minima} anos. Quando {nome_dependente} completar {idade_minima} "
     "anos, você poderá entrar em contato "
-    "novamente.\n\n"
+    "novamente.\n"
     "Um abraço e até logo! 👋☺️"
 )
 
@@ -130,7 +130,7 @@ def montar_mensagem_dependente_menor_5_etapa6(
 
 ### ENCAMINHAMENTO DO TITULAR PELA FAIXA CONFIGURADA NA UNIDADE
 MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
-    "Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n\n"
+    "Certo, vou te passar o contato da nossa equipe para dar continuidade a sua experiência supera! 😊\n"
     "Para entrar em contato, basta clicar no botão abaixo."
 )
 
@@ -141,7 +141,7 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
 # A redação atende às duas rotas sem presumir que quem conversa é o participante.
 MENSAGEM_IDADE_ACIMA_99_ETAPA6 = (
     "Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena "
-    "*anamnese* com um dos nossos consultores.\n\n"
+    "*anamnese* com um dos nossos consultores.\n"
     "Basta clicar no botão abaixo para falar com nosso time! 😊"
 )
 
@@ -256,6 +256,8 @@ def reconhecer_mensagem_suporte_idoso_etapa6(conteudo):
     texto = str(conteudo or "").strip()
     mensagens = (
         MENSAGEM_SUPORTE_IDOSO_ETAPA6,
+        # Recuperação de envios anteriores à revisão de espaçamento; não reenviar.
+        MENSAGEM_SUPORTE_IDOSO_ETAPA6.replace("\n", "\n\n"),
         _MENSAGEM_SUPORTE_IDOSO_LEGADA_SEM_FAIXA,
     )
     # O prefixo de retorno pode anteceder o corpo salvo; não interpretar como envio novo.

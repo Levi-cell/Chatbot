@@ -62,6 +62,11 @@ NOMES_ETAPAS = [
     'Agendamento', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
 ]
 RELATORIO = {
+    'dependentes_por_titular': {
+        'titulares': 40, 'dependentes': 41,
+        'grupos': [{'dependentes_por_titular': 1, 'titulares': 39},
+                   {'dependentes_por_titular': 2, 'titulares': 1}],
+    },
     'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'idade_minima_suporte': 60},
     'encaminhados_comercial_por_idade': 8,
     'periodo': CONVERSAS['periodo'], 'metricas': CONVERSAS['metricas'],

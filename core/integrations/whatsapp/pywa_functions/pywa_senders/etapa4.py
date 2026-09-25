@@ -28,12 +28,16 @@ def enviar_etapa4(
     cliente_telefone,
     phone_id_unidade,
     *,
+    status_dependente=False,
     repeticao=False,
 ):
     return _enviar_texto_etapa4(
         cliente_telefone,
         phone_id_unidade,
-        montar_mensagem_etapa4(repeticao=repeticao),
+        montar_mensagem_etapa4(
+            status_dependente=status_dependente,
+            repeticao=repeticao,
+        ),
         evento="enviar_etapa4",
     )
 
