@@ -88,7 +88,7 @@ Commit: `8f6fe39928ef930092ea1c667f396f32501b5295`
 
 ### V1.6.3 — Correção visual na oferta do dependente
 
-Commit: PENDENTE
+Commit: `ab157b4d53fec2fe60356047ac1709535731e2f1`
 
 ## Padrão de numeração a partir da V1.2.0
 

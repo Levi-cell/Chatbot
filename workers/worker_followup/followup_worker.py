@@ -5,7 +5,7 @@ from datetime import timedelta
 from time import monotonic
 
 from core.integrations.whatsapp.messages.followup_messages import (
-    MENSAGEM_FOLLOWUP,
+    montar_mensagem_followup,
     montar_mensagem_encerramento_followup,
 )
 from core.database.connection_aws import get_conn
@@ -66,12 +66,18 @@ def processar_candidato(candidato, parar):
                 return False
             stage_anterior = dados["followup_stage"]
             stage = stage_anterior + 1
-            mensagem = MENSAGEM_FOLLOWUP
             if stage == 2:
                 mensagem = montar_mensagem_encerramento_followup(
                     id_etapa=dados["id_etapa"],
                     nome_titular=dados["nome_titular"],
                     nome_agente=dados["nome_agente"],
+                    status_dependente=dados["status_dependente"],
+                    nome_dependente=dados["nome_dependente"],
+                )
+            else:
+                mensagem = montar_mensagem_followup(
+                    id_etapa=dados["id_etapa"],
+                    nome_titular=dados["nome_titular"],
                     status_dependente=dados["status_dependente"],
                     nome_dependente=dados["nome_dependente"],
                 )

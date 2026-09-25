@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from core.repositories.atendimento import followup as repo
 from core.integrations.whatsapp.messages.followup_messages import (
     MENSAGEM_FOLLOWUP,
+    montar_mensagem_followup,
     montar_mensagem_encerramento_followup,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as sender
@@ -602,15 +603,43 @@ class RetornoEtapa8Tests(unittest.TestCase):
 
 
 class ProativoTests(unittest.TestCase):
+    def test_primeiro_personaliza_convite_sem_reutilizar_nomes_antigos(self):
+        for etapa, dependente, nome_dependente, nome_titular, saudacao, convite in (
+            (1, False, None, "Ana", "Olá! ☺️", "receber você na nossa unidade para sua"),
+            (1, True, "Bia", "Ana", "Olá! ☺️", "receber você na nossa unidade para sua"),
+            (2, False, "Bia", " Ana ", "Olá, Ana! ☺️", "receber você na nossa unidade para sua"),
+            (8, True, " Bia ", "Ana", "Olá, Ana! ☺️", "receber você e Bia na nossa unidade para a"),
+            (5, True, None, "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
+            (5, True, "", "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
+            (5, True, "   ", "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
+            (2, False, None, None, "Olá! ☺️", "receber você na nossa unidade para sua"),
+        ):
+            with self.subTest(etapa=etapa, dependente=dependente, nome=nome_dependente):
+                texto = montar_mensagem_followup(
+                    id_etapa=etapa, nome_titular=nome_titular,
+                    status_dependente=dependente, nome_dependente=nome_dependente,
+                )
+                self.assertTrue(texto.startswith(saudacao + "\n\n"))
+                self.assertIn(convite + " *experiência Supera gratuita*! 🧡", texto)
+                self.assertEqual(texto.split("\n\n")[2], "Podemos continuar seu atendimento por aqui?")
+                self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
+                self.assertNotIn("\n\n\n", texto)
+                self.assertNotIn("{", texto)
+                if etapa == 1:
+                    self.assertNotIn("Ana", texto)
+                    self.assertNotIn("Bia", texto)
+                if not dependente:
+                    self.assertNotIn("Bia", texto)
+
     def test_despedida_preserva_nome_da_rota_e_oculta_cadastro_antigo_na_etapa1(self):
         for etapa, dependente, nome_dependente, inicio, beneficio in (
-            (1, False, None, "Oi, tudo certo?", "pode te oferecer"),
-            (1, True, "Bia", "Oi, tudo certo?", "pode te oferecer"),
-            (2, False, None, "Oi Ana, tudo certo?", "pode te oferecer"),
-            (11, True, "Bia", "Oi Ana, tudo certo?", "você e Bia não estão preparados"),
-            (5, True, None, "Oi Ana, tudo certo?", "pode te oferecer"),
-            (5, True, "", "Oi Ana, tudo certo?", "pode te oferecer"),
-            (5, True, "   ", "Oi Ana, tudo certo?", "pode te oferecer"),
+            (1, False, None, "Oi, tudo bem? ☺️", "pode te oferecer"),
+            (1, True, "Bia", "Oi, tudo bem? ☺️", "pode te oferecer"),
+            (2, False, None, "Oi Ana, tudo bem? ☺️", "pode te oferecer"),
+            (11, True, "Bia", "Oi Ana, tudo bem? ☺️", "você e Bia não estão preparados"),
+            (5, True, None, "Oi Ana, tudo bem? ☺️", "pode te oferecer"),
+            (5, True, "", "Oi Ana, tudo bem? ☺️", "pode te oferecer"),
+            (5, True, "   ", "Oi Ana, tudo bem? ☺️", "pode te oferecer"),
         ):
             with self.subTest(etapa=etapa, dependente=dependente):
                 texto = montar_mensagem_encerramento_followup(
@@ -620,7 +649,17 @@ class ProativoTests(unittest.TestCase):
                 self.assertTrue(texto.startswith(inicio))
                 self.assertIn(beneficio, texto)
                 self.assertIn("para aproveitar todos os benefícios", texto)
-                self.assertTrue(texto.endswith("Ficamos à disposição 🙂\n\nAbraços, Suh. 👋"))
+                self.assertIn(
+                    "Então eu vou liberar a vaga para a próxima pessoa "
+                    "e encerrar o seu atendimento, tudo bem?", texto,
+                )
+                self.assertTrue(texto.endswith(
+                    "tudo bem?\n\nFico à disposição caso precise falar comigo novamente! ☺️👋"
+                    "\n\n_Abraços, Suh. 🧡_"
+                ))
+                self.assertEqual(texto.count("Abraços,"), 1)
+                self.assertNotIn("\n\n\n", texto)
+                self.assertNotIn("{", texto)
                 if dependente and etapa > 1 and str(nome_dependente or "").strip():
                     self.assertIn("que o Supera pode oferecer. Então eu vou liberar a vaga", texto)
                     if nome_dependente:
@@ -649,7 +688,7 @@ class ProativoTests(unittest.TestCase):
 
     def _processar(
         self, *, elegivel=True, lock=True, erro_envio=None, erro_banco=None, parar=False,
-        stage=0,
+        stage=0, dados_releitura=None,
     ):
         conn = MagicMock()
         stop = Event()
@@ -665,7 +704,8 @@ class ProativoTests(unittest.TestCase):
                 patch.object(
                     worker,
                     "reler_elegivel",
-                    return_value=dict(candidato(), followup_stage=stage) if elegivel else None,
+                    return_value={**candidato(), "followup_stage": stage,
+                                  **(dados_releitura or {})} if elegivel else None,
                 )
             )
             enviar = stack.enter_context(
@@ -697,10 +737,23 @@ class ProativoTests(unittest.TestCase):
         conn.close.assert_called_once()
         conn.rollback.assert_not_called()
 
+    def test_primeiro_usa_rota_e_nomes_da_releitura_antes_do_envio(self):
+        ok, _, enviar, persistir, _, _ = self._processar(dados_releitura={
+            "id_etapa": 8, "nome_titular": "Maria", "status_dependente": True,
+            "nome_dependente": "Pedro",
+        })
+        self.assertTrue(ok)
+        texto = enviar.call_args.kwargs["mensagem"]
+        self.assertTrue(texto.startswith("Olá, Maria! ☺️\n\n"))
+        self.assertIn("receber você e Pedro na nossa unidade", texto)
+        self.assertNotIn("Ana", texto)
+        self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
+        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 0)
+
     def test_segundo_envia_despedida_e_so_persiste_apos_confirmacao(self):
         ok, _, enviar, persistir, _, _ = self._processar(stage=1)
         self.assertTrue(ok)
-        self.assertIn("Oi Ana, tudo certo?", enviar.call_args.kwargs["mensagem"])
+        self.assertIn("Oi Ana, tudo bem? ☺️", enviar.call_args.kwargs["mensagem"])
         self.assertIn("Abraços, Suh.", enviar.call_args.kwargs["mensagem"])
         self.assertEqual(persistir.call_args.args[0]["followup_stage"], 1)
         ok, conn, _, persistir, _, _ = self._processar(

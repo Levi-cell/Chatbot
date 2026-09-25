@@ -380,13 +380,27 @@ após sete horas e somente quando os demais critérios de elegibilidade forem
 atendidos. Uma revisão de estilo não autoriza ampliar a elegibilidade do envio.
 
 Existem duas camadas nas etapas 1–17, inclusive 8: o lembrete após 7h e a despedida
-após mais 7h sem resposta desde o envio real do primeiro. A despedida usa
+após mais 7h sem resposta desde o envio real do primeiro.
+
+O primeiro lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
+no atendimento; na etapa 1, usa `Olá! ☺️`, sem aproveitar nomes antigos.
+Começa com “Queremos muito continuar te ajudando!” e convida a receber a
+**experiência Supera gratuita** na unidade. Após `\n\n`, pergunta “Podemos continuar
+seu atendimento por aqui?”. Para titular, usa “receber você”; para dependente com nome, “receber
+você e {nome_dependente}”; para dependente ainda sem nome, “receber vocês”, sem
+presumir que a experiência será para o titular. O rodapé de todas as variantes é
+`Estaremos te esperando!`, sem emoji.
+
+A despedida usa
 “para aproveitar todos os benefícios” nas duas rotas e assina com `{nome_agente}`.
 Na etapa 1, nunca usa nome de cadastro anterior. Na rota dependente, usa
 “você e {nome_dependente} não estão preparados”, sem repetir o nome após “benefícios”;
 se o nome ainda não foi coletado (nulo, vazio ou só espaços), usa a mesma mensagem
-do titular, sem alterar a rota da conversa. Não acrescenta prefixo de retorno,
-tratamento, pergunta da etapa, rodapé ou botões à despedida.
+do titular, sem alterar a rota da conversa. O corpo termina com
+`Fico à disposição caso precise falar comigo novamente! ☺️👋` e o rodapé é
+`Abraços, {nome_agente}. 🧡`. Os dois follow-ups usam o componente de rodapé em
+itálico, separado do corpo por `\n\n` (uma linha em branco). Não acrescentar prefixo
+de retorno, tratamento, pergunta da etapa ou botões aos envios proativos.
 
 O segundo envio confirmado encerra a conversa, preservando stage 2. Uma mensagem
 posterior inicia outro atendimento com a mensagem inicial da etapa 1, sem prefixo

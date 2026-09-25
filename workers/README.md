@@ -331,8 +331,13 @@ há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janel
 | `FOLLOWUP_POLL_SECONDS` | `60` | 5–3.600 segundos de espera após cada lote. |
 | `FOLLOWUP_BATCH_SIZE` | `20` | 1–100 candidatas por lote; processamento sequencial. |
 
-O primeiro texto é `Olá, gostaria de continuar seu atendimento agora?`.
-O segundo é a despedida personalizada em `messages/followup_messages.py`.
+Os dois textos são montados em `messages/followup_messages.py` com os dados da
+releitura após o lock. O primeiro convida a continuar o atendimento e receber a
+experiência Supera gratuita na unidade, com rodapé `Estaremos te esperando!`.
+Usa o nome do titular já informado no atendimento (nunca nome antigo na etapa 1)
+e adapta o convite para dependente com nome ou, sem o nome, “receber vocês”.
+O segundo é a despedida personalizada, com rodapé `Abraços, {nome_agente}. 🧡`;
+sem nome de dependente coletado, mantém a versão do titular.
 Para despachar, todas as condições
 precisam continuar válidas na releitura após adquirir o lock:
 
