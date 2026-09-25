@@ -605,9 +605,12 @@ class ProativoTests(unittest.TestCase):
     def test_despedida_preserva_nome_da_rota_e_oculta_cadastro_antigo_na_etapa1(self):
         for etapa, dependente, nome_dependente, inicio, beneficio in (
             (1, False, None, "Oi, tudo certo?", "pode te oferecer"),
+            (1, True, "Bia", "Oi, tudo certo?", "pode te oferecer"),
             (2, False, None, "Oi Ana, tudo certo?", "pode te oferecer"),
-            (11, True, "Bia", "Oi Ana, tudo certo?", "pode oferecer para Bia"),
-            (5, True, None, "Oi Ana, tudo certo?", "pode oferecer para a outra pessoa"),
+            (11, True, "Bia", "Oi Ana, tudo certo?", "você e Bia não estão preparados"),
+            (5, True, None, "Oi Ana, tudo certo?", "pode te oferecer"),
+            (5, True, "", "Oi Ana, tudo certo?", "pode te oferecer"),
+            (5, True, "   ", "Oi Ana, tudo certo?", "pode te oferecer"),
         ):
             with self.subTest(etapa=etapa, dependente=dependente):
                 texto = montar_mensagem_encerramento_followup(
@@ -616,8 +619,18 @@ class ProativoTests(unittest.TestCase):
                 )
                 self.assertTrue(texto.startswith(inicio))
                 self.assertIn(beneficio, texto)
-                self.assertIn("para todos os benefícios", texto)
-                self.assertTrue(texto.endswith("Abraços, Suh."))
+                self.assertIn("para aproveitar todos os benefícios", texto)
+                self.assertTrue(texto.endswith("Ficamos à disposição 🙂\n\nAbraços, Suh. 👋"))
+                if dependente and etapa > 1 and str(nome_dependente or "").strip():
+                    self.assertIn("que o Supera pode oferecer. Então eu vou liberar a vaga", texto)
+                    if nome_dependente:
+                        self.assertEqual(texto.count(nome_dependente), 1)
+                else:
+                    self.assertEqual(texto, montar_mensagem_encerramento_followup(
+                        id_etapa=etapa, nome_titular="Ana", nome_agente="Suh",
+                        status_dependente=False,
+                    ))
+                    self.assertNotIn("você e ", texto)
                 if etapa == 1:
                     self.assertNotIn("Ana", texto)
 

@@ -3,7 +3,7 @@
 ### ENCERRAMENTO DO TITULAR: QUEM CONVERSA TAMBÉM FARÁ A EXPERIÊNCIA
 MENSAGEM_ETAPA22_TITULAR = (
     "Perfeito, foi um prazer falar com você, estamos ansiosos para te receber na nossa unidade! 🥰🧡\n\n"
-    "No próximo dia útil, nossa equipe entrará em contato. "
+    "No próximo dia útil, nossa equipe entrará em contato.\n "
     "Até breve! 👋🏼😉"
 )
 

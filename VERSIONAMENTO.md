@@ -82,6 +82,14 @@ Commit: `e5a2b45a5a71b487b6aa6a6f0aa9253e87185581`
 
 Commit: `cdbc66f67a718c6ca82eec885237b69ed114865e`
 
+### V1.6.2 — Correções nas mensagens e consulta etária
+
+Commit: `8f6fe39928ef930092ea1c667f396f32501b5295`
+
+### V1.6.3 — Correção visual na oferta do dependente
+
+Commit: PENDENTE
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

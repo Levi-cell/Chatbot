@@ -381,10 +381,12 @@ atendidos. Uma revisão de estilo não autoriza ampliar a elegibilidade do envio
 
 Existem duas camadas nas etapas 1–17, inclusive 8: o lembrete após 7h e a despedida
 após mais 7h sem resposta desde o envio real do primeiro. A despedida usa
-“para todos os benefícios” nas duas rotas e assina com `{nome_agente}`. Na etapa 1,
-nunca usa nome de cadastro anterior. Na rota dependente, cita `{nome_dependente}`;
-se o nome ainda não foi coletado, usa “a outra pessoa”. Não acrescenta prefixo de
-retorno, tratamento, pergunta da etapa, rodapé ou botões à despedida.
+“para aproveitar todos os benefícios” nas duas rotas e assina com `{nome_agente}`.
+Na etapa 1, nunca usa nome de cadastro anterior. Na rota dependente, usa
+“você e {nome_dependente} não estão preparados”, sem repetir o nome após “benefícios”;
+se o nome ainda não foi coletado (nulo, vazio ou só espaços), usa a mesma mensagem
+do titular, sem alterar a rota da conversa. Não acrescenta prefixo de retorno,
+tratamento, pergunta da etapa, rodapé ou botões à despedida.
 
 O segundo envio confirmado encerra a conversa, preservando stage 2. Uma mensagem
 posterior inicia outro atendimento com a mensagem inicial da etapa 1, sem prefixo

@@ -28,7 +28,7 @@ MENSAGEM_REPETICAO_ETAPA2 = (
 )
 
 ORIENTACAO_CONTEXTO_ETAPA2 = (
-    "Olha, não consegui entender, me diz, *esse atendimento é para você ou para um dependente*? "
+    "Olha, não consegui entender, me diz, *esse atendimento é para você ou para um dependente*?"
 )
 
 

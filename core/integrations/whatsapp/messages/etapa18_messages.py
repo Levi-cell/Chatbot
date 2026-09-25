@@ -75,7 +75,7 @@ def montar_mensagem_contexto_invalido_etapa18(link_agendamento, nome_dependente=
     link = _normalizar_link_agendamento(link_agendamento)
     return _com_rodape(
         f"Olha, não consegui entender. "
-        f"Se ainda não escolheu o dia e horário para {experiencia}, use este link:\n\n "
+        f"Para escolher o melhor o dia e horário para {experiencia}, basta clicar este link:\n\n "
         f"{link}"
     )
 

@@ -22,8 +22,7 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 ### APRESENTAÇÃO EXCLUSIVA DO PRIMEIRO CONTATO
 APRESENTACAO_ETAPA1 = (
     # A separação completa fica no texto; o compositor apenas concatena.
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! "
-    "☺️\n\n"
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n\n"
 )
 
 ### PERGUNTA QUE COMPLETA A MENSAGEM INICIAL

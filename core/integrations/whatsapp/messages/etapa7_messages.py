@@ -38,7 +38,7 @@ MENSAGEM_PADRAO_TITULAR = compor_mensagem_inicial(
 
 ### APRESENTAÇÃO INICIAL DO DEPENDENTE
 APRESENTACAO_DEPENDENTE = (
-    "Maravilha, {nome_titular}!\n\n ☺️ "
+    "Maravilha, {nome_titular}! ☺️ \n\n"
     "Queremos presentear {nome_dependente} com uma *demonstração prática gratuita* na "
     "nossa unidade!\n\n"
     "{nome_dependente} também participará de uma avaliação cognitiva para conhecer melhor as "
