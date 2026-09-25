@@ -14,15 +14,13 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 ### MENSAGEM INICIAL DO TITULAR: EXPLICAÇÃO + PERGUNTA DA PROFISSÃO
 MENSAGEM_PADRAO_TITULAR_ETAPA4 = (
     "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
-    "conhecer melhor seu perfil, ok?\n"
-    "Me diz, qual a sua *profissão*?"
+    "conhecer melhor seu perfil. Me diz, qual a sua *profissão*?"
 )
 
 ### MENSAGEM INICIAL DO DEPENDENTE: A PROFISSÃO CONTINUA SENDO DO TITULAR
 MENSAGEM_PADRAO_DEPENDENTE_ETAPA4 = (
     "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
-    "conhecer melhor o seu perfil e o perfil da outra pessoa, ok?\n"
-    "Me diz, qual a sua *profissão* hoje?"
+    "conhecer melhor o seu perfil e o perfil da outra pessoa. Me diz, qual a sua *profissão* hoje?"
 )
 
 ### REPETIÇÃO COMUM ÀS DUAS ROTAS, SEM REAPRESENTAR A ABERTURA

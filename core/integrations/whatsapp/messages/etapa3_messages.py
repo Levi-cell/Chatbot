@@ -58,7 +58,7 @@ def montar_mensagem_contexto_etapa3(status_dependente):
     destinatario = "um dependente" if status_dependente else "você"
     return (
         "Olha, não consegui entender, "
-        f"Me confirma, esse atendimento é para {destinatario}?"
+        f"me confirma, esse atendimento é para {destinatario}?"
     )
 
 

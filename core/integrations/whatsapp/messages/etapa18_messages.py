@@ -21,19 +21,19 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 TEXTO_BOTAO_JA_AGENDEI_ETAPA18 = "Já reservei"
 
 RODAPE_ETAPA18_AGENDAMENTO = (
-    "Quando finalizar nos avisa aqui ☺️"
+    "Quando finalizar nos avisa aqui!"
 )
 
 ### TRECHO COM O LINK, REUTILIZADO NA INICIAL E NOS TRATAMENTOS
 MENSAGEM_REPETICAO_ETAPA18 = (
     "Para reservar {experiencia}, basta clicar neste link e escolher o melhor "
-    "dia e horário: "
+    "dia e horário:\n\n "
     "{link_agendamento}"
 )
 
 
 ### MENSAGEM INICIAL: AGRADECIMENTO + TRECHO DA RESERVA
-APRESENTACAO_ETAPA18 = "Obrigado por responder às perguntas! ☺️\n"
+APRESENTACAO_ETAPA18 = "Obrigado por responder às perguntas! ☺️\n\n"
 
 
 # A repetição mantém o link e o rodapé, sem agradecer novamente pelas perguntas.
@@ -75,7 +75,7 @@ def montar_mensagem_contexto_invalido_etapa18(link_agendamento, nome_dependente=
     link = _normalizar_link_agendamento(link_agendamento)
     return _com_rodape(
         f"Olha, não consegui entender. "
-        f"Se ainda não escolheu o dia e horário para {experiencia}, use este link: "
+        f"Se ainda não escolheu o dia e horário para {experiencia}, use este link:\n\n "
         f"{link}"
     )
 

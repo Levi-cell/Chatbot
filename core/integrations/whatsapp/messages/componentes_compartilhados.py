@@ -20,8 +20,8 @@ RODAPE_ETAPA8_ESPERA = "Estaremos te esperando!"
 RODAPE_OPCAO_UNICA = "Selecione apenas uma opção abaixo."
 
 # Formato visual no corpo; os rótulos acima também são usados como metadados.
-MENSAGEM_COM_CABECALHO = "*{cabecalho}*\n{mensagem}"
-MENSAGEM_COM_RODAPE = "{mensagem}\n_{rodape}_"
+MENSAGEM_COM_CABECALHO = "*{cabecalho}*\n\n{mensagem}"
+MENSAGEM_COM_RODAPE = "{mensagem}\n\n_{rodape}_"
 
 
 def montar_texto_com_cabecalho(mensagem, cabecalho):

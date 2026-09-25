@@ -142,7 +142,7 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
 MENSAGEM_IDADE_ACIMA_99_ETAPA6 = (
     "Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena "
     "*anamnese* com um dos nossos consultores.\n"
-    "Basta clicar no botão abaixo para falar com nosso time! 😊"
+    "Basta clicar no botão abaixo para falar com nosso time e iniciar a anamnese! 😊"
 )
 
 BOTAO_FALAR_COM_CONSULTORA_ETAPA6 = "Falar com Consultor"

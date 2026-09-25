@@ -78,6 +78,10 @@ Commit: `d001d674bb7fb08f8b70980aec5cacfb326009d2`
 
 Commit: `e5a2b45a5a71b487b6aa6a6f0aa9253e87185581`
 
+### V1.6.0 — Segundo follow-up e consulta etária personalizada
+
+Commit: `cdbc66f67a718c6ca82eec885237b69ed114865e`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

@@ -6,7 +6,7 @@ from .composicao import compor_tratamento
 MENSAGEM_TRATAMENTO_FINANCEIRO = (
     "Olha, demais informações como valores de investimento são *exclusivas* para cada aluno e "
     "só são possíveis de determinar após a "
-    "sua *experiência supera gratuita* na unidade.\n"
+    "sua *experiência supera gratuita* na unidade.\n\n"
 )
 PONTE_TRATAMENTO_FINANCEIRO = "Mas bora lá:\n\n"
 

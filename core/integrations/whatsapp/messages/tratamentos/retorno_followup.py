@@ -1,7 +1,7 @@
 """Saudação da reação ao follow-up; o worker valida a resposta da etapa."""
 
-MENSAGEM_RETORNO_FOLLOWUP_SEM_NOME = "Bom te ver novamente ☺️\n"
-MENSAGEM_RETORNO_FOLLOWUP_COM_NOME = "Bom te ver novamente, {nome_titular} ☺️\n"
+MENSAGEM_RETORNO_FOLLOWUP_SEM_NOME = "Bom te ver novamente ☺️\n\n"
+MENSAGEM_RETORNO_FOLLOWUP_COM_NOME = "Bom te ver novamente, {nome_titular} ☺️\n\n"
 
 
 def montar_saudacao_retomada_followup(nome_titular=None):

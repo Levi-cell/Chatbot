@@ -13,7 +13,7 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
 MENSAGEM_PADRAO_ETAPA2 = (
-    "Prazer, {nome_titular}! ☺️\n"
+    "Prazer, {nome_titular}! ☺️\n\n"
     "O Supera é um curso de *estimulação cognitiva* que trabalha habilidades "
     "cognitivas e socioemocionais por meio de atividades que estimulam atenção, "
     "concentração, memória, raciocínio e outras funções importantes para o dia a "

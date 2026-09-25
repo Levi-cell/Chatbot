@@ -52,6 +52,17 @@ visuais, não às funções que recebem textos para compor.** `\n` muda de linha
 `\n\n` deixa uma linha vazia; `\n\n\n` deixa duas. Dividir uma string em
 várias linhas do arquivo Python não insere quebras nem espaços no envio.
 
+Manter `\n\n` entre parágrafos. A correção de excesso reduz somente três
+quebras consecutivas para duas; não transformar duas em uma nem remover
+quebras simples indiscriminadamente. Todo rodapé existente deve ficar
+separado do corpo por uma linha vazia (`\n\n`), declarada no modelo
+`MENSAGEM_COM_RODAPE`. O WhatsApp não é responsável por criar esse espaço:
+o rodapé em itálico faz parte do texto enviado. Não acrescentar outro
+separador ao corpo antes de aplicar o modelo.
+
+Após o cabeçalho, usar também duas quebras (`\n\n`) antes da mensagem,
+declaradas em `MENSAGEM_COM_CABECALHO`, inclusive nas perguntas da triagem.
+
 - `compor_mensagem_inicial` e `compor_tratamento` apenas concatenam os
   fragmentos. Não inserem separadores, não removem quebras e não usam `strip()`
   no texto pronto. A apresentação, a orientação e a ponte declaram sua

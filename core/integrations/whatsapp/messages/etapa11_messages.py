@@ -15,33 +15,33 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 MENSAGEM_PADRAO_CLIENTE_ETAPA11 = (
     "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
-    "do seu cérebro. 🔎🧠\n"
-    "Dessa forma podemos preparar uma experiência personalizada, vamos começar? ☺️"
+    "do seu cérebro. 🔎🧠\n\n"
+    "Dessa forma podemos preparar uma experiência personalizada! ☺️"
 )
 MENSAGEM_PADRAO_DEPENDENTE_ETAPA11 = (
     "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
-    "do cérebro de {nome_dependente}. 🔎🧠\n"
-    "Dessa forma podemos preparar uma experiência personalizada, vamos começar? ☺️"
+    "do cérebro de {nome_dependente}. 🔎🧠\n\n"
+    "Dessa forma podemos preparar uma experiência personalizada! ☺️"
 )
 
 ### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
 MENSAGEM_REPETICAO_CLIENTE_ETAPA11 = (
-    "Vamos iniciar sua *triagem*? ☺️ Ela serve para entender como está a saúde "
+    "Vamos iniciar sua *triagem*? Ela serve para entender como está a saúde "
     "do seu cérebro. 🔎🧠"
 )
 MENSAGEM_REPETICAO_DEPENDENTE_ETAPA11 = (
-    "Vamos iniciar a *triagem* de {nome_dependente}? ☺️ Ela serve para entender como está "
+    "Vamos iniciar a *triagem* de {nome_dependente}? Ela serve para entender como está "
     "a saúde do cérebro de {nome_dependente}. 🔎🧠"
 )
 
 ### CONTEXTO INVÁLIDO: MENSAGEM COMPLETA, SEM CONCATENAR A REPETIÇÃO
 ORIENTACAO_CONTEXTO_CLIENTE_ETAPA11 = (
-    "Olha, não consegui entender, vamos iniciar sua *triagem*? ☺️ "
+    "Olha, não consegui entender, vamos iniciar sua *triagem*? "
     "Ela serve para entender como está a saúde do seu cérebro. 🔎🧠"
 )
 ORIENTACAO_CONTEXTO_DEPENDENTE_ETAPA11 = (
-    "Olha, não consegui entender, vamos iniciar a *triagem* de {nome_dependente}? ☺️ "
+    "Olha, não consegui entender, vamos iniciar a *triagem* de {nome_dependente}? "
     "Ela serve para entender como está a saúde do cérebro de {nome_dependente}. 🔎🧠"
 )
 

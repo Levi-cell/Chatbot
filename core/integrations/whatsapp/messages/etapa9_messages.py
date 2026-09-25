@@ -26,7 +26,7 @@ MENSAGEM_REPETICAO_DEPENDENTE = (
 
 
 ### MENSAGEM INICIAL DA ETAPA: SAUDAÇÃO PRÓPRIA + PERGUNTA
-APRESENTACAO_ETAPA9 = "Que bom ver você aqui novamente, {nome_titular}!\n"
+APRESENTACAO_ETAPA9 = "Que bom ver você aqui novamente, {nome_titular}!\n\n"
 
 
 def montar_mensagem_retorno_cliente_etapa9(

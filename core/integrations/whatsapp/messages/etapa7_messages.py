@@ -16,11 +16,11 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 ### APRESENTAÇÃO INICIAL DO TITULAR
 
 APRESENTACAO_TITULAR = (
-    "Maravilha, {nome_titular}! ☺️ "
+    "Maravilha, {nome_titular}! ☺️\n\n "
     "Queremos te presentear com uma *demonstração prática gratuita* na nossa "
-    "unidade!\n"
+    "unidade!\n\n"
     "Você também participará de uma avaliação cognitiva para conhecer melhor suas "
-    "habilidades de memória, atenção, concentração e raciocínio lógico.\n"
+    "habilidades de memória, atenção, concentração e raciocínio lógico.\n\n"
 )
 
 ### É USADA NA APRESENTAÇÃO E NA REPETIÇÃO
@@ -38,11 +38,11 @@ MENSAGEM_PADRAO_TITULAR = compor_mensagem_inicial(
 
 ### APRESENTAÇÃO INICIAL DO DEPENDENTE
 APRESENTACAO_DEPENDENTE = (
-    "Maravilha, {nome_titular}! ☺️ "
+    "Maravilha, {nome_titular}!\n\n ☺️ "
     "Queremos presentear {nome_dependente} com uma *demonstração prática gratuita* na "
-    "nossa unidade!\n"
+    "nossa unidade!\n\n"
     "{nome_dependente} também participará de uma avaliação cognitiva para conhecer melhor as "
-    "habilidades de memória, atenção, concentração e raciocínio lógico.\n"
+    "habilidades de memória, atenção, concentração e raciocínio lógico.\n\n"
 )
 
 ### TRECHO DO DEPENDENTE USADO NA INICIAL E NA REPETIÇÃO
@@ -84,7 +84,7 @@ def montar_mensagem_oferta_cliente_reforco_escolar_etapa7():
 ### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_oferta_cliente_contexto_invalido_etapa7():
     return (
-        "Olha, não consegui entender, me diz, você quer"
+        "Olha, não consegui entender, vamos"
         " reservar o melhor dia e horário para sua *experiência Supera gratuita*? 🧡"
     )
 
@@ -131,8 +131,8 @@ def montar_mensagem_oferta_dependente_reforco_escolar_etapa7(nome_dependente):
 ### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_oferta_dependente_contexto_invalido_etapa7(nome_dependente):
     return (
-        "Olha, não consegui entender, me diz, "
-        "você quer reservar o melhor dia e horário para a *experiência Supera gratuita* de"
+        "Olha, não consegui entender, "
+        "vamos reservar o melhor dia e horário para a *experiência Supera gratuita* de"
         f" {nome_dependente}? 🧡"
     )
 

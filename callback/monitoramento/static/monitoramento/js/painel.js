@@ -213,22 +213,29 @@
   function mostrarResultadoFaixa(d){
     const t=d.titulares,p=d.dependentes,idade=numero.format(d.idade_minima)+(d.idade_minima===1?' ano':' anos');
     const contar=(n,singular,plural)=>numero.format(n)+' '+(n===1?singular:plural);
-    let texto;
-    if(d.publico==='titulares'){
-      texto='Você tem '+contar(t.leads,'lead titular','leads titulares')+' com idade igual ou superior a '+idade+'. '
-        +contar(t.funil,'foi enviado','foram enviados')+' ao funil.';
-    }else if(d.publico==='dependentes'){
-      texto='Você tem '+contar(p.leads,'lead para dependente','leads para dependentes')+' com idade igual ou superior a '+idade+'. '
-        +contar(p.funil,'foi enviado','foram enviados')+' ao funil.';
-    }else{
-      texto='Você tem um total de '+contar(d.total,'lead','leads')+' com idade igual ou superior a '+idade+', sendo '
-        +contar(t.leads,'titular','titulares')+' e '+contar(p.leads,'dependente','dependentes')+'. '
-        +numero.format(t.funil)+' desses titulares e '+numero.format(p.funil)+' desses dependentes foram enviados ao funil.';
+    const tabela=criar('table','tabela-resultado-faixa');
+    tabela.appendChild(criar('caption','','Leads com idade igual ou acima de '+idade));
+    const cabecalho=criar('thead'),colunas=criar('tr');
+    ['Público','Leads','Enviados ao funil'].forEach(texto=>{
+      const coluna=criar('th','',texto);coluna.scope='col';colunas.appendChild(coluna);
+    });
+    cabecalho.appendChild(colunas);
+    const linha=(rotulo,leads,funil)=>{
+      const tr=criar('tr'),nome=criar('th','',rotulo);nome.scope='row';
+      tr.append(nome,criar('td','',numero.format(leads)),criar('td','',numero.format(funil)));
+      return tr;
+    };
+    const linhas=criar('tbody');
+    if(d.publico!=='dependentes')linhas.appendChild(linha('Titulares',t.leads,t.funil));
+    if(d.publico!=='titulares')linhas.appendChild(linha('Dependentes',p.leads,p.funil));
+    tabela.append(cabecalho,linhas);
+    if(d.publico==='todos'){
+      const total=criar('tfoot');total.appendChild(linha('Total',d.total,t.funil+p.funil));tabela.appendChild(total);
     }
     const detalhe=contar(d.contatos,'contato representado','contatos representados')+' · '+d.periodo.rotulo
       +' · Consultado em '+data.format(new Date(d.periodo.fim))+' às '+hora.format(new Date(d.periodo.fim));
     consultaIdade.resultado.className='resultado-faixa';
-    consultaIdade.resultado.replaceChildren(criar('p','resumo-faixa',texto),criar('p','detalhe-faixa',detalhe));
+    consultaIdade.resultado.replaceChildren(tabela,criar('p','detalhe-faixa',detalhe));
   }
   async function consultarIdade(evento){
     evento.preventDefault();
@@ -273,7 +280,7 @@
     if(consultaIdade.cartao)return consultaIdade.cartao;
     const cartao=criar('article','cartao consulta-faixa');
     cartao.id='consultaFaixaEtaria';
-    cartao.appendChild(titulo('Consulta de faixa etária personalizada','Encontre leads a partir de uma idade e confira quantos foram para o funil.'));
+    cartao.appendChild(titulo('Consulta de faixa etária personalizada','Consulte leads com idade igual ou acima da informada e veja quantos foram enviados ao funil.'));
     const formulario=criar('form','formulario-faixa');formulario.noValidate=true;
     const campoIdade=criar('label','campo-faixa','Idade mínima (anos)');
     const idade=criar('input');idade.id='idadeMinimaConsulta';idade.name='idade_minima';

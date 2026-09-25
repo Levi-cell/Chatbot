@@ -37,7 +37,7 @@ MENSAGEM_REPETICAO_ETAPA1 = "Me diz, qual o seu primeiro nome?"
 # Mensagem completa: a própria orientação já pede o nome. Não concatenar
 # apresentação padrão, repetição ou rodapé à versão aprovada desta abertura.
 MENSAGEM_INFORMACOES_INICIO_ETAPA1 = (
-    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️ "
+    "{saudacao}! Sou {artigo_agente} {nome_agente}, assistente do {nome_unidade}! ☺️\n\n "
     "Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?"
 )
 

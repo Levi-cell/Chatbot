@@ -7,7 +7,7 @@ from core.integrations.whatsapp.messages.tratamentos.midia import (
 
 ### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
 MENSAGEM_PADRAO_ETAPA21 = (
-    "Perfeito! 😊 " "Deixe aqui abaixo seu comentário para melhorar nosso atendimento."
+    "Perfeito! 😊\n\nDeixe aqui abaixo seu comentário para melhorar nosso atendimento."
 )
 
 ### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
