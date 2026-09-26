@@ -44,6 +44,8 @@ _PADROES = tuple(
     re.compile(padrao)
     for padrao in (
         _PERGUNTA,
+        # Pedido direto, inclusive textos de anúncio como "Conhecer o curso".
+        rf"(?:{_INTENCAO}\s+)?conhecer\s+(?:(?:o\s+)?curso|{_REFERENCIA})",
         rf"{_INTENCAO}\s+(?:saber|entender)\s+{_PERGUNTA}",
         rf"{_INTENCAO}\s+(?:saber|conhecer|entender)\s+"
         rf"(?:um\s+pouco\s+)?(?:mais|melhor)(?:\s+{_ASSUNTO})?",

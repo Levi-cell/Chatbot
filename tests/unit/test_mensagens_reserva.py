@@ -207,8 +207,10 @@ class MensagensReservaTests(unittest.TestCase):
                     oferta = texto.removeprefix(prefixo or "")
                     self.assertTrue(oferta.startswith("Maravilha, Maria!"))
                     self.assertEqual(oferta.count("Maravilha"), 1)
+                    paragrafos = oferta.split("\n\n")
+                    self.assertEqual(paragrafos[0].strip(), "Maravilha, Maria! ☺️")
                     self.assertIn(
-                        "*demonstração prática gratuita*", oferta.split("\n\n")[0]
+                        "*demonstração prática gratuita*", paragrafos[1]
                     )
                     self.assertIn("*experiência Supera exclusiva*", oferta)
                     self.assertNotIn("{nome", oferta)

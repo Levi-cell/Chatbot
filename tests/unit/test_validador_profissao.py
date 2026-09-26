@@ -40,7 +40,7 @@ class ValidadorProfissaoTests(unittest.TestCase):
                             etapa=3, texto=resposta, dependente=dependente
                         )
                         prefixo = (
-                            "Bom te ver novamente, Ana ☺️\n" if retorno else ""
+                            "Bom te ver novamente, Ana ☺️\n\n" if retorno else ""
                         )
                         if retorno != "followup":
                             contexto.pop("retorno_followup")

@@ -74,7 +74,10 @@ class MensagensEtapa11Tests(unittest.TestCase):
                         envio = flow_sender(cx)
                     texto = self.conferir_envio(envio, wa, dependente, prefixo)
                     self.assertIn("*triagem com 6 perguntas rápidas*", texto)
-                    self.assertIn("experiência personalizada, vamos começar?", texto)
+                    self.assertIn(
+                        "Dessa forma podemos preparar uma experiência personalizada! ☺️",
+                        texto,
+                    )
                     self.assertEqual(envio["evento_transicao"], "email_valido")
                     self.assertEqual(envio["email_cliente"], "maria@example.com")
 
@@ -121,7 +124,7 @@ class MensagensEtapa11Tests(unittest.TestCase):
                 with patch.object(cliente, "WhatsApp", return_value=wa):
                     envio = enviar_repeticao_followup(cx)
                 texto = self.conferir_envio(
-                    envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n"
+                    envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n\n"
                 )
                 self.assertEqual(envio["mensagem_bot"], texto)
                 self.assertNotIn("antes de prosseguir", texto)

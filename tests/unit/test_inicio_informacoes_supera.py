@@ -45,6 +45,11 @@ class PedidoInformacoesSuperaTests(unittest.TestCase):
             "Posso ter mais informações sobre isso",
             "Como funciona",
             "Como funciona o Supera",
+            "Conhecer o curso",
+            "Conhecer curso",
+            "Quero conhecer o curso",
+            "Gostaria de conhecer esse curso",
+            "Tenho interesse em conhecer o Supera",
             "O que é o método Supera",
             "O que é esse curso",
             "De que se trata isso",
@@ -97,6 +102,11 @@ class PedidoInformacoesSuperaTests(unittest.TestCase):
             "Supera",
             "informações",
             "Não quero informações",
+            "Não quero conhecer o curso",
+            "Conhecer o curso de inglês",
+            "Quero conhecer o preço do curso",
+            "Quero conhecer Maria",
+            "Conhecer o curso, mas não quero receber mensagens",
             "Não quero saber o que é o Supera",
             "Quero reservar",
             "Gostaria de informações sobre preços",
@@ -131,7 +141,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
                 ) as validar_nome:
                     envio = flow_sender(contexto)
                 esperado = (
-                    f"Boa tarde! Sou {artigo} {nome_agente}, assistente do Supera Teste! ☺️ "
+                    f"Boa tarde! Sou {artigo} {nome_agente}, assistente do Supera Teste! ☺️\n\n"
                     "Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?"
                 )
                 wa.send_message.assert_called_once()
@@ -168,6 +178,8 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             "Olá",
             "O que é o Supera?",
             "Oi, gostaria de saber um pouco sobre o Supera",
+            "Conhecer o curso",
+            "Olá! Quero conhecer o curso",
         ):
             with self.subTest(texto=texto), patch.object(
                 cliente, "WhatsApp", return_value=cliente_simulado()
@@ -182,7 +194,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             self.assertEqual(proxima["primeiro_nome_cliente"], "Maria")
             self.assertTrue(
                 proxima["mensagem_bot"].startswith(
-                    "Prazer, Maria! ☺️\nO Supera"
+                    "Prazer, Maria! ☺️\n\nO Supera"
                 )
             )
 
@@ -195,6 +207,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             ),
             ("O que é o Supera? É reforço escolar?", "text", "duvida_reforco_escolar"),
             ("Quero informações sobre preços", "text", "pergunta_financeira"),
+            ("Quero conhecer o curso, quanto custa?", "text", "pergunta_financeira"),
             ("É reforço escolar? Quanto custa?", "text", "duvida_reforco_escolar"),
         )
         for texto, tipo, tratamento in casos:
@@ -229,7 +242,7 @@ class AberturaInformacoesSuperaTests(unittest.TestCase):
             retorno = enviar_repeticao_followup(contexto)
         self.assertEqual(
             retorno["mensagem_bot"],
-            "Bom te ver novamente ☺️\n" + etapa1_messages.MENSAGEM_REPETICAO_ETAPA1,
+            "Bom te ver novamente ☺️\n\n" + etapa1_messages.MENSAGEM_REPETICAO_ETAPA1,
         )
         self.assertNotIn("evento_transicao", retorno)
 

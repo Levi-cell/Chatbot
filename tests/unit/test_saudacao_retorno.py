@@ -10,7 +10,7 @@ from core.repositories.atendimento import historico
 from workers.worker_flow.response_flow import flow_sender
 
 
-SAUDACAO = "Bom te ver novamente, Maria ☺️\n"
+SAUDACAO = "Bom te ver novamente, Maria ☺️\n\n"
 
 
 def contexto_sender(*, saudacao=SAUDACAO, resposta_bot=None, etapa=2):
