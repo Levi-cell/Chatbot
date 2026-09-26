@@ -94,7 +94,7 @@ saúda o titular pelo nome e destaca **demonstração prática gratuita**; a per
 final convida a reservar sua **experiência Supera exclusiva**. A rota de dependente
 preserva seu nome como participante. Os montadores e contextos de atendimento
 distinguem `nome_titular`, `nome_dependente` e `nome_agente`, sem alterar o esquema
-do banco. Os botões das etapas 7 e 9 exibem **Quero reservar**;
+do banco. Os botões das etapas 7 e 9 exibem **Reservar agora**;
 a etapa 18 usa **Já reservei**. O aceite por texto continua reconhecendo expressões
 antigas como `quero agendar` e `já agendei`, conforme a etapa. Perguntas sobre como
 reservar não são aceites; na etapa 18, intenção de reservar não comprova conclusão.

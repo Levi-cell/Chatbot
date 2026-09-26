@@ -94,6 +94,10 @@ Commit: `ab157b4d53fec2fe60356047ac1709535731e2f1`
 
 Commit: `ec47623ae9a06ee0e1b5337a23b64df2da1bdf3a`
 
+### V1.6.5 — Follow-up adaptado à etapa da oferta
+
+Commit: `e1ea04b0f620da0eec783b818a72337f5b5f2fc0`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

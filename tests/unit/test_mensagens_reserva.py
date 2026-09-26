@@ -223,7 +223,7 @@ class MensagensReservaTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         [b.title for b in wa.send_message.call_args.kwargs["buttons"]],
-                        ["Quero reservar", "Talvez mais tarde"],
+                        ["Reservar agora", "Talvez mais tarde"],
                     )
                     self.assertEqual(texto.count(envio["rodape_mensagem"]), 1)
 
@@ -431,6 +431,8 @@ class AceiteReservaTests(unittest.TestCase):
             (validar_etapa9, "retorno_confirmado"),
         ):
             for texto in (
+                "Reservar agora",
+                "  RESERVAR agora!  ",
                 "Quero reservar",
                 "quero",
                 "Quero agendar",
@@ -444,6 +446,9 @@ class AceiteReservaTests(unittest.TestCase):
                 with self.subTest(validador=validar.__name__, texto=texto):
                     self.assertEqual(validar(texto), esperado)
             for texto in (
+                "não quero reservar agora",
+                "como reservar agora?",
+                "quero saber como reservar agora",
                 "não quero reservar",
                 "como reservar?",
                 "quero saber como reservar",
@@ -464,6 +469,7 @@ class AceiteReservaTests(unittest.TestCase):
         ):
             self.assertEqual(validar_etapa18(texto), "agendamento_confirmado")
         for texto in (
+            "Reservar agora",
             "Quero reservar",
             "Quero agendar",
             "não reservei",

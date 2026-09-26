@@ -9,6 +9,7 @@ OPCAO_ACEITA = "aceita"
 OPCAO_ADIADA = "adiada"
 
 TEXTO_BOTAO_QUERO_RESERVAR = "quero reservar"
+TEXTO_BOTAO_RESERVAR_AGORA = "reservar agora"
 TEXTO_BOTAO_TALVEZ_MAIS_TARDE = "talvez mais tarde"
 
 # Só retira a expressão inicial de ausência de objeção. O restante da resposta
@@ -116,7 +117,10 @@ def validar_aceite_reserva(conteudo_texto):
     if PADRAO_PEDIDO_INFORMACOES.search(texto_normalizado):
         return None
 
-    if texto_normalizado == TEXTO_BOTAO_QUERO_RESERVAR:
+    if texto_normalizado in (
+        TEXTO_BOTAO_RESERVAR_AGORA,
+        TEXTO_BOTAO_QUERO_RESERVAR,
+    ):
         return OPCAO_ACEITA
 
     if PADRAO_RESPOSTA_POSITIVA.search(texto_normalizado):

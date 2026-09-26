@@ -108,7 +108,7 @@ def montar_mensagem_retorno_dependente_contexto_invalido_etapa9(nome_dependente)
 
 # BOTOES DA ETAPA 9
 
-BOTAO_ETAPA9_QUERO_AGENDAR = "Quero reservar"
+BOTAO_ETAPA9_QUERO_AGENDAR = "Reservar agora"
 BOTAO_ETAPA9_TALVEZ_MAIS_TARDE = "Talvez mais tarde"
 
 BOTOES_ETAPA9 = (

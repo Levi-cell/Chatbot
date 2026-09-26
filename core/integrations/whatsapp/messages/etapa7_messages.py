@@ -139,7 +139,7 @@ def montar_mensagem_oferta_dependente_contexto_invalido_etapa7(nome_dependente):
 
 # BOTOES DA ETAPA 7
 
-BOTAO_ETAPA7_QUERO_AGENDAR = "Quero reservar"
+BOTAO_ETAPA7_QUERO_AGENDAR = "Reservar agora"
 BOTAO_ETAPA7_TALVEZ_MAIS_TARDE = "Talvez mais tarde"
 
 BOTOES_ETAPA7 = (

@@ -91,8 +91,10 @@ declaradas em `MENSAGEM_COM_CABECALHO`, inclusive nas perguntas da triagem.
 - Mensagens já persistidas não são reformatadas. A recuperação da etapa 6
   reconhece também o espaçamento anterior, exclusivamente para concluir retries.
 
-Entusiasmo não pode afirmar algo que ainda não aconteceu. `Quero reservar`
-expressa intenção; não significa que o dia e horário já foram escolhidos.
+Os botões das etapas 7 e 9 exibem `Reservar agora`. Os validadores aceitam tanto
+`Reservar agora` quanto `Quero reservar`, preservando respostas de botões antigos.
+Entusiasmo não pode afirmar algo que ainda não aconteceu. O aceite expressa
+intenção; não significa que o dia e horário já foram escolhidos.
 Perguntas da triagem devem permanecer neutras: não elogiar ou reprovar uma
 resposta como `Nunca` ou `Frequentemente`, nem transformar triagem em diagnóstico.
 
@@ -126,7 +128,7 @@ Maravilha, {nome_titular}! ☺️ Queremos te presentear com uma *demonstração
 
 Resposta não compreendida:
 Olha, não consegui entender se você quer reservar sua experiência Supera gratuita.
-Escolha Quero reservar para continuar ou Talvez mais tarde para deixar para outro momento.
+Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outro momento.
 ```
 
 Uma dúvida não precisa receber todo o discurso comercial novamente. O
@@ -384,13 +386,10 @@ após mais 7h sem resposta desde o envio real do primeiro.
 
 O primeiro lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
 no atendimento; na etapa 1, usa `Olá! ☺️`, sem aproveitar nomes antigos.
-Une “Queremos muito continuar te ajudando” ao convite para receber a
-**experiência Supera gratuita** na unidade. Após `\n\n`, nas etapas 1–6 pergunta
-“Podemos continuar seu atendimento por aqui?”. Nas etapas 7–17, após a oferta,
-pergunta “Podemos continuar por aqui para reservar sua experiência?”; para
-dependente, usa “reservar a experiência de {nome_dependente}” ou, se faltar o
-nome, “reservar a experiência”. A pergunta convida a reservar, sem sugerir que
-já existe uma reserva confirmada. Essa variação não altera a elegibilidade do envio.
+Começa com “Queremos muito continuar te ajudando! Será um prazer receber” e oferece a
+**experiência Supera gratuita** na unidade. Após `\n\n`, sempre pergunta
+“Podemos continuar seu atendimento por aqui?”, nas etapas 1–17 e nas duas rotas,
+inclusive depois da oferta. A pergunta final não varia conforme a etapa.
 No convite, para titular usa “receber você”; para dependente com nome, “receber
 você e {nome_dependente}”; para dependente ainda sem nome, “receber vocês”, sem
 presumir que a experiência será para o titular. O rodapé de todas as variantes é
@@ -572,7 +571,7 @@ def montar_mensagem_financeiro():
 def montar_mensagem_contexto_invalido():
     return (
         "Olha, não consegui entender se você quer reservar sua experiência. "
-        "Escolha Quero reservar ou Talvez mais tarde."
+        "Escolha Reservar agora ou Talvez mais tarde."
     )
 ```
 

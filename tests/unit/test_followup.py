@@ -523,7 +523,7 @@ class RetornoEtapa8Tests(unittest.TestCase):
                             b.title
                             for b in fake.send_message.call_args.kwargs["buttons"]
                         ],
-                        ["Quero reservar", "Talvez mais tarde"],
+                        ["Reservar agora", "Talvez mais tarde"],
                     )
 
     def test_mapa_ausente_ou_destino_errado_recusa_antes_de_enviar(self):
@@ -631,26 +631,26 @@ class ProativoTests(unittest.TestCase):
                 if not dependente:
                     self.assertNotIn("Bia", texto)
 
-    def test_primeiro_pergunta_sobre_reservar_apenas_depois_da_oferta(self):
-        for etapa, dependente, nome_dependente, pergunta in (
-            (1, False, None, "Podemos continuar seu atendimento por aqui?"),
-            (6, False, None, "Podemos continuar seu atendimento por aqui?"),
-            (6, True, "Bia", "Podemos continuar seu atendimento por aqui?"),
-            (7, False, "Bia", "Podemos continuar por aqui para reservar sua experiência?"),
-            (7, True, " Bia ", "Podemos continuar por aqui para reservar a experiência de Bia?"),
-            (8, False, None, "Podemos continuar por aqui para reservar sua experiência?"),
-            (8, True, "Bia", "Podemos continuar por aqui para reservar a experiência de Bia?"),
-            (17, False, None, "Podemos continuar por aqui para reservar sua experiência?"),
-            (17, True, "Bia", "Podemos continuar por aqui para reservar a experiência de Bia?"),
-            (7, True, None, "Podemos continuar por aqui para reservar a experiência?"),
-            (7, True, "   ", "Podemos continuar por aqui para reservar a experiência?"),
+    def test_primeiro_mantem_pergunta_de_atendimento_antes_e_depois_da_oferta(self):
+        for etapa, dependente, nome_dependente in (
+            (1, False, None),
+            (6, False, None),
+            (6, True, "Bia"),
+            (7, False, "Bia"),
+            (7, True, " Bia "),
+            (8, False, None),
+            (8, True, "Bia"),
+            (17, False, None),
+            (17, True, "Bia"),
+            (7, True, None),
+            (7, True, "   "),
         ):
             with self.subTest(etapa=etapa, dependente=dependente, nome=nome_dependente):
                 texto = montar_mensagem_followup(
                     id_etapa=etapa, nome_titular="Ana", status_dependente=dependente,
                     nome_dependente=nome_dependente,
                 )
-                self.assertEqual(texto.split("\n\n")[2], pergunta)
+                self.assertEqual(texto.split("\n\n")[2], "Podemos continuar seu atendimento por aqui?")
 
     def test_despedida_preserva_nome_da_rota_e_oculta_cadastro_antigo_na_etapa1(self):
         for etapa, dependente, nome_dependente, inicio, beneficio in (
@@ -767,7 +767,7 @@ class ProativoTests(unittest.TestCase):
         texto = enviar.call_args.kwargs["mensagem"]
         self.assertTrue(texto.startswith("Olá, Maria! ☺️\n\n"))
         self.assertIn("receber você e Pedro na nossa unidade", texto)
-        self.assertIn("Podemos continuar por aqui para reservar a experiência de Pedro?", texto)
+        self.assertIn("Podemos continuar seu atendimento por aqui?", texto)
         self.assertNotIn("Ana", texto)
         self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
         self.assertEqual(persistir.call_args.args[0]["followup_stage"], 0)

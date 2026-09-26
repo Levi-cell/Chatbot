@@ -5,13 +5,11 @@ from .tratamentos.retorno_followup import montar_saudacao_retomada_followup
 
 MENSAGEM_LEMBRETE_FOLLOWUP = (
     "{saudacao}\n\n"
-    "Queremos muito continuar te ajudando e receber "
+    "Queremos muito continuar te ajudando! Será um prazer receber "
     "{participantes} na nossa unidade para {artigo_experiencia} "
     "*experiência Supera gratuita*! 🧡\n\n"
-    "{pergunta}"
+    "Podemos continuar seu atendimento por aqui?"
 )
-PERGUNTA_FOLLOWUP_ATENDIMENTO = "Podemos continuar seu atendimento por aqui?"
-PERGUNTA_FOLLOWUP_RESERVA = "Podemos continuar por aqui para reservar {experiencia}?"
 RODAPE_LEMBRETE_FOLLOWUP = "Estaremos te esperando!"
 RODAPE_ENCERRAMENTO_FOLLOWUP = "Abraços, {nome_agente}. 🧡"
 
@@ -40,20 +38,14 @@ def montar_mensagem_followup(
     saudacao = f"Olá, {nome_titular}! ☺️" if nome_titular else "Olá! ☺️"
     participantes = "você"
     artigo_experiencia = "sua"
-    experiencia = "sua experiência"
     if status_dependente and id_etapa > 1:
         nome_dependente = str(nome_dependente or "").strip()
         # A rota já é conhecida, mesmo que o nome do dependente ainda falte.
         participantes = f"você e {nome_dependente}" if nome_dependente else "vocês"
         artigo_experiencia = "a"
-        experiencia = f"a experiência de {nome_dependente}" if nome_dependente else "a experiência"
-    # A oferta começa na etapa 7; esta escolha de texto não amplia a elegibilidade.
-    pergunta = PERGUNTA_FOLLOWUP_ATENDIMENTO
-    if 7 <= id_etapa <= 17:
-        pergunta = PERGUNTA_FOLLOWUP_RESERVA.format(experiencia=experiencia)
     mensagem = MENSAGEM_LEMBRETE_FOLLOWUP.format(
         saudacao=saudacao, participantes=participantes,
-        artigo_experiencia=artigo_experiencia, pergunta=pergunta,
+        artigo_experiencia=artigo_experiencia,
     )
     return montar_texto_com_rodape(mensagem, RODAPE_LEMBRETE_FOLLOWUP)
 
