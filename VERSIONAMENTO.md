@@ -102,6 +102,10 @@ Commit: `e1ea04b0f620da0eec783b818a72337f5b5f2fc0`
 
 Commit: `087b5eb348d5fa84a8c78ecf26c37b59f52afda7`
 
+### V1.7.0 — Filtro comercial e encerramentos por idade
+
+Commit: `dbe38014a93b3d264e280911bd6db0f607591777`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

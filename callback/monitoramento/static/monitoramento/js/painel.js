@@ -378,13 +378,6 @@
     const cartao=criar('article','cartao encerramentos-idade');
     cartao.appendChild(titulo('Encaminhamentos e encerramentos por idade',
       'Conversas encerradas no período, por motivos compatíveis com as regras atuais da unidade.'));
-    const resumo=criar('div','resumo-encerramentos');
-    [[dados.total_encaminhadas,'com contato comercial enviado'],
-     [dados.total_sem_encaminhamento,'encerradas sem encaminhamento']].forEach(([total,rotulo])=>{
-      const item=criar('p');
-      item.append(criar('strong','',numero.format(total)),criar('span','',rotulo));
-      resumo.appendChild(item);
-    });
     const tabela=criar('table','tabela-encerramentos');
     tabela.appendChild(criar('caption','sr-only','Conversas encerradas por motivo no período selecionado'));
     const cabecalho=criar('thead'),titulos=criar('tr'),linhas=criar('tbody');
@@ -401,8 +394,9 @@
     tabela.append(cabecalho,linhas);
     const suporte=dados.idade_minima_suporte===null?'Suporte configurável desativado.':
       'Suporte atual: '+dados.idade_minima_suporte+'+ até 89 anos.';
-    cartao.append(resumo,tabela,criar('p','nota-faixa',suporte+' Regra universal: 90+. Mínimo para dependentes: '+dados.idade_minima_dependente+' anos.'));
+    cartao.append(tabela,criar('p','nota-faixa',suporte+' Regra universal: 90+. Mínimo para dependentes: '+dados.idade_minima_dependente+' anos.'));
     cartao.appendChild(criar('p','nota-faixa','Cada conversa conta uma vez, pela data de encerramento. Motivos de configurações diferentes e registros antigos sem limite identificado não entram nesta tabela. Envio do contato não confirma clique ou atendimento humano.'));
+    cartao.appendChild(criar('p','nota-faixa','Para encontrar os chats que merecem a atenção do comercial, acesse a seção Conversas e selecione o filtro Comercial. O filtro considera a última conversa de cada contato com a unidade.'));
     return cartao;
   }
   function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Na consulta de faixa etária personalizada, cada titular conta uma vez e cada cadastro de dependente conta separadamente. O total pode superar o número de contatos. As idades são as atualmente cadastradas.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','A tabela de encerramentos por idade conta conversas, pela data de encerramento e pelos motivos compatíveis com a configuração atual. O filtro Comercial mostra chats cuja última conversa exige análise comercial, inclusive menores que não receberam o contato da unidade.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
