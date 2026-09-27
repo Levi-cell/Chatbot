@@ -68,7 +68,6 @@ RELATORIO = {
                    {'dependentes_por_titular': 2, 'titulares': 1}],
     },
     'unidade': {'nome': 'Supera Santo Antônio de Jesus', 'idade_minima_suporte': 60},
-    'encaminhados_comercial_por_idade': 8,
     'periodo': CONVERSAS['periodo'], 'metricas': CONVERSAS['metricas'],
     'tendencias': {'leads': 12.4, 'mensagens': 8.1, 'funil': -3.2, 'avaliacoes': 5.0, 'nota_media': 2.1},
     'atividade': [
@@ -91,3 +90,27 @@ CONTATOS = [
     {'id_cliente': 140, 'nome': 'Edcarlos Silva', 'email': 'edcarlos@example.com', 'waid_telefone': '557194111866'},
     {'id_cliente': 141, 'nome': None, 'email': None, 'waid_telefone': '557599111222'},
 ]
+
+
+# Casos fictícios explícitos para revisão do novo filtro e da tabela.
+CONVERSAS['conversas'][2]['comercial'] = {
+    'id_conversa': 150, 'motivo': 'suporte_idoso_60', 'tag': '60+',
+    'descricao': 'Titular encaminhado por suporte 60+', 'contato_enviado': True,
+    'participante': 'Titular', 'resposta_idade': 'Tenho 65 anos', 'nome_dependente': None,
+}
+RELATORIO['encerramentos_por_idade'] = {
+    'idade_minima_suporte': 60, 'idade_minima_dependente': 4,
+    'total_encaminhadas': 15, 'total_sem_encaminhamento': 5,
+    'linhas': [
+        {'motivo': 'suporte_idoso_60', 'rotulo': 'Titulares · suporte 60+ (até 89 anos)',
+         'contato_enviado': True, 'destino': 'Contato comercial enviado', 'conversas': 10},
+        {'motivo': 'idade_universal_90', 'rotulo': 'Titulares · 90+ (regra universal)',
+         'contato_enviado': True, 'destino': 'Contato comercial enviado', 'conversas': 3},
+        {'motivo': 'idade_universal_90', 'rotulo': 'Dependentes · 90+ (regra universal)',
+         'contato_enviado': True, 'destino': 'Contato comercial enviado', 'conversas': 2},
+        {'motivo': 'titular_menor_18', 'rotulo': 'Titulares · menos de 18 anos',
+         'contato_enviado': False, 'destino': 'Encerrado sem encaminhamento', 'conversas': 4},
+        {'motivo': 'dependente_menor_4', 'rotulo': 'Dependentes · menos de 4 anos',
+         'contato_enviado': False, 'destino': 'Encerrado sem encaminhamento', 'conversas': 1},
+    ],
+}

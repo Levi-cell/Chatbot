@@ -219,3 +219,11 @@ código, estáticos e serviços. A migração incremental está em
 em `rollback/20260911_idade_minima_suporte.sql`. Não executar em instalações
 novas, não reaplicar a migração de follow-up e não editar a migração histórica
 que criou a coluna booleana. Os comandos só pertencem à implantação aprovada.
+
+
+## Filtro Comercial e regras de idade
+
+Ver [procedimento coordenado](filtro_comercial_regras_idade.md). A migração
+`migrations/20260926_filtro_comercial_regras_idade.sql` exige telefones reais válidos
+e interrompe a transação se houver pendência. Não executá-la com código antigo
+processando atendimentos ou permitindo edição simultânea no Admin.

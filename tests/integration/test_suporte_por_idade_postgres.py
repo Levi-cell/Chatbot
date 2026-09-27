@@ -132,11 +132,14 @@ class SuporteIdadePostgresTests(unittest.TestCase):
         self.conn.execute(ddl_unidade)
         self.conn.execute('''INSERT INTO chatbot.unidade
             (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel, telefone,
-             waba_id, phone_number_id, link_agendamento)
+             waba_id, phone_number_id, link_agendamento, numero_comercial)
             VALUES (1, 'Nova', 'Suh', 'feminino', 'teste', 'teste@example.com', '5571999999999',
-                    'waba', 'phone', 'https://example.com')''')
+                    'waba', 'phone', 'https://example.com', '5571999999999')''')
         self.assertIsNone(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade').fetchone()[0])
-        self.assert_dominio()
+        for limite in (None, 50, 60, 70, 80):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s', (limite,))
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=90')
 
     def test_reversao_preserva_politica_null_60(self):
         self.migrar()
@@ -232,10 +235,14 @@ class SuporteIdadePostgresTests(unittest.TestCase):
                     'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
                     (limite,),
                 )
-                self.assertEqual(
-                    buscar_contexto_etapa6(5, 1, cursor)['idade_minima_suporte'],
-                    limite,
-                )
+                if limite == 90:
+                    # A migração histórica permite 90; o runtime novo exige a posterior.
+                    with self.assertRaises(ValueError):
+                        buscar_contexto_etapa6(5, 1, cursor)
+                else:
+                    self.assertEqual(
+                        buscar_contexto_etapa6(5, 1, cursor)['idade_minima_suporte'], limite,
+                    )
                 self.assertEqual(
                     painel.buscar_unidade(1, cursor)['idade_minima_suporte'], limite,
                 )

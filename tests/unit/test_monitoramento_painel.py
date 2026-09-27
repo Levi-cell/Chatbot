@@ -283,7 +283,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
         relatorio = montar_relatorio(
             {'leads': 2, 'mensagens': 4, 'funil': 1, 'avaliacoes': 0, 'nota_media': None},
             {'leads': 1, 'mensagens': 2, 'funil': 0, 'avaliacoes': 1, 'nota_media': 5.0},
-            {}, {}, [], [], encaminhados_comercial_por_idade=0,
+            {}, {}, [], [],
         )
         self.assertIsNone(relatorio['tendencias']['nota_media'])
 

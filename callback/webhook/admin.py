@@ -232,15 +232,14 @@ class UnidadeAdmin(admin.ModelAdmin):
                 super()._post_clean()
 
                 if (
-                    self.cleaned_data.get("idade_minima_suporte") is not None
-                    and not numero_comercial_whatsapp_valido(
+                    not numero_comercial_whatsapp_valido(
                         self.cleaned_data.get("numero_comercial")
                     )
                 ):
                     self.add_error(
                         "numero_comercial",
                         "Informe um número comercial brasileiro válido "
-                        "antes de ativar o encaminhamento por idade.",
+                        "para o contato da unidade, inclusive com suporte desativado.",
                     )
 
                 if change or self.errors:

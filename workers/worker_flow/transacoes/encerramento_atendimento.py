@@ -1,11 +1,15 @@
 import logging
 
-from core.validacoes.suporte_por_idade import (
-    validar_idade_minima_suporte,
+from core.validacoes.encerramento_por_idade import (
+    MOTIVO_TITULAR_MENOR,
+    MOTIVO_UNIVERSAL,
+    motivo_dependente,
+    motivo_suporte,
+    reconstruir_limite_suporte,
 )
 
 from core.integrations.whatsapp.messages.etapa6_messages import (
-    reconhecer_mensagem_suporte_idoso_etapa6,
+    reconhecer_encerramento_etapa6,
 )
 from core.repositories.atendimento.conversas import encerrar_conversa
 from core.repositories.atendimento.dependentes import (
@@ -13,7 +17,6 @@ from core.repositories.atendimento.dependentes import (
 )
 from core.repositories.fluxo.politicas import buscar_politica_etapa
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa6 import (
-    obter_idade_minima_dependente,
     validar_idade,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
@@ -41,11 +44,18 @@ def resolver_intencao_encerramento(
 ):
     if contexto_envio.get("encerrar_atendimento"):
         motivo = contexto_envio["motivo_encerramento"]
-        motivo_banco = (
-            MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO
-            if motivo == MOTIVO_SUPORTE_IDOSO
-            else MOTIVO_ENCERRAMENTO_IDADE_INVALIDA
-        )
+        # O resolver carrega o limite que realmente gerou a resposta enviada.
+        # Não reler a unidade aqui: ela pode ter mudado depois do envio.
+        if motivo == MOTIVO_SUPORTE_IDOSO:
+            motivo_banco = motivo_suporte(contexto_envio["limite_idade_encerramento"])
+        elif motivo == MOTIVO_DEPENDENTE_MENOR_5:
+            motivo_banco = motivo_dependente(contexto_envio["limite_idade_encerramento"])
+        elif motivo == MOTIVO_CLIENTE_MENOR_18:
+            motivo_banco = MOTIVO_TITULAR_MENOR
+        elif motivo == MOTIVO_IDADE_ACIMA_99:
+            motivo_banco = MOTIVO_UNIVERSAL
+        else:
+            raise ValueError(f"Categoria de encerramento desconhecida: {motivo!r}")
         return {
             "motivo": motivo,
             "motivo_encerramento": motivo_banco,
@@ -85,85 +95,74 @@ def resolver_intencao_encerramento(
 
 
 def _reconstruir_encerramento_etapa6(contexto_historico):
-    if (
-        contexto_historico.get("id_etapa_origem_transicao")
-        != ETAPA_6_IDADE_ALUNO
-    ):
-        return None
+    """Conclui somente a resposta já comprovada para a entrada em recuperação.
 
-    resultado = validar_idade(
-        contexto_historico.get("texto_cliente_atual") or ""
+    A busca anterior exige conversa + fila + hash de origem. Aqui não procuramos
+    uma mensagem solta no histórico e não usamos cliente.idade, pois os efeitos
+    da idade podem estar pendentes. Sem resposta conhecida, não deduzir fechamento.
+    """
+    if contexto_historico.get("id_etapa_origem_transicao") != ETAPA_6_IDADE_ALUNO:
+        return None
+    resposta = contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
+    reconhecida = reconhecer_encerramento_etapa6(
+        resposta.get("conteudo_texto"), resposta.get("tipo_mensagem"),
     )
-
-    if resultado.acima_limite:
-        return {
-            "motivo": MOTIVO_IDADE_ACIMA_99,
-            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
-            "excluir_dependente": False,
-            "bloqueio_dias": 0,
-        }
-
-    if not resultado.valida:
+    if not reconhecida:
         return None
 
-    if (
-        not contexto_historico.get("status_dependente")
-        and 50 <= resultado.idade <= 99
-        and _resposta_bot_e_encaminhamento_suporte_idoso(
-            contexto_historico
-        )
-    ):
-        # O texto prova o envio, mas não congela a configuração anterior.
-        idade_minima = validar_idade_minima_suporte(
-            contexto_historico["idade_minima_suporte"]
-        )
-        if idade_minima is None or resultado.idade < idade_minima:
+    resultado = validar_idade(contexto_historico.get("texto_cliente_atual") or "")
+    idade = resultado.idade if resultado.valida or resultado.acima_limite else None
+    dependente = bool(contexto_historico.get("status_dependente"))
+    categoria = reconhecida["categoria"]
+    motivo_banco = MOTIVO_ENCERRAMENTO_IDADE_INVALIDA
+    excluir_dependente = False
+
+    if categoria == "suporte":
+        if dependente:
             return None
-        return {
-            "motivo": MOTIVO_SUPORTE_IDOSO,
-            "motivo_encerramento": MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO,
-            "excluir_dependente": False,
-            "bloqueio_dias": 0,
-        }
+        motivo = MOTIVO_SUPORTE_IDOSO
+        motivo_banco = MOTIVO_ENCERRAMENTO_SUPORTE_IDOSO
+        limite_atual = contexto_historico["idade_minima_suporte"]
+        limite = reconstruir_limite_suporte(idade, limite_atual)
+        if limite is not None:
+            motivo_banco = motivo_suporte(limite)
+            logger.info(
+                "encerramento_reconstruido_por_compatibilidade | "
+                "id_conversa=%s id_mensagem_fila=%s idade=%s "
+                "limite_atual=%s limite_reconstruido=%s",
+                contexto_historico.get("id_conversa"),
+                (contexto_historico.get("mensagem_cliente_atual") or {}).get("id_mensagem_fila"),
+                idade, limite_atual, limite,
+            )
+        # Suporte antigo de 90–99 continua genérico: não virar universal/80+.
+    elif categoria == "titular_menor":
+        if dependente:
+            return None
+        motivo = MOTIVO_CLIENTE_MENOR_18
+        if idade is not None and idade < 18:
+            motivo_banco = MOTIVO_TITULAR_MENOR
+    elif categoria == "dependente_menor":
+        if not dependente:
+            return None
+        motivo = MOTIVO_DEPENDENTE_MENOR_5
+        excluir_dependente = True
+        minimo_enviado = reconhecida["idade_minima"]
+        if idade is not None and idade < minimo_enviado:
+            # Preserva o mínimo que o cliente leu, mesmo que o BPA tenha mudado.
+            motivo_banco = motivo_dependente(minimo_enviado)
+    else:
+        motivo = MOTIVO_IDADE_ACIMA_99
+        if idade is not None and 90 <= idade < 100:
+            motivo_banco = MOTIVO_UNIVERSAL
+        # O corpo de 100+ é igual entre versões. Sem motivo confirmado, manter
+        # legado em vez de afirmar qual limiar histórico foi usado.
 
-    if contexto_historico.get("status_dependente"):
-        idade_minima = obter_idade_minima_dependente(
-            contexto_historico.get("bpa_ativo_unidade")
-        )
-
-        if resultado.idade < idade_minima:
-            return {
-                "motivo": MOTIVO_DEPENDENTE_MENOR_5,
-                "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
-                "excluir_dependente": True,
-                "bloqueio_dias": 0,
-            }
-        return None
-
-    if resultado.idade < 18:
-        return {
-            "motivo": MOTIVO_CLIENTE_MENOR_18,
-            "motivo_encerramento": MOTIVO_ENCERRAMENTO_IDADE_INVALIDA,
-            "excluir_dependente": False,
-            "bloqueio_dias": 0,
-        }
-
-    return None
-
-
-def _resposta_bot_e_encaminhamento_suporte_idoso(contexto_historico):
-    # Apenas recuperação da resposta desta entrada, chamada no ramo resposta_ja_existia.
-    # Reconhece o corpo atual e o da versão anterior ainda em produção, permitindo
-    # concluir o encerramento pendente sem reenviar. Não reabre conversas antigas
-    # nem escolhe o texto de novos envios. A política atual é validada pelo chamador.
-    resposta_bot = (
-        contexto_historico.get("resposta_bot_para_mensagem_atual") or {}
-    )
-    if resposta_bot.get("tipo_mensagem") != "interactive_cta_url":
-        return False
-
-    conteudo = str(resposta_bot.get("conteudo_texto") or "").strip()
-    return reconhecer_mensagem_suporte_idoso_etapa6(conteudo)
+    return {
+        "motivo": motivo,
+        "motivo_encerramento": motivo_banco,
+        "excluir_dependente": excluir_dependente,
+        "bloqueio_dias": 0,
+    }
 
 
 def aplicar_encerramento_se_necessario(

@@ -183,11 +183,15 @@ def criar_tabelas():
             cnpj VARCHAR(50) UNIQUE NOT NULL,
             email_responsavel VARCHAR(255) UNIQUE NOT NULL,
             telefone VARCHAR(20) UNIQUE NOT NULL,
-            numero_comercial VARCHAR(30),
+            numero_comercial VARCHAR(30) NOT NULL
+                CONSTRAINT ck_unidade_numero_comercial CHECK (
+                    regexp_replace(numero_comercial, '[^0-9]', '', 'g')
+                    ~ '^([0-9]{10,11}|55[0-9]{10,11})$'
+                ),
             idade_minima_suporte INTEGER DEFAULT NULL
                 CONSTRAINT ck_unidade_idade_minima_suporte CHECK (
                     idade_minima_suporte IS NULL
-                    OR idade_minima_suporte IN (50, 60, 70, 80, 90)
+                    OR idade_minima_suporte IN (50, 60, 70, 80)
                 ),
             email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
@@ -303,7 +307,10 @@ def criar_tabelas():
                         'idade_invalida',
                         'foi_agendado',
                         'encaminhado_suporte_idoso',
-                        'followup_sem_resposta'
+                        'followup_sem_resposta',
+                        'titular_menor_18', 'dependente_menor_4', 'dependente_menor_5',
+                        'suporte_idoso_50', 'suporte_idoso_60', 'suporte_idoso_70', 'suporte_idoso_80',
+                        'idade_universal_90'
                     )
                 ),
 

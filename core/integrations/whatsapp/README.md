@@ -184,7 +184,7 @@ texto ainda emitido pela versão em produção permite recuperar respostas sem
 reenviá-las. As variantes antigas que citavam a faixa foram removidas após
 verificação de ausência de pendências no banco.
 
-O encaminhamento geral de 100 anos ou mais mantém um sender próprio, usado
+O encaminhamento geral de 90 anos ou mais mantém um sender próprio, usado
 para titular e dependente mesmo com suporte desativado. Seu catálogo apresenta
 a anamnese com o consultor e acrescenta um rodapé acolhedor, sem repetir a
 pergunta de idade. A decisão de encerrar continua pertencendo ao worker.

@@ -175,3 +175,12 @@ concluída é reconhecida por sua entrada original; um replay não zera um novo 
 `consultar_diagnostico` executa transação somente leitura e não adquire o lock de
 processamento nem envia mensagens. Os contratos reais de SQL e migração são
 verificados em `tests/integration/test_followup_postgres.py`.
+
+
+## Encerramentos no monitoramento
+
+`monitoramento/encerramentos.py` lê, em lote, o motivo da última conversa real
+cliente/unidade e o par histórico de mensagens pelo hash de origem. A limpeza
+da fila não quebra esse vínculo. Consultas sempre recebem a unidade do guard.
+O relatório agrupa conversas encerradas pela data final, sem deduplicação por
+cliente e sem exigir que continuem sendo o atendimento mais recente.

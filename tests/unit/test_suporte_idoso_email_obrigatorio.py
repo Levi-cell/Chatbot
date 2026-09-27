@@ -262,7 +262,7 @@ class SuporteIdosoTests(unittest.TestCase):
         for idade, dependente, suporte, caminho in (
             (59, False, 60, "normal"),
             (60, False, 60, "suporte"),
-            (99, False, 60, "suporte"),
+            (99, False, 60, "cem_mais"),
             (100, False, 60, "cem_mais"),
             (70, True, 60, "normal_dependente"),
         ):
@@ -318,6 +318,7 @@ class SuporteIdosoTests(unittest.TestCase):
             {
                 "encerrar_atendimento": True,
                 "motivo_encerramento": "encaminhado_suporte_idoso",
+                "limite_idade_encerramento": 60,
                 "idade_aluno": 65,
             }
         )
@@ -344,6 +345,7 @@ class SuporteIdosoTests(unittest.TestCase):
             {
                 "encerrar_atendimento": True,
                 "motivo_encerramento": "encaminhado_suporte_idoso",
+                "limite_idade_encerramento": 60,
             }
         )
         primeira = encerramento_atendimento.resolver_intencao_encerramento(
@@ -353,7 +355,7 @@ class SuporteIdosoTests(unittest.TestCase):
         )
         self.assertEqual(
             primeira["motivo_encerramento"],
-            "encaminhado_suporte_idoso",
+            "suporte_idoso_60",
         )
         self.assertEqual(primeira["bloqueio_dias"], 0)
 
@@ -374,7 +376,7 @@ class SuporteIdosoTests(unittest.TestCase):
         )
         self.assertEqual(
             replay["motivo_encerramento"],
-            "encaminhado_suporte_idoso",
+            "suporte_idoso_60",
         )
         self.assertEqual(replay["bloqueio_dias"], 0)
 

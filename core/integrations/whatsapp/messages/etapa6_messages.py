@@ -1,5 +1,7 @@
 """Etapa 6: idade do participante e saídas por política da unidade."""
 
+import re
+
 from core.validacoes.suporte_por_idade import (
     validar_idade_minima_suporte,
 )
@@ -135,7 +137,8 @@ MENSAGEM_SUPORTE_IDOSO_ETAPA6 = (
 )
 
 
-### CLIENTE OU DEPENDENTE COM MAIS DE 99 ANOS
+### CLIENTE OU DEPENDENTE COM 90 ANOS OU MAIS
+# Nomes antigos preservados como contrato de importação; o corte fica no resolver.
 # Regra geral, inclusive quando idade_minima_suporte está desativada.
 # Mensagem própria: orienta o contato com o consultor sem repetir a pergunta de idade.
 # A redação atende às duas rotas sem presumir que quem conversa é o participante.
@@ -159,7 +162,7 @@ def montar_botao_idade_acima_99_etapa6():
     return BOTAO_FALAR_COM_CONSULTORA_ETAPA6
 
 
-### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 99 ANOS
+### TITULAR A PARTIR DO LIMITE CONFIGURADO ATÉ 89 ANOS
 
 BOTAO_SUPORTE_IDOSO_ETAPA6 = "Falar agora"
 
@@ -262,3 +265,49 @@ def reconhecer_mensagem_suporte_idoso_etapa6(conteudo):
     )
     # O prefixo de retorno pode anteceder o corpo salvo; não interpretar como envio novo.
     return texto.endswith(mensagens)
+
+
+def reconhecer_encerramento_etapa6(conteudo, tipo_mensagem):
+    """Identifica somente corpos conhecidos; espaços e prefixos não mudam a decisão.
+
+    O chamador deve comprovar a conversa, a etapa e o vínculo com a entrada.
+    Esta função não consulta configurações nem altera a formatação dos envios.
+    """
+    texto = " ".join(str(conteudo or "").split())
+
+    def termina_com(corpo):
+        return texto.endswith(" ".join(corpo.split()))
+
+    if tipo_mensagem == "interactive_cta_url":
+        if any(termina_com(corpo) for corpo in (
+            MENSAGEM_SUPORTE_IDOSO_ETAPA6,
+            _MENSAGEM_SUPORTE_IDOSO_LEGADA_SEM_FAIXA,
+        )):
+            return {"categoria": "suporte"}
+        universal = montar_mensagem_idade_acima_99_etapa6()
+        if any(termina_com(corpo) for corpo in (
+            universal,
+            universal.replace(" e iniciar a anamnese", ""),
+        )):
+            return {"categoria": "universal"}
+        return None
+
+    if tipo_mensagem != "text":
+        return None
+    if termina_com(MENSAGEM_CLIENTE_MENOR_18_ETAPA6):
+        return {"categoria": "titular_menor"}
+
+    # O mínimo aparece duas vezes no corpo. A referência exige que sejam iguais.
+    modelo = " ".join(MENSAGEM_DEPENDENTE_MENOR_5_ETAPA6.split())
+    padrao = re.escape(modelo)
+    padrao = padrao.replace(re.escape("{idade_minima}"), r"(?P<minimo>[45])", 1)
+    padrao = padrao.replace(re.escape("{idade_minima}"), r"(?P=minimo)")
+    padrao = padrao.replace(re.escape("{nome_dependente}"), r"(?P<nome>.+?)")
+    encontrado = re.search(padrao + r"$", texto)
+    if encontrado:
+        return {
+            "categoria": "dependente_menor",
+            "idade_minima": int(encontrado.group("minimo")),
+            "nome_dependente": encontrado.group("nome"),
+        }
+    return None

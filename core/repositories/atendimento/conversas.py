@@ -1,16 +1,14 @@
 import logging
 
+from core.validacoes.encerramento_por_idade import MOTIVOS_IDADE
+
 
 logger = logging.getLogger("db.atendimento.conversas")
 
 ETAPA_INICIAL = 1
 
-MOTIVOS_ENCERRAMENTO_VALIDOS = {
-    "idade_invalida",
-    "foi_agendado",
-    "encaminhado_suporte_idoso",
-    "followup_sem_resposta",
-}
+# Catálogo compartilhado: preserva os motivos de follow-up e agendamento.
+MOTIVOS_ENCERRAMENTO_VALIDOS = MOTIVOS_IDADE | {'foi_agendado', 'followup_sem_resposta'}
 
 
 def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):

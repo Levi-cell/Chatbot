@@ -327,7 +327,7 @@ class MetricasPerfisRelatoriosTests(unittest.TestCase):
             self._perfil(1, 102, idade_titular=60),
             self._perfil(2, 201, status_dependente=True, idade_dependente=60),
         ]
-        for suporte in (None, 50, 60, 70, 80, 90):
+        for suporte in (None, 50, 60, 70, 80):
             with self.subTest(suporte=suporte):
                 segmentacao = self._segmentacao(perfis, {101, 102, 201}, idade_minima_suporte=suporte)
                 linhas = self._linhas(segmentacao)

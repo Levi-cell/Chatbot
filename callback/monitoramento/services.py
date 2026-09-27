@@ -7,6 +7,7 @@ from core.validacoes.suporte_por_idade import validar_idade_minima_suporte
 from django.db import connection
 
 from core.repositories.monitoramento import painel as repositorio
+from core.repositories.monitoramento import encerramentos as repositorio_encerramentos
 
 from .apresentacao import (
     botoes_para_mensagem,
@@ -14,6 +15,7 @@ from .apresentacao import (
     consolidar_conversas,
     montar_relatorio,
 )
+from .encerramentos import apresentar_encerramento, montar_tabela_encerramentos
 from .faixa_etaria import consultar_faixa_etaria, distribuir_dependentes_por_titular
 
 
@@ -55,9 +57,14 @@ def carregar_conversas(acesso, periodo):
         metricas = repositorio.buscar_metricas(
             acesso.id_unidade, periodo.inicio, periodo.fim, cursor
         )
+        encerramentos = repositorio_encerramentos.buscar_encerramentos_atuais(
+            acesso.id_unidade, [linha['id_conversa'] for linha in linhas], cursor,
+        )
+    comerciais = {linha['id_cliente']: apresentar_encerramento(linha) for linha in encerramentos}
     conversas = consolidar_conversas(linhas)
     for item in conversas:
         item['ultima_atividade'] = _iso(item['ultima_atividade'])
+        item['comercial'] = comerciais.get(item['id_cliente'])
     metricas['nota_media'] = float(metricas['nota_media']) if metricas.get('nota_media') is not None else None
     return {
         'unidade': {
@@ -163,8 +170,8 @@ def carregar_relatorio(acesso, periodo):
     with connection.cursor() as cursor:
         unidade = repositorio.buscar_unidade(acesso.id_unidade, cursor)
         metricas = repositorio.buscar_metricas(acesso.id_unidade, periodo.inicio, periodo.fim, cursor)
-        encaminhados = repositorio.contar_encaminhados_comercial_por_idade(
-            acesso.id_unidade, periodo.inicio, periodo.fim, cursor
+        contagens_idade = repositorio_encerramentos.contar_encerramentos_por_motivo(
+            acesso.id_unidade, periodo.inicio, periodo.fim, cursor,
         )
         anteriores = None
         if periodo.inicio_anterior is not None:
@@ -197,9 +204,13 @@ def carregar_relatorio(acesso, periodo):
             bpa_ativo=bool(unidade['bpa_ativo']),
         ),
         satisfacao, etapas, atividade,
-        encaminhados_comercial_por_idade=encaminhados,
     )
     relatorio.update({
+        'encerramentos_por_idade': montar_tabela_encerramentos(
+            contagens_idade,
+            idade_minima_suporte=unidade['idade_minima_suporte'],
+            bpa_ativo=bool(unidade['bpa_ativo']),
+        ),
         'dependentes_por_titular': distribuir_dependentes_por_titular(perfis_brutos),
         'unidade': {
             'nome': unidade['nome_unidade'],

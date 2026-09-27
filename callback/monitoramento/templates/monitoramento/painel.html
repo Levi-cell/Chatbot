@@ -8,8 +8,8 @@
   <meta name="theme-color" content="#1c321d">
   <meta name="referrer" content="same-origin">
   <title>Monitoramento · ESL Tech</title>
-  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260924-faixa-tabela">
-  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260924-faixa-tabela" defer></script>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260926-comercial-idade">
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260926-comercial-idade" defer></script>
 </head>
 <body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
       data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
@@ -56,13 +56,26 @@
       <div class="app-conversas">
         <aside class="lista-conversas" aria-label="Lista de conversas">
           <div class="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input id="buscaConversas" type="search" placeholder="Pesquisar contato" aria-label="Pesquisar contato"></div>
+          <div id="grupoFiltros" class="grupo-filtros">
           <nav class="filtros-conversas" aria-label="Filtrar conversas">
             <button type="button" class="ativo" data-filtro="todas">Todas</button>
-            <button type="button" data-filtro="continuacoes">Continuações</button>
+            <button type="button" data-filtro="comercial">Comercial</button>
             <button type="button" data-filtro="followup">Follow-up</button>
             <button type="button" data-filtro="funil">Funil</button>
             <button type="button" data-filtro="avaliadas">Avaliadas</button>
           </nav>
+          <button id="informacaoFiltros" class="informacao-filtros" type="button" aria-label="Entenda os filtros" aria-expanded="false" aria-controls="legendaFiltros">i</button>
+          <div id="legendaFiltros" class="legenda-filtros" hidden>
+            <strong>Entenda os filtros</strong>
+            <dl>
+              <dt>Todas</dt><dd>Chats com mensagens do cliente no período.</dd>
+              <dt>Comercial</dt><dd>A última conversa encerrou por idade e merece análise. Nem todos receberam o contato comercial.</dd>
+              <dt>Follow-up</dt><dd>A última conversa está no primeiro ou segundo follow-up. O segundo encerra o atendimento.</dd>
+              <dt>Funil</dt><dd>Envio ao funil confirmado no período. Não confirma agendamento ou venda.</dd>
+              <dt>Avaliadas</dt><dd>Nota de satisfação registrada no período.</dd>
+            </dl>
+          </div>
+          </div>
           <div id="listaConversas" class="rolagem-lista" aria-live="polite"><div class="estado-vazio carregando">Carregando conversas…</div></div>
         </aside>
         <section class="janela-chat" aria-label="Histórico da conversa">

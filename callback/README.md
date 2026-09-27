@@ -216,8 +216,8 @@ tratamento de reforço escolar da etapa 1.
 
 `waba_id` e `phone_number_id` ficam somente leitura após a criação. O Admin
 também expõe `idade_minima_suporte` e `email_obrigatorio`. O seletor de suporte
-aceita Desativado, 50+, 60+, 70+, 80+ e 90+; ativar exige um `numero_comercial`
-brasileiro válido, inclusive ao editar ou remover o número de uma unidade ativa.
+aceita Desativado, 50+, 60+, 70+ e 80+. Toda unidade exige `numero_comercial`
+brasileiro válido, inclusive com suporte desativado. A universal 90+ vale para ambas as rotas.
 Somente o titular é alcançado; o limite não altera a dispensa de e-mail dos 60+.
 
 No Admin, criação/exclusão de unidade e desbloqueio individual seguem
@@ -320,13 +320,15 @@ CSV elegível exige nome, e-mail estruturalmente válido e telefone em formato
 internacional. Essa regra vale tanto para Google CSV quanto para CSV essencial;
 nenhum dos formatos acrescenta etiquetas comerciais ou datas ao nome.
 
-O card **Encaminhados ao comercial** fica somente em Relatórios, abaixo dos
-quatro indicadores. Conta clientes distintos por unidade com encerramento
-`encaminhado_suporte_idoso` no período (`finalizou_em`, intervalo semiaberto).
-Inclui históricos, sem filtrar pela política atual, sem duplicar conversas e sem
-misturar os casos 100+. Não comprova clique, atendimento humano ou matrícula.
-Tags 18–59, 60+ e de dependentes continuam fixas. Quantidades e taxas do Funil
-mantêm todos os envios registrados mesmo quando a configuração atual mudou.
+A tabela **Encaminhamentos e encerramentos por idade** conta conversas pela data
+de encerramento no período. Exibe somente motivos compatíveis com suporte e BPA
+atuais, separando a universal 90+ de titulares e dependentes e os menores sem contato.
+Legados sem limite identificado não são atribuídos à configuração atual.
+O filtro **Comercial** substitui Continuações: mostra a última conversa por
+cliente/unidade com motivo de idade. A tag histórica independe da configuração
+atual; uma conversa nova remove a tag. A legenda fica no botão informativo.
+Funil/Avaliadas mantêm seus critérios e dados, com prioridade visual da tag especial.
+Detalhes usam o par de mensagens do histórico mesmo após exclusão da fila/dependente.
 
 ### Consulta de faixa etária personalizada
 

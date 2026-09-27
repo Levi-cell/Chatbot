@@ -3,6 +3,7 @@ from core.validacoes.suporte_por_idade import IDADES_MINIMAS_SUPORTE
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from core.validacoes.encerramento_por_idade import ROTULOS_MOTIVOS
 
 
 class Cliente(models.Model):
@@ -76,14 +77,9 @@ class Conversa(models.Model):
         max_length=30,
         blank=True,
         null=True,
-        choices=[
-            ("idade_invalida", "Idade inválida"),
-            ("foi_agendado", "Foi agendado"),
-            (
-                "encaminhado_suporte_idoso",
-                "Encaminhado ao suporte ao idoso",
-            ),
-        ],
+        choices=[*ROTULOS_MOTIVOS.items(),
+                 ("foi_agendado", "Foi agendado"),
+                 ("followup_sem_resposta", "Segundo follow-up sem resposta")],
     )
 
     class Meta:
@@ -273,8 +269,7 @@ class Unidade(models.Model):
     telefone = models.CharField(unique=True, max_length=20)
     numero_comercial = models.CharField(
         max_length=30,
-        blank=True,
-        null=True,
+        help_text="Contato comercial obrigatório para toda unidade.",
     )
     idade_minima_suporte = models.IntegerField(
         "encaminhar titular ao comercial a partir de",
@@ -286,7 +281,7 @@ class Unidade(models.Model):
         ],
         help_text=(
             "Na etapa de idade, encaminha somente o titular a partir do limite "
-            "até 99 anos e encerra sem bloqueio. Não altera a regra de e-mail."
+            "até 89 anos e encerra sem bloqueio; 90+ é universal. Não altera a regra de e-mail."
         ),
     )
     email_obrigatorio = models.BooleanField(

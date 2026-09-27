@@ -23,7 +23,7 @@
     adulto:{curto:'18–59',completo:'Titular de 18 a 59 anos'},
     idoso:{curto:'60+',completo:'Titular com 60 anos ou mais'},
   };
-  function visivel(i){if(estado.filtro==='continuacoes'&&i.ids_conversa.length<2)return false;if(estado.filtro==='followup'&&![1,2].includes(i.followup_stage))return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
+  function visivel(i){if(estado.filtro==='comercial'&&!i.comercial)return false;if(estado.filtro==='followup'&&![1,2].includes(i.followup_stage))return false;if(estado.filtro==='funil'&&!i.foi_funil)return false;if(estado.filtro==='avaliadas'&&!i.avaliada)return false;const b=estado.busca.trim().toLocaleLowerCase('pt-BR');return !b||[i.nome,i.contato,i.email,i.profissao,i.ultima_mensagem,...i.dependentes].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(b);}
   function mini(pai,texto,classe=''){pai.appendChild(criar('span','mini-tag '+classe,texto));}
   function renderLista(){
     const lista=ids('listaConversas');
@@ -63,21 +63,64 @@
       corpo.append(cabecalho,criar('div','item-previa',item.ultima_mensagem||'Sem conteúdo textual'));
 
       const tags=criar('div','mini-tags');
-      if(item.ids_conversa.length>1)mini(tags,item.ids_conversa.length+' conversas');
-      if([1,2].includes(item.followup_stage))mini(tags,'Follow-up '+item.followup_stage,'followup');
-      if(item.foi_funil)mini(tags,'Funil','funil');
-      if(item.avaliada)mini(tags,'Avaliada','nota');
+      if(item.comercial){
+        const etiqueta=criar('span','mini-tag comercial',item.comercial.tag);
+        etiqueta.title=item.comercial.descricao;
+        tags.appendChild(etiqueta);
+      }else{
+        if(item.ids_conversa.length>1)mini(tags,item.ids_conversa.length+' conversas');
+        if([1,2].includes(item.followup_stage))mini(tags,'Follow-up '+item.followup_stage,'followup');
+        if(item.foi_funil)mini(tags,'Funil','funil');
+        if(item.avaliada)mini(tags,'Avaliada','nota');
+      }
       corpo.appendChild(tags);
       botao.append(avatar,corpo);
       botao.addEventListener('click',()=>abrir(item.id_cliente));
       lista.appendChild(botao);
     });
   }
-  function detalhes(i){ids('nomeContato').textContent=i.nome;ids('avatarContato').textContent=iniciais(i.nome);ids('avatarContato').style.background=cor(i.id_cliente);const r=[];if(i.contato)r.push('Contato: '+i.contato);if(i.profissao)r.push('Profissão: '+i.profissao);ids('detalhesContato').textContent=r.join(' • ')||'Dados ainda não informados';const tags=ids('tagsContato');tags.replaceChildren();i.perfis.forEach(p=>tags.appendChild(criar('span','tag-contato '+p,perfil(p))));if(i.foi_funil)tags.appendChild(criar('span','tag-contato funil','Funil'));const dl=criar('dl'),campos=[['Contato',i.contato||'Não informado'],['Profissão',i.profissao||'Não informada']];if(estado.regras.email_obrigatorio||i.email)campos.push(['E-mail',i.email||'Obrigatório · não informado']);if(i.dependentes.length)campos.push(['Dependente(s)',i.dependentes.join(', ')]);campos.push(['Conversas técnicas',i.ids_conversa.join(', ')]);campos.push(['Regras da unidade',[estado.regras.email_obrigatorio?'E-mail obrigatório':'E-mail opcional',politicaSuporte(estado.regras.idade_minima_suporte),estado.regras.bpa_ativo?'BPA ativo':'BPA inativo'].join(' · ')]);campos.forEach(([t,v])=>{const g=criar('div');g.append(criar('dt','',t),criar('dd','',v));dl.appendChild(g);});ids('painelDetalhes').replaceChildren(dl);}
+  function detalhes(item){
+    ids('nomeContato').textContent=item.nome;
+    ids('avatarContato').textContent=iniciais(item.nome);
+    ids('avatarContato').style.background=cor(item.id_cliente);
+    const resumo=[];
+    if(item.contato)resumo.push('Contato: '+item.contato);
+    if(item.profissao)resumo.push('Profissão: '+item.profissao);
+    ids('detalhesContato').textContent=resumo.join(' • ')||'Dados ainda não informados';
+    const tags=ids('tagsContato');
+    tags.replaceChildren();
+    item.perfis.forEach(p=>tags.appendChild(criar('span','tag-contato '+p,perfil(p))));
+    if(item.comercial)tags.appendChild(criar('span','tag-contato comercial',item.comercial.tag));
+    else if(item.foi_funil)tags.appendChild(criar('span','tag-contato funil','Funil'));
+    const campos=[['Contato',item.contato||'Não informado'],['Profissão',item.profissao||'Não informada']];
+    if(estado.regras.email_obrigatorio||item.email)campos.push(['E-mail',item.email||'Obrigatório · não informado']);
+    if(item.dependentes.length)campos.push(['Dependente(s)',item.dependentes.join(', ')]);
+    if(item.comercial){
+      const encerramento=item.comercial;
+      campos.push(['Motivo deste encerramento',encerramento.descricao],
+        ['Participante',encerramento.participante],
+        ['Resposta sobre a idade',encerramento.resposta_idade],
+        ['Contato comercial',encerramento.contato_enviado?'Enviado ao cliente':'Não enviado']);
+      if(encerramento.nome_dependente)campos.push(['Dependente deste atendimento',encerramento.nome_dependente]);
+    }
+    campos.push(['Conversas técnicas',item.ids_conversa.join(', ')]);
+    campos.push(['Regras atuais da unidade',[
+      estado.regras.email_obrigatorio?'E-mail obrigatório':'E-mail opcional',
+      politicaSuporte(estado.regras.idade_minima_suporte),
+      estado.regras.bpa_ativo?'BPA ativo · mínimo 4 anos':'BPA inativo · mínimo 5 anos',
+    ].join(' · ')]);
+    const lista=criar('dl');
+    campos.forEach(([rotulo,valor])=>{
+      const grupo=criar('div');
+      grupo.append(criar('dt','',rotulo),criar('dd','',valor));
+      lista.appendChild(grupo);
+    });
+    ids('painelDetalhes').replaceChildren(lista);
+  }
   function marca(){const c=criar('div','marca-dagua');c.setAttribute('aria-hidden','true');const i=document.querySelector('.marca-app img').cloneNode();i.alt='';c.appendChild(i);return c;}
   function renderMensagens(ms,{manter=false}={}){const c=ids('mensagensChat'),final=c.scrollHeight-c.scrollTop-c.clientHeight<120,topo=c.scrollTop;c.replaceChildren(marca());let d='',conv=null;ms.forEach(m=>{const dt=new Date(m.data),nd=dia.format(dt);if(nd!==d){c.appendChild(criar('div','dia',nd));d=nd;}if(conv!==m.id_conversa){c.appendChild(criar('div','separador-conversa',(conv===null?'Início':'Continuação')+' do atendimento · conversa '+m.id_conversa));conv=m.id_conversa;}const l=criar('div','linha-mensagem '+(m.quem_enviou==='bot'?'bot':'cliente')),b=criar('div','bolha');if(m.tipo&&m.tipo!=='text')b.appendChild(criar('span','tipo-mensagem',m.tipo.replaceAll('_',' ')));b.appendChild(criar('div','texto-mensagem',m.texto));if(m.botoes?.length){const bs=criar('div','botoes-mensagem');m.botoes.forEach(x=>{const bt=criar('button','botao-mensagem',x);bt.type='button';bt.disabled=true;bt.setAttribute('aria-label',x+' (botão histórico)');bs.appendChild(bt);});b.appendChild(bs);}const mt=criar('div','meta-mensagem');mt.appendChild(criar('span','','Etapa '+(m.id_etapa??'—')+' · '+hora.format(dt)));if(m.quem_enviou==='bot')mt.appendChild(criar('span','ticks','✓✓'));b.appendChild(mt);l.appendChild(b);c.appendChild(l);});if(!ms.length)c.appendChild(criar('div','boas-vindas','Nenhuma mensagem visível no período.'));requestAnimationFrame(()=>{if(!manter||final)c.scrollTop=c.scrollHeight;else c.scrollTop=topo;});}
   async function abrir(idCliente,{silencioso=false}={}){const i=estado.conversas.find(c=>c.id_cliente===idCliente);if(!i)return;const periodo=estado.periodo;estado.selecionada=idCliente;renderLista();detalhes(i);ids('topoChat').hidden=false;document.querySelector('.app-conversas').classList.add('chat-aberto');const c=ids('mensagensChat');if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio carregando','Carregando histórico…'));try{const d=await json(urls.mensagens+idCliente+'/?periodo='+encodeURIComponent(periodo));if(estado.selecionada===idCliente&&estado.periodo===periodo)renderMensagens(d.mensagens,{manter:silencioso});}catch(e){if(estado.periodo!==periodo)return;if(!silencioso)c.replaceChildren(marca(),criar('div','estado-vazio',e.message));else toast('Não foi possível atualizar a conversa agora.');}}
-  async function carregarConversas(silencioso=false){if(estado.carregandoConversas){estado.recarregarConversas=true;return;}estado.carregandoConversas=true;const periodo=estado.periodo,seq=++estado.sequenciaConversas;if(estado.secao==='conversas')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.conversas,periodo));if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;const velha=estado.conversas.find(c=>c.id_cliente===estado.selecionada);estado.conversas=d.conversas;estado.regras=d.unidade.regras;ids('nomeUnidade').textContent=d.unidade.nome;ids('periodoConversas').textContent='Agente '+d.unidade.agente+' · '+d.periodo.texto;renderLista();const nova=estado.conversas.find(c=>c.id_cliente===estado.selecionada);if(nova&&(!silencioso||!velha||nova.ultima_mensagem_id!==velha.ultima_mensagem_id||nova.ultima_atividade!==velha.ultima_atividade))await abrir(nova.id_cliente,{silencioso});else if(!estado.selecionada&&matchMedia('(min-width:721px)').matches&&estado.conversas[0])await abrir(estado.conversas[0].id_cliente);if(estado.secao==='conversas')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;if(estado.secao==='conversas')status('Falha ao atualizar','erro');if(!silencioso)ids('listaConversas').replaceChildren(criar('div','estado-vazio',e.message));else toast(e.message);}finally{estado.carregandoConversas=false;if(estado.recarregarConversas){estado.recarregarConversas=false;void carregarConversas(true);}}}
+  async function carregarConversas(silencioso=false){if(estado.carregandoConversas){estado.recarregarConversas=true;return;}estado.carregandoConversas=true;const periodo=estado.periodo,seq=++estado.sequenciaConversas;if(estado.secao==='conversas')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.conversas,periodo));if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;const velha=estado.conversas.find(c=>c.id_cliente===estado.selecionada);estado.conversas=d.conversas;estado.regras=d.unidade.regras;ids('nomeUnidade').textContent=d.unidade.nome;ids('periodoConversas').textContent='Agente '+d.unidade.agente+' · '+d.periodo.texto;renderLista();const nova=estado.conversas.find(c=>c.id_cliente===estado.selecionada);if(nova&&(!silencioso||!velha||nova.ultima_mensagem_id!==velha.ultima_mensagem_id||nova.ultima_atividade!==velha.ultima_atividade))await abrir(nova.id_cliente,{silencioso});else if(nova)detalhes(nova);else if(!estado.selecionada&&matchMedia('(min-width:721px)').matches&&estado.conversas[0])await abrir(estado.conversas[0].id_cliente);if(estado.secao==='conversas')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaConversas||periodo!==estado.periodo)return;if(estado.secao==='conversas')status('Falha ao atualizar','erro');if(!silencioso)ids('listaConversas').replaceChildren(criar('div','estado-vazio',e.message));else toast(e.message);}finally{estado.carregandoConversas=false;if(estado.recarregarConversas){estado.recarregarConversas=false;void carregarConversas(true);}}}
   function tend(v){if(v==null)return['Histórico completo',''];if(v===0)return['Sem variação ante o período anterior',''];return[(v>0?'↑ ':'↓ ')+Math.abs(v).toLocaleString('pt-BR')+'% ante o período anterior',v>0?'positiva':'negativa'];}
   function kpi(rotulo,valor,v){const c=criar('article','cartao kpi'),t=tend(v);c.append(criar('span','rotulo',rotulo),criar('strong','',valor),criar('span','tendencia '+t[1],t[0]));return c;}
   function titulo(t,d,l=''){const h=criar('header','titulo-cartao'),x=criar('div');x.append(criar('h2','',t),criar('p','',d));h.appendChild(x);if(l)h.appendChild(criar('span','legenda',l));return h;}
@@ -328,20 +371,41 @@
     return cartao;
   }
   function encaminhamentos(d){
-    if(!Number.isSafeInteger(d.encaminhados_comercial_por_idade)||d.encaminhados_comercial_por_idade<0){
-      throw new Error('Não foi possível obter o total de encaminhamentos.');
+    const dados=d.encerramentos_por_idade;
+    if(!dados||!Array.isArray(dados.linhas)||dados.linhas.some(l=>!Number.isSafeInteger(l.conversas)||l.conversas<0)){
+      throw new Error('Não foi possível obter os encerramentos por idade.');
     }
-    const cartao=criar('article','cartao indicador-comercial');
-    const descricao=criar('div');
-    descricao.append(
-      criar('h2','','Encaminhados ao comercial'),
-      criar('p','','Leads únicos encaminhados por suporte de idade no período'),
-      criar('p','politica-suporte',politicaSuporte(d.unidade.idade_minima_suporte)),
-    );
-    cartao.append(descricao,criar('strong','total-comercial',numero.format(d.encaminhados_comercial_por_idade)));
+    const cartao=criar('article','cartao encerramentos-idade');
+    cartao.appendChild(titulo('Encaminhamentos e encerramentos por idade',
+      'Conversas encerradas no período, por motivos compatíveis com as regras atuais da unidade.'));
+    const resumo=criar('div','resumo-encerramentos');
+    [[dados.total_encaminhadas,'com contato comercial enviado'],
+     [dados.total_sem_encaminhamento,'encerradas sem encaminhamento']].forEach(([total,rotulo])=>{
+      const item=criar('p');
+      item.append(criar('strong','',numero.format(total)),criar('span','',rotulo));
+      resumo.appendChild(item);
+    });
+    const tabela=criar('table','tabela-encerramentos');
+    tabela.appendChild(criar('caption','sr-only','Conversas encerradas por motivo no período selecionado'));
+    const cabecalho=criar('thead'),titulos=criar('tr'),linhas=criar('tbody');
+    ['Motivo','Destino','Conversas'].forEach(rotulo=>{
+      const celula=criar('th','',rotulo);celula.scope='col';titulos.appendChild(celula);
+    });
+    cabecalho.appendChild(titulos);
+    dados.linhas.forEach(item=>{
+      const linha=criar('tr'),motivo=criar('th','',item.rotulo);
+      motivo.scope='row';
+      linha.append(motivo,criar('td','',item.destino),criar('td','quantidade',numero.format(item.conversas)));
+      linhas.appendChild(linha);
+    });
+    tabela.append(cabecalho,linhas);
+    const suporte=dados.idade_minima_suporte===null?'Suporte configurável desativado.':
+      'Suporte atual: '+dados.idade_minima_suporte+'+ até 89 anos.';
+    cartao.append(resumo,tabela,criar('p','nota-faixa',suporte+' Regra universal: 90+. Mínimo para dependentes: '+dados.idade_minima_dependente+' anos.'));
+    cartao.appendChild(criar('p','nota-faixa','Cada conversa conta uma vez, pela data de encerramento. Motivos de configurações diferentes e registros antigos sem limite identificado não entram nesta tabela. Envio do contato não confirma clique ou atendimento humano.'));
     return cartao;
   }
-  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Na consulta de faixa etária personalizada, cada titular conta uma vez e cada cadastro de dependente conta separadamente. O total pode superar o número de contatos. As idades são as atualmente cadastradas.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','Encaminhados ao comercial conta leads únicos pelo encerramento por suporte de idade no período, inclusive históricos. Não confirma clique, atendimento humano, matrícula ou venda; não inclui o tratamento de 100+. A data considerada é a do encaminhamento, e não a da mensagem recebida.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
+  function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Lead é um contato único que enviou mensagem no período selecionado.','Na consulta de faixa etária personalizada, cada titular conta uma vez e cada cadastro de dependente conta separadamente. O total pode superar o número de contatos. As idades são as atualmente cadastradas.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','A tabela de encerramentos por idade conta conversas, pela data de encerramento e pelos motivos compatíveis com a configuração atual. O filtro Comercial mostra chats cuja última conversa exige análise comercial, inclusive menores que não receberam o contato da unidade.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A etapa mostra o estado atual da conversa mais recente de cada contato ativo no período; não reconstrói a etapa histórica daquele dia.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
   function renderRelatorio(d){
     const foco=consultaIdade.cartao?.contains(document.activeElement)?document.activeElement:null;
     const selecao=foco===consultaIdade.idade?[foco.selectionStart,foco.selectionEnd]:null;
@@ -384,6 +448,19 @@
   }
   async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
   function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';window.scrollTo({top:0});secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
+  function configurarLegendaFiltros(){
+    const grupo=ids('grupoFiltros'),botao=ids('informacaoFiltros'),legenda=ids('legendaFiltros');
+    let fixada=false;
+    const mostrar=aberta=>{legenda.hidden=!aberta;botao.setAttribute('aria-expanded',String(aberta));};
+    botao.addEventListener('pointerenter',evento=>{if(evento.pointerType==='mouse')mostrar(true);});
+    botao.addEventListener('focus',()=>mostrar(true));
+    botao.addEventListener('click',()=>{fixada=!fixada;mostrar(fixada);});
+    grupo.addEventListener('pointerleave',()=>{if(!fixada&&!grupo.contains(document.activeElement))mostrar(false);});
+    grupo.addEventListener('focusout',evento=>{if(!fixada&&!grupo.contains(evento.relatedTarget))mostrar(false);});
+    document.addEventListener('pointerdown',evento=>{if(!grupo.contains(evento.target)){fixada=false;mostrar(false);}});
+    document.addEventListener('keydown',evento=>{if(evento.key==='Escape'){fixada=false;mostrar(false);}});
+  }
+  configurarLegendaFiltros();
   document.querySelectorAll('[data-secao]').forEach(b=>b.addEventListener('click',()=>trocar(b.dataset.secao)));
   document.querySelectorAll('[data-periodo]').forEach(s=>s.addEventListener('change',()=>{estado.periodo=s.value;invalidarConsultaIdade('Período alterado. Clique em Consultar para obter os números desta janela.');estado.selecionada=null;estado.sequenciaConversas++;estado.sequenciaRelatorio++;document.querySelectorAll('[data-periodo]').forEach(o=>o.value=s.value);estado.secao==='relatorios'?carregarRelatorio():carregarConversas();}));
   document.querySelectorAll('[data-filtro]').forEach(b=>b.addEventListener('click',()=>{estado.filtro=b.dataset.filtro;document.querySelectorAll('[data-filtro]').forEach(x=>x.classList.toggle('ativo',x===b));renderLista();}));

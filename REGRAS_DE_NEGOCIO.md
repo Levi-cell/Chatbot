@@ -313,22 +313,23 @@ Implementação principal:
   ou mais usa a versão adulta com o nome persistido. O limite de entrada de 4
   anos em unidade com BPA e de 5 anos sem BPA continua pertencendo à validação
   de idade anterior à triagem.
-- Cada unidade possui `idade_minima_suporte` (NULL/50/60/70/80/90, padrão NULL)
+- Cada unidade possui `idade_minima_suporte` (NULL/50/60/70/80, padrão NULL)
   e `email_obrigatorio` (padrão TRUE). A migração da política anterior conserva
   TRUE como 60 e FALSE como NULL; novas unidades começam sem suporte ativado.
 - Na etapa 6, mídia, reforço escolar e financeiro precedem a validação de idade.
-  Pessoas de 100+ conservam o encaminhamento próprio para titular ou dependente,
-  independentemente do suporte. Usam uma mensagem própria sobre uma pequena
-  anamnese com um consultor, o botão de contato comercial e um rodapé acolhedor.
-  Esse texto não repete a pergunta de idade nem muda o encerramento por
-  `idade_invalida`, sem bloqueio. Depois, titulares com idade válida maior ou igual
-  ao limite recebem o contato comercial e encerram na etapa 6 com
-  `motivo_encerramento = 'encaminhado_suporte_idoso'`, sem bloqueio ou Funil.
-  A idade é persistida. Dependentes e titulares menores mantêm as regras atuais.
-- Para todas as faixas configuráveis (50/60/70/80/90), o encaminhamento usa
+  A universal 90+ tem prioridade e vale para titular e dependente, inclusive com
+  suporte desativado. Envia contato com mensagem pronta e encerra com
+  `idade_universal_90`. Titulares abaixo de 90 e a partir do suporte configurado
+  encerram com `suporte_idoso_50/60/70/80`; a idade desse suporte é persistida.
+  Menores de 18 encerram com `titular_menor_18`. Dependentes abaixo do mínimo
+  encerram com `dependente_menor_4` (BPA) ou `dependente_menor_5` (sem BPA).
+  Menores não recebem contato comercial. Nenhum desses casos gera Funil ou
+  bloqueio de 30 dias. Os nomes internos `idade_acima_99` permanecem compatíveis,
+  mas não representam o corte dos novos atendimentos.
+- Para todas as faixas configuráveis (50/60/70/80), o encaminhamento usa
   a mesma mensagem de atendimento personalizado, sem anunciar o limite, e o
   botão `Falar agora`.
-- Todo botão para o comercial leva uma mensagem pronta, inclusive o de 100+.
+- Todo botão para o comercial leva uma mensagem pronta, inclusive o universal 90+.
   O texto identifica o chatbot pelo nome e artigo conforme seu gênero, a unidade
   e o cliente que está conversando. Na rota de titular, inclui sua idade e o
   desejo de reservar sua experiência Supera gratuita. Na rota de dependente,
@@ -337,19 +338,26 @@ Implementação principal:
   nem a idade do dependente atribuída ao titular. A origem vem da unidade
   vinculada à conversa; não inventar informações ausentes.
   O cliente confirma o envio no WhatsApp; abrir o botão não envia esse texto.
-- O proprietário configura o limite no Admin. Habilitar ou manter a política
-  requer `numero_comercial` brasileiro válido, inclusive ao editar o número.
-- Retry reconhece a mensagem atual de suporte por faixa e a versão sem faixa ainda
-  emitida pelo código em produção (`701b834`), inclusive com prefixo de saudação.
-  A compatibilidade serve somente à recuperação de uma entrada já respondida;
-  nunca a novos envios. Remover essa versão anterior somente após o deploy e a
-  checagem de suas pendências. As cinco variantes antigas que citavam o limite
-  foram retiradas após consulta somente de leitura em 21/09/2026: havia um envio
-  histórico, com fila concluída e conversa encerrada, sem pendência daquele formato.
-  Conversas encerradas apenas consultadas no painel não dependem desse código. O texto
-  identifica uma resposta existente, sem recuperar o limite antigo. Reavaliações
-  usam a configuração atual; não autorizam reenvio, reescrita do histórico ou
-  avanço sem resposta correspondente. A reação ao follow-up também aplica essas regras quando a idade é validada.
+- O proprietário configura o limite no Admin. Toda unidade exige número comercial
+  brasileiro válido, mesmo com suporte desativado. A migração normaliza 90 para
+  NULL e invalida o cache; nunca converte 90 para 80.
+- Retry exige a resposta conhecida vinculada à mesma conversa, fila e hash da
+  entrada. A idade vem da mensagem vinculada, nunca de `cliente.idade`;
+  `validar_idade` extrai o inteiro inclusive de números acompanhados de texto
+  ou escritos por extenso. Para
+  suporte comprovado entre 50 e 89, usa o limite atual se ele ainda inclui a idade;
+  caso contrário, usa o maior entre 50/60/70/80 que não exceda a idade, inclusive
+  se o suporte foi desativado. Registra a reconstrução compatível em log, sem
+  afirmar que descobriu a faixa histórica exata. Suporte legado 90–99 fica genérico.
+  O mínimo BPA é recuperado do texto efetivamente enviado. Uma oferta já enviada
+  não vira encerramento por mudança de regra. Universal 100+ em retry sem motivo
+  confirmado conserva o legado quando o corpo não distingue a versão. Encerramento
+  e fila sent continuam atômicos; o risco Meta-before-DB permanece aceito.
+  Uma resposta universal comprovada para titular de 91 ou dependente de 92
+  mantém `idade_universal_90` se o suporte mudar de desativado para 80+ antes
+  do retry. Universal tem prioridade para ambos; adicionalmente, dependentes
+  não participam do suporte configurável. A reconstrução não recalcula motivos
+  de conversas concluídas e não é usada para decidir novas conversas.
 - Na etapa 10, mídia, reforço escolar e financeiro continuam precedendo a
   coleta de e-mail. A exigência efetiva é a configuração da unidade, exceto
   para o titular de 60 a 99 anos, cujo e-mail é universalmente opcional quando
@@ -1249,7 +1257,7 @@ Implementação principal:
   dias, 2, 3 e 6 meses e 1 ano. Uma janela finita compara seus indicadores com
   a janela imediatamente anterior de igual duração.
 - Conversas técnicas do mesmo cliente são consolidadas somente dentro da unidade
-  autorizada. Os filtros locais são Todas, Continuações, Funil e Avaliadas; os
+  autorizada. Os filtros locais são Todas, Comercial, Follow-up, Funil e Avaliadas; os
   perfis visuais são Menor de 18, Adulto, 60+ e Dependente. Na lista de
   conversas, as etiquetas ao lado da data preservam a relação entre faixa
   etária e destino nas formas abreviadas DP -18, DP 18–59, DP 60+, 18–59 e
@@ -1261,13 +1269,18 @@ Implementação principal:
 - As opções `idade_minima_suporte`, `email_obrigatorio` e `bpa_ativo` são lidas
   da unidade. O limite é apresentado como política; não modifica tags 18–59/60+
   ou de dependentes nem esconde envios ao Funil registrados em qualquer faixa.
-- Relatórios possui o card Encaminhados ao comercial, abaixo dos quatro KPIs.
-  Conta clientes distintos da unidade com conversa encerrada por
-  `encaminhado_suporte_idoso`, usando `finalizou_em >= início` e `< fim` do período.
-  Inclui os registros históricos independentemente da configuração atual e da
-  conversa mais recente; não inclui outros motivos nem o tratamento de 100+.
-  Não comprova clique, atendimento humano, matrícula, venda ou envio ao Funil.
-  Falha de consulta não é zero. O card não é duplicado na seção Conversas.
+- Comercial mostra somente chats cuja última conversa real na unidade encerrou
+  por idade. Uma conversa nova remove a tag, mesmo fora do período consultado;
+  a configuração atual não altera uma tag histórica. A legenda explica cada filtro.
+- Relatórios possui a tabela Encaminhamentos e encerramentos por idade abaixo
+  dos quatro KPIs. Conta conversas (não contatos), por `finalizou_em >= início`
+  e `< fim`, mesmo que exista atendimento posterior. Mostra suporte do limite
+  atual, universal 90+ separada por titular/dependente, titular menor e dependente
+  abaixo do mínimo BPA atual. Configurações diferentes e legados sem limite
+  identificável ficam fora. Reescolher a mesma configuração inclui motivos iguais
+  no período, independentemente da data dessa reconfiguração.
+  Distingue contato enviado de encerramento sem contato; não comprova clique,
+  atendimento humano, matrícula ou envio ao Funil. Falha de consulta não é zero.
 - O relatório mostra métricas, comparação, demanda ao longo do tempo, perfis,
   satisfação e a etapa atual da conversa mais recente de cada contato que teve
   atividade no período. Cada contato conta uma vez. A etapa é um retrato atual;

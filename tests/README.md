@@ -173,7 +173,7 @@ Nenhum teste acessa a base de produção.
 
 ## Suporte por idade
 
-`unit/test_suporte_por_idade.py` cobre as seis configurações, fronteiras,
+`unit/test_suporte_por_idade.py` cobre as cinco configurações (desativado/50/60/70/80), fronteiras,
 Admin, contato comercial, mensagem, recuperação com limite atual e contagem
 real em SQLite dos encaminhamentos por unidade, data e motivo. As suítes de
 e-mail, turno, follow-up, CSV e relatórios continuam como regressão.
@@ -185,3 +185,15 @@ e consultas reais de contexto/relatório no schema completo após a migração. 
 `SUPORTE_IDADE_TEST_DSN`, host loopback e banco vazio `test_chatbot_suporte_idade`.
 Recusa schema chatbot preexistente; não usa DB_HOST/DB_NAME. Sem a variável, é
 pulado. Ver o [procedimento](../deploy/idade_minima_suporte.md) para homologação.
+
+
+## Encerramentos por idade
+
+`test_encerramentos_por_idade.py` cobre faixa compatível no retry, mensagem ligada
+à recuperação, cortes de idade, BPA histórico, último chat, separação por unidade
+e relatório de conversas na configuração atual. Inclui idade por extenso e com
+`anos de idade`, além dos retornos de titular com 91 e dependente com 92 depois
+de ativar suporte 80+: ambos conservam a categoria universal sem novo envio.
+`test_encerramentos_por_idade_postgres.py`
+exige `COMERCIAL_IDADE_TEST_DSN` em banco loopback vazio `test_chatbot_comercial`;
+recusa qualquer schema chatbot preexistente. Nunca apontar testes para produção.

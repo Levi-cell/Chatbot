@@ -113,8 +113,8 @@ e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
 30 dias são exclusivos da política da etapa 22.
 
 Cada unidade possui `idade_minima_suporte INTEGER NULL DEFAULT NULL`, limitada
-por CHECK a NULL/50/60/70/80/90, e `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`.
-O limite encaminha apenas titulares a partir da idade escolhida até 99 anos;
+por CHECK a NULL/50/60/70/80, e `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`.
+O limite encaminha apenas titulares a partir da idade escolhida até 89 anos;
 NULL desativa. A coleta de e-mail conserva a exceção universal do titular 60+.
 
 O SQL `deploy/migrations/20260911_idade_minima_suporte.sql` converte a coluna
@@ -270,3 +270,12 @@ gerenciador de segredos.
 - `tests/integration/test_followup_postgres.py` (PostgreSQL local descartável).
 
 A organização e o comando da suíte completa estão em `tests/README.md`.
+
+
+## Encerramentos por idade e configuração atual
+
+A migração `20260926_filtro_comercial_regras_idade.sql` amplia o CHECK de motivos,
+preserva legados, normaliza suporte 90 para NULL e exige telefone comercial válido.
+Não cria coluna nem altera motivos históricos. A entrada vinculada à resposta
+conserva a idade informada; o motivo específico conserva o limite aplicado.
+Instalações novas usam o DDL final e não reaplicam migrações antigas.

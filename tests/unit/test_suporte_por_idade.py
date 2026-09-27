@@ -16,7 +16,8 @@ from core.repositories.monitoramento import painel as repositorio
 from core.integrations.whatsapp.messages.etapa6_messages import montar_mensagem_suporte_idoso_etapa6
 from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa6 as sender
 from monitoramento import services
-from monitoramento.apresentacao import montar_relatorio, classificar_faixa
+from monitoramento.apresentacao import classificar_faixa
+from monitoramento.encerramentos import montar_tabela_encerramentos
 from monitoramento.periodos import PERIODOS, resolver_periodo
 from webhook.admin import UnidadeAdmin
 from webhook.models import Unidade
@@ -26,7 +27,7 @@ from workers.worker_flow.response_flow.etapas import resolver_etapa6
 from workers.worker_flow.transacoes import efeitos_transicao, encerramento_atendimento
 
 
-LIMITES = (None, 50, 60, 70, 80, 90)
+LIMITES = (None, 50, 60, 70, 80)
 
 # Amostra independente do catálogo atual: a produção ainda pode enviar esse texto.
 MENSAGEM_LEGADA_SEM_FAIXA = (
@@ -41,7 +42,7 @@ MENSAGEM_ENCAMINHAMENTO_ATUAL = (
 MENSAGEM_ANAMNESE_100_MAIS = (
     'Certo, olha, para idades mais avançadas vamos precisar realizar uma pequena '
     '*anamnese* com um dos nossos consultores.\n'
-    'Basta clicar no botão abaixo para falar com nosso time! 😊\n'
+    'Basta clicar no botão abaixo para falar com nosso time e iniciar a anamnese! 😊\n\n'
     '_Nosso time vai orientar os próximos passos. 🧡_'
 )
 
@@ -63,7 +64,7 @@ class SuportePorIdadeTests(unittest.TestCase):
         self.assertEqual(list(campo.formfield().choices), [(None, 'Desativado')] + [
             (idade, f'{idade}+') for idade in LIMITES[1:]
         ])
-        for invalido in (True, False, 0, -1, 49, 55, 100, '60', 60.0):
+        for invalido in (True, False, 0, -1, 49, 55, 90, 100, '60', 60.0):
             with self.subTest(invalido=invalido), self.assertRaises(ValueError):
                 validar_idade_minima_suporte(invalido)
         with self.assertRaises(ValueError):
@@ -88,7 +89,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                             'idade_minima_suporte': '' if limite is None else str(limite),
                             'numero_comercial': telefone,
                         }, instance=instance)
-                        esperado = limite is None or telefone == '(71) 99999-9999'
+                        esperado = telefone == '(71) 99999-9999'
                         self.assertEqual(form.is_valid(), esperado, form.errors)
                         if not esperado:
                             self.assertIn('numero_comercial', form.errors)
@@ -115,7 +116,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                         contexto = contexto_etapa6(idade, suporte=limite, dependente=dependente)
                         contexto['bpa_ativo_unidade'] = bpa
                         esperado = (
-                            'cem' if idade >= 100 else
+                            'cem' if idade >= 90 else
                             'suporte' if not dependente and limite is not None and idade >= limite else
                             'menor' if not dependente and idade < 18 else
                             'crianca' if dependente and idade < (4 if bpa else 5) else
@@ -207,8 +208,8 @@ class SuportePorIdadeTests(unittest.TestCase):
                     self.assertNotIn('evento_transicao', envio)
                     conta.return_value.send_message.assert_called_once()
 
-                    # O motivo geral continua vindo da idade original no retry,
-                    # independentemente do corpo enviado antes da interrupção.
+                    # A resposta comprovada de 100+ preserva o motivo legado: o corpo
+                    # sozinho não prova qual limiar universal era vigente.
                     contexto['resposta_bot_para_mensagem_atual'] = {
                         'tipo_mensagem': 'interactive_cta_url',
                         'conteudo_texto': enviado['text'],
@@ -242,7 +243,7 @@ class SuportePorIdadeTests(unittest.TestCase):
         for idade in (50, 59, 60, 99):
             contexto = contexto_etapa6(idade, suporte=50)
             envio = contexto_envio(6)
-            envio.update(encerrar_atendimento=True, motivo_encerramento='encaminhado_suporte_idoso', idade_aluno=idade)
+            envio.update(encerrar_atendimento=True, motivo_encerramento='encaminhado_suporte_idoso', idade_aluno=idade, limite_idade_encerramento=50)
             cursor = object()
             with patch.object(efeitos_transicao, 'atualizar_idade_cliente') as salvar:
                 efeitos_transicao.atualizar_banco_conforme_transicao_de_etapa(contexto, envio, cursor)
@@ -251,7 +252,7 @@ class SuportePorIdadeTests(unittest.TestCase):
             self.assertEqual(intencao['bloqueio_dias'], 0)
             self.assertFalse(intencao['excluir_dependente'])
 
-    def test_recuperacao_reconhece_variantes_mas_usa_limite_atual(self):
+    def test_recuperacao_reconhece_variantes_e_reconstroi_faixa_compativel(self):
         textos = [
             MENSAGEM_LEGADA_SEM_FAIXA,
             # Corpo salvo pela V1.5.2, antes da redução de espaçamento.
@@ -260,7 +261,7 @@ class SuportePorIdadeTests(unittest.TestCase):
             montar_mensagem_suporte_idoso_etapa6(50),
         ]
         for texto_enviado in textos:
-            for atual, idade, encerra in ((70, 65, False), (70, 75, True), (None, 95, False), (50, 55, True)):
+            for atual, idade, encerra in ((70, 65, True), (70, 75, True), (None, 95, True), (50, 55, True)):
                 contexto = contexto_etapa6(idade, suporte=atual)
                 contexto['resposta_bot_para_mensagem_atual'] = {
                     'tipo_mensagem': 'interactive_cta_url',
@@ -325,10 +326,10 @@ class EncaminhamentosRelatorioTests(unittest.TestCase):
                 stack.enter_context(patch.object(repositorio, 'buscar_metricas', return_value={}))
                 for nome in ('buscar_perfis', 'buscar_satisfacao', 'buscar_etapas', 'buscar_atividade'):
                     stack.enter_context(patch.object(repositorio, nome, return_value=[]))
-                contar = stack.enter_context(patch.object(repositorio, 'contar_encaminhados_comercial_por_idade', return_value=3))
+                contar = stack.enter_context(patch.object(services.repositorio_encerramentos, 'contar_encerramentos_por_motivo', return_value=[{'motivo_encerramento':'idade_universal_90','status_dependente':False,'conversas':3}]))
                 payload = services.carregar_relatorio(SimpleNamespace(id_unidade=10), periodo)
                 self.assertEqual(contar.call_args.args[:3], (10, periodo.inicio, periodo.fim))
-                self.assertEqual(payload['encaminhados_comercial_por_idade'], 3)
+                self.assertEqual(payload['encerramentos_por_idade']['total_encaminhadas'], 3)
                 self.assertIsNone(payload['unidade']['idade_minima_suporte'])
                 contar.side_effect = RuntimeError('banco indisponível')
                 with self.assertRaises(RuntimeError):
@@ -337,7 +338,7 @@ class EncaminhamentosRelatorioTests(unittest.TestCase):
     def test_card_nao_inventa_zero_e_tags_permanecem_fixas(self):
         for invalido in (None, True, -1, '1'):
             with self.assertRaises(ValueError):
-                montar_relatorio({}, None, {}, {}, [], [], encaminhados_comercial_por_idade=invalido)
+                montar_tabela_encerramentos([{'conversas': invalido}], idade_minima_suporte=60, bpa_ativo=False)
         self.assertEqual(classificar_faixa(59), 'adulto')
         self.assertEqual(classificar_faixa(60), 'idoso')
         perfis = services._agrupar_perfis([

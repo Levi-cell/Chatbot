@@ -305,3 +305,25 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .indicador-comercial p{margin:0;color:var(--muted);font-size:12px;line-height:1.5}
 .indicador-comercial .politica-suporte{margin-top:4px}
 .total-comercial{font-size:28px;line-height:1.2;overflow-wrap:anywhere;max-width:100%;color:var(--verde-800)}
+
+
+/* Encerramentos por idade: estilos locais, sem alterar tabelas ou selos de perfil. */
+.mini-tag.comercial,.tag-contato.comercial{background:#fff0cf;color:#71501b}
+.grupo-filtros{position:relative;display:flex;align-items:center;gap:4px;padding-right:8px;flex-shrink:0}
+.grupo-filtros .filtros-conversas{flex:1;min-width:0}
+.informacao-filtros{flex:0 0 28px;width:28px;height:28px;border:1px solid #dce3d7;border-radius:50%;background:#fff;color:#395a36;font-weight:700;cursor:pointer}
+.informacao-filtros:focus-visible{outline:2px solid #395a36;outline-offset:2px}
+.legenda-filtros{position:absolute;z-index:20;left:10px;right:10px;top:100%;max-height:min(400px,50dvh);overflow:auto;padding:16px;background:#fff;border:1px solid #dce3d7;border-radius:12px;box-shadow:0 8px 24px #142b1526;font-size:12px;line-height:1.5}
+.legenda-filtros dl{margin:10px 0 0}.legenda-filtros dt{font-weight:700;color:#2b4930}.legenda-filtros dd{margin:0 0 8px;color:#586557}
+.resumo-encerramentos{display:flex;gap:28px;flex-wrap:wrap;margin:12px 0 16px}
+.resumo-encerramentos p{display:flex;align-items:baseline;gap:8px;margin:0;color:#56644f;font-size:13px}
+.resumo-encerramentos strong{font-size:25px;color:#284a2e}
+.tabela-encerramentos{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.tabela-encerramentos caption.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.tabela-encerramentos th,.tabela-encerramentos td{padding:12px 10px;border-bottom:1px solid #e9eee5;text-align:left;overflow-wrap:anywhere}
+.tabela-encerramentos thead th{color:#63705d;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.tabela-encerramentos th:first-child{width:46%}.tabela-encerramentos th:last-child{width:16%}
+.tabela-encerramentos tbody th{font-weight:500}.tabela-encerramentos .quantidade,.tabela-encerramentos thead th:last-child{text-align:right;font-weight:700}
+.tabela-encerramentos .quantidade{color:#2b5932;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.tabela-encerramentos{font-size:12px}.tabela-encerramentos th,.tabela-encerramentos td{padding:10px 4px}.tabela-encerramentos th:first-child{width:42%}.tabela-encerramentos thead th:last-child{width:72px;white-space:nowrap;font-size:10px;letter-spacing:0}.resumo-encerramentos{gap:8px}.resumo-encerramentos p{width:100%}}
+@media(pointer:coarse){.informacao-filtros{flex-basis:44px;width:44px;height:44px}}

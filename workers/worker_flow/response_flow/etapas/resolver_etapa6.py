@@ -1,5 +1,7 @@
 import logging
 
+from core.validacoes.encerramento_por_idade import IDADE_UNIVERSAL
+
 from workers.worker_flow.response_flow.repeticao_followup import (
     enviar_repeticao_followup,
 )
@@ -132,7 +134,7 @@ def resolve_etapa6(contexto_historico):
             nome_dependente,
         )
 
-    if resultado_idade.acima_limite:
+    if resultado_idade.idade >= IDADE_UNIVERSAL:
         contexto_envio = enviar_etapa6_idade_acima_99(
             cliente_telefone,
             phone_id_unidade,
@@ -155,7 +157,7 @@ def resolve_etapa6(contexto_historico):
         contexto_historico["idade_minima_suporte"]
     )
 
-    # O tratamento universal de 100+ já ocorreu. Dependentes seguem seu fluxo.
+    # O tratamento universal de 90+ já ocorreu. Dependentes seguem seu fluxo.
     if (
         not status_dependente
         and idade_minima is not None
@@ -175,6 +177,7 @@ def resolve_etapa6(contexto_historico):
             contexto_envio,
             idade,
             MOTIVO_SUPORTE_IDOSO,
+            limite_idade_encerramento=idade_minima,
         )
 
     if not status_dependente and idade < 18:
@@ -204,6 +207,7 @@ def resolve_etapa6(contexto_historico):
             idade,
             MOTIVO_DEPENDENTE_MENOR_5,
             excluir_dependente=True,
+            limite_idade_encerramento=idade_minima_dependente,
         )
 
     # VALIDANDO DESTINO(S)
@@ -346,6 +350,7 @@ def _anexar_encerramento(
     motivo,
     *,
     excluir_dependente=False,
+    limite_idade_encerramento=None,
 ):
     contexto_envio.update(
         {
@@ -353,6 +358,7 @@ def _anexar_encerramento(
             "encerrar_atendimento": True,
             "motivo_encerramento": motivo,
             "excluir_dependente": excluir_dependente,
+            "limite_idade_encerramento": limite_idade_encerramento,
         }
     )
     return contexto_envio

@@ -1,6 +1,6 @@
 """Domínio puro da configuração de encaminhamento por idade da unidade."""
 
-IDADES_MINIMAS_SUPORTE = (50, 60, 70, 80, 90)
+IDADES_MINIMAS_SUPORTE = (50, 60, 70, 80)
 
 
 def validar_idade_minima_suporte(valor):

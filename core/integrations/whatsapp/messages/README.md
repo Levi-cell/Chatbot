@@ -143,7 +143,7 @@ Há quatro grupos distintos em `etapa1_messages.py`:
 | Grupo | Quando usar | Conteúdo |
 |---|---|---|
 | Apresentação inicial padrão | Primeiro contato, antes de a etapa 1 estar apresentada | Saudação, agente/unidade, acolhimento e pergunta do primeiro nome. |
-| Apresentação inicial explicativa | O primeiro texto pergunta o que é o Supera ou pede informações gerais | Mensagem única aprovada: apresentação, explicação como academia para o cérebro e pedido do nome. |
+| Apresentação inicial explicativa | O primeiro texto pergunta o que é o Supera ou pede informações gerais | Mensagem única aprovada: apresentação e pedido do nome para orientar e passar mais detalhes. |
 | Apresentação inicial com tratamento | A primeira entrada já contém mídia, dúvida financeira ou ideia de reforço escolar | Apresentação/acolhimento + tratamento correspondente + pergunta do primeiro nome. |
 | Tratamento após a apresentação | O bot já pediu o nome e a resposta precisa de orientação | Tratamento + pergunta do nome; no contexto de nome inválido, a orientação já contém esse pedido. Não repetir toda a apresentação. |
 
@@ -164,21 +164,23 @@ selecionada quando `id_etapa_atual is None` e a entrada é `text`. Não classifi
 novamente esse pedido depois que o bot já solicitou o nome.
 
 `valida_inicio_etapa1.py` reconhece expressões completas como `O que é o Supera`,
-`Do que se trata`, `O que é`, `Como funciona` e `Olá! Posso ter mais informações
+`Do que se trata`, `O que é`, `Como funciona`, `Conhecer o curso`,
+`Quero conhecer o curso` e `Olá! Posso ter mais informações
 sobre isso?`, com ou sem saudação, acentos e interrogação. Não depender de uma
 palavra solta como `informações`. Pedidos sobre outro assunto e negativas não
 são aceitos por esse classificador. Dúvidas específicas continuam nos tratamentos
 existentes, inclusive quando misturadas ao pedido genérico.
 
-`MENSAGEM_INFORMACOES_INICIO_ETAPA1` é uma mensagem completa: usa o texto aprovado
-com `Hoje vou te ajudar a conhecer o Supera! 🧡`, a explicação da academia para o
-cérebro e um único pedido do nome. Não concatenar a abertura padrão, a pergunta
+`MENSAGEM_INFORMACOES_INICIO_ETAPA1` é uma mensagem completa: apresentação seguida
+de `Para eu te orientar melhor e passar mais detalhes poderia me falar seu nome?`.
+Os parágrafos são separados por `\n\n`, sem espaço no início do segundo.
+Não concatenar a abertura padrão, a pergunta
 de repetição ou um rodapé adicional. O montador somente formata saudação, agente,
 artigo e unidade; a seleção da variante pertence ao resolver.
 
 Ambas as aberturas apresentam a etapa 1 sem validar o primeiro texto como nome,
 sem transição para a 2 e sem contar tratamento inválido. Após o nome válido,
-seguem para a mesma etapa 2: `Prazer, {nome_titular}!` e `Então, o Supera…`.
+seguem para a mesma etapa 2: `Prazer, {nome_titular}!` e `O Supera…`.
 Não há flag, coluna ou nova etapa para lembrar qual abertura foi usada.
 Follow-up da etapa 1 mantém saudação sem nome + pergunta de repetição; não
 reenvia essa explicação. Retry reutiliza a resposta já persistida.
@@ -297,13 +299,13 @@ validadores durante uma revisão de personalidade.
 
 ### Etapa 6: encaminhamentos por idade
 
-A faixa configurável (50/60/70/80/90) encaminha somente titulares até 99 anos.
-O caso de **100 anos ou mais** é uma regra geral para titular e dependente,
+A faixa configurável (50/60/70/80) encaminha somente titulares até 89 anos.
+O caso de **90 anos ou mais** é uma regra geral para titular e dependente,
 inclusive com suporte desativado, e tem mensagem própria sobre uma pequena
 anamnese com um consultor. A redação não deve presumir que a pessoa conversando
 será a participante quando a rota for de dependente.
 
-Na mensagem de 100+, acrescentar uma vez o rodapé acolhedor
+Na mensagem de 90+, acrescentar uma vez o rodapé acolhedor
 `Nosso time vai orientar os próximos passos. 🧡`, usando o componente de rodapé.
 O botão abre o contato comercial. Não repetir a pergunta de idade, usar o
 rodapé de seleção de opções ou prometer dia e horário já reservados.
@@ -313,7 +315,7 @@ Esse encaminhamento encerra o atendimento do bot; não é uma repetição de eta
 
 Todo botão de contato comercial deve abrir o WhatsApp com um pedido pronto.
 Isso inclui tanto o suporte pela faixa configurada quanto o encaminhamento de
-100+. O cliente ainda confirma o envio; clicar no botão não envia a mensagem.
+90+. O cliente ainda confirma o envio; clicar no botão não envia a mensagem.
 
 O montador `montar_mensagem_contato_comercial_etapa6` identifica o chatbot,
 a unidade e o cliente, usando os dados da conversa. Depois, adapta o pedido:
@@ -734,3 +736,12 @@ reapresentam o agente na etapa 1, não comemoram novamente a oferta e não agrad
 outra vez pelas perguntas antes do link. Desde a revisão de 23/09/2026, a reação
 ao follow-up é validada normalmente, com a exceção da etapa 8 descrita acima.
 Os validadores, eventos e critérios de elegibilidade permanecem os mesmos.
+
+
+### Reconhecimento na recuperação da etapa 6
+
+`reconhecer_encerramento_etapa6` identifica os corpos conhecidos de suporte,
+universal, titular menor e dependente abaixo do mínimo. Tolera espaçamento e
+prefixo de retorno somente na leitura; não modifica as quebras das mensagens.
+O worker comprova o vínculo da resposta com a entrada. Os nomes antigos que
+contêm `acima_99` permanecem como contrato interno; o resolver aplica universal 90+.

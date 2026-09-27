@@ -177,14 +177,15 @@ origem, mesmo que outra etapa reconheça os mesmos textos com eventos próprios.
 - Etapa 4: profissão válida é persistida em `conversa.profissao` e atualiza
   também `cliente.profissao`. O snapshot da conversa preserva o atendimento
   anterior quando o cadastro do cliente muda.
-- Etapa 6: `idade_minima_suporte` aceita NULL (desativado), 50, 60, 70, 80 ou 90.
-  Encaminha somente titulares a partir do limite até 99 anos, persiste a idade e
-  encerra na etapa 6 com `encaminhado_suporte_idoso`, sem bloqueio ou Funil.
-  Dependentes seguem as regras atuais. Pessoas de 100+ conservam o encaminhamento
-  próprio para titular ou dependente, mesmo com suporte desativado.
-  Na recuperação, as cinco mensagens oficiais identificam a resposta já enviada;
-  uma reavaliação usa o limite atual, sem recuperar a configuração anterior.
-  A barreira de idempotência impede reenvio e não cria avanço de etapa.
+- Etapa 6: suporte NULL/50/60/70/80, exclusivo do titular até 89. Universal 90+
+  prioritária em ambas as rotas. Menores de 18 e dependentes abaixo de 4 com BPA
+  ou 5 sem BPA encerram sem contato. Todos esses casos ficam fora do Funil e
+  sem bloqueio. O contexto conserva a categoria e o limite usados no envio.
+  A recuperação reconhece a resposta da entrada em retry antes de decidir a
+  categoria e valida a idade daquela entrada, nunca a idade global. Se necessário,
+  reconstrói suporte compatível com a idade; mínimo BPA vem do corpo enviado.
+  Não recalcula um motivo já confirmado e não altera commits ou idempotência.
+  O validador numérico mantém o contrato 100+ para replay de avanços antigos.
 - Etapa 7: confirmações de aceite geram `oferta_aceita` (`7 -> 10`);
   `Talvez mais tarde` gera `oferta_adiada` (`7 -> 8`). Pedidos como
   `quero mais informações` ou `quero saber mais` não são aceite; assim como
@@ -204,11 +205,45 @@ No retry já respondido da etapa 10, o resultado aceito do e-mail é reconstruí
 pelo histórico original, sem nova chamada à Meta nem reavaliação pela política
 de e-mail atual da unidade.
 
-No encaminhamento por idade da etapa 6, o histórico comprova a resposta já
-enviada, e a reavaliação do encerramento usa o limite atual da unidade. Se esse
-limite estiver desativado ou não abranger mais a idade do titular, a recuperação
-não encerra por suporte, não reenvia a resposta nem avança automaticamente a
-etapa. O limite anterior não é restaurado e o histórico original é preservado.
+### Recuperação de encerramento por idade
+
+A reconstrução em `transacoes/encerramento_atendimento.py` só é usada com
+`resposta_ja_existia`: o histórico precisa comprovar a resposta do bot vinculada
+à mesma conversa e à mesma entrada em recuperação. Não reclassifica uma conversa
+já concluída nem procura uma mensagem qualquer de outro atendimento.
+
+O corpo e o tipo da resposta salva identificam a categoria de encerramento.
+`validar_idade(texto_cliente_atual)` extrai um inteiro da entrada vinculada:
+`71`, `71 anos`, `71 anos de idade` e `Setenta e um` produzem 71. Nunca comparar
+texto livre com o limite nem usar `cliente.idade`, cujos efeitos podem estar
+pendentes. Entrada inválida ou ambígua não autoriza inventar uma faixa.
+
+Para suporte comprovado de titular entre 50 e 89, manter o limite atual se
+abranger a idade. Se estiver desativado ou não a abranger, usar a maior opção
+50/60/70/80 que não ultrapasse a idade. Essa faixa justifica o encaminhamento,
+mas não comprova qual configuração exata existia; a reconstrução fica no log.
+
+| Resposta já registrada | Idade extraída | Suporte antes do retry | Resultado |
+| --- | --- | --- | --- |
+| Suporte de titular | 51 | 60+ | `suporte_idoso_50` |
+| Suporte de titular | 71 | 80+ | `suporte_idoso_70` |
+| Suporte de titular | 71 | 60+ | `suporte_idoso_60` |
+| Universal de titular, enviada com suporte desativado | 91 | 80+ | `idade_universal_90` |
+| Universal de dependente, enviada com suporte desativado | 92 | 80+ | `idade_universal_90` |
+
+Nos dois casos universais, a categoria da resposta já enviada tem prioridade.
+Para dependentes há ainda a restrição independente de que suporte configurável
+é exclusivo de titulares. Nenhum desses casos é convertido em suporte 80+.
+Novos atendimentos aplicam a universal a partir de 90, com qualquer configuração.
+No retry legado de 100+ sem motivo confirmado, o corpo igual entre versões não
+comprova o limiar histórico; conserva-se o motivo genérico. Suporte antigo de
+90–99 também permanece genérico. O mínimo BPA vem da resposta efetivamente enviada.
+
+A recuperação conclui o encerramento e a fila `sent` na mesma transação, sem
+reenviar a resposta, sem Funil e sem bloqueio de 30 dias por idade. Uma conversa
+nova segue as regras atuais: titular de 71 com suporte 80+ continua normalmente.
+Se a Meta aceitou o envio, mas nenhuma resposta foi persistida antes da falha,
+permanece o risco aceito de novo envio com a configuração atual.
 
 ### Saudação de retorno
 

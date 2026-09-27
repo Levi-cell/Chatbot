@@ -1,13 +1,20 @@
 # Plano prático: filtro Comercial e regras de encerramento por idade
 
-**Revisão:** 26/09/2026. **Status:** proposta completa em código; ainda não aplicada ao projeto.
+**Revisão:** 26/09/2026. **Status:** aplicado no projeto local; migração e deploy em produção pendentes.
 **Base Git:** `087b5eb348d5fa84a8c78ecf26c37b59f52afda7`. Cada passo registra também o SHA-256 do arquivo local usado como base.
+
+**Base da aplicação:** backup `978627dd55885b42b451b29e5f01e435b01373aa`.
 
 Este documento substitui o plano teórico anterior. Cada passo contém o conteúdo
 integral de um arquivo, inclusive trechos preservados. Não há instruções do tipo
 “restante igual” ou código omitido. O passo final contém a migração SQL inteira.
-A cópia temporária foi usada para conferir a proposta; no projeto real, esta tarefa
-altera somente este documento. Não há deploy, alteração de banco ou envio de mensagens.
+A cópia temporária foi usada para conferir a proposta. Os 36 arquivos foram
+aplicados após conferir os hashes da base, preservando as correções posteriores
+da etapa 1 e os testes atualizados. Os blocos abaixo conservam o código aprovado
+como registro da proposta; a documentação dos arquivos aplicados recebeu também
+os exemplos discutidos e o registro de validação, e o teste de encerramentos
+ganhou os casos de idade textual e universal 91/92 após mudança de configuração.
+Não houve deploy, alteração do banco de produção ou envio de mensagens.
 
 ## Contrato aprovado
 
@@ -104,31 +111,39 @@ resposta de encaminhamento comprovada autorizando a regra especial.
 
 ## Validação realizada e limites
 
-- 128 testes passaram na cópia candidata; três testes de PostgreSQL ficaram
-  ignorados por ausência do banco local descartável. Inclui recuperação, painel,
-  follow-up, métricas e execução do worker com integrações simuladas.
-- A suíte ampliada encontrou 17 falhas/subtestes antigos de texto/espaçamento.
-  Elas foram reproduzidas em uma cópia da base original (54 testes, 17 falhas).
-  Foram mantidas fora desta alteração. O erro adicional da fixture com suporte
-  configurável 90 foi corrigido para o domínio novo no passo correspondente.
+- A suíte completa de 293 testes passou no projeto aplicado. Em seguida,
+  18 testes direcionados passaram, incluindo um caso novo de recuperação
+  universal com titular de 91 e dependente de 92: 294 testes unitários distintos.
+  A reconstrução também cobre `71 anos`, `71 anos de idade` e `Setenta e um`.
+- As 17 falhas/subtestes antigos de texto/espaçamento foram corrigidos nos
+  testes, com autorização, antes da aplicação e já fazem parte do backup.
+  Os textos aprovados não foram alterados para satisfazer expectativas antigas.
+- Os 13 testes de integração passaram em PostgreSQL 18.3 local descartável,
+  incluindo migração, preservação de dados, regras do schema, rollback,
+  atomicidade do encerramento com fila sent e compatibilidade com a migração
+  anterior. O servidor temporário foi encerrado após a validação.
 - JavaScript passou na checagem de sintaxe. Interface conferida em navegador
-  com fixtures fictícias, desktop e largura 390px: filtro, detalhes, legenda,
-  tabela, ausência de erros JS e de overflow horizontal. Formatação visual revisada.
-- Código Python dos arquivos propostos passou na análise sintática. A migração
-  **não foi executada em PostgreSQL nesta revisão**. Sua validação real, desempenho
-  das consultas com volume representativo e conferência pós-deploy são condições
-  da aplicação, detalhadas no procedimento. Não prometer ausência absoluta de bugs.
+  durante a revisão da mesma proposta, com fixtures fictícias em desktop e
+  largura 390px: filtro, detalhes, legenda, tabela, sem erros JS ou overflow
+  horizontal. Os arquivos de interface aplicados são os mesmos validados.
+- Na revisão anterior à aplicação, a migração exata também foi validada com
+  schema completo, falha antes do commit, disputa de lock, reversão e reaplicação.
+  As consultas foram exercitadas com 30 mil conversas, 60 mil mensagens e
+  10 mil chats sintéticos, incluindo isolamento por unidade e exclusão do Funil
+  para encerramentos por idade. Medições locais não garantem desempenho no RDS.
 - Nenhuma nova chamada à Meta/CRM foi feita; nenhuma credencial ou dado real foi
-  incluído nas fixtures. Não houve mudança dos arquivos de runtime no projeto.
+  incluído nas fixtures. A migração de produção ainda precisa ser executada
+  na janela coordenada de deploy. A validação local não promete ausência absoluta
+  de bugs nem substitui a conferência pós-deploy.
 
-## Como aplicar depois
+## Aplicação local e próximo deploy
 
-Conferir commit e hashes antes de copiar cada arquivo. Se a base mudou, reconciliar
-as diferenças; não sobrescrever correções posteriores. Salvar os arquivos completos
-dos passos em um checkout de implementação, rodar os testes e revisar a interface.
+Os arquivos já estão aplicados no checkout local. Não reaplicar os blocos deste
+registro por cima de correções posteriores. A documentação corrente e os arquivos
+do projeto são a referência após esta entrega.
 Preparar os arquivos não significa executar o SQL. Só executar o último passo na
 janela coordenada de deploy, com serviços/edições suspensos conforme o procedimento.
-Não alterar `VERSIONAMENTO.md` nem decidir uma versão por este plano; fazer isso na entrega.
+`VERSIONAMENTO.md` e a escolha da próxima versão ficam para a preparação do deploy.
 
 O worker principal, os commits, a busca de idempotência, o funil e o follow-up
 permanecem estruturalmente intactos. Os pontos de mudança do worker são
