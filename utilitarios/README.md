@@ -27,6 +27,9 @@ utilitarios/
 ├── requirements-monitoramento.txt
 ├── montar_lead_teste.py
 ├── verificar_followup.py    diagnóstico somente leitura, sem envio
+├── consultas_franquia/
+│   ├── consultar_franquia_meta.py  consumo, estimativa de franquia e faturas
+│   └── alterar_fuso_portfolio.py  altera e confirma o fuso do portfólio Meta
 ├── cache_consulta.py
 ├── utlitys.py
 ├── pintregister.py
@@ -210,6 +213,119 @@ Os identificadores são mascarados nas consultas por padrão.
 > Enquanto esse entrypoint não for corrigido em uma tarefa de código própria,
 > ele não é uma ferramenta CLI segura. Importar o módulo não realiza o POST.
 
+## Franquia de mensagens de serviço na Meta
+
+`consultas_franquia/consultar_franquia_meta.py` faz apenas GET na Graph API. Não consulta o banco,
+não envia mensagens e não depende dos webhooks de status nem de atualizar PyWa.
+Usa token e versão Graph da configuração existente. Consulta o `timezone_id`
+da WABA e resolve seu fuso IANA brasileiro automaticamente. Fuso ausente ou
+não mapeado gera erro; não é substituído pelo fuso do servidor ou do portfólio.
+
+### Executar pela IDE
+
+Abra `consultas_franquia/consultar_franquia_meta.py`, vá ao bloco `if __name__ == "__main__"` no
+final e edite os IDs diretamente nas chamadas `consultar_franquia(...)` e
+`consultar_faturas(...)`. Na consulta de mensagens, omita `fuso_horario` para
+usar o da WABA. Se informado, precisa coincidir com o retornado pela Meta.
+Ajuste `mes` se necessário (`None` para o mês atual; `"AAAA-MM"` para outro mês). Comente a
+chamada que não quiser executar. Clique em **Run neste arquivo**, sem argumentos
+de execução; os resultados serão impressos em JSON no console. As chamadas
+devem ficar dentro desse bloco para não executar consultas durante um import.
+
+Os atalhos também podem ser chamados diretamente dentro desse bloco ou em
+outro script:
+
+```python
+consultar_franquia("ID_DA_WABA", "PHONE_ID")
+consultar_faturas("ID_DO_PORTFOLIO")
+```
+
+Substitua os exemplos por IDs numéricos. Ambos os atalhos carregam o ambiente
+local, imprimem e retornam o dicionário completo. Não exigem `print()` extra.
+`consultar_franquia("ID_DA_WABA")` consulta todos os números dessa WABA.
+As duas funções aceitam `env_file=...` e `mostrar_identificadores=True`;
+por padrão, a exibição mascara IDs/telefones, sem alterar o retorno da função.
+Mantenha tokens nos arquivos de configuração; não publique IDs preenchidos.
+
+### Executar pelo terminal
+
+```bash
+python -m utilitarios.consultas_franquia.consultar_franquia_meta --waba-id WABA_ID --phone-number-id PHONE_ID --env-file .env
+```
+
+Acrescente `--phone-number-id PHONE_ID` para um único número, `--mes AAAA-MM`
+para outro mês ou `--mostrar-identificadores` para exibir os IDs completos.
+Sem o filtro de telefone, cada número da WABA recebe seu próprio resultado.
+O phone ID é validado contra a WABA; a consulta de analytics usa o telefone
+correspondente, não o ID, no filtro `phone_numbers`. Sem `--env-file`, aplica o
+bootstrap local padrão; na VM use `/etc/chatbot/chatbot.env`.
+
+A função `consultar_franquia_meta(waba_id, phone_number_id=..., mes=None)`
+retorna um dicionário. Não carrega o ambiente sozinha; o entrypoint CLI faz isso.
+É a função preparada para o futuro worker: o processo carrega o ambiente uma
+vez, e a função não reinicia variáveis, imprime, agenda, espera ou grava no banco.
+Aceita `session=...` para reutilizar uma sessão HTTP e `agora=...` para testes.
+O resultado inclui os volumes `FREE_CUSTOMER_SERVICE`, `FREE_ENTRY_POINT` e
+`REGULAR` da categoria `SERVICE`. Desde outubro/2026, calcula
+`max(0, 1000 - FREE_CUSTOMER_SERVICE)` por número. Mensagens gratuitas por
+anúncio não são subtraídas da franquia. Para meses anteriores, os campos de
+franquia e saldo ficam nulos: a classificação antiga não mede essa franquia e
+pode incluir templates de utilidade. `data_hora_inicio` e `data_hora_fim`
+representam os limites fixos do mês. `fim_exclusivo` limita a consulta ao instante
+de referência no mês atual; meses encerrados usam o mês completo. O retorno
+também inclui `mes_em_andamento`, `timezone_id`, `total_mensagens`,
+`mensagens_cobradas_meta`, `mensagens_assumidas_esl` e `mensagens_excedentes_unidade`.
+A divisão ESL/unidade aplica o benefício mensal proposto de 1.000 mensagens
+cobradas, sem somá-las novamente ao total e sem calcular valores monetários.
+Na meia-noite exata do primeiro dia, a consulta rejeita intervalo vazio; o futuro
+worker deve programar a primeira coleta após a virada, por exemplo às 00:01.
+
+Plano vigente: [consumo mensal, worker e seção Consumo](../docs/proposta_controle_mensagens_meta.md).
+O [histórico da pesquisa e contador de emergência](../docs/arquivo_pesquisa_meta_e_contador_emergencia.md)
+foi preservado separadamente. Banco, worker, painel e PDFs ainda não foram aplicados.
+
+O saldo é **estimado**, para números usados exclusivamente em conversas
+individuais pela WABA consultada. Não inclui grupos ou consumo de outras contas
+de mensagens no mesmo número; ambos podem compartilhar a franquia. Analytics
+não é uma reserva de crédito em tempo real nem garante gratuidade do próximo
+envio. Falha de permissão, campo ausente, resposta inválida ou métricas paginadas
+não viram saldo zero ou 1.000: o comando falha sem publicar saldo parcial.
+
+Referências: [analytics da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/analytics)
+e [preços, vigência e franquia](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing).
+
+### Faturas empresariais por portfólio
+
+`consultar_faturas(id_portfolio, meses=4)` usa o endpoint `business_invoices` via GET.
+O ID é o do portfólio empresarial, não o da WABA nem o `phone_id`. O utilitário
+percorre as páginas por cursor no endpoint original e preserva os valores,
+moedas e períodos retornados pela Meta, sem somá-los ou convertê-los.
+O período padrão inclui o mês atual até hoje e os três anteriores, pela **data
+de emissão**, usando `issue_start_date` inclusivo e `issue_end_date` exclusivo.
+Por exemplo, em 28/09/2026 consulta de 01/06/2026 até 29/09/2026 (exclusivo).
+`fuso_horario="America/Sao_Paulo"` define a data local para montar o recorte;
+não altera nem consulta o fuso configurado no portfólio.
+Não há filtro de WhatsApp: faturas de anúncios também são incluídas quando
+disponíveis nesse endpoint. `ad_account_ids` identifica as contas de anúncios
+associadas e `quantidade_faturas_com_contas_anuncio` conta as faturas com essa
+informação; ausência desses IDs não classifica uma fatura como WhatsApp.
+Este endpoint trata do **faturamento mensal**. Não equivale a listar todos os
+comprovantes de cartão, recargas ou gastos de campanhas em Ads Insights.
+`consultar_faturas_meta(id_portfolio, session=...)` é a função de consulta
+sem carregamento de ambiente ou impressão, para uso programático/testes.
+
+O token configurado precisa ter as permissões financeiras exigidas pela Meta.
+Lista vazia não comprova ausência de cobranças, e as faturas empresariais
+retornadas não são necessariamente do WhatsApp. A disponibilidade para as
+contas do projeto ainda depende de validação real. Falha de acesso ou resposta
+incompleta gera erro, sem apresentar uma lista parcial como consulta completa.
+URLs de download autenticadas não são solicitadas nem exibidas.
+
+Referências: [consulta de faturas mensais](https://developers.facebook.com/docs/marketing-api/reference/business/business_invoices/)
+e [campos da fatura, incluindo contas de anúncios](https://developers.facebook.com/docs/marketing-api/reference/omega-customer-trx/).
+
+Referência: [campos de fatura no SDK oficial da Meta](https://github.com/facebook/facebook-python-business-sdk/blob/main/facebook_business/adobjects/omegacustomertrx.py).
+
 ## Bloqueios Meta × banco
 
 Lista cada unidade com seu WABA e `phone_id`, consulta os bloqueados da Meta e
@@ -362,6 +478,39 @@ identificado para sua própria unidade. Como Santo André ainda não existe no
 banco, seu snapshot usa `id_unidade=-1` apenas para satisfazer o contrato
 interno; esse campo não é incluído no payload da ApiCarrossel. Importar os
 módulos nunca realiza uma requisição externa.
+
+## Fuso do portfólio Meta
+
+Em `consultas_franquia/alterar_fuso_portfolio.py`, a função
+`alterar_fuso_portfolio(id_portfolio, id_timezone)` carrega a configuração local
+e usa `requests` para consultar, alterar e confirmar o fuso do portfólio.
+Requer token com acesso administrativo ao portfólio. O exemplo do bloco
+`__main__` está comentado: descomente e execute o arquivo pela IDE quando quiser
+aplicar a mudança. Importar o arquivo não realiza requisições.
+
+```python
+alterar_fuso_portfolio(891138433896919, 206)
+```
+
+IDs Meta: `206` = `America/Bahia` (UTC−03 atualmente), `25` =
+`America/Sao_Paulo` (UTC−03 atualmente), `270` = `America/Porto_Velho`
+(UTC−04 atualmente). O Brasil não possui um único ID de fuso.
+`0` retornado em uma consulta significa `TZ_UNKNOWN`, não UTC+00:00.
+Referência: [tabela oficial da Meta](https://developers.facebook.com/docs/marketing-api/reference/ad-account/timezone-ids/).
+
+Só envia POST se o fuso atual for diferente. O resultado informa os IDs antes
+e depois; a confirmação exige nova leitura com o valor esperado. Timeout ou
+falha nessa leitura não prova que a mudança deixou de acontecer: consulte o
+estado antes de tentar novamente. A ferramenta não faz retries automáticos.
+O alvo é o portfólio; ela não altera a WABA nem contas de anúncios.
+
+O erro Meta `3910` indica falta de permissão para editar os dados do portfólio.
+Conseguir consultar a conta ou gerenciar a WABA compartilhada não comprova essa
+permissão. Um administrador do portfólio deve realizar a alteração ou revisar
+o acesso da identidade vinculada ao token. Não repetir o POST enquanto a
+permissão não tiver sido resolvida. A ferramenta explica esse código sem
+expor tokens ou respostas arbitrárias da API.
+Referência: [Business API, código 3910](https://developers.facebook.com/docs/marketing-api/reference/business/).
 
 ## Ideia futura: rotação automática do PIN
 

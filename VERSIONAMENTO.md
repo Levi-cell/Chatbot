@@ -106,6 +106,10 @@ Commit: `087b5eb348d5fa84a8c78ecf26c37b59f52afda7`
 
 Commit: `dbe38014a93b3d264e280911bd6db0f607591777`
 
+### V1.7.1 — Simplificação do card de encerramentos
+
+Commit: `d4104cfc444be88fef9deea1d0d3b4c5f04000da`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.
