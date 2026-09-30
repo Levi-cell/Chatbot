@@ -1,8 +1,9 @@
 # Plano de consumo mensal de mensagens da Meta
 
-Revisão: 29/09/2026. Escopo desta etapa: consolidar este plano e preparar somente
-a consulta de mensagens no utilitário. Banco, worker, painel, PDFs e deploy
-ficam para uma implementação posterior, conforme esclarecimento do usuário.
+Revisão: 29/09/2026. Implementação autorizada e aplicada ao projeto: integração,
+banco, worker, seção Consumo e PDFs. A migração de produção e a ativação do serviço
+continuam sendo etapas do deploy. Procedimento e SQL em
+[consumo_mensal_meta.md](../deploy/consumo_mensal_meta.md).
 
 Nomes aprovados pelo usuário: **`worker_consumo_meta`**, tabela
 **`consumo_mensal_meta`** e seção **Consumo**. As fronteiras mensais de calendário
@@ -90,7 +91,7 @@ exigem diagnóstico, sem transformar isso automaticamente em cobrança local.
 
 Arquivo atual: `utilitarios/consultas_franquia/consultar_franquia_meta.py`.
 
-Consulta programática preparada para o futuro worker:
+Consulta programática compartilhada com o worker:
 
 ```python
 resultado = consultar_franquia_meta(
@@ -141,10 +142,17 @@ No retorno, `data_hora_inicio` e `data_hora_fim` são as fronteiras fixas mensai
 `fim_exclusivo` é o fim efetivamente solicitado à API, limitado ao instante de
 referência quando o mês ainda está aberto. Não confundir esses dois fins.
 
-O futuro worker carrega o ambiente uma vez, reutiliza uma sessão HTTP com timeout
+O worker carrega o ambiente uma vez, reutiliza uma sessão HTTP com timeout
 finito e trata o erro por unidade. Não é necessário atualizar o PyWa para esse
 GET feito com `requests`. As funções de faturas e de alteração de fuso não foram
 incluídas no fluxo periódico e não devem ser executadas pelo worker.
+
+Por decisão de manutenção aprovada, o projeto foi atualizado de PyWa 3.8.0 para
+4.5.0 e a versão foi fixada em `requirements.txt`. A suíte existente e os testes
+de contrato com o SDK real e HTTP simulado passaram sem alterar os senders.
+A VM receberá a mesma versão na instalação das dependências durante o deploy;
+essa atualização não muda a versão da Graph API configurada no ambiente nem
+introduz uma migração SQL adicional.
 
 ## 4. Fuso e fronteiras do mês
 
@@ -170,7 +178,7 @@ Esses nomes substituem a proposta anterior de `fuso_horario_unidade` e
 `fuso_verificado_em` como controle auxiliar da última verificação válida.
 Usar a grafia `fuso` nos identificadores. O código não é um deslocamento UTC;
 o nome IANA deve respeitar a escrita canônica, como `America/Sao_Paulo`.
-As colunas ainda não foram criadas; a futura migração deixa as duas como NULL,
+A migração `20260929_consumo_mensal_meta.sql` cria as duas colunas como NULL,
 sem preencher todas as unidades com um fuso presumido.
 
 **A Meta é a fonte de verdade do cadastro de fuso.** O worker seguirá este fluxo:
@@ -394,7 +402,7 @@ Estados aprovados — são três valores na coluna `status_apuracao`:
 
 `status_apuracao` é o nome da coluna, não um quarto valor. Falha da API fica nos
 campos próprios de diagnóstico; não acrescentar `erro` como estado da apuração.
-Esta definição está aprovada no plano, sem migração ou worker implementados.
+Esta definição foi implementada no domínio, worker e constraints da migração SQL.
 
 Fluxo definido:
 
@@ -457,7 +465,7 @@ o usuário escolheu prazo mensal com prorrogação. Uma eventual revisão manual
 posterior deve preservar a trilha do dado anterior e a data da correção. Mudanças
 posteriores da Meta não serão detectadas automaticamente após a consolidação.
 O utilitário apenas consulta dados; agendamento, status e persistência pertencem
-ao futuro worker e aos repositórios.
+ao worker e aos repositórios.
 
 ## 8. Nova seção Consumo: conteúdo e comportamento
 
@@ -470,9 +478,25 @@ diagnóstico interno. Os dados e sua compreensão têm prioridade sobre decoraç
 
 Seletor próprio de mês, servido pelo banco da unidade:
 
-- Ordem decrescente, mês atual primeiro quando disponível.
+- Ordem decrescente, mês atual sempre primeiro, mesmo antes da primeira coleta.
+  Somente meses anteriores com registro da unidade entram no histórico. Meses
+  futuros não aparecem e são rejeitados também no endpoint e no PDF.
+- Exceção antes de outubro/2026: oferecer apenas “Out · 2026”, sem rotular como
+  mês atual, com “Disponível apenas dia primeiro de outubro.”. Não mostrar saldos
+  nem habilitar PDFs. A prévia funciona mesmo antes de o worker preencher o fuso.
+- O calendário de navegação usa o fuso da unidade. Enquanto ele estiver NULL,
+  usa America/Sao_Paulo somente para navegação, sem gravá-lo no cadastro nem
+  presumir recortes ou métricas. As coletas continuam exigindo o fuso da Meta.
 - Rótulos: “Dez · 2026 — mês atual”, “Nov · 2026”, “Out · 2026”.
-- Controle com seta e lista de meses organizada, operável por toque e teclado.
+- Controle nativo com seta e lista de meses organizada, operável por toque e
+  teclado. Históricos longos usam a rolagem do seletor no navegador/sistema;
+  não expandir todos os meses na página nem truncar anos antigos. Não é necessário
+  acrescentar paginação. A seleção automática acompanha a virada do mês, enquanto
+  uma escolha histórica explícita permanece no período escolhido.
+- Manter um único seletor. Quando houver meses de mais de um ano, agrupá-los
+  por ano dentro da própria lista, do mais recente ao mais antigo. Com apenas
+  um ano, exibir a lista simples. Um filtro independente por ano pode ser
+  considerado futuramente, conforme o tamanho do histórico e a necessidade real.
 - Cada opção corresponde a fronteiras mensais exatas, não a 30 dias.
 - Se o mês atual ainda não tiver coleta válida, apresentar “Aguardando primeira
   atualização” de forma distinta do zero, sem rotular o mês anterior como atual.
@@ -592,9 +616,9 @@ oficial existente. Nenhum número de cliente, token ou dado pessoal de conversas
 é necessário. Usar uma leitura consistente do banco para que cartões e totais
 do mesmo PDF não sejam montados com versões diferentes de uma coleta.
 
-Na futura implementação, escolher a ferramenta compatível com as dependências
-do projeto, gerar exemplos de uma e várias páginas e inspecionar visualmente.
-Não instalar ferramenta ou criar PDF fictício nesta fase de planejamento.
+PDF implementado com ReportLab e o SVG oficial convertido por svglib, fontes
+incorporadas e geração em memória. Exemplos de uma e várias páginas foram
+gerados com dados fictícios para revisão visual, fora dos arquivos da aplicação.
 
 ## 10. Tarifa por mensagem e comunicação comercial
 
@@ -647,7 +671,7 @@ a situação efetiva de faturamento da WABA antes de depender de entregas após
 esgotar a franquia. A concessão comercial da ESL não configura pagamento na Meta;
 o worker de métricas não deve cadastrar ou alterar formas de pagamento.
 
-## 11. Responsabilidades e arquivos da aplicação futura
+## 11. Responsabilidades e arquivos da aplicação
 
 - Integração de leitura: extrair o núcleo preparado em `utilitarios/consultas_franquia/`
   para módulo de `core/integrations/whatsapp/` na aplicação definitiva; o atalho
@@ -666,8 +690,8 @@ o worker de métricas não deve cadastrar ou alterar formas de pagamento.
 - Configuração de deploy/systemd, dependências se necessárias e documentação de
   operação, falhas e significado dos estados.
 
-SQL só será preparado/aplicado na implementação posterior. Nenhum serviço
-produtivo, tabela, token, fuso ou envio de mensagem foi alterado nesta etapa.
+SQL preparado em `deploy/migrations/20260929_consumo_mensal_meta.sql`. Nenhum
+serviço ou banco produtivo foi alterado pela implementação local.
 
 ## 12. Verificações antes de aplicar
 
@@ -746,6 +770,33 @@ detalhados no fluxo. A parada após consolidação substitui a proposta anterior
 de auditoria semanal; não há uma quarta opção de estado a implementar.
 Banco, worker, painel e PDFs permanecem para implementação posterior; esta
 revisão apenas atualiza o plano. A função de consulta já obtém o fuso da WABA;
-o futuro worker usa a informação atual da Meta para sincronizar o cadastro
+o worker usa a informação atual da Meta para sincronizar o cadastro
 local. O fuso opcional da função permanece uma conferência manual, sem servir
 como bloqueio da atualização automática e sem alterar a conta Meta.
+
+
+## 14. Mapa da implementação e decisões operacionais
+
+- `core/integrations/whatsapp/consumo.py`: GET da conta/fuso e pricing analytics;
+  o utilitário mantém seus atalhos IDE/CLI e delega a consulta a esse módulo.
+- `core/consumo_meta/`: calendário, validação de identidade, volumes e decisão do
+  dia 25. Comparação sempre usa a leitura persistida anterior ao upsert.
+- `core/repositories/consumo_meta/coletas.py`: SQL sem commits ou HTTP.
+- `workers/worker_consumo_meta/`: configuração, ciclo sequencial, supervisor e
+  transações curtas em `processamento.py`. Serviço systemd independente.
+- `consumo_meta_coletas`: agenda e diagnóstico separados, com chave unidade/período
+  (`conta` ou `AAAA-MM`). `ultima_tentativa_em`, `ultimo_erro`,
+  `falhas_consecutivas` e `proxima_consulta_em` ficam aqui, incluindo falhas antes
+  do primeiro registro mensal. Substitui os nomes propostos de verificação
+  no registro mensal sem duplicar estado de agenda.
+- `core/repositories/monitoramento/consumo.py`: leituras por unidade autenticada.
+- `callback/monitoramento/consumo_services.py`, `consumo_views.py`, `consumo_pdf.py`:
+  apresentação, autorização dos endpoints e relatórios. Frontend dedicado em
+  `consumo.js`/`consumo.css`, com seletor independente e refresh a cada 30 segundos.
+- Modelos unmanaged em `callback/webhook/models.py`; migração manual transacional,
+  reutilizada pelo setup inicial. Não é necessária migration Django desse domínio.
+- Referência monetária e vigência são preservadas por mês; o valor não é fatura.
+- Inicialmente recuperar meses desde outubro/2026; o cadastro de unidade atual
+  não possui data de início de acompanhamento. Não inferir essa data de conversas.
+- Reversão operacional mantém tabelas e dados (mudança aditiva), para evitar perda
+  de histórico. SQL e ativação de produção seguem o guia de deploy específico.

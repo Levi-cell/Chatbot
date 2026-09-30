@@ -1506,3 +1506,25 @@ envio. No primeiro, o flow lê stage positivo ao obter o lock; no segundo, relê
 o estado encerrado e abre outro atendimento, reagendando uma leitura obsoleta sem
 consumir retry. A janela entre aceite
 externo e commit local continua sujeita à duplicidade rara já aceita na V1.
+
+
+## Consumo mensal de mensagens Meta
+
+A seção Consumo usa analytics coletado por worker independente e armazenado por
+unidade/mês. Não altera etapas, elegibilidade do Funil, bloqueios, janelas de envio
+ou retries. O recorte é serviço individual: janela gratuita, franquia Meta usada
+e mensagens cobradas. A ESL cobre as primeiras 1.000 cobradas de cada mês; o
+excedente é separado. Franquia Meta inicial: 1.000 por número/mês, desde outubro/2026.
+
+O calendário usa o fuso informado pela WABA. Mês atual recebe coleta horária;
+meses encerrados pendentes recebem conferência diária. Só consolidar no dia 25
+previsto, se os volumes coincidirem com a coleta válida anterior de mês completo
+feita em data local anterior. Falha/divergência prorroga para o próximo dia 25.
+Consolidado é decisão interna da ESL, não fechamento de fatura pela Meta, e encerra
+as coletas automáticas do mês. Valores monetários no painel são referências.
+
+A interface e os PDFs leem exclusivamente o banco da unidade autenticada. Falha
+não apaga valores anteriores nem cria um saldo fictício. A data exibida é a última
+coleta válida do worker. Fusos e fronteiras de meses existentes são preservados;
+mudança incompatível de conta/número/fuso exige revisão, sem misturar recortes.
+Procedimento operacional: [Consumo Meta](deploy/consumo_mensal_meta.md).

@@ -160,6 +160,15 @@ senders são o local normal para chamadas de envio; operações compartilhadas d
 bloqueio e desbloqueio ficam em `tools/usuarios.py`, que reutiliza a mesma
 fábrica de cliente em `pywa_functions/cliente.py`.
 
+O projeto fixa **PyWa 4.5.0** em `requirements.txt`. A atualização de 3.8.0 para
+4.5.0 foi verificada com o SDK real e transporte HTTP simulado: texto, botões,
+link comercial com mensagem pronta, lista de avaliação, follow-up, ID de envio,
+bloqueio/desbloqueio, paginação e falhas de envio. Não exigiu mudança nos senders.
+`META_GRAPH_API_VERSION` continua controlando a versão da Graph API; o padrão
+interno da biblioteca não substitui essa configuração. O webhook Django mantém
+seu próprio processamento de payloads. Ativação de WABA, registro de número e
+analytics usam `requests` diretamente, sem depender da PyWa.
+
 - `cliente.py`: normaliza `phone_id`, cria `WhatsApp` e aplica o prefixo de
   retorno somente no escopo do envio corrente;
 - `saudacao.py`: seleção de bom dia, boa tarde ou boa noite pelo horário do
@@ -296,3 +305,11 @@ alterar os clientes existentes. A sessão usa timeout de 20 segundos por operaç
 com conexão limitada a 5 segundos. Stage e persistência pertencem ao worker/repositório.
 O ID retornado confirma o aceite da API; os eventos `sent`, `delivered` e `read`
 recebidos pelo webhook não atualizam o histórico nesta versão.
+
+## Analytics de consumo
+
+`consumo.py` faz somente GET: resolve fuso da WABA e consulta volumes mensais
+SERVICE por número/tipo de preço. Valida telefone, conta, fuso, categoria,
+quantidades e paginação; erro não vira zero. Token e versão vêm da configuração
+central. O worker e o utilitário usam este mesmo núcleo, sem dependência do
+bootstrap da IDE. Não acrescenta contador local ou processamento de statuses.

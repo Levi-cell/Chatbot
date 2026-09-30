@@ -517,3 +517,10 @@ Referência: [Business API, código 3910](https://developers.facebook.com/docs/m
 O desenho preliminar para atualizar periodicamente o PIN na Meta e no banco
 está registrado em [`PIN_AUTOMATICO_FUTURO.md`](PIN_AUTOMATICO_FUTURO.md). Ele
 é apenas uma proposta para uma versão futura; nenhuma automação foi ativada.
+
+## Consumo Meta em produção
+
+`consultas_franquia/consultar_franquia_meta.py` mantém a execução manual IDE/CLI
+e delega a consulta de mensagens a `core/integrations/whatsapp/consumo.py`.
+Persistência e repetição pertencem ao novo `worker_consumo_meta`; não executar
+o utilitário por cron para alimentar o painel. [Implantação](../deploy/consumo_mensal_meta.md).

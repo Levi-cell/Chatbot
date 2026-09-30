@@ -184,3 +184,10 @@ cliente/unidade e o par histórico de mensagens pelo hash de origem. A limpeza
 da fila não quebra esse vínculo. Consultas sempre recebem a unidade do guard.
 O relatório agrupa conversas encerradas pela data final, sem deduplicação por
 cliente e sem exigir que continuem sendo o atendimento mais recente.
+
+## Consumo Meta
+
+`consumo_meta/coletas.py` concentra leitura de unidades, sincronização de fuso,
+agenda e upsert mensal. Não confirma transações nem consulta a Meta: o worker
+controla essas fronteiras. `monitoramento/consumo.py` limita todas as leituras
+a `id_unidade` já autorizada e fornece os mesmos registros para painel e PDFs.

@@ -1,8 +1,8 @@
 # Implantacao no Lightsail
 
 Os arquivos assumem a aplicacao em `/opt/chatbot/app`, o ambiente virtual em
-`/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os quatro
-processos da aplicacao sao independentes e escrevem seus logs no journald. O
+`/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os processos
+da aplicacao sao independentes e escrevem seus logs no journald. O
 portal de monitoramento faz parte do processo web `chatbot-webhook`; ele não
 cria outro serviço. O quarto serviço é `chatbot-worker-followup`, implantado na
 V1.2.0. Este guia também cobre a preparação de uma instalação nova.
@@ -227,3 +227,12 @@ Ver [procedimento coordenado](filtro_comercial_regras_idade.md). A migração
 `migrations/20260926_filtro_comercial_regras_idade.sql` exige telefones reais válidos
 e interrompe a transação se houver pendência. Não executá-la com código antigo
 processando atendimentos ou permitindo edição simultânea no Admin.
+
+## Consumo Meta: serviço adicional
+
+A seção Consumo acrescenta um quinto processo independente,
+`chatbot-worker-consumo-meta.service`. Exige a migração
+`migrations/20260929_consumo_mensal_meta.sql`, dependências de PDF, collectstatic
+e ativação por ambiente. Seguir o [guia completo](consumo_mensal_meta.md); não
+executar o setup inicial de banco numa atualização. Até ativar o serviço e
+existir coleta válida, o painel informa que aguarda dados.

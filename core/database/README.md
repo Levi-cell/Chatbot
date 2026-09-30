@@ -279,3 +279,13 @@ preserva legados, normaliza suporte 90 para NULL e exige telefone comercial vál
 Não cria coluna nem altera motivos históricos. A entrada vinculada à resposta
 conserva a idade informada; o motivo específico conserva o limite aplicado.
 Instalações novas usam o DDL final e não reaplicam migrações antigas.
+
+## Consumo mensal Meta
+
+DDL versionado: `deploy/migrations/20260929_consumo_mensal_meta.sql`. O setup inicial
+reutiliza somente seu bloco DDL, sem executar BEGIN/COMMIT dentro da transação externa.
+Adiciona o par nullable `unidade.id_fuso`/`nome_fuso` e `fuso_verificado_em`.
+`consumo_mensal_meta` tem unicidade unidade/mês, volumes não negativos, fronteiras
+e fuso preservados e os três estados de apuração. `consumo_meta_coletas` mantém
+agenda/diagnóstico, inclusive antes do primeiro sucesso. Nenhuma conversa/fila
+é alterada. Migração, operação e reversão: [guia](../../deploy/consumo_mensal_meta.md).

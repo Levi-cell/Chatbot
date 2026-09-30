@@ -77,7 +77,7 @@ atendimento estiver aberta.
 
 ## Ferramentas da PyWa
 
-A PyWa 3.8.0 instalada oferece:
+A PyWa 4.5.0 fixada em `requirements.txt` oferece:
 
 | Recurso | Objeto PyWa |
 |---|---|

@@ -1,0 +1,69 @@
+/* Consumo tem período e componentes próprios; não altera o navegador de chats. */
+.secao-consumo { padding-top: 26px; padding-bottom: 34px; }
+.secao-consumo .barra-contexto { margin-bottom: 22px; }
+.consumo-aviso { padding: 12px 16px; margin-bottom: 16px; border: 1px solid #dbd9bd; border-radius: 12px; background: #fffceb; color: #645c2a; font-size: 12px; line-height: 1.6; }
+.consumo-contexto { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 14px; }
+.consumo-contexto p { margin: 4px 0; color: var(--muted); font-size: 11px; }
+.consumo-estado { padding: 6px 11px; border-radius: 30px; background: #e8efdc; color: var(--verde-800); font-size: 11px; font-weight: 650; white-space: nowrap; }
+.consumo-estado.em_conferencia { background: #fff0cc; color: #755a19; }
+.consumo-estado.consolidado { background: #ddf2e4; }
+.consumo-cartoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.consumo-cartao { padding: 22px; border: 1px solid var(--linha); border-radius: 17px; background: var(--branco); min-width: 0; }
+.consumo-cartao h2 { font-size: 11px; color: var(--muted); font-weight: 600; margin: 0 0 12px; }
+.consumo-cartao .consumo-valor { font-size: clamp(30px, 3vw, 43px); font-weight: 700; letter-spacing: -.04em; line-height: 1.15; display: block; overflow-wrap: anywhere; }
+.consumo-cartao p { font-size: 12px; color: var(--muted); line-height: 1.6; margin: 10px 0 0; }
+.consumo-cartao.destaque { background: var(--verde-900); color: white; border-color: var(--verde-900); }
+.consumo-cartao.destaque h2, .consumo-cartao.destaque p { color: #d0dcc9; }
+.consumo-cartao progress { display: block; width: 100%; height: 7px; margin-top: 18px; border: 0; border-radius: 8px; overflow: hidden; accent-color: var(--lima); background: #53634d; }
+.consumo-cartao progress::-webkit-progress-bar { background: #53634d; }
+.consumo-cartao progress::-webkit-progress-value { background: var(--lima); }
+.consumo-reparticao { border-top: 1px solid var(--linha); padding-top: 10px; margin-top: 15px; display: grid; gap: 7px; font-size: 11px; }
+.consumo-reparticao div { display: flex; justify-content: space-between; gap: 10px; }
+.consumo-referencia { margin: 12px 0 20px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.consumo-distribuicao, .consumo-historico, .consumo-ajuda { margin-top: 18px; padding: 22px; border: 1px solid var(--linha); border-radius: 17px; background: white; }
+.consumo-distribuicao h2, .consumo-historico h2 { margin: 0 0 5px; font-size: 17px; }
+.consumo-nota { font-size: 11px; line-height: 1.6; color: var(--muted); margin: 5px 0 16px; }
+.consumo-barra-total { display: flex; height: 18px; gap: 3px; overflow: hidden; border-radius: 6px; background: #edf0e9; margin-top: 18px; }
+.consumo-barra-total span { min-width: 0; }
+.consumo-janela { background: #37663d; }
+.consumo-franquia { background: #a4cc63; }
+.consumo-cobradas { background: #c29451; }
+.consumo-legenda { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 13px; font-size: 11px; color: var(--muted); }
+.consumo-legenda span { display: inline-flex; align-items: center; gap: 7px; }
+.consumo-legenda i { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.consumo-tabela-area { overflow-x: auto; width: 100%; margin-top: 12px; }
+.consumo-tabela { width: 100%; border-collapse: collapse; font-size: 11px; }
+.consumo-tabela caption { text-align: left; color: var(--muted); font-size: 11px; padding: 0 0 10px; }
+.consumo-tabela th, .consumo-tabela td { padding: 12px 10px; border-bottom: 1px solid var(--linha); text-align: right; white-space: nowrap; }
+.consumo-tabela th { color: var(--muted); font-weight: 600; }
+.consumo-tabela th:first-child, .consumo-tabela td:first-child { text-align: left; padding-left: 0; }
+.consumo-tabela td .consumo-estado { font-size: 10px; }
+.consumo-ajuda summary { font-weight: 650; font-size: 14px; cursor: pointer; }
+.consumo-explicacoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 20px; }
+.consumo-explicacoes h2 { font-size: 13px; margin: 0; }
+.consumo-explicacoes p { font-size: 12px; line-height: 1.7; color: var(--muted); }
+.consumo-ajuda > .consumo-nota { margin-bottom: 0; }
+.consumo-downloads { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; padding: 23px 0 0; }
+.consumo-downloads p { margin: 0; font-size: 14px; font-weight: 600; }
+.consumo-downloads p span { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); font-weight: 400; }
+.consumo-downloads > div { display: flex; gap: 9px; flex-wrap: wrap; }
+.consumo-botao { background: var(--verde-800); color: #fff; padding: 11px 14px; border: 1px solid var(--verde-800); border-radius: 9px; font-size: 12px; font-weight: 600; }
+.consumo-botao.secundario { background: white; color: var(--verde-800); border-color: var(--linha); }
+.consumo-botao:disabled { opacity: .5; cursor: default; }
+.consumo-vazio { padding: 34px 22px; text-align: center; color: var(--muted); line-height: 1.7; font-size: 13px; }
+@media (max-width: 1100px) {
+  .seletor-secao button { padding-left: 12px; padding-right: 12px; }
+  .cabecalho-app { gap: 12px; }
+}
+@media (max-width: 720px) {
+  .secao-consumo { padding-left: 16px; padding-right: 16px; }
+  .secao-consumo .barra-contexto { padding-left: 0; padding-right: 0; }
+  .seletor-secao { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-width: 0; width: 100%; }
+  .seletor-secao button { padding: 0 8px; justify-content: center; font-size: 12px; gap: 5px; min-width: 0; }
+  .consumo-cartoes, .consumo-explicacoes { grid-template-columns: 1fr; }
+  .consumo-cartao { padding: 20px; }
+  .secao-consumo .barra-contexto { align-items: stretch; flex-direction: column; }
+  .secao-consumo .seletor-periodo select { min-width: 0; width: 100%; }
+  .consumo-distribuicao, .consumo-historico, .consumo-ajuda { padding: 18px; }
+  .consumo-downloads, .consumo-downloads > div { flex-direction: column; align-items: stretch; width: 100%; }
+}

@@ -197,3 +197,27 @@ de ativar suporte 80+: ambos conservam a categoria universal sem novo envio.
 `test_encerramentos_por_idade_postgres.py`
 exige `COMERCIAL_IDADE_TEST_DSN` em banco loopback vazio `test_chatbot_comercial`;
 recusa qualquer schema chatbot preexistente. Nunca apontar testes para produção.
+
+## Compatibilidade PyWa
+
+`test_pywa_compatibilidade.py` usa a biblioteca instalada e `httpx.MockTransport`,
+sem chamadas à Meta. Exercita os senders de oferta, encaminhamento comercial,
+avaliação e follow-up, o prefixo, a versão configurada da Graph API, os IDs de
+envio, bloqueio/desbloqueio e paginação. Rejeições HTTP, ausência de ID e timeout
+precisam continuar chegando como falhas ao worker, sem reenvio automático HTTP.
+Validado na atualização de PyWa 3.8.0 para 4.5.0.
+
+## Consumo mensal Meta
+
+`test_consumo_meta.py` cobre calendário (incluindo fevereiro bissexto), volumes,
+saldo, cobertura ESL, identidade e decisão/prorrogação do dia 25.
+`test_monitoramento_consumo.py` testa apresentação, ausência de primeira coleta,
+autorização real do Django, isolamento por unidade, erro sem falso zero e PDFs.
+Inclui a prévia de outubro durante setembro, a abertura à meia-noite no fuso da
+unidade, rejeição/ocultação de meses futuros e ordenação de histórico de vários anos.
+`test_consultar_franquia_meta.py` continua validando o contrato HTTP do utilitário.
+
+`tests.integration.test_consumo_meta_postgres` exige `CONSUMO_META_TEST_DSN`,
+loopback e banco `test_chatbot_consumo` sem schema chatbot. Valida o SQL real
+reexecutado, upsert, rollback, concorrência, agenda persistida, duas unidades,
+meses pendentes e mudança de fuso, com respostas Meta simuladas. Não usa produção.

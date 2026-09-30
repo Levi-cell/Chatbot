@@ -296,6 +296,9 @@ class Unidade(models.Model):
         max_length=100,
     )
     phone_number_id = models.CharField(unique=True, max_length=100)
+    id_fuso = models.IntegerField(blank=True, null=True, editable=False)
+    nome_fuso = models.TextField(blank=True, null=True, editable=False)
+    fuso_verificado_em = models.DateTimeField(blank=True, null=True, editable=False)
     link_agendamento = models.CharField(unique=True, max_length=400)
     link_instagram = models.CharField(
         max_length=400,
@@ -462,3 +465,56 @@ class CacheControle(models.Model):
     class Meta:
         managed = False
         db_table = 'cache_controle'
+
+
+class ConsumoMensalMeta(models.Model):
+    """Espelho de leitura; o worker persiste pelo repositório e a migração é SQL."""
+
+    id_registro = models.BigAutoField(primary_key=True)
+    id_unidade = models.ForeignKey(Unidade, models.DO_NOTHING, db_column='id_unidade')
+    mes_referencia = models.DateField()
+    waba_id = models.CharField(max_length=100)
+    phone_number_id = models.CharField(max_length=100)
+    timezone_id = models.IntegerField()
+    fuso_horario = models.TextField()
+    data_hora_inicio = models.DateTimeField()
+    data_hora_fim = models.DateTimeField()
+    qtd_janela_gratuita = models.BigIntegerField()
+    qtd_franquia_consumida = models.BigIntegerField()
+    qtd_cobradas_meta = models.BigIntegerField()
+    franquia_meta_mensal = models.IntegerField(default=1000)
+    beneficio_esl_mensal = models.IntegerField(default=1000)
+    tarifa_referencia_brl = models.DecimalField(max_digits=12, decimal_places=6)
+    tarifa_vigencia = models.DateField()
+    consultado_ate = models.DateTimeField()
+    ultimo_sucesso_em = models.DateTimeField()
+    status_apuracao = models.CharField(max_length=20, choices=[
+        ('em_andamento', 'Em andamento'), ('em_conferencia', 'Em conferência'),
+        ('consolidado', 'Consolidado'),
+    ])
+    data_proxima_consolidacao = models.DateField(null=True, blank=True)
+    consolidado_em = models.DateTimeField(null=True, blank=True)
+    ultima_decisao_consolidacao_em = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField()
+    atualizado_em = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'consumo_mensal_meta'
+        constraints = [models.UniqueConstraint(fields=['id_unidade', 'mes_referencia'], name='uq_consumo_unidade_mes')]
+
+
+class ConsumoMetaColeta(models.Model):
+    """Agenda de conta/período; também existe quando a primeira consulta falha."""
+
+    pk = models.CompositePrimaryKey('id_unidade', 'periodo')
+    id_unidade = models.IntegerField()
+    periodo = models.CharField(max_length=7)
+    proxima_consulta_em = models.DateTimeField()
+    ultima_tentativa_em = models.DateTimeField(null=True, blank=True)
+    ultimo_erro = models.TextField(null=True, blank=True)
+    falhas_consecutivas = models.IntegerField(default=0)
+
+    class Meta:
+        managed = False
+        db_table = 'consumo_meta_coletas'

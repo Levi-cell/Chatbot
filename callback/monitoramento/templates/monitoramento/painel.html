@@ -9,13 +9,17 @@
   <meta name="referrer" content="same-origin">
   <title>Monitoramento · ESL Tech</title>
   <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260926-comercial-tabela">
-  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260926-comercial-tabela" defer></script>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/consumo.css' %}?v=20260929-consumo">
+  <script src="{% static 'monitoramento/js/consumo.js' %}?v=20260929-anos-consumo" defer></script>
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20260929-consumo" defer></script>
 </head>
 <body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
       data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
       data-url-relatorio="{% url 'monitoramento:dados_relatorio' %}"
       data-url-faixa-etaria="{% url 'monitoramento:dados_faixa_etaria' %}"
       data-url-csv="{% url 'monitoramento:contatos_csv' %}"
+      data-url-consumo="{% url 'monitoramento:dados_consumo' %}"
+      data-url-consumo-pdf="{% url 'monitoramento:consumo_pdf' %}"
       data-url-login="{% url 'monitoramento:login' %}">
   <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
   <header class="cabecalho-app">
@@ -30,6 +34,9 @@
       </button>
       <button type="button" data-secao="relatorios" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10m7 10V4m7 16v-7"/></svg>Relatórios
+      </button>
+      <button type="button" data-secao="consumo" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 14V9m6 5V4m6 10v-3"/></svg>Consumo
       </button>
     </nav>
     <div class="acoes-cabecalho">
@@ -106,6 +113,29 @@
         </label>
       </header>
       <div id="conteudoRelatorio" class="conteudo-relatorio"><div class="cartao carregando-relatorio">Preparando os indicadores…</div></div>
+    </section>
+    <section id="secaoConsumo" class="secao-painel secao-consumo" aria-labelledby="tituloConsumo" hidden>
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">MENSAGENS E COBERTURA</p><h1 id="tituloConsumo">Consumo</h1><p>Entenda o uso das mensagens e o que está incluído para sua unidade.</p></div>
+        <label class="seletor-periodo" for="mesConsumo">Mês de referência
+          <select id="mesConsumo" disabled><option value="">Carregando meses…</option></select>
+        </label>
+      </header>
+      <div id="avisoConsumo" class="consumo-aviso" role="status" hidden></div>
+      <div id="conteudoConsumo" aria-busy="false"><div class="cartao consumo-vazio">Preparando o consumo mensal…</div></div>
+      <details class="cartao consumo-ajuda" id="ajudaConsumo">
+        <summary>Como funcionam a gratuidade e a cobertura?</summary>
+        <div class="consumo-explicacoes">
+          <div><h2>Janela gratuita</h2><p>Mensagens classificadas pela Meta como gratuitas por uma entrada elegível, como anúncios de clique para WhatsApp. Elas não usam a franquia mensal.</p><p>A janela documentada é de 72 horas após a resposta à entrada elegível, feita em até 24 horas. Mensagens comuns não renovam esse prazo. A classificação apresentada é fornecida pela Meta.</p></div>
+          <div><h2>Franquia Meta</h2><p>São 1.000 mensagens de serviço gratuitas por número, a cada mês, usadas fora da janela gratuita. O saldo não acumula para o próximo mês.</p></div>
+          <div><h2>Cobertura ESL Tech</h2><p>Quando a franquia termina, a ESL Tech assume as primeiras 1.000 mensagens de serviço cobradas no mês. Apenas o excedente fica sob responsabilidade da unidade, conforme as condições do serviço.</p></div>
+        </div>
+        <p class="consumo-nota">Em andamento: mês atual. Em conferência: mês encerrado, aguardando a conferência do dia 25. Consolidado: passou pela conferência interna da ESL; não significa fatura fechada pela Meta. Dados de serviço individual, sujeitos a revisão; outros usos do mesmo número podem compartilhar a franquia.</p>
+      </details>
+      <div class="consumo-downloads">
+        <p>Leve esses números com você.<span>Relatórios de consumo com períodos, quantidades e cobertura.</span></p>
+        <div><button type="button" id="pdfConsumoMes" class="consumo-botao" disabled>Baixar PDF deste mês</button><button type="button" id="pdfConsumoTodos" class="consumo-botao secundario" disabled>Baixar PDF de todos os meses</button></div>
+      </div>
     </section>
   </main>
   <div id="toast" class="toast" role="status" hidden></div>

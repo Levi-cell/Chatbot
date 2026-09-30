@@ -2,6 +2,7 @@ import logging
 
 from core.database.deploy_database.transacao_deploy import transacao_deploy
 from core.database.deploy_database.followup_script import criar_tabelas_followup
+from core.database.deploy_database.consumo_meta_script import criar_tabelas_consumo_meta
 
 logger = logging.getLogger("db.deploy_database")
 
@@ -583,6 +584,7 @@ def criar_tabelas():
         """)
 
         criar_tabelas_followup(cursor)
+        criar_tabelas_consumo_meta(cursor)
 
     logger.info("banco_setup_ok | acao=criar_tabelas")
 

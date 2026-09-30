@@ -381,3 +381,17 @@ separação não foi implementada. Os relatórios em `utilitarios` seguem manuai
 
 Esses arquivos cobrem o núcleo transacional; consulte também
 [`tests/README.md`](../tests/README.md).
+
+## Seção Consumo
+
+A terceira seção usa `GET /dados/consumo/?mes=AAAA-MM`, isolado pela unidade do
+usuário autenticado. `GET /consumo.pdf?escopo=mes&mes=AAAA-MM` exporta o mês;
+`escopo=todos` exporta o histórico. Todos leem apenas o banco e são privados,
+sem cache. Não consultam Meta nem acionam workers.
+
+`consumo_services.py` compartilha a apresentação entre tela e PDF; `consumo_pdf.py`
+usa fontes incorporadas e o SVG oficial, sem arquivo compartilhado entre usuários.
+Consumo atualiza ao entrar/retornar, escolher mês e a cada 30 segundos visível.
+O horário exibido é `ultimo_sucesso_em` do worker. Falha mantém métricas anteriores;
+sem primeira coleta não mostra saldo fictício. CSS/JS ficam em arquivos dedicados.
+Seletor mensal independe dos períodos de Conversas e Relatórios.

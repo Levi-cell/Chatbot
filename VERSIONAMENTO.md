@@ -110,6 +110,10 @@ Commit: `dbe38014a93b3d264e280911bd6db0f607591777`
 
 Commit: `d4104cfc444be88fef9deea1d0d3b4c5f04000da`
 
+### V1.8.0 — Consumo mensal Meta e relatórios
+
+Commit: PENDENTE
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

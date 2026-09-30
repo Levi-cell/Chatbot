@@ -458,3 +458,16 @@ Rollback: parar o proativo primeiro e manter flow compatível enquanto houver st
 positivo ou retomadas pendentes. Desligar o serviço não limpa esses registros.
 Os comandos completos ficam na [rotina de deploy](../regras_deploy/rotina_deploy.md)
 e no [guia de ativação](../deploy/README.md#ativação-do-follow-up).
+
+## Worker de consumo Meta
+
+`python -m workers.worker_consumo_meta.iniciar_worker_consumo_meta` inicia o
+sincronizador de analytics. Ativar com `CONSUMO_META_ENABLED=True` após a migração.
+Consulta o mês atual por hora, meses pendentes diariamente e consolida somente
+no dia 25 previsto, comparando a leitura anterior de mês completo. Falha/divergência
+prorroga a decisão por um mês; `consolidado` encerra coletas automáticas.
+
+O ciclo usa advisory lock próprio de sessão, HTTP fora de transação, agenda
+persistida por unidade/mês e upsert protegido de leituras antigas. Não altera
+locks, retries ou regras do atendimento, follow-up e Funil. Falhas preservam
+totais e última coleta válida. Detalhes em [deploy](../deploy/consumo_mensal_meta.md).

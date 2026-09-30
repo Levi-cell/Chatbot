@@ -441,7 +441,25 @@
     if(foco){foco.focus({preventScroll:true});if(selecao)foco.setSelectionRange(...selecao);}
   }
   async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
-  function trocar(secao){estado.secao=secao;document.querySelectorAll('[data-secao]').forEach(b=>{const a=b.dataset.secao===secao;b.classList.toggle('ativo',a);b.setAttribute('aria-pressed',String(a));});ids('secaoConversas').hidden=secao!=='conversas';ids('secaoRelatorios').hidden=secao!=='relatorios';window.scrollTo({top:0});secao==='relatorios'?carregarRelatorio():carregarConversas(true);}
+  function trocar(secao) {
+    estado.secao = secao;
+    document.querySelectorAll('[data-secao]').forEach(botao => {
+      const ativa = botao.dataset.secao === secao;
+      botao.classList.toggle('ativo', ativa);
+      botao.setAttribute('aria-pressed', String(ativa));
+    });
+    ids('secaoConversas').hidden = secao !== 'conversas';
+    ids('secaoRelatorios').hidden = secao !== 'relatorios';
+    ids('secaoConsumo').hidden = secao !== 'consumo';
+    history.replaceState(null, '', '#' + secao);
+    window.scrollTo({top: 0});
+    if (secao === 'consumo') window.ConsumoPainel.ativar(status);
+    else {
+      window.ConsumoPainel.desativar();
+      if (secao === 'relatorios') carregarRelatorio();
+      else carregarConversas(true);
+    }
+  }
   function configurarLegendaFiltros(){
     const grupo=ids('grupoFiltros'),botao=ids('informacaoFiltros'),legenda=ids('legendaFiltros');
     let fixada=false;
@@ -463,7 +481,12 @@
   ids('alternarDetalhes').addEventListener('click',e=>{const a=e.currentTarget.getAttribute('aria-expanded')==='true';e.currentTarget.setAttribute('aria-expanded',String(!a));ids('painelDetalhes').hidden=a;});
   ids('mensagensChat').addEventListener('scroll',()=>{const c=ids('mensagensChat');ids('irFinal').hidden=c.scrollHeight-c.scrollTop-c.clientHeight<150;});
   ids('irFinal').addEventListener('click',()=>ids('mensagensChat').scrollTo({top:ids('mensagensChat').scrollHeight,behavior:'smooth'}));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)(estado.secao==='conversas'?carregarConversas(true):carregarRelatorio(true));});
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (estado.secao === 'consumo') window.ConsumoPainel.atualizar();
+    else if (estado.secao === 'conversas') carregarConversas(true);
+    else carregarRelatorio(true);
+  });
   setInterval(()=>{if(!document.hidden&&estado.secao==='conversas')carregarConversas(true);},10000);
   setInterval(()=>{if(!document.hidden&&estado.secao==='relatorios')carregarRelatorio(true);},30000);
   // O espaço do chat acompanha o cabeçalho real, inclusive após girar o celular.
@@ -480,5 +503,7 @@
   }else{
     window.addEventListener('resize',ajustarAlturaPainel);
   }
-  carregarConversas();
+  const secaoInicial = location.hash.slice(1);
+  if (['consumo', 'relatorios'].includes(secaoInicial)) trocar(secaoInicial);
+  else carregarConversas();
 })();
