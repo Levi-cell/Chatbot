@@ -9,8 +9,8 @@
   <meta name="referrer" content="same-origin">
   <title>Monitoramento · ESL Tech</title>
   <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260926-comercial-tabela">
-  <link rel="stylesheet" href="{% static 'monitoramento/css/consumo.css' %}?v=20260929-consumo">
-  <script src="{% static 'monitoramento/js/consumo.js' %}?v=20260929-anos-consumo" defer></script>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/consumo.css' %}?v=20260929-consumo-explicado">
+  <script src="{% static 'monitoramento/js/consumo.js' %}?v=20260929-consumo-explicado" defer></script>
   <script src="{% static 'monitoramento/js/painel.js' %}?v=20260929-consumo" defer></script>
 </head>
 <body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
@@ -126,11 +126,51 @@
       <details class="cartao consumo-ajuda" id="ajudaConsumo">
         <summary>Como funcionam a gratuidade e a cobertura?</summary>
         <div class="consumo-explicacoes">
-          <div><h2>Janela gratuita</h2><p>Mensagens classificadas pela Meta como gratuitas por uma entrada elegível, como anúncios de clique para WhatsApp. Elas não usam a franquia mensal.</p><p>A janela documentada é de 72 horas após a resposta à entrada elegível, feita em até 24 horas. Mensagens comuns não renovam esse prazo. A classificação apresentada é fornecida pela Meta.</p></div>
-          <div><h2>Franquia Meta</h2><p>São 1.000 mensagens de serviço gratuitas por número, a cada mês, usadas fora da janela gratuita. O saldo não acumula para o próximo mês.</p></div>
-          <div><h2>Cobertura ESL Tech</h2><p>Quando a franquia termina, a ESL Tech assume as primeiras 1.000 mensagens de serviço cobradas no mês. Apenas o excedente fica sob responsabilidade da unidade, conforme as condições do serviço.</p></div>
+          <div>
+            <h2>72 horas de mensagens gratuitas</h2>
+            <p>Quando o cliente chega por um <strong>anúncio da Meta, como no Facebook ou Instagram, com botão para conversar no WhatsApp</strong>, pode abrir um período de mensagens gratuitas. Um anúncio em outra plataforma não dá esse benefício só por ter um link para o WhatsApp.</p>
+            <p>Segundo a documentação da Meta, esse período dura <strong>72 horas a partir da primeira resposta do chatbot</strong> à mensagem que veio do anúncio. O chatbot precisa responder em até 24 horas após o cliente enviar essa mensagem.</p>
+            <p>Também pode valer para o botão de WhatsApp de uma página do Facebook. O cliente precisa chegar pelo aplicativo no celular, e a Meta deve reconhecer essa origem. As mensagens gratuitas desse período não gastam a reserva mensal.</p>
+          </div>
+          <div>
+            <h2>1.000 mensagens gratuitas de reserva</h2>
+            <p>A cada mês, a Meta oferece uma reserva de <strong>1.000 respostas comuns do chatbot por número de WhatsApp</strong>, compartilhada entre todos os clientes da unidade. Ela é usada quando:</p>
+            <ul>
+              <li>O cliente chega sem o período gratuito de 72 horas, por exemplo, por indicação ou por um anúncio fora da Meta.</li>
+              <li>O cliente veio de um anúncio da Meta, mas suas 72 horas gratuitas já terminaram.</li>
+            </ul>
+            <p>A reserva se renova no início de cada mês. O que sobrar não passa para o mês seguinte.</p>
+          </div>
+          <div>
+            <h2>A ESL Tech cobre mais 1.000 mensagens</h2>
+            <p>Se a reserva gratuita acabar, a Meta começa a cobrar pelas próximas respostas comuns do chatbot.</p>
+            <p>A <strong>ESL Tech assume as primeiras 1.000 dessas mensagens cobradas no mês</strong>. Só a quantidade que ultrapassar essa cobertura fica por conta da unidade, conforme as condições do serviço.</p>
+            <p>No indicador “Cobradas pela Meta”, você vê a divisão: quantas a ESL Tech assume e quantas ficam para a unidade.</p>
+          </div>
         </div>
-        <p class="consumo-nota">Em andamento: mês atual. Em conferência: mês encerrado, aguardando a conferência do dia 25. Consolidado: passou pela conferência interna da ESL; não significa fatura fechada pela Meta. Dados de serviço individual, sujeitos a revisão; outros usos do mesmo número podem compartilhar a franquia.</p>
+        <div class="consumo-prazo-resposta">
+          <h2>As 24 horas para responder continuam valendo</h2>
+          <p><strong>Cada nova mensagem do cliente abre ou renova 24 horas para o chatbot responder normalmente.</strong> Se o cliente ficar 24 horas sem escrever, a Meta só permite modelos de mensagem previamente aprovados, chamados <em>templates</em>, até ele mandar outra mensagem.</p>
+          <p>São dois prazos diferentes: <strong>as 72 horas definem a gratuidade; as 24 horas permitem as respostas comuns.</strong> Uma nova mensagem do cliente renova as 24 horas, mas não reinicia aquelas 72 horas. Dentro das 72 horas, os templates também são gratuitos.</p>
+        </div>
+        <details class="consumo-exemplos">
+          <summary>Ver exemplos com horários e quantidades</summary>
+          <div class="consumo-explicacoes">
+            <div><h3>Cliente veio de um anúncio da Meta</h3><p>Ana escreve na segunda às 10h e o chatbot responde às 10h05. A gratuidade vai até quinta às 10h05. Se Ana não escrever de novo, as respostas comuns só podem ser enviadas até terça às 10h. Depois disso, apenas templates, até ela voltar a escrever.</p></div>
+            <div><h3>Cliente chegou por indicação</h3><p>Pedro recebeu o número de um amigo e escreveu para a unidade. As respostas comuns do chatbot usam a reserva mensal. Se a unidade já usou 750 das 1.000 mensagens, ainda restam 250, para Pedro e os demais clientes.</p></div>
+            <div><h3>A reserva gratuita acabou</h3><p>A unidade usou as 1.000 mensagens de reserva e, depois, teve mais 1.300 mensagens cobradas pela Meta. A ESL Tech assume 1.000 dessas mensagens. As 300 restantes ficam por conta da unidade.</p></div>
+          </div>
+        </details>
+        <div class="consumo-situacoes">
+          <h2>O que significa a situação de cada mês?</h2>
+          <dl>
+            <div><dt><span class="consumo-estado em_andamento">Em andamento</span></dt><dd>É o mês atual. Os números são parciais e continuam sendo atualizados conforme recebemos os dados da Meta.</dd></div>
+            <div><dt><span class="consumo-estado em_conferencia">Em conferência</span></dt><dd>O mês terminou. Continuamos consultando a Meta todos os dias para conferir possíveis ajustes. A primeira conferência para concluir o mês acontece no dia 25 do mês seguinte.</dd></div>
+            <div><dt><span class="consumo-estado consolidado">Consolidado</span></dt><dd>Os números coincidiram na conferência da ESL Tech e o acompanhamento automático desse mês foi concluído. Isso não significa que a Meta já fechou a fatura.</dd></div>
+          </dl>
+          <p class="consumo-nota">Se houver diferença nos números ou não for possível concluir a consulta no dia 25, a conferência continua diariamente. A próxima tentativa de conclusão fica para o dia 25 do mês seguinte.</p>
+        </div>
+        <p class="consumo-nota">Este painel acompanha as respostas comuns do chatbot em conversas individuais. Templates fora das 72 horas têm regras de cobrança próprias. A reserva gratuita é do número de WhatsApp: se ele também for usado por outro sistema, esse uso pode consumir a mesma reserva. Os números vêm da Meta e podem ser revisados por ela.</p>
       </details>
       <div class="consumo-downloads">
         <p>Leve esses números com você.<span>Relatórios de consumo com períodos, quantidades e cobertura.</span></p>

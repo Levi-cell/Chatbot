@@ -40,8 +40,19 @@
 .consumo-tabela td .consumo-estado { font-size: 10px; }
 .consumo-ajuda summary { font-weight: 650; font-size: 14px; cursor: pointer; }
 .consumo-explicacoes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 20px; }
-.consumo-explicacoes h2 { font-size: 13px; margin: 0; }
-.consumo-explicacoes p { font-size: 12px; line-height: 1.7; color: var(--muted); }
+.consumo-ajuda h2, .consumo-explicacoes h3 { font-size: 13px; margin: 0; }
+.consumo-explicacoes p, .consumo-explicacoes li, .consumo-prazo-resposta p, .consumo-situacoes dd { font-size: 12px; line-height: 1.7; color: var(--muted); }
+.consumo-explicacoes ul { padding-left: 18px; }
+.consumo-explicacoes li + li { margin-top: 8px; }
+.consumo-ajuda strong { color: var(--verde-800); font-weight: 600; }
+.consumo-prazo-resposta { margin-top: 20px; padding: 18px; border-left: 3px solid #a4cc63; border-radius: 0 10px 10px 0; background: #f3f6ef; }
+.consumo-prazo-resposta p:last-child { margin-bottom: 0; }
+.consumo-exemplos { margin-top: 20px; padding: 16px 0; border-top: 1px solid var(--linha); border-bottom: 1px solid var(--linha); }
+.consumo-exemplos summary { font-size: 13px; color: var(--verde-800); }
+.consumo-ajuda summary:focus-visible { outline: 2px solid var(--verde-800); outline-offset: 5px; border-radius: 3px; }
+.consumo-situacoes { margin: 22px 0; }
+.consumo-situacoes dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin: 20px 0 16px; }
+.consumo-situacoes dd { margin: 14px 0 0; }
 .consumo-ajuda > .consumo-nota { margin-bottom: 0; }
 .consumo-downloads { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; padding: 23px 0 0; }
 .consumo-downloads p { margin: 0; font-size: 14px; font-weight: 600; }
@@ -60,7 +71,7 @@
   .secao-consumo .barra-contexto { padding-left: 0; padding-right: 0; }
   .seletor-secao { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); min-width: 0; width: 100%; }
   .seletor-secao button { padding: 0 8px; justify-content: center; font-size: 12px; gap: 5px; min-width: 0; }
-  .consumo-cartoes, .consumo-explicacoes { grid-template-columns: 1fr; }
+  .consumo-cartoes, .consumo-explicacoes, .consumo-situacoes dl { grid-template-columns: 1fr; }
   .consumo-cartao { padding: 20px; }
   .secao-consumo .barra-contexto { align-items: stretch; flex-direction: column; }
   .secao-consumo .seletor-periodo select { min-width: 0; width: 100%; }

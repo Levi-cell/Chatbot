@@ -112,7 +112,7 @@ Commit: `d4104cfc444be88fef9deea1d0d3b4c5f04000da`
 
 ### V1.8.0 — Consumo mensal Meta e relatórios
 
-Commit: PENDENTE
+Commit: `0b01c3a0fee52a24add7e4e1c0133eeee6099615`
 
 ## Padrão de numeração a partir da V1.2.0
 

@@ -96,14 +96,14 @@
       datas.append(criar('p', '', registro.periodo_texto), criar('p', '', `Última coleta: ${horario(registro)} · ${registro.fuso_horario}`));
       contexto.append(datas, criar('span', 'consumo-estado ' + registro.status_apuracao, registro.status_rotulo));
       const cartoes = criar('div', 'consumo-cartoes');
-      const janela = cartao('Gratuitas pela janela', registro.qtd_janela_gratuita, 'Não consomem sua franquia mensal.');
-      const franquia = cartao('Franquia Meta restante', registro.franquia_restante,
+      const janela = cartao('Gratuitas no período de 72 horas', registro.qtd_janela_gratuita, 'Não gastam sua reserva mensal de mensagens gratuitas.');
+      const reserva = cartao('Reserva gratuita restante', registro.franquia_restante,
         `${numero.format(registro.qtd_franquia_consumida)} utilizadas de ${numero.format(registro.franquia_meta_mensal)} no mês.`, true);
       const progresso = criar('progress');
       progresso.max = registro.franquia_meta_mensal || 1;
       progresso.value = registro.qtd_franquia_consumida;
-      progresso.setAttribute('aria-label', 'Utilização da franquia Meta');
-      franquia.append(progresso);
+      progresso.setAttribute('aria-label', 'Mensagens utilizadas da reserva gratuita da Meta');
+      reserva.append(progresso);
       const cobradas = cartao('Cobradas pela Meta', registro.qtd_cobradas_meta, 'Veja abaixo como essa quantidade é dividida.');
       const reparticao = criar('div', 'consumo-reparticao');
       for (const [rotulo, valor] of [['A ESL Tech assume', registro.assumidas_esl], ['Excedentes da unidade', registro.excedentes_unidade]]) {
@@ -112,7 +112,7 @@
         reparticao.append(linha);
       }
       cobradas.append(reparticao);
-      cartoes.append(janela, franquia, cobradas);
+      cartoes.append(janela, reserva, cobradas);
       const tarifa = new Intl.NumberFormat('pt-BR', {minimumFractionDigits: 3, maximumFractionDigits: 6}).format(Number(registro.tarifa_referencia_brl));
       const referencia = criar('p', 'consumo-referencia',
         `Referência para o Brasil: R$ ${tarifa}/mensagem de serviço. Excedente nessa referência: ${moeda.format(Number(registro.valor_referencia_excedente))}. ` +
@@ -125,7 +125,7 @@
       const legenda = criar('div', 'consumo-legenda');
       for (const [rotulo, valor, classe] of [
         ['Janela gratuita', registro.qtd_janela_gratuita, 'consumo-janela'],
-        ['Franquia utilizada', registro.qtd_franquia_consumida, 'consumo-franquia'],
+        ['Reserva gratuita utilizada', registro.qtd_franquia_consumida, 'consumo-franquia'],
         ['Cobradas Meta', registro.qtd_cobradas_meta, 'consumo-cobradas'],
       ]) {
         const trecho = criar('span', classe);
@@ -158,7 +158,7 @@
     tabela.append(criar('caption', '', 'O saldo restante de meses anteriores não acumula. Cada mês é independente.'));
     const cabecalho = criar('thead');
     const linha = criar('tr');
-    for (const titulo of ['Mês', 'Janela gratuita', 'Franquia usada', 'Restantes Meta', 'Cobradas Meta', 'ESL assume', 'Excedentes', 'Situação', 'Última coleta']) {
+    for (const titulo of ['Mês', 'Janela gratuita', 'Reserva usada', 'Reserva restante', 'Cobradas Meta', 'ESL assume', 'Excedentes', 'Situação', 'Última coleta']) {
       const celula = criar('th', '', titulo);
       celula.scope = 'col';
       linha.append(celula);
