@@ -10,6 +10,7 @@ RESPOSTA_TRIAGEM_FREQUENTEMENTE = "frequentemente"
 TIPOS_MENSAGEM_ACEITOS = {
     "button",
     "interactive",
+    "interactive_button",
     "text",
 }
 

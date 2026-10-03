@@ -54,6 +54,13 @@ Meta, Funil, Redis ou RDS. A integração com PostgreSQL local só executa quand
 `FOLLOWUP_TEST_DSN` é fornecida explicitamente. Um utilitário manual não deve
 ser executado como forma de testar sua importação.
 
+`test_botoes_webhook.py`, `test_valida_etapa18.py`, `test_fluxo_reserva_link.py`
+e `test_pywa_compatibilidade.py` cobrem a escolha de turno: JSON dos botões
+serializado pela PyWa, extração no webhook, tipos `interactive` e
+`interactive_button`, resolução 18 → 19, persistência e replay sem novo envio.
+Cobrem também frases afirmativas e a recusa de respostas ambíguas, múltiplos
+turnos e menções sem escolha. As fronteiras HTTP e SQL são simuladas.
+
 Testes unitários pertencem a `tests/unit/`; contratos com PostgreSQL real ficam
 em `tests/integration/` e exigem ambiente descartável explícito. Dados e classes
 auxiliares exclusivos de teste ficam em `tests/`, nunca nos módulos de produção.

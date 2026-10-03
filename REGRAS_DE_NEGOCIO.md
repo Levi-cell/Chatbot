@@ -1535,6 +1535,20 @@ A configuração atual de `unidade.link_agendamento` decide a saída da triagem:
 
 `conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
+Na etapa 18, os três botões e frases afirmativas como `só posso pela tarde`,
+`prefiro ir de manhã` e `à noite fica melhor para mim` definem um único turno.
+Aceitar caixa, acentos, pontuação e os sinônimos matutino, vespertino e noturno.
+Repetir o mesmo turno não cria uma segunda escolha. Dois turnos distintos,
+negação, dúvida, pergunta ou ausência de escolha recebem o mesmo tratamento
+pedindo **apenas um turno**, sem avançar nem salvar preferência. `Amanhã`,
+`boa tarde` e `trabalho de manhã` não autorizam inferir um turno.
+
+O webhook extrai o título da opção de `interactive` e `interactive_button`,
+usando o identificador textual quando o título estiver ausente. O worker
+aceita ambos os tipos nas etapas com opções, inclusive na recuperação de uma
+resposta já enviada. Não interpretar o texto citado da pergunta anterior como
+resposta; não flexibilizar a validação específica de cada etapa nem aceitar mídia.
+
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
 Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.

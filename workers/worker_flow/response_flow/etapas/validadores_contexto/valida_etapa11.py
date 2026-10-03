@@ -13,6 +13,7 @@ TIPO_TRATAMENTO_CONFIRMACAO_INVALIDA = "confirmacao_triagem_invalida"
 TIPOS_MENSAGEM_ACEITOS_ETAPA11 = {
     "button",
     "interactive",
+    "interactive_button",
     "text",
 }
 

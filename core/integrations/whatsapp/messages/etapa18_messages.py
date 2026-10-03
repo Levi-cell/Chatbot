@@ -49,8 +49,8 @@ def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=
         texto = montar_mensagem_tratamento_midia(pergunta, aceita_botoes=True)
     elif tratamento == "contexto_invalido":
         texto = (
-            "Olha, não consegui identificar um único turno. "
-            "Escolha *Pela manhã*, *Pela tarde* ou *Pela noite*."
+            "Para continuar, preciso que você escolha *apenas um turno*. "
+            "Me diga qual prefere: *Pela manhã*, *Pela tarde* ou *Pela noite*."
         )
     elif tratamento is None:
         texto = (

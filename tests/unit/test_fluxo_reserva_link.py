@@ -84,7 +84,7 @@ class TurnoTests(unittest.TestCase):
             ("manhã, prefiro manhã", "manha"),
             ("pela TARDE", "tarde"),
         ):
-            for tipo in ("text", "interactive_button"):
+            for tipo in ("text", "interactive", "interactive_button"):
                 with self.subTest(texto=texto, tipo=tipo):
                     self.assertEqual(validar_etapa18(texto, tipo), esperado)
 
@@ -205,6 +205,10 @@ class FluxoReservaTests(unittest.TestCase):
     def test_tratamentos_permanecem_na18_sem_efeito(self):
         for texto, tipo, tratamento in (
             ("manha e tarde", "text", "contexto_invalido"),
+            ("Pela manhã ou pela noite", "interactive", "contexto_invalido"),
+            ("Talvez pela tarde", "interactive_button", "contexto_invalido"),
+            ("Eu trabalho à tarde", "text", "contexto_invalido"),
+            ("Não sei", "text", "contexto_invalido"),
             ("Pela manhã", "audio", "midia"),
             ("quanto custa?", "text", "financeiro"),
             ("vocês fazem reforço escolar?", "text", "reforco_escolar"),
@@ -215,6 +219,9 @@ class FluxoReservaTests(unittest.TestCase):
             self.assertEqual(envio["id_etapa_resultante"], 18)
             self.assertEqual(envio["tipo_tratamento"], tratamento)
             self.assertNotIn("evento_transicao", envio)
+            self.assertNotIn("turno", envio)
+            if tratamento == "contexto_invalido":
+                self.assertIn("*apenas um turno*", envio["mensagem_bot"])
             with patch.object(efeitos, "salvar_turno_conversa") as salvar:
                 efeitos.atualizar_banco_conforme_transicao_de_etapa(
                     ctx, envio, object()
@@ -256,6 +263,35 @@ class FluxoReservaTests(unittest.TestCase):
         cursor.fetchone.return_value = ("noite",)
         efeito = efeitos.atualizar_banco_conforme_transicao_de_etapa(ctx, envio, cursor)
         self.assertEqual(efeito["turno"], "noite")
+
+    def test_replay_de_botao_reconstroi_preferencia_sem_reenviar(self):
+        for tipo in ("interactive", "interactive_button"):
+            for texto, turno in (("Pela manhã", "manha"), ("Pela tarde", "tarde"), ("Pela noite", "noite")):
+                with self.subTest(tipo=tipo, texto=texto):
+                    ctx = contexto(18, texto)
+                    ctx["tipo_mensagem_atual"] = tipo
+                    ctx["resposta_bot_para_mensagem_atual"] = {
+                        "id_etapa": 19, "id_hash_msg": "wamid.persistido",
+                    }
+                    envio = flow_sender(ctx)
+                    self.http.send_message.assert_not_called()
+                    cursor = MagicMock()
+                    cursor.fetchone.return_value = (turno,)
+                    efeito = efeitos.atualizar_banco_conforme_transicao_de_etapa(ctx, envio, cursor)
+                    self.assertEqual(efeito["turno"], turno)
+
+    def test_tipos_interativos_equivalentes_nas_outras_etapas_com_botoes(self):
+        for tipo in ("interactive", "interactive_button"):
+            for etapa, texto, destino in (
+                (3, "Não", 4), (11, "Começar triagem", 12), (12, "Nunca", 13),
+                (17, "Nunca", 18), (19, "ok", 21), (20, "Já reservei", 21),
+                (21, "5", 22), (22, "Sim", 23), (22, "Não", 24),
+            ):
+                with self.subTest(tipo=tipo, etapa=etapa):
+                    ctx = contexto(etapa, texto, link="https://example.com" if etapa == 20 else None)
+                    ctx["tipo_mensagem_atual"] = tipo
+                    envio = flow_sender(ctx)
+                    self.assertEqual(envio["id_etapa_resultante"], destino)
 
     def test_replay17_respeita_resposta_ja_enviada_apos_adicao_link(self):
         ctx = contexto(17, "Nunca", link="https://example.com")

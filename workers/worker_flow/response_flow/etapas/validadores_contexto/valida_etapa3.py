@@ -13,6 +13,7 @@ MOTIVO_RESPOSTA_NAO_RECONHECIDA = "confirmacao_nao_reconhecida"
 TIPOS_MENSAGEM_ACEITOS_ETAPA3 = {
     "button",
     "interactive",
+    "interactive_button",
     "text",
 }
 

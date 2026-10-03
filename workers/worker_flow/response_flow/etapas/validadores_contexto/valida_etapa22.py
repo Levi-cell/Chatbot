@@ -12,6 +12,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 TIPOS_MENSAGEM_ACEITOS_ETAPA22 = {
     "text",
     "interactive",
+    "interactive_button",
     "button",
 }
 

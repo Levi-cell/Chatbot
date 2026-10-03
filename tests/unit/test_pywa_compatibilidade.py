@@ -12,13 +12,18 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 from pywa.errors import WhatsAppError
 
+from callback.webhook.services.populating_fila_mensagens import extrair_dados_whatsapp
+from tests.unit.test_botoes_webhook import payload_botao
+from tests.unit.test_fluxo_reserva_link import contexto
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.pywa_functions import cliente
 from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa6, etapa7, etapa21, followup,
+    etapa6, etapa7, etapa18, etapa19, etapa21, followup,
 )
 from core.integrations.whatsapp.pywa_functions.resposta_envio import extrair_id_hash_msg_bot
 from core.integrations.whatsapp.tools import usuarios
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+from workers.worker_flow.transacoes import efeitos_transicao
 
 
 PHONE_ID = "1234567890"
@@ -100,6 +105,31 @@ class PywaCompatibilidadeTests(unittest.TestCase):
         self.assertEqual({linha["id"] for linha in linhas},
                          {f"satisfacao_{nota}" for nota in range(1, 6)})
         self.assertEqual(resultado["id_hash_msg_bot"], ID_MENSAGEM)
+
+    def test_cada_botao_real_de_turno_volta_pelo_webhook_avanca_e_persiste(self):
+        # Usa o JSON serializado pela PyWa real. Só HTTP e SQL são substituídos.
+        cliente_wa = self._cliente_real()
+        with patch.object(etapa18, "conta_wa", return_value=cliente_wa):
+            etapa18.enviar_etapa18(TELEFONE_CLIENTE, PHONE_ID)
+        botoes = self._payload()["interactive"]["action"]["buttons"]
+        self.assertEqual([b["reply"]["title"] for b in botoes],
+                         ["Pela manhã", "Pela tarde", "Pela noite"])
+        for botao, turno in zip(botoes, ("manha", "tarde", "noite")):
+            for tipo in ("interactive", "interactive_button"):
+                for dependente in (False, True):
+                    with self.subTest(botao=botao, tipo=tipo, dependente=dependente):
+                        resposta = {"type": "button_reply", "button_reply": botao["reply"]}
+                        dados = extrair_dados_whatsapp(payload_botao(tipo, resposta))
+                        ctx = contexto(18, dados["conteudo_texto"], dependente=dependente)
+                        ctx["tipo_mensagem_atual"] = dados["tipo_mensagem"]
+                        with patch.object(etapa19, "conta_wa", return_value=cliente_wa):
+                            envio = flow_sender(ctx)
+                        self.assertEqual(envio["id_etapa_resultante"], 19)
+                        self.assertEqual(envio["evento_transicao"], "turno_escolhido")
+                        self.assertEqual(envio["turno"], turno)
+                        with patch.object(efeitos_transicao, "salvar_turno_conversa") as salvar:
+                            efeitos_transicao.atualizar_banco_conforme_transicao_de_etapa(ctx, envio, None)
+                        salvar.assert_called_once_with(10, 2, turno, None)
 
     def test_followup_mantem_timeout_e_envia_sem_prefixo(self):
         with patch.object(followup.httpx, "Client", return_value=self.session) as criar:

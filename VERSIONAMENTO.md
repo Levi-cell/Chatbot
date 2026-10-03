@@ -118,6 +118,10 @@ Commit: `0b01c3a0fee52a24add7e4e1c0133eeee6099615`
 
 Commit: `2f4e2c9433d03b21d608c795c0d4cc6a0a3b7e2f`
 
+### V1.9.0 — Reservas com e sem link
+
+Commit: `1c2a1ae349fe2c0d28ba5b632a8b71072945d4ae`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

@@ -172,8 +172,12 @@ def extrair_conteudo_texto_mensagem(message, tipo):
     if tipo == "text":
         return message.get("text", {}).get("body")
 
-    if tipo == "interactive":
-        return extrair_conteudo_interactive(message.get("interactive", {}))
+    if tipo in {"interactive", "interactive_button"}:
+        # A Meta envia interactive; aceitamos também o alias interactive_button.
+        # O worker recebe apenas a resposta selecionada, nunca o texto citado
+        # da mensagem anterior (que pode mencionar os três turnos).
+        interactive = message.get("interactive") or message.get("interactive_button", {})
+        return extrair_conteudo_interactive(interactive)
 
     if tipo == "button":
         return extrair_conteudo_button(message.get("button", {}))
@@ -182,21 +186,34 @@ def extrair_conteudo_texto_mensagem(message, tipo):
 
 
 def extrair_conteudo_interactive(interactive):
+    if not isinstance(interactive, dict):
+        return None
     tipo_interactive = interactive.get("type")
 
     if tipo_interactive == "button_reply":
         button_reply = interactive.get("button_reply", {})
-        return button_reply.get("title") or button_reply.get("id")
+        return _extrair_texto_opcao(button_reply, "title", "id")
 
     if tipo_interactive == "list_reply":
         list_reply = interactive.get("list_reply", {})
-        return list_reply.get("title") or list_reply.get("id")
+        return _extrair_texto_opcao(list_reply, "title", "id")
 
     return None
 
 
 def extrair_conteudo_button(button):
-    return button.get("text") or button.get("payload")
+    return _extrair_texto_opcao(button, "text", "payload")
+
+
+def _extrair_texto_opcao(opcao, campo_texto, campo_identificador):
+    """Prioriza o rótulo; sem ele, aceita o callback textual já usado pelo bot."""
+    if not isinstance(opcao, dict):
+        return None
+    for campo in (campo_texto, campo_identificador):
+        valor = opcao.get(campo)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+    return None
 
 
 def preparar_dados_fila(data):
