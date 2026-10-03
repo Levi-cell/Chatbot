@@ -1,42 +1,52 @@
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    RESPOSTAS_COMENTARIO_RECUSADO,
-    TIPOS_MENSAGEM_ACEITOS_ETAPA20,
-    normalizar_resposta_comentario,
+import re
+
+from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
+    normalizar_texto,
 )
 
 
-def normalizar_comentario_etapa21(conteudo_texto, tipo_mensagem):
-    """Prepara o texto para persistência, sem julgar se é um bom comentário.
+TIPO_TRATAMENTO_SATISFACAO_INVALIDA = "satisfacao_invalida"
 
-    Texto curto, emoji e pontuação são comentários válidos. Ausência de texto,
-    botão antigo ou recusa explícita resultam em NULL, sem impedir o encerramento.
-    """
-    if tipo_mensagem != "text":
-        return None
+_NOTAS_POR_RESPOSTA = {
+    "1": 1,
+    "muito ruim": 1,
+    "1 muito ruim": 1,
+    "2": 2,
+    "ruim": 2,
+    "2 ruim": 2,
+    "3": 3,
+    "regular": 3,
+    "3 regular": 3,
+    "4": 4,
+    "muito bom": 4,
+    "4 muito bom": 4,
+    "5": 5,
+    "excelente": 5,
+    "5 excelente": 5,
+}
 
+
+def validar_etapa21(conteudo_texto):
+    """Traduz uma unica opcao coerente da pesquisa para uma nota de 1 a 5."""
     if not isinstance(conteudo_texto, str):
         return None
 
-    comentario = conteudo_texto.strip()
+    texto_normalizado = _normalizar_resposta(conteudo_texto)
 
-    if not comentario:
-        return None
+    # Suporta o callback_data caso algum payload nao traga o titulo da linha.
+    if texto_normalizado.startswith("satisfacao "):
+        texto_normalizado = texto_normalizado.removeprefix(
+            "satisfacao "
+        )
 
-    if recusou_comentario_etapa21(comentario, tipo_mensagem):
-        return None
-
-    return comentario
+    return _NOTAS_POR_RESPOSTA.get(texto_normalizado)
 
 
-def recusou_comentario_etapa21(conteudo_texto, tipo_mensagem):
-    """Permite desistência explícita, inclusive por botão antigo já exibido."""
-    if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA20:
-        return False
-
-    if not isinstance(conteudo_texto, str):
-        return False
-
-    return (
-        normalizar_resposta_comentario(conteudo_texto)
-        in RESPOSTAS_COMENTARIO_RECUSADO
+def _normalizar_resposta(texto):
+    texto_sem_acento = normalizar_texto(texto)
+    texto_sem_pontuacao = re.sub(
+        r"[^a-z0-9\s]",
+        " ",
+        texto_sem_acento,
     )
+    return " ".join(texto_sem_pontuacao.split())

@@ -307,7 +307,7 @@ class MonitoramentoPainelTests(unittest.TestCase):
         with patch('monitoramento.views.carregar_relatorio', return_value=RELATORIO):
             resposta = self.cliente.get('/dados/relatorio/?periodo=7d')
         self.assertEqual(resposta.status_code, 200)
-        self.assertEqual(len(resposta.json()['etapas']), 22)
+        self.assertEqual(len(resposta.json()['etapas']), 24)
         with patch('monitoramento.views.carregar_mensagens', return_value=MENSAGENS[140]):
             resposta = self.cliente.get('/dados/conversas/140/')
         self.assertEqual(resposta.status_code, 200)

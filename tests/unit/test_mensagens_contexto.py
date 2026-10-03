@@ -6,7 +6,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import patch
 
-from core.integrations.whatsapp.messages import etapa6_messages, etapa18_messages
+from core.integrations.whatsapp.messages import etapa6_messages, etapa20_messages
 from core.integrations.whatsapp.pywa_functions import cliente
 from tests.unit.test_mensagens_reserva import cliente_simulado, contexto_resposta
 from workers.worker_flow.response_flow.flow_sender import flow_sender
@@ -20,7 +20,7 @@ class MensagensContextoTests(unittest.TestCase):
             "idade_dependente": 10,
             "link_agendamento": "https://example.com/reservar",
         }
-        for etapa in range(1, 23):
+        for etapa in range(1, 25):
             modulo = importlib.import_module(
                 f"core.integrations.whatsapp.messages.etapa{etapa}_messages"
             )
@@ -81,7 +81,7 @@ class MensagensContextoTests(unittest.TestCase):
         self.assertIn("idade de Lucas", dependente)
 
     def test_fluxo_preserva_etapa_botoes_rodape_e_prefixo_unico(self):
-        for etapa in (6, 7, *range(12, 20)):
+        for etapa in (6, 7, *range(12, 18), 20, 21):
             for dependente in (False, True):
                 for prefixo in (None, "Olá novamente, Maria!\n\n"):
                     with self.subTest(
@@ -116,7 +116,7 @@ class MensagensContextoTests(unittest.TestCase):
                             )
                         )
                         self.assertNotIn("Que bom te ver novamente", texto)
-                        if etapa != 19:
+                        if etapa != 21:
                             self.assertEqual("Lucas" in texto, dependente)
                         if etapa != 6:
                             self.assertTrue(wa.send_message.call_args.kwargs["buttons"])
@@ -129,7 +129,7 @@ class MensagensContextoTests(unittest.TestCase):
                                 ["Nunca", "Às vezes", "Frequentemente"],
                             )
                             self.assertNotIn("Com que frequência", texto)
-                        if etapa == 18:
+                        if etapa == 20:
                             self.assertEqual(
                                 texto.count("https://example.com/reservar"), 1
                             )
@@ -149,8 +149,8 @@ class MensagensContextoTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 montar("", 10)
         with self.assertRaises(ValueError):
-            etapa18_messages.montar_mensagem_contexto_invalido_etapa18("")
+            etapa20_messages.montar_mensagem_contexto_invalido_etapa20("")
         with self.assertRaises(ValueError):
-            etapa18_messages.montar_mensagem_contexto_invalido_etapa18(
+            etapa20_messages.montar_mensagem_contexto_invalido_etapa20(
                 "https://example.com", ""
             )

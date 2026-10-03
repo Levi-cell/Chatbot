@@ -197,7 +197,7 @@ def criar_tabelas():
             email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
             waba_id VARCHAR(100) UNIQUE NOT NULL,
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
-            link_agendamento VARCHAR(400) UNIQUE NOT NULL,
+            link_agendamento VARCHAR(400) UNIQUE,
             link_instagram VARCHAR(400),
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
@@ -214,6 +214,7 @@ def criar_tabelas():
 
             CONSTRAINT ck_unidade_genero
                 CHECK (genero IN ('masculino', 'feminino')),
+
 
             CONSTRAINT uq_unidade_usuario_monitoramento
                 UNIQUE (id_usuario_monitoramento),
@@ -279,6 +280,8 @@ def criar_tabelas():
             id_etapa_atual INT,
 
             status_ativa BOOLEAN NOT NULL DEFAULT TRUE,
+            turno VARCHAR(5) CONSTRAINT ck_conversa_turno
+                CHECK (turno IS NULL OR turno IN ('manha', 'tarde', 'noite')),
             status_dependente BOOLEAN DEFAULT FALSE,
             profissao VARCHAR(100) NULL,
 

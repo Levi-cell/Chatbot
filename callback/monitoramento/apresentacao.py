@@ -2,14 +2,17 @@
 
 import re
 
+from core.integrations.whatsapp.messages.etapa18_messages import montar_botoes_etapa18
+from core.integrations.whatsapp.messages.etapa19_messages import TITULO_BOTAO_COMERCIAL
+
 from core.integrations.whatsapp.messages.etapa2_messages import montar_botoes_etapa2
 from core.integrations.whatsapp.messages.etapa3_messages import montar_botoes_etapa3
 from core.integrations.whatsapp.messages.etapa7_messages import montar_botoes_etapa7
 from core.integrations.whatsapp.messages.etapa9_messages import montar_botoes_etapa9
 from core.integrations.whatsapp.messages.etapa11_messages import montar_botoes_etapa11
-from core.integrations.whatsapp.messages.etapa18_messages import montar_botoes_etapa18
-from core.integrations.whatsapp.messages.etapa19_messages import montar_opcoes_satisfacao_etapa19
 from core.integrations.whatsapp.messages.etapa20_messages import montar_botoes_etapa20
+from core.integrations.whatsapp.messages.etapa21_messages import montar_opcoes_satisfacao_etapa21
+from core.integrations.whatsapp.messages.etapa22_messages import montar_botoes_etapa22
 from core.integrations.whatsapp.messages.triagem_componentes import montar_botoes_triagem
 
 
@@ -26,8 +29,10 @@ _BOTOES_POR_ETAPA = {
     16: montar_botoes_triagem,
     17: montar_botoes_triagem,
     18: montar_botoes_etapa18,
-    19: lambda: [titulo for _, titulo in montar_opcoes_satisfacao_etapa19()],
+    19: lambda: [TITULO_BOTAO_COMERCIAL],
     20: montar_botoes_etapa20,
+    21: lambda: [titulo for _, titulo in montar_opcoes_satisfacao_etapa21()],
+    22: montar_botoes_etapa22,
 }
 
 
@@ -111,7 +116,7 @@ def consolidar_conversas(linhas):
             'dependentes': set(),
             'foi_funil': False, 'avaliada': False, 'followup_stage': 0,
             'ultima_atividade': None, 'ultima_mensagem': '',
-            'ultima_mensagem_id': None,
+            'ultima_mensagem_id': None, 'turno': None,
         })
         cliente['ids_conversa'].append(linha['id_conversa'])
         cliente['foi_funil'] |= bool(linha.get('foi_funil'))
@@ -147,6 +152,7 @@ def consolidar_conversas(linhas):
                 and id_mensagem > (cliente['ultima_mensagem_id'] or 0)
             )
         ):
+            cliente['turno'] = linha.get('turno')
             cliente['ultima_atividade'] = atividade
             cliente['ultima_mensagem'] = linha.get('ultima_mensagem') or ''
             cliente['ultima_mensagem_id'] = linha.get('ultima_mensagem_id')

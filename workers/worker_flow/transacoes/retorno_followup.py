@@ -64,7 +64,7 @@ def preparar_retorno_followup(mensagem, contexto_banco, cursor):
     dados = None
     if not resposta:
         etapa = conversa.get("id_etapa_atual")
-        if type(etapa) is not int or not 1 <= etapa <= 21:
+        if type(etapa) is not int or not 1 <= etapa <= 23:
             raise ValueError("Retorno de follow-up sem etapa repetível")
         dados = buscar_contexto_repeticao(
             id_conversa, contexto_banco["id_unidade"], cursor

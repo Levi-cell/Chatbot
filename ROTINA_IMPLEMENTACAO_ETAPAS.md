@@ -486,7 +486,7 @@ O `flow_sender`:
 - não chama PyWa diretamente.
 
 A etapa 1 ainda não possui nome confirmado e é chamada diretamente. Nas etapas
-2 a 21, a rota atual usa `_resolver_com_saudacao` para aplicar, no mesmo envio e
+2 a 23, a rota atual usa `_resolver_com_saudacao` para aplicar, no mesmo envio e
 sem mudar validação ou destino, o prefixo de retorno quando a última mensagem do
 bot daquela conversa tem pelo menos três horas. A barreira de resposta já
 existente continua antes dessa lógica, para o retry não gerar novo envio.
@@ -604,7 +604,7 @@ em um estado sem atendimento.
 Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
 selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
 dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
-substituem a validação da resposta atual. O catálogo de repetição contempla 1–21,
+substituem a validação da resposta atual. O catálogo de repetição contempla 1–23,
 exceto a etapa 8, que retorna diretamente à 9.
 
 Antes do segundo envio, a reação passa pelos resolvers normais: resposta válida
@@ -650,14 +650,14 @@ core/integrations/whatsapp/
 ├── messages/
 │   ├── etapa1_messages.py
 │   ├── ...
-│   └── etapa22_messages.py
+│   └── etapa24_messages.py
 └── pywa_functions/
     ├── cliente.py
     ├── saudacao.py
     └── pywa_senders/
         ├── etapa1.py
         ├── ...
-        └── etapa22.py
+        └── etapa24.py
 ```
 
 ### Fronteiras
@@ -833,3 +833,15 @@ Ao receber uma solicitação de nova etapa:
 
 Se uma nova regra não se encaixar neste padrão, ela deve ser discutida antes de
 introduzir exceção arquitetural.
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

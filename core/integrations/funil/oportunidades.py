@@ -2,6 +2,8 @@
 
 import re
 
+from core.validacoes.turno import ROTULOS_TURNO, validar_turno
+
 from core.triagem.perguntas import (
     montar_pergunta_triagem,
     obter_faixa_etaria_triagem,
@@ -121,11 +123,21 @@ def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     if not _normalizar_telefone_brasileiro(telefone_cliente):
         aviso_telefone = f"\n{AVISO_TELEFONE_INTERNACIONAL}\n"
 
+    tem_link = bool(str(dados_lead.get("link_agendamento") or "").strip())
+    orientacao = (
+        "Confira sua plataforma de reserva (como o Calendly) e o painel de monitoramento."
+        if tem_link else
+        "Confira o painel de monitoramento e o número comercial para verificar se o cliente enviou mensagem."
+    )
+    turno = dados_lead.get("turno")
+    if turno is not None:
+        validar_turno(turno)
+    preferencia = f"- Turno de preferência: {ROTULOS_TURNO[turno]}\n" if turno else ""
     cabecalho = (
         "------NOVO LEAD-------\n\n"
-        "Cliente concluiu a triagem cognitiva pelo chatbot e chegou à "
-        "etapa de agendamento. Fique atento ao Calendly. Seguem as "
-        "informações para contato:\n\n"
+        "Cliente concluiu a triagem cognitiva pelo chatbot. "
+        f"{orientacao} A disponibilidade e a efetivação de sua reserva devem ser conferidas pela equipe.\n\n"
+        f"{preferencia}"
         f"- Nome do cliente: {nome_cliente}\n"
         f"- Telefone/WhatsApp do cliente: "
         f"{telefone_cliente}\n"

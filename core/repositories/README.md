@@ -158,12 +158,12 @@ O núcleo transacional e os testes específicos estão descritos em
 proativo e retomada. Recebe cursor; não abre conexão, não faz commit e não importa
 worker. O histórico permanece particionado; a unicidade do ciclo fica na tabela
 não particionada `followup_envio`, pela chave composta conversa + ID/data da âncora.
-`followup_retomada` permite reconstruir a reação ignorada em retries após o reset.
+`followup_retomada` permite reconstruir o processamento da reação em retries após o reset.
 `followup_legado` audita a marcação inicial de todas as conversas ativas com stage 1,
 preservando ID, stage anterior e horário da migração. Esse registro não é um envio.
 As tabelas são internas, sem ações no monitoramento ou no admin.
 
-`listar_elegiveis` e `reler_elegivel` usam o mesmo SQL: etapa 1–17, stage zero,
+`listar_elegiveis` e `reler_elegivel` usam o mesmo SQL: etapa 1–17 e a 18 somente para unidade sem link, stage 0 ou 1 com recibo válido,
 última mensagem do bot confirmada há pelo menos sete horas, última mensagem do
 cliente dentro de 23h59, unidade adimplente e ausência de bloqueios ou fila aberta.
 Os horários do bot e do cliente são condições separadas. A paginação usa
@@ -191,3 +191,15 @@ cliente e sem exigir que continuem sendo o atendimento mais recente.
 agenda e upsert mensal. Não confirma transações nem consulta a Meta: o worker
 controla essas fronteiras. `monitoramento/consumo.py` limita todas as leituras
 a `id_unidade` já autorizada e fornece os mesmos registros para painel e PDFs.
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

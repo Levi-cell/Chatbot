@@ -4,63 +4,49 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_f
     normalizar_texto,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_COMENTARIO_SATISFACAO_ACEITO,
-    EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
+    EVENTO_AGENDAMENTO_CONFIRMADO,
 )
 
 
-TIPOS_MENSAGEM_ACEITOS_ETAPA20 = {
-    "text",
-    "interactive",
-    "button",
-}
+TIPO_TRATAMENTO_AGENDAMENTO_NAO_CONFIRMADO = (
+    "agendamento_nao_confirmado"
+)
 
-RESPOSTAS_COMENTARIO_ACEITO = {
-    "sim",
-    "sim quero comentar",
-    "sim quero sugerir",
-    "quero comentar",
-    "quero sugerir",
-    "quero deixar um comentario",
-    "quero deixar uma sugestao",
-    "eu quero comentar",
-    "eu quero sugerir",
-    "gostaria de comentar",
-    "gostaria de sugerir",
-}
-
-RESPOSTAS_COMENTARIO_RECUSADO = {
-    "nao",
-    "nao quero comentar",
-    "nao quero sugerir",
-    "prefiro nao comentar",
-    "prefiro nao sugerir",
+_CONFIRMACOES_ACEITAS = {
+    "ja reservei",
+    "reservei",
+    "ja fiz minha reserva",
+    "minha reserva esta concluida",
+    "consegui reservar",
+    "ja agendei",
+    "agendei",
+    "agendado",
+    "ja esta agendado",
+    "esta agendado",
+    "consegui agendar",
+    "agendamento feito",
+    "agendamento realizado",
 }
 
 
-def validar_decisao_comentario_etapa20(
-    conteudo_texto,
-    tipo_mensagem,
-):
-    """Traduz somente intenções inequívocas em eventos da etapa 20."""
-    if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA20:
-        return None
+def validar_etapa20(conteudo_texto):
+    """Aceita somente confirmações curtas de conclusão da reserva.
 
+    O webhook coloca o título do botão no mesmo campo usado pelo texto. Assim,
+    clique e resposta digitada percorrem a mesma validação estrita.
+    """
     if not isinstance(conteudo_texto, str):
         return None
 
-    resposta = normalizar_resposta_comentario(conteudo_texto)
+    texto_normalizado = _normalizar_resposta(conteudo_texto)
 
-    if resposta in RESPOSTAS_COMENTARIO_ACEITO:
-        return EVENTO_COMENTARIO_SATISFACAO_ACEITO
-
-    if resposta in RESPOSTAS_COMENTARIO_RECUSADO:
-        return EVENTO_COMENTARIO_SATISFACAO_RECUSADO
+    if texto_normalizado in _CONFIRMACOES_ACEITAS:
+        return EVENTO_AGENDAMENTO_CONFIRMADO
 
     return None
 
 
-def normalizar_resposta_comentario(texto):
+def _normalizar_resposta(texto):
     texto_sem_acento = normalizar_texto(texto)
     texto_sem_pontuacao = re.sub(
         r"[^a-z0-9\s]",

@@ -625,6 +625,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             None,
             None,
             [],
+            None,
+            "https://example.com",
+            None,
         )
 
         dados = leads.buscar_dados_lead_funil(122, cursor)
@@ -680,9 +683,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             },
         ) as salvar:
             aceite = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico_base(id_etapa_atual=20),
+                contexto_historico_base(id_etapa_atual=22),
                 {
-                    "id_etapa_resultante": 21,
+                    "id_etapa_resultante": 23,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_ACEITO
                     ),
@@ -693,9 +696,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             salvar.assert_not_called()
 
             recusa = efeitos.atualizar_banco_conforme_transicao_de_etapa(
-                contexto_historico_base(id_etapa_atual=20),
+                contexto_historico_base(id_etapa_atual=22),
                 {
-                    "id_etapa_resultante": 22,
+                    "id_etapa_resultante": 24,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_RECUSADO
                     ),
@@ -712,7 +715,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
         salvar.assert_called_once_with(10, None, cursor)
         self.assertTrue(recusa["comentario_satisfacao_persistido"])
 
-    def test_comentario_da_etapa21_e_persistido_integralmente(self):
+    def test_comentario_da_etapa23_e_persistido_integralmente(self):
         cursor = object()
 
         with patch.object(
@@ -726,11 +729,11 @@ class PersistenciaEssencialTests(unittest.TestCase):
         ) as salvar:
             resultado = efeitos.atualizar_banco_conforme_transicao_de_etapa(
                 contexto_historico_base(
-                    id_etapa_atual=21,
+                    id_etapa_atual=23,
                     texto_cliente="Atendimento muito atencioso!",
                 ),
                 {
-                    "id_etapa_resultante": 22,
+                    "id_etapa_resultante": 24,
                     "evento_transicao": (
                         EVENTO_COMENTARIO_SATISFACAO_RECEBIDO
                     ),
@@ -748,10 +751,10 @@ class PersistenciaEssencialTests(unittest.TestCase):
         )
         self.assertTrue(resultado["comentario_satisfacao_persistido"])
 
-    def test_somente_etapa_22_encerra_e_aplica_bloqueio_de_30_dias(self):
-        contexto = contexto_historico_base(id_etapa_atual=20)
+    def test_somente_etapa_24_encerra_e_aplica_bloqueio_de_30_dias(self):
+        contexto = contexto_historico_base(id_etapa_atual=22)
 
-        for id_etapa in (18, 19, 20, 21):
+        for id_etapa in (20, 21, 22, 23):
             with self.subTest(id_etapa=id_etapa), patch.object(
                 encerramento,
                 "buscar_politica_etapa",
@@ -777,7 +780,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
             encerramento,
             "buscar_politica_etapa",
             return_value=PoliticaEtapa(
-                id_etapa=22,
+                id_etapa=24,
                 encerra_automaticamente=True,
                 bloqueio_dias=30,
                 elegivel_funil=True,
@@ -787,7 +790,7 @@ class PersistenciaEssencialTests(unittest.TestCase):
                 contexto,
                 {
                     "evento_transicao": "comentario_satisfacao_recebido",
-                    "id_etapa_resultante": 22,
+                    "id_etapa_resultante": 24,
                 },
                 object(),
             )

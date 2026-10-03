@@ -76,7 +76,7 @@ class SuportePorIdadeTests(unittest.TestCase):
         admin = UnidadeAdmin(Unidade, AdminSite())
         request = RequestFactory().get('/admin/')
         request.user = SimpleNamespace(has_perm=lambda *_: True)
-        instance = Unidade(id_unidade=1)
+        instance = Unidade(id_unidade=1, link_agendamento="https://example.com")
         with patch.object(admin, '_validar_cache_unidades_form'), patch.object(
             admin, '_preparar_meta_antes_de_salvar'
         ) as meta:

@@ -92,7 +92,7 @@ durante o teste e restaura-a ao terminar; não cria usuários nem tabelas no RDS
 
 `test_monitoramento_painel.py` valida as rotas privadas, métodos permitidos,
 propagação obrigatória da unidade autorizada, quantidade de parâmetros dos SQLs,
-consolidação de perfis, 22 etapas, períodos comparáveis e os quatro downloads
+consolidação de perfis, 24 etapas, períodos comparáveis e os quatro downloads
 CSV (Google e essencial, todos e elegíveis). Cobre todos os períodos, unidade
 autorizada, revogação de acesso, acentos, campos vazios e proteção contra fórmulas
 nos dados textuais. Seus payloads vivem em `fixtures/monitoramento_painel.py` e
@@ -104,7 +104,7 @@ internacional no Google CSV; não remove o DDD nem altera os dados de origem.
 
 A segunda camada é coberta em `unit/test_followup.py` (redação por rota, nomes e
 falha de envio) e `integration/test_followup_postgres.py` (7h contadas do primeiro
-envio real, etapas 1–17 incluindo 8, guardas de silêncio/fila/janela, encerramento
+envio real, etapas 1–17 e a 18 somente para unidade sem link incluindo 8, guardas de silêncio/fila/janela, encerramento
 atômico com rollback, ausência de terceiro envio e reabertura sem prefixo).
 O teste do painel usa as consultas reais para provar que outra conversa do mesmo
 chat invalida o stage antigo, mesmo fora do período selecionado. A migração de
@@ -221,3 +221,40 @@ unidade, rejeição/ocultação de meses futuros e ordenação de histórico de 
 loopback e banco `test_chatbot_consumo` sem schema chatbot. Valida o SQL real
 reexecutado, upsert, rollback, concorrência, agenda persistida, duas unidades,
 meses pendentes e mudança de fuso, com respostas Meta simuladas. Não usa produção.
+
+## Reserva com e sem plataforma
+
+`unit/test_fluxo_reserva_link.py` cobre as rotas de titular/dependente, o turno,
+os botões comerciais, os efeitos de transição e o replay sem novo envio.
+`integration/test_reserva_link_postgres.py` exige `RESERVA_LINK_TEST_DSN` em
+loopback e banco vazio `test_chatbot_reserva_link`: executa DDL, SQL de Funil,
+follow-up, preferências e isolamento do painel.
+
+`integration/test_migracao_reserva_link_postgres.py` exige
+`MIGRACAO_RESERVA_TEST_DSN`, loopback e banco vazio
+`test_chatbot_migracao_reserva`. A fixture restaura o schema anterior com dados
+fictícios, incluindo partições, satisfação, fila, checkpoints, Funil e Consumo.
+Confere remapeamento, preservação dos demais campos, reexecução, reversão,
+recusas atômicas e recuperação de resposta migrada. Ambas as suítes recusam
+schema `chatbot` preexistente; nunca apontar suas DSNs para a base de aplicação.
+
+Exemplo, depois de criar os dois bancos descartáveis no PostgreSQL local:
+
+```powershell
+$env:RESERVA_LINK_TEST_DSN = 'host=127.0.0.1 dbname=test_chatbot_reserva_link user=postgres'
+$env:MIGRACAO_RESERVA_TEST_DSN = 'host=127.0.0.1 dbname=test_chatbot_migracao_reserva user=postgres'
+python -m unittest tests.unit.test_fluxo_reserva_link tests.integration.test_reserva_link_postgres tests.integration.test_migracao_reserva_link_postgres -v
+```
+
+As demais suítes de integração precisam das próprias DSNs descritas acima.
+Sem as variáveis, os testes PostgreSQL são ignorados, não considerados aprovados.
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

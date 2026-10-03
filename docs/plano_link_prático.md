@@ -3,13 +3,41 @@
 Revisão: **03/10/2026**, sobre o projeto atual na **V1.8.1**.
 HEAD de referência: `2f4e2c9433d03b21d608c795c0d4cc6a0a3b7e2f`.
 
-Esta revisão corresponde à **primeira tarefa**: atualizar o plano para que a
-rota sem link possa ser implementada sem sobrescrever as mudanças recentes.
-Os arquivos completos abaixo foram reconciliados com a base local atual e
-validados em uma cópia temporária isolada. O projeto principal recebeu apenas
-a atualização deste documento. A aplicação, a migração e o deploy pertencem
-à segunda tarefa; o plano e o comparativo de IA permanecem congelados até a
-terceira tarefa.
+**Situação em 03/10/2026: implementação local da segunda tarefa concluída;
+implantação na VM pendente.** A primeira revisão reconciliou os arquivos completos
+abaixo com a V1.8.1. A aplicação partiu do backup
+`ad096710be96b59158aaa9c13e98c516734f3d84`, cujos 121 hashes conferidos coincidiam
+com essa base. O código aplicado foi revisado e recebeu os ajustes descritos
+abaixo; esses ajustes prevalecem sobre os blocos originais de aplicação.
+
+Os blocos completos e hashes permanecem como registro do plano aprovado e da
+base anterior, **não como instrução para sobrescrever novamente o projeto**.
+Para implantação, usar os arquivos atuais do repositório e o
+[procedimento de deploy](../deploy/reserva_com_sem_link.md). O plano e o
+comparativo de IA continuam congelados para a terceira tarefa.
+
+### Ajustes e validação da aplicação
+
+- Criados o SQL incremental `deploy/migrations/20261003_reserva_com_sem_link.sql`
+  e sua reversão restrita, preservando as referências antigas por significado,
+  os IDs das transições existentes, histórico particionado e demais dados.
+- A recuperação de resposta já enviada na 20 dispensa remontar o contexto de
+  plataforma: retirar o link depois do envio não invalida a resposta persistida.
+  Para um envio novo na 20, o link continua obrigatório, conforme a regra abaixo.
+- Ajustadas as quebras de parágrafo nas apresentações das novas etapas 18/19,
+  a organização do despacho por etapa e a versão do JavaScript no template.
+  A única mudança no template protegido é esse identificador de cache.
+- O antigo contexto de despedida `contextos/etapa22.py` foi substituído por
+  `contextos/etapa24.py`, sem manter uma segunda implementação com nome antigo.
+- Fixtures de follow-up atualizadas para as 24 etapas e para o número comercial
+  obrigatório já existente no projeto. Acrescentados testes reais da migração.
+- 452 testes aprovados na suíte completa, incluindo PostgreSQL descartável;
+  revisão visual do painel no computador e em 390 px, com dados fictícios.
+- Sem alterações em requisitos, `.env`, lógica de Consumo Meta ou documentos de IA.
+  Sem executar migração na base de produção, publicar código ou enviar mensagens.
+
+Os critérios locais estão cobertos. O corte do banco, a subida dos serviços e
+a homologação real de WhatsApp/CRM devem seguir o procedimento de implantação.
 
 ## Base atual e alterações preservadas
 
@@ -17566,7 +17594,7 @@ Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
 
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -17580,7 +17608,7 @@ valor, a mensagem esperada será:
 ```text
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -17633,7 +17661,7 @@ Mensagem esperada:
 Olha, o Supera não é reforço escolar.
 Nós trabalhamos a raiz da aprendizagem, desenvolvendo habilidades como atenção, concentração, memória e raciocínio — o alicerce necessário para aprender melhor em qualquer matéria. 🧠✨
 
-Mas bora lá:
+Vamos lá:
 
 (retomada neutra da etapa atual)
 ```
@@ -20256,7 +20284,7 @@ reservar não são aceites; na etapa 20, intenção de reservar não comprova co
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
 O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
-sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
+sua pergunta de retomada, introduzida por `Vamos lá:` uma única vez.
 `tratamentos_universais.py` apenas reexporta os imports antigos por compatibilidade.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o
@@ -23532,7 +23560,7 @@ Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outr
 
 Uma dúvida não precisa receber todo o discurso comercial novamente. O
 tratamento financeiro e o de reforço escolar usam o prefixo compartilhado,
-uma ponte como `Mas bora lá:` e a pergunta necessária para continuar.
+uma ponte como `Vamos lá:` e a pergunta necessária para continuar.
 Não acumular conectivos nem repetir esse prefixo dentro da mesma resposta.
 
 ## 3. A etapa 1 é a exceção de entrada

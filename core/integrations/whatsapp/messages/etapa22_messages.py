@@ -1,27 +1,65 @@
-# ETAPA 22 - MENSAGEM TERMINAL DO ATENDIMENTO
+"""Etapa 22: apresentação, repetição e tratamentos compostos."""
 
-### ENCERRAMENTO DO TITULAR: QUEM CONVERSA TAMBÉM FARÁ A EXPERIÊNCIA
-MENSAGEM_ETAPA22_TITULAR = (
-    "Perfeito, foi um prazer falar com você, estamos ansiosos para te receber na nossa unidade! 🥰🧡\n\n"
-    "No próximo dia útil, nossa equipe entrará em contato.\n "
-    "Até breve! 👋🏼😉"
+from core.integrations.whatsapp.messages.tratamentos.financeiro import (
+    montar_mensagem_tratamento_financeiro,
+)
+from core.integrations.whatsapp.messages.tratamentos.midia import (
+    montar_mensagem_tratamento_midia,
+)
+from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
+    montar_mensagem_tratamento_reforco_escolar,
 )
 
 
-### ENCERRAMENTO DO DEPENDENTE: ACOLHER O CLIENTE E O PARTICIPANTE PELO NOME
-MENSAGEM_ETAPA22_DEPENDENTE = (
-    "Perfeito, foi um prazer falar com você, estamos ansiosos para receber você e {nome_dependente} na nossa unidade!  🥰🧡\n\n"
-    "No próximo dia útil, nossa equipe entrará em contato.\n "
-    "Até breve! 👋🏼😉"
+### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
+MENSAGEM_PADRAO_ETAPA22 = (
+    "Você tem algum comentário ou sugestão para melhorar nosso atendimento?\n"
+    "Seu feedback é muito importante para nós! 😊"
+)
+
+### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
+MENSAGEM_REPETICAO_ETAPA22 = (
+    "Você gostaria de deixar um comentário ou sugestão sobre nosso atendimento?"
+)
+
+ORIENTACAO_CONTEXTO_ETAPA22 = (
+    "Olha, não consegui entender. Deseja fazer algum comentário sobre nosso atendimento?"
 )
 
 
-def montar_mensagem_etapa22(*, status_dependente=False, nome_dependente=None):
-    """A despedida mantém o participante definido ao longo do atendimento."""
-    if type(status_dependente) is not bool:
-        raise ValueError("Rota do atendimento inválida para a finalização")
-    if not status_dependente:
-        return MENSAGEM_ETAPA22_TITULAR
-    if not isinstance(nome_dependente, str) or not nome_dependente.strip():
-        raise ValueError("Nome do dependente ausente para a finalização")
-    return MENSAGEM_ETAPA22_DEPENDENTE.format(nome_dependente=nome_dependente.strip())
+def montar_mensagem_etapa22(*, repeticao=False):
+    mensagem = MENSAGEM_REPETICAO_ETAPA22 if repeticao else MENSAGEM_PADRAO_ETAPA22
+    return mensagem
+
+
+### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO, SEM A MENSAGEM INICIAL
+def montar_mensagem_financeiro_etapa22():
+    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA22)
+
+
+def montar_mensagem_midia_etapa22():
+    return montar_mensagem_tratamento_midia(
+        MENSAGEM_REPETICAO_ETAPA22, aceita_botoes=True
+    )
+
+
+def montar_mensagem_reforco_escolar_etapa22():
+    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA22)
+
+
+### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
+def montar_mensagem_contexto_invalido_etapa22():
+    return ORIENTACAO_CONTEXTO_ETAPA22
+
+
+TEXTO_BOTAO_COMENTAR_ETAPA22 = "Sim, quero comentar"
+
+
+TEXTO_BOTAO_SEM_COMENTARIO_ETAPA22 = "Prefiro não comentar"
+
+
+def montar_botoes_etapa22():
+    return [
+        TEXTO_BOTAO_COMENTAR_ETAPA22,
+        TEXTO_BOTAO_SEM_COMENTARIO_ETAPA22,
+    ]

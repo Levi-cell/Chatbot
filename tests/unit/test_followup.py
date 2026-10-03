@@ -54,6 +54,8 @@ def mensagem(tipo="text"):
 def dados():
     return {
         "nome_titular": "Ana",
+        "turno": "tarde",
+        "numero_comercial": "5511999990000",
         "nome_dependente": "Bia",
         "idade_dependente": 12,
         "nome_unidade": "Unidade Teste",
@@ -155,14 +157,15 @@ class RetornoTests(unittest.TestCase):
                 },
                 **{
                     f"buscar_contexto_etapa{n}": dict(dados_etapa)
-                    for n in (6, 7, 9, 18)
+                    for n in (6, 7, 9, 20)
                 },
                 "buscar_contexto_etapa10": dict(
                     dados_etapa,
                     status_dependente_contexto_email=dependente,
                     email_obrigatorio=False,
                 ),
-                "buscar_contexto_etapa22": dict(
+                "buscar_contexto_etapa18": dict(dados_etapa, status_dependente_reserva=dependente),
+                "buscar_contexto_etapa24": dict(
                     dados_etapa, status_dependente_contexto_finalizacao=dependente
                 ),
                 "buscar_contexto_triagem": dict(
@@ -339,7 +342,7 @@ class RepeticaoTests(unittest.TestCase):
         from core.integrations.whatsapp.pywa_functions import cliente
 
         for dependente in (False, True):
-            for etapa in range(1, 22):
+            for etapa in range(1, 24):
                 if etapa == 8:
                     continue  # A exceção 8 -> 9 tem cobertura própria abaixo.
                 with self.subTest(etapa=etapa, dependente=dependente):
@@ -444,7 +447,7 @@ class RepeticaoTests(unittest.TestCase):
         self.assertEqual(envio["evento_transicao"], "nome_cliente_valido")
 
     def test_terminal_e_dado_ausente_falham_antes_da_meta(self):
-        for etapa in (None, 0, 22, 23):
+        for etapa in (None, 0, 24, 25):
             with self.assertRaises(ValueError):
                 repeticao._selecionar_sender(etapa, dados())
         cx = dados()

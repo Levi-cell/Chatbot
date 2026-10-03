@@ -1,9 +1,9 @@
-"""Etapa 18: sua reserva pelo link, apresentação e repetição."""
+"""Escolha de turno: padrão, repetição e tratamentos compartilhados."""
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    RODAPE_OPCAO_UNICA,
     montar_texto_com_rodape,
 )
-
 from core.integrations.whatsapp.messages.tratamentos.composicao import (
     compor_mensagem_inicial,
 )
@@ -17,101 +17,47 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     montar_mensagem_tratamento_reforco_escolar,
 )
 
-
-TEXTO_BOTAO_JA_AGENDEI_ETAPA18 = "Já reservei"
-
-RODAPE_ETAPA18_AGENDAMENTO = (
-    "Quando finalizar nos avisa aqui!"
+MENSAGEM_REPETICAO_ETAPA18 = "Qual turno fica melhor para reservar {participante}?"
+# A orientação completa pertence somente à entrada; tratamentos retomam a pergunta.
+ORIENTACAO_ESCOLHA_UNICA_ETAPA18 = (
+    "\n\n"
+    "Mesmo que você possa em mais de um turno, escolha o de sua preferência. "
+    "Se precisar corrigir depois, basta combinar com nosso consultor."
 )
-
-### TRECHO COM O LINK, REUTILIZADO NA INICIAL E NOS TRATAMENTOS
-MENSAGEM_REPETICAO_ETAPA18 = (
-    "Para reservar {experiencia}, basta clicar neste link e escolher o melhor "
-    "dia e horário:\n\n "
-    "{link_agendamento}"
+MENSAGEM_PADRAO_ETAPA18 = compor_mensagem_inicial(
+    "Agradeço por responder às perguntas! ☺️\n\n",
+    MENSAGEM_REPETICAO_ETAPA18 + ORIENTACAO_ESCOLHA_UNICA_ETAPA18,
 )
-
-
-### MENSAGEM INICIAL: AGRADECIMENTO + TRECHO DA RESERVA
-APRESENTACAO_ETAPA18 = "Obrigado por responder às perguntas! ☺️\n\n"
-
-
-# A repetição mantém o link e o rodapé, sem agradecer novamente pelas perguntas.
-def montar_mensagem_etapa18(link_agendamento, nome_dependente=None, *, repeticao=False):
-    mensagem = _montar_repeticao(link_agendamento, nome_dependente)
-    if not repeticao:
-        mensagem = compor_mensagem_inicial(
-            APRESENTACAO_ETAPA18, mensagem
-        )
-    return _com_rodape(mensagem)
-
-
-### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO COM O PARTICIPANTE CORRETO
-def montar_mensagem_midia_etapa18(link_agendamento, nome_dependente=None):
-    mensagem = montar_mensagem_tratamento_midia(
-        _montar_repeticao(link_agendamento, nome_dependente),
-        aceita_botoes=True,
-    )
-    return _com_rodape(mensagem)
-
-
-def montar_mensagem_financeiro_etapa18(link_agendamento, nome_dependente=None):
-    mensagem = montar_mensagem_tratamento_financeiro(
-        _montar_repeticao(link_agendamento, nome_dependente),
-    )
-    return _com_rodape(mensagem)
-
-
-def montar_mensagem_reforco_escolar_etapa18(link_agendamento, nome_dependente=None):
-    mensagem = montar_mensagem_tratamento_reforco_escolar(
-        _montar_repeticao(link_agendamento, nome_dependente),
-    )
-    return _com_rodape(mensagem)
-
-
-### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
-def montar_mensagem_contexto_invalido_etapa18(link_agendamento, nome_dependente=None):
-    experiencia = _descrever_experiencia(nome_dependente)
-    link = _normalizar_link_agendamento(link_agendamento)
-    return _com_rodape(
-        f"Olha, não consegui entender. "
-        f"Para escolher o melhor o dia e horário para {experiencia}, basta clicar este link:\n\n "
-        f"{link}"
-    )
 
 
 def montar_botoes_etapa18():
-    return (TEXTO_BOTAO_JA_AGENDEI_ETAPA18,)
+    return ["Pela manhã", "Pela tarde", "Pela noite"]
 
 
-# Apenas formata titular/dependente e link; o contexto fornece os dados da rota.
-def _descrever_experiencia(nome_dependente):
-    experiencia = "sua *experiência Supera gratuita*"
-    if nome_dependente is not None:
-        if not isinstance(nome_dependente, str) or not nome_dependente.strip():
-            raise ValueError("Nome do dependente inválido para apresentar sua reserva")
-        experiencia = f"a *experiência Supera gratuita* de {nome_dependente.strip()}"
-    return experiencia
-
-
-def _montar_repeticao(link_agendamento, nome_dependente):
-    return MENSAGEM_REPETICAO_ETAPA18.format(
-        experiencia=_descrever_experiencia(nome_dependente),
-        link_agendamento=_normalizar_link_agendamento(link_agendamento),
+def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=False):
+    participante = (
+        f"o *momento Supera gratuito* de {nome_dependente}"
+        if nome_dependente
+        else "seu *momento Supera gratuito*"
     )
-
-
-def _com_rodape(mensagem):
-    return montar_texto_com_rodape(mensagem, RODAPE_ETAPA18_AGENDAMENTO)
-
-
-def _normalizar_link_agendamento(link_agendamento):
-    link = str(link_agendamento or "").strip()
-
-    if not link:
-        raise ValueError("Link de agendamento da unidade não configurado")
-
-    if not link.startswith(("https://", "http://")):
-        raise ValueError("Link de agendamento da unidade é inválido")
-
-    return link
+    pergunta = MENSAGEM_REPETICAO_ETAPA18.format(participante=participante)
+    if tratamento == "financeiro":
+        texto = montar_mensagem_tratamento_financeiro(pergunta)
+    elif tratamento == "reforco_escolar":
+        texto = montar_mensagem_tratamento_reforco_escolar(pergunta)
+    elif tratamento == "midia":
+        texto = montar_mensagem_tratamento_midia(pergunta, aceita_botoes=True)
+    elif tratamento == "contexto_invalido":
+        texto = (
+            "Olha, não consegui identificar um único turno. "
+            "Escolha *Pela manhã*, *Pela tarde* ou *Pela noite*."
+        )
+    elif tratamento is None:
+        texto = (
+            pergunta
+            if repeticao
+            else MENSAGEM_PADRAO_ETAPA18.format(participante=participante)
+        )
+    else:
+        raise ValueError("Tratamento desconhecido para escolha de turno")
+    return montar_texto_com_rodape(texto, RODAPE_OPCAO_UNICA)

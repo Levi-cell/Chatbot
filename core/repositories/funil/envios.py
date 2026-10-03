@@ -17,11 +17,18 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
         FROM (
             SELECT c.id_conversa
             FROM chatbot.conversa c
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
               ON integracao.id_unidade = c.id_unidade
             WHERE e.elegivel_funil = TRUE
+              AND (
+                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                 AND c.id_etapa_atual >= 20)
+                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                    AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
+              )
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE
@@ -53,6 +60,7 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
             FROM chatbot.funil_envios fe
             JOIN chatbot.conversa c
               ON c.id_conversa = fe.id_conversa
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
@@ -70,6 +78,12 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
                     )
                   )
               AND e.elegivel_funil = TRUE
+              AND (
+                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                 AND c.id_etapa_atual >= 20)
+                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                    AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
+              )
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE
@@ -149,7 +163,11 @@ def marcar_envio_como_concluido(
     resposta_funil,
     cursor,
 ):
-    """Confirma conversa e fila no mesmo commit controlado pelo worker."""
+    """Confirma conversa e fila no mesmo commit controlado pelo worker.
+
+    O link vigente já foi conferido antes do despacho. Depois do aceite externo,
+    adicionar um link não pode apagar o sucesso e provocar um segundo envio.
+    """
     cursor.execute(
         """
         UPDATE chatbot.conversa c

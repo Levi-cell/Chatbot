@@ -8,7 +8,7 @@ MENSAGEM_TRATAMENTO_FINANCEIRO = (
     "só são possíveis de determinar após a "
     "sua *experiência supera gratuita* na unidade.\n\n"
 )
-PONTE_TRATAMENTO_FINANCEIRO = "Mas bora lá:\n\n"
+PONTE_TRATAMENTO_FINANCEIRO = "Vamos lá:\n\n"
 
 
 def montar_mensagem_tratamento_financeiro(mensagem_repeticao):

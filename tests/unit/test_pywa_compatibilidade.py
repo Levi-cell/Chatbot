@@ -15,7 +15,7 @@ from pywa.errors import WhatsAppError
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.pywa_functions import cliente
 from core.integrations.whatsapp.pywa_functions.pywa_senders import (
-    etapa6, etapa7, etapa19, followup,
+    etapa6, etapa7, etapa21, followup,
 )
 from core.integrations.whatsapp.pywa_functions.resposta_envio import extrair_id_hash_msg_bot
 from core.integrations.whatsapp.tools import usuarios
@@ -92,8 +92,8 @@ class PywaCompatibilidadeTests(unittest.TestCase):
         self.assertEqual(resultado["id_hash_msg_bot"], ID_MENSAGEM)
 
     def test_avaliacao_preserva_cinco_opcoes_e_callbacks(self):
-        with patch.object(etapa19, "conta_wa", return_value=self._cliente_real()):
-            resultado = etapa19.enviar_etapa19(TELEFONE_CLIENTE, PHONE_ID, "Ana")
+        with patch.object(etapa21, "conta_wa", return_value=self._cliente_real()):
+            resultado = etapa21.enviar_etapa21(TELEFONE_CLIENTE, PHONE_ID, "Ana")
         interativa = self._payload()["interactive"]
         self.assertEqual(interativa["type"], "list")
         linhas = interativa["action"]["sections"][0]["rows"]

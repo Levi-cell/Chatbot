@@ -15790,7 +15790,7 @@ MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12 = (
 
 MENSAGEM_MIDIA_ETAPA12 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12}"
 )
 
@@ -15800,7 +15800,7 @@ MENSAGEM_MIDIA_ETAPA12 = (
 MENSAGEM_FINANCEIRO_ETAPA12 = (
     "Olha, demais informações, como valores de investimento, são "
     "apresentadas no atendimento presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12}"
 )
 
@@ -15809,7 +15809,7 @@ MENSAGEM_FINANCEIRO_ETAPA12 = (
 
 MENSAGEM_CONTEXTO_INVALIDO_ETAPA12 = (
     "Desculpe, não entendi.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_TRIAGEM_COGNITIVA_ETAPA12}"
 )
 
@@ -16358,20 +16358,20 @@ MENSAGEM_ETAPA21 = (
 
 MENSAGEM_MIDIA_ETAPA21 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_ETAPA21}"
 )
 
 MENSAGEM_FINANCEIRO_ETAPA21 = (
     "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_ETAPA21}"
 )
 
 MENSAGEM_CONTEXTO_INVALIDO_ETAPA21 = (
     "Desculpe, não entendi.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_ETAPA21}"
 )
 
@@ -16425,13 +16425,13 @@ MENSAGEM_ETAPA22 = (
 
 MENSAGEM_MIDIA_ETAPA22 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA22}"
 )
 
 MENSAGEM_CONTEXTO_INVALIDO_ETAPA22 = (
     "Desculpe, não consegui entender seu comentário.\n\n"
-    "Mas bora lá:\n\n"
+    "Vamos lá:\n\n"
     f"{MENSAGEM_SOLICITACAO_COMENTARIO_ETAPA22}"
 )
 
@@ -16530,7 +16530,7 @@ def montar_mensagem_contexto_etapa2():
 
 
 def _montar_mensagem_tratamento(tratamento):
-    return f"{tratamento}\n\nMas bora lá:\n\n{MENSAGEM_RETOMADA_ETAPA2}"
+    return f"{tratamento}\n\nVamos lá:\n\n{MENSAGEM_RETOMADA_ETAPA2}"
 
 
 def montar_mensagem_retorno_followup_etapa2():
@@ -16705,7 +16705,7 @@ def montar_botoes_etapa4():
 
 def _montar_mensagem_tratamento(tratamento, status_dependente):
     pergunta = montar_mensagem_etapa4(status_dependente)
-    return f"{tratamento}\n\nMas bora lá:\n\n{pergunta}"
+    return f"{tratamento}\n\nVamos lá:\n\n{pergunta}"
 ````
 
 ## Passo 66 — `core/integrations/whatsapp/messages/etapa5_messages.py`
@@ -16729,7 +16729,7 @@ def montar_mensagem_etapa5():
 
 MENSAGEM_MIDIA_ETAPA5 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
+    "Vamos lá, me fala novamente, qual sua profissão?"
 )
 
 
@@ -16740,7 +16740,7 @@ def montar_mensagem_midia_etapa5():
 MENSAGEM_FINANCEIRO_ETAPA5 = (
     "Olha, demais informações como valores de investimento são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n"
-    "Mas bora lá, me fala novamente, qual sua profissão?"
+    "Vamos lá, me fala novamente, qual sua profissão?"
 )
 
 
@@ -17148,7 +17148,7 @@ def montar_mensagem_oferta_dependente_etapa8(nome):
 
 MENSAGEM_OFERTA_CLIENTE_MIDIA_ETAPA8 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "Vamos lá, quero te presentear com uma experiência que pode fazer toda a diferença "
     "no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
     "uma avaliação que vai mostrar como estão habilidades importantes para o "
@@ -17166,7 +17166,7 @@ def montar_mensagem_oferta_cliente_midia_etapa8():
 
 MENSAGEM_OFERTA_DEPENDENTE_MIDIA_ETAPA8 = (
     "Olha, ainda não reconhecemos mensagens com mídia, apenas texto.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "Vamos lá, quero presentear {nome} com uma experiência que pode fazer toda a "
     "diferença no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
     "fará uma avaliação que vai mostrar como estão habilidades importantes "
@@ -17185,7 +17185,7 @@ def montar_mensagem_oferta_dependente_midia_etapa8(nome):
 MENSAGEM_OFERTA_CLIENTE_FINANCEIRO_ETAPA8 = (
     "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "Vamos lá, quero te presentear com uma experiência que pode fazer toda a diferença "
     "no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
     "uma avaliação que vai mostrar como estão habilidades importantes para o "
@@ -17204,7 +17204,7 @@ def montar_mensagem_oferta_cliente_financeiro_etapa8():
 MENSAGEM_OFERTA_DEPENDENTE_FINANCEIRO_ETAPA8 = (
     "Olha, demais informações, como valores de investimento, são apresentadas no atendimento "
     "presencial após a aula *gratuita*.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "Vamos lá, quero presentear {nome} com uma experiência que pode fazer toda a "
     "diferença no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
     "fará uma avaliação que vai mostrar como estão habilidades importantes "
@@ -17255,7 +17255,7 @@ def montar_mensagem_oferta_dependente_reforco_escolar_etapa8(nome):
 
 MENSAGEM_OFERTA_CLIENTE_CONTEXTO_INVALIDO_ETAPA8 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero te presentear com uma experiência que pode fazer toda a diferença "
+    "Vamos lá, quero te presentear com uma experiência que pode fazer toda a diferença "
     "no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, você fará "
     "uma avaliação que vai mostrar como estão habilidades importantes para o "
@@ -17273,7 +17273,7 @@ def montar_mensagem_oferta_cliente_contexto_invalido_etapa8():
 
 MENSAGEM_OFERTA_DEPENDENTE_CONTEXTO_INVALIDO_ETAPA8 = (
     "Não consegui entender a sua mensagem.\n\n"
-    "Mas bora lá, quero presentear {nome} com uma experiência que pode fazer toda a "
+    "Vamos lá, quero presentear {nome} com uma experiência que pode fazer toda a "
     "diferença no seu desenvolvimento.\n\n"
     "Além de participar de uma Aula Exclusiva totalmente gratuita, {nome} "
     "fará uma avaliação que vai mostrar como estão habilidades importantes "
@@ -36214,7 +36214,7 @@ Mensagem esperada:
 Olha, o Supera não é reforço escolar.
 Nós trabalhamos a raiz da aprendizagem, desenvolvendo habilidades como atenção, concentração, memória e raciocínio — o alicerce necessário para aprender melhor em qualquer matéria. 🧠✨
 
-Mas bora lá:
+Vamos lá:
 
 (retomada neutra da etapa atual)
 ```

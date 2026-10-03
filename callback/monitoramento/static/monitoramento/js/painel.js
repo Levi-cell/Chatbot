@@ -92,7 +92,7 @@
     item.perfis.forEach(p=>tags.appendChild(criar('span','tag-contato '+p,perfil(p))));
     if(item.comercial)tags.appendChild(criar('span','tag-contato comercial',item.comercial.tag));
     else if(item.foi_funil)tags.appendChild(criar('span','tag-contato funil','Funil'));
-    const campos=[['Contato',item.contato||'Não informado'],['Profissão',item.profissao||'Não informada']];
+    const campos=[['Turno de preferência',({manha:'Manhã',tarde:'Tarde',noite:'Noite'})[item.turno]||'Não informado'],['Contato',item.contato||'Não informado'],['Profissão',item.profissao||'Não informada']];
     if(estado.regras.email_obrigatorio||item.email)campos.push(['E-mail',item.email||'Obrigatório · não informado']);
     if(item.dependentes.length)campos.push(['Dependente(s)',item.dependentes.join(', ')]);
     if(item.comercial){
@@ -207,7 +207,7 @@
     }
     return cartao;
   }
-  function etapas(ds){const c=criar('article','cartao');c.appendChild(titulo('Onde os atendimentos estão','Etapa atual da conversa mais recente de cada contato ativo no período.','22 etapas'));const lista=criar('div','etapas-lista'),max=Math.max(1,...ds.map(e=>Number(e.quantidade)));ds.forEach(e=>{const l=criar('div','etapa-linha'),tr=criar('div','trilho'),i=criar('i');i.style.width=Number(e.quantidade)/max*100+'%';tr.appendChild(i);l.append(criar('span','etapa-numero',String(e.id_etapa)),criar('span','etapa-nome',e.nome_etapa),tr,criar('strong','',String(e.quantidade)));lista.appendChild(l);});c.appendChild(lista);return c;}
+  function etapas(ds){const c=criar('article','cartao');c.appendChild(titulo('Onde os atendimentos estão','Etapa atual da conversa mais recente de cada contato ativo no período.','24 etapas'));const lista=criar('div','etapas-lista'),max=Math.max(1,...ds.map(e=>Number(e.quantidade)));ds.forEach(e=>{const l=criar('div','etapa-linha'),tr=criar('div','trilho'),i=criar('i');i.style.width=Number(e.quantidade)/max*100+'%';tr.appendChild(i);l.append(criar('span','etapa-numero',String(e.id_etapa)),criar('span','etapa-nome',e.nome_etapa),tr,criar('strong','',String(e.quantidade)));lista.appendChild(l);});c.appendChild(lista);return c;}
   function exportacao(formato='google'){
     const essencial=formato==='essencial';
     const cartao=criar('article','cartao exportacao');

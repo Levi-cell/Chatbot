@@ -1,5 +1,12 @@
-"""Etapa 20: apresentação, repetição e tratamentos compostos."""
+"""Etapa 20: sua reserva pelo link, apresentação e repetição."""
 
+from core.integrations.whatsapp.messages.componentes_compartilhados import (
+    montar_texto_com_rodape,
+)
+
+from core.integrations.whatsapp.messages.tratamentos.composicao import (
+    compor_mensagem_inicial,
+)
 from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
 )
@@ -11,55 +18,100 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 )
 
 
-### MENSAGEM COMPLETA PARA A ENTRADA NA ETAPA
-MENSAGEM_PADRAO_ETAPA20 = (
-    "Você tem algum comentário ou sugestão para melhorar nosso atendimento?\n"
-    "Seu feedback é muito importante para nós! 😊"
+TEXTO_BOTAO_JA_AGENDEI_ETAPA20 = "Já reservei"
+
+RODAPE_ETAPA20_AGENDAMENTO = (
+    "Quando finalizar nos avisa aqui!"
 )
 
-### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
+### TRECHO COM O LINK, REUTILIZADO NA INICIAL E NOS TRATAMENTOS
 MENSAGEM_REPETICAO_ETAPA20 = (
-    "Você gostaria de deixar um comentário ou sugestão sobre nosso atendimento?"
+    "Para reservar {experiencia}, basta clicar neste link e escolher o melhor "
+    "dia e horário:\n\n "
+    "{link_agendamento}"
 )
 
-ORIENTACAO_CONTEXTO_ETAPA20 = (
-    "Olha, não consegui entender. Deseja fazer algum comentário sobre nosso atendimento?"
-)
+
+### MENSAGEM INICIAL: AGRADECIMENTO + TRECHO DA RESERVA
+APRESENTACAO_ETAPA20 = "Obrigado por responder às perguntas! ☺️\n\n"
 
 
-def montar_mensagem_etapa20(*, repeticao=False):
-    mensagem = MENSAGEM_REPETICAO_ETAPA20 if repeticao else MENSAGEM_PADRAO_ETAPA20
-    return mensagem
+# A repetição mantém o link e o rodapé, sem agradecer novamente pelas perguntas.
+def montar_mensagem_etapa20(link_agendamento, nome_dependente=None, *, repeticao=False):
+    mensagem = _montar_repeticao(link_agendamento, nome_dependente)
+    if not repeticao:
+        mensagem = compor_mensagem_inicial(
+            APRESENTACAO_ETAPA20, mensagem
+        )
+    return _com_rodape(mensagem)
 
 
-### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO, SEM A MENSAGEM INICIAL
-def montar_mensagem_financeiro_etapa20():
-    return montar_mensagem_tratamento_financeiro(MENSAGEM_REPETICAO_ETAPA20)
-
-
-def montar_mensagem_midia_etapa20():
-    return montar_mensagem_tratamento_midia(
-        MENSAGEM_REPETICAO_ETAPA20, aceita_botoes=True
+### TRATAMENTOS: ORIENTAÇÃO + REPETIÇÃO COM O PARTICIPANTE CORRETO
+def montar_mensagem_midia_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_midia(
+        _montar_repeticao(link_agendamento, nome_dependente),
+        aceita_botoes=True,
     )
+    return _com_rodape(mensagem)
 
 
-def montar_mensagem_reforco_escolar_etapa20():
-    return montar_mensagem_tratamento_reforco_escolar(MENSAGEM_REPETICAO_ETAPA20)
+def montar_mensagem_financeiro_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_financeiro(
+        _montar_repeticao(link_agendamento, nome_dependente),
+    )
+    return _com_rodape(mensagem)
+
+
+def montar_mensagem_reforco_escolar_etapa20(link_agendamento, nome_dependente=None):
+    mensagem = montar_mensagem_tratamento_reforco_escolar(
+        _montar_repeticao(link_agendamento, nome_dependente),
+    )
+    return _com_rodape(mensagem)
 
 
 ### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
-def montar_mensagem_contexto_invalido_etapa20():
-    return ORIENTACAO_CONTEXTO_ETAPA20
-
-
-TEXTO_BOTAO_COMENTAR_ETAPA20 = "Sim, quero comentar"
-
-
-TEXTO_BOTAO_SEM_COMENTARIO_ETAPA20 = "Prefiro não comentar"
+def montar_mensagem_contexto_invalido_etapa20(link_agendamento, nome_dependente=None):
+    experiencia = _descrever_experiencia(nome_dependente)
+    link = _normalizar_link_agendamento(link_agendamento)
+    return _com_rodape(
+        f"Olha, não consegui entender. "
+        f"Para escolher o melhor o dia e horário para {experiencia}, basta clicar este link:\n\n "
+        f"{link}"
+    )
 
 
 def montar_botoes_etapa20():
-    return [
-        TEXTO_BOTAO_COMENTAR_ETAPA20,
-        TEXTO_BOTAO_SEM_COMENTARIO_ETAPA20,
-    ]
+    return (TEXTO_BOTAO_JA_AGENDEI_ETAPA20,)
+
+
+# Apenas formata titular/dependente e link; o contexto fornece os dados da rota.
+def _descrever_experiencia(nome_dependente):
+    experiencia = "seu *momento Supera gratuito*"
+    if nome_dependente is not None:
+        if not isinstance(nome_dependente, str) or not nome_dependente.strip():
+            raise ValueError("Nome do dependente inválido para apresentar sua reserva")
+        experiencia = f"o *momento Supera gratuito* de {nome_dependente.strip()}"
+    return experiencia
+
+
+def _montar_repeticao(link_agendamento, nome_dependente):
+    return MENSAGEM_REPETICAO_ETAPA20.format(
+        experiencia=_descrever_experiencia(nome_dependente),
+        link_agendamento=_normalizar_link_agendamento(link_agendamento),
+    )
+
+
+def _com_rodape(mensagem):
+    return montar_texto_com_rodape(mensagem, RODAPE_ETAPA20_AGENDAMENTO)
+
+
+def _normalizar_link_agendamento(link_agendamento):
+    link = str(link_agendamento or "").strip()
+
+    if not link:
+        raise ValueError("Link de agendamento da unidade não configurado")
+
+    if not link.startswith(("https://", "http://")):
+        raise ValueError("Link de agendamento da unidade é inválido")
+
+    return link

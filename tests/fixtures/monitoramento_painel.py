@@ -59,7 +59,7 @@ NOMES_ETAPAS = [
     'Oferta adiada', 'Retorno ao atendimento', 'E-mail', 'Introdução à triagem',
     'Triagem · pergunta 1', 'Triagem · pergunta 2', 'Triagem · pergunta 3',
     'Triagem · pergunta 4', 'Triagem · pergunta 5', 'Triagem · pergunta 6',
-    'Agendamento', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
+    'Escolha do turno', 'Encaminhamento ao comercial', 'Sua reserva pela plataforma', 'Pesquisa · nota', 'Opção de comentário', 'Comentário', 'Finalização',
 ]
 RELATORIO = {
     'dependentes_por_titular': {

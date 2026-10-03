@@ -106,11 +106,11 @@ O schema final inclui `integracao_funil_unidade`, configuração 1:1 da unidade,
 `funil_envios`, fila operacional 1:1 da conversa, a profissão informada pelo
 cliente naquela conversa, a profissão válida mais recente no cadastro do
 cliente e `pesquisa_satisfacao`, registro 1:1 de nota e comentário opcional da
-conversa. As etapas 18 a 22 são marcadas como
+conversa. As etapas 20 a 24 são marcadas como
 `elegivel_funil`; os dados da pesquisa não compõem o payload do Funil. A etapa
-20 registra a decisão de comentar, a etapa 21 coleta o comentário quando aceito
-e a recusa salta diretamente da etapa 20 para a 22. Encerramento e bloqueio de
-30 dias são exclusivos da política da etapa 22.
+22 registra a decisão de comentar, a etapa 23 coleta o comentário quando aceito
+e a recusa salta diretamente da etapa 22 para a 22. Encerramento e bloqueio de
+30 dias são exclusivos da política da etapa 24.
 
 Cada unidade possui `idade_minima_suporte INTEGER NULL DEFAULT NULL`, limitada
 por CHECK a NULL/50/60/70/80, e `email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE`.
@@ -191,7 +191,7 @@ Para uma base anterior à V1.2.0, use uma única vez
 [followup_registros.sql](../../deploy/migrations/followup_registros.sql), com
 flow parado e follow-up desligado. O script inteiro é transacional: cria os
 registros, audita todas as conversas ativas e marca `followup_stage = 1`, inclusive
-nas etapas 18–21. Não altera etapa, histórico, finalização ou datas anteriores e
+nas etapas 20–23. Não altera etapa, histórico, finalização ou datas anteriores e
 não envia mensagens. Legado ativo terminal/inconsistente cancela a migração.
 
 Na produção atual, essa migração já foi aplicada. Não a repita em deploys
@@ -289,3 +289,15 @@ Adiciona o par nullable `unidade.id_fuso`/`nome_fuso` e `fuso_verificado_em`.
 e fuso preservados e os três estados de apuração. `consumo_meta_coletas` mantém
 agenda/diagnóstico, inclusive antes do primeiro sucesso. Nenhuma conversa/fila
 é alterada. Migração, operação e reversão: [guia](../../deploy/consumo_mensal_meta.md).
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

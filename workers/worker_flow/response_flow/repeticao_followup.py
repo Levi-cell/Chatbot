@@ -4,6 +4,10 @@ A validação fica nos resolvers normais. Mantém também a recuperação sem en
 de respostas já confirmadas e a compatibilidade do retorno especial 8 -> 9.
 """
 
+from core.integrations.whatsapp.messages.contato_comercial import montar_mensagem_contato_comercial
+from core.validacoes.turno import validar_turno
+from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa18, etapa19
+
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_cabecalho,
 )
@@ -31,10 +35,10 @@ from core.integrations.whatsapp.pywa_functions.pywa_senders import (
     etapa15,
     etapa16,
     etapa17,
-    etapa18,
-    etapa19,
     etapa20,
     etapa21,
+    etapa22,
+    etapa23,
 )
 
 from workers.worker_flow.response_flow.etapas.resolver_etapa8 import resolve_etapa8
@@ -56,18 +60,20 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_15_TRIAGEM_PERGUNTA_4,
     ETAPA_16_TRIAGEM_PERGUNTA_5,
     ETAPA_17_TRIAGEM_PERGUNTA_6,
-    ETAPA_18_AGENDAMENTO,
-    ETAPA_19_PESQUISA_SATISFACAO,
-    ETAPA_20_DECISAO_COMENTARIO,
-    ETAPA_21_COMENTARIO_SATISFACAO,
+    ETAPA_18_ESCOLHA_TURNO,
+    ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
+    ETAPA_20_AGENDAMENTO,
+    ETAPA_21_PESQUISA_SATISFACAO,
+    ETAPA_22_DECISAO_COMENTARIO,
+    ETAPA_23_COMENTARIO_SATISFACAO,
 )
 
 SENDERS_SIMPLES = {
     ETAPA_4_PROFISSAO: etapa4.enviar_etapa4,
     ETAPA_5_NOME_DEPENDENTE: etapa5.enviar_etapa5,
     ETAPA_10_EMAIL: etapa10.enviar_etapa10,
-    ETAPA_20_DECISAO_COMENTARIO: etapa20.enviar_etapa20,
-    ETAPA_21_COMENTARIO_SATISFACAO: etapa21.enviar_etapa21,
+    ETAPA_22_DECISAO_COMENTARIO: etapa22.enviar_etapa22,
+    ETAPA_23_COMENTARIO_SATISFACAO: etapa23.enviar_etapa23,
 }
 SENDERS_TRIAGEM = {
     ETAPA_12_TRIAGEM_PERGUNTA_1: (
@@ -156,13 +162,36 @@ def _selecionar_sender(etapa, dados):
             dependente,
             _texto(dados, "nome_dependente") if dependente else None,
         )
-    if etapa == ETAPA_18_AGENDAMENTO:
+    if etapa == ETAPA_18_ESCOLHA_TURNO:
         return etapa18.enviar_etapa18, (
+            _texto(dados, "nome_dependente") if dependente else None,
+        )
+    if etapa == ETAPA_19_ENCAMINHAMENTO_COMERCIAL:
+        # Suporte à retomada já registrada, sem ampliar a elegibilidade proativa.
+        turno = validar_turno(dados.get("turno"))
+        nome_dependente = _texto(dados, "nome_dependente") if dependente else None
+        texto = montar_mensagem_contato_comercial(
+            nome_agente=_texto(dados, "nome_agente"),
+            genero_agente=_texto(dados, "genero"),
+            nome_cliente=_texto(dados, "nome_titular"),
+            nome_dependente=nome_dependente,
+            idade_aluno=dados.get(
+                "idade_dependente" if dependente else "idade_cliente"
+            ),
+            turno=turno,
+        )
+        return etapa19.enviar_etapa19, (
+            _texto(dados, "numero_comercial"),
+            texto,
+            nome_dependente,
+        )
+    if etapa == ETAPA_20_AGENDAMENTO:
+        return etapa20.enviar_etapa20, (
             _texto(dados, "link_agendamento"),
             _texto(dados, "nome_dependente") if dependente else None,
         )
-    if etapa == ETAPA_19_PESQUISA_SATISFACAO:
-        return etapa19.enviar_etapa19, (_texto(dados, "nome_titular"),)
+    if etapa == ETAPA_21_PESQUISA_SATISFACAO:
+        return etapa21.enviar_etapa21, (_texto(dados, "nome_titular"),)
     raise ValueError(f"Etapa não repetível: {etapa}")
 
 

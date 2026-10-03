@@ -15,7 +15,7 @@ core/integrations/whatsapp/
 ├── numero_comercial.py
 ├── messages/
 │   ├── README.md
-│   ├── etapa1_messages.py ... etapa22_messages.py
+│   ├── etapa1_messages.py ... etapa24_messages.py
 │   ├── componentes_compartilhados.py
 │   ├── followup_messages.py
 │   ├── tratamentos_universais.py
@@ -33,7 +33,7 @@ core/integrations/whatsapp/
 │   ├── resposta_envio.py
 │   ├── ferramentas.md
 │   └── pywa_senders/
-│       ├── etapa1.py ... etapa22.py
+│       ├── etapa1.py ... etapa24.py
 │       ├── followup.py
 │       └── triagem_base.py
 └── tools/
@@ -95,14 +95,14 @@ final convida a reservar sua **experiência Supera exclusiva**. A rota de depend
 preserva seu nome como participante. Os montadores e contextos de atendimento
 distinguem `nome_titular`, `nome_dependente` e `nome_agente`, sem alterar o esquema
 do banco. Os botões das etapas 7 e 9 exibem **Reservar agora**;
-a etapa 18 usa **Já reservei**. O aceite por texto continua reconhecendo expressões
+a etapa 20 usa **Já reservei**. O aceite por texto continua reconhecendo expressões
 antigas como `quero agendar` e `já agendei`, conforme a etapa. Perguntas sobre como
-reservar não são aceites; na etapa 18, intenção de reservar não comprova conclusão.
+reservar não são aceites; na etapa 20, intenção de reservar não comprova conclusão.
 
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
 O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
-sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
+sua pergunta de retomada, introduzida por `Vamos lá:` uma única vez.
 `tratamentos_universais.py` apenas reexporta os imports antigos por compatibilidade.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o
@@ -313,3 +313,15 @@ SERVICE por número/tipo de preço. Valida telefone, conta, fuso, categoria,
 quantidades e paginação; erro não vira zero. Token e versão vêm da configuração
 central. O worker e o utilitário usam este mesmo núcleo, sem dependência do
 bootstrap da IDE. Não acrescenta contador local ou processamento de statuses.
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

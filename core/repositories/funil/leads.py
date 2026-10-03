@@ -21,7 +21,9 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             d.nome_dependente,
             d.idade AS idade_dependente,
             triagem.respostas,
-            coleta_email.conteudo_texto AS resposta_email_conversa
+            coleta_email.conteudo_texto AS resposta_email_conversa,
+            NULLIF(BTRIM(u.link_agendamento), '') AS link_agendamento,
+            c.turno
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -69,6 +71,12 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         ) AS coleta_email ON TRUE
         WHERE c.id_conversa = %s
           AND etapa_atual.elegivel_funil = TRUE
+          AND (
+                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                 AND c.id_etapa_atual >= 20)
+                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                    AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
+              )
           AND c.lead_no_funil IS NOT TRUE
         LIMIT 1;
         """,
@@ -80,6 +88,8 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         return None
 
     return {
+        "link_agendamento": resultado[13],
+        "turno": resultado[14],
         "id_conversa": resultado[0],
         "id_unidade": resultado[1],
         "nome_unidade": resultado[2],

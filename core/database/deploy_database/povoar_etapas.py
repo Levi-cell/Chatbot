@@ -24,11 +24,13 @@ ETAPAS = (
     (15, "Triagem cognitiva - pergunta 4", False, 0, False),
     (16, "Triagem cognitiva - pergunta 5", False, 0, False),
     (17, "Triagem cognitiva - pergunta 6", False, 0, False),
-    (18, "Agendamento após a triagem cognitiva", False, 0, True),
-    (19, "Pesquisa de satisfação - nota", False, 0, True),
-    (20, "Pesquisa de satisfação - opção de comentário", False, 0, True),
-    (21, "Pesquisa de satisfação - comentário", False, 0, True),
-    (22, "Finalização do atendimento", True, 30, True),
+    (18, "Escolha do turno para a demonstração prática", False, 0, False),
+    (19, "Encaminhamento ao comercial após a triagem", False, 0, True),
+    (20, "Sua reserva pela plataforma da unidade", False, 0, True),
+    (21, "Pesquisa de satisfação - nota", False, 0, True),
+    (22, "Pesquisa de satisfação - opção de comentário", False, 0, True),
+    (23, "Pesquisa de satisfação - comentário", False, 0, True),
+    (24, "Finalização do atendimento", True, 30, True),
 )
 
 SINCRONIZAR_ETAPA_SQL = """
@@ -60,7 +62,7 @@ def _recusar_catalogo_legado(cursor):
             bloqueio_dias,
             elegivel_funil
         FROM chatbot.etapa
-        WHERE id_etapa BETWEEN 3 AND 22
+        WHERE id_etapa BETWEEN 3 AND 24
         ORDER BY id_etapa;
         """
     )
@@ -94,8 +96,8 @@ def _recusar_catalogo_legado(cursor):
     if divergencias:
         raise RuntimeError(
             "Catalogo de etapas legado detectado. Aplique primeiro a "
-            "migracao SQL que insere a confirmacao como etapa 3 e "
-            "renumera as antigas etapas 3 a 21 para 4 a 22 "
+            "migracao SQL correspondente ao catalogo de 24 etapas. "
+            "Os seeds nao remapeiam historico nem conversas existentes "
             f"(etapas_divergentes={divergencias})"
         )
 

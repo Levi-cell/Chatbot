@@ -31,6 +31,12 @@ formulário nem pressioná-la a continuar.
 - Usar **experiência Supera gratuita**, **demonstração prática exclusiva**,
   **presentear**, **reservar** e **sua reserva**, conforme o contexto.
   O atendimento não oferece curso ou matrícula gratuitos.
+- Alternar alguns usos existentes de **experiência Supera** com **momento Supera**,
+  mantendo os dois termos no atendimento. A retomada da oferta (9), a escolha
+  do turno (18) e a reserva pelo link (20) usam **momento Supera gratuito**;
+  a oferta inicial e o encaminhamento comercial preservam **experiência Supera**.
+  Ajustar os artigos e adjetivos (`seu momento`, `o momento de`, `gratuito`).
+  Não inserir esses termos em mensagens que antes não mencionavam a experiência.
 - Na oferta inicial da etapa 7, destacar **demonstração prática gratuita**
   logo na abertura, antes da explicação da avaliação. Encerrar com o convite
   para reservar a **experiência Supera exclusiva**. A gratuidade não pode ficar
@@ -133,8 +139,12 @@ Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outr
 
 Uma dúvida não precisa receber todo o discurso comercial novamente. O
 tratamento financeiro e o de reforço escolar usam o prefixo compartilhado,
-uma ponte como `Mas bora lá:` e a pergunta necessária para continuar.
+uma ponte como `Vamos lá:` e a pergunta necessária para continuar.
 Não acumular conectivos nem repetir esse prefixo dentro da mesma resposta.
+
+Na etapa 18, a orientação sobre escolher uma preferência e combinar correções
+com o consultor aparece somente na entrada. Tratamentos e repetição neutra
+retomam apenas a pergunta do turno; os botões e o rodapé de opção única permanecem.
 
 ## 3. A etapa 1 é a exceção de entrada
 
@@ -332,10 +342,10 @@ titular nem atribuir a ele a idade do participante. O pedido expressa intenção
 de reservar; não confirma uma reserva já realizada. Esta é a mensagem do lead
 para o comercial, distinta da orientação que o bot envia antes do botão.
 
-### Comentário livre e despedida: etapas 21 e 22
+### Comentário livre e despedida: etapas 23 e 24
 
-A etapa 21 não possui tratamento de contexto inválido. No fluxo normal,
-qualquer comentário em texto leva à etapa 22, inclusive `ok`, `sim`, um emoji
+A etapa 23 não possui tratamento de contexto inválido. No fluxo normal,
+qualquer comentário em texto leva à etapa 24, inclusive `ok`, `sim`, um emoji
 ou pontuação. Não exigir uma opinião detalhada nem classificar o comentário
 como dúvida financeira ou sobre reforço escolar. Não enviar `não consegui
 entender seu comentário` nem pedir uma nova resposta por causa do conteúdo.
@@ -345,13 +355,13 @@ texto vazio e botão antigo permitem concluir sem gravar um comentário; coment�
 textuais livres são preservados. O retry deve reconstruir esse mesmo resultado.
 O contrato de retomadas por follow-up permanece separado do fluxo normal.
 
-A etapa 22 tem duas mensagens completas, sem repetição nem tratamento:
+A etapa 24 tem duas mensagens completas, sem repetição nem tratamento:
 
 - Titular: `Estamos ansiosos para te receber na nossa unidade! 🧡`
 - Dependente: `Estamos ansiosos para receber você e {nome_dependente} na nossa unidade! 🧡`
 
 Os demais parágrafos de despedida são mantidos. Os dois caminhos de entrada,
-recusa de comentário na etapa 20 e resposta na 21, precisam levar a rota e o
+recusa de comentário na etapa 22 e resposta na 23, precisam levar a rota e o
 nome persistido do dependente ao sender. Respostas já gravadas são recuperadas
 sem montar uma nova despedida. Essa variação editorial não muda o encerramento
 nem o bloqueio de 30 dias.
@@ -745,3 +755,8 @@ universal, titular menor e dependente abaixo do mínimo. Tolera espaçamento e
 prefixo de retorno somente na leitura; não modifica as quebras das mensagens.
 O worker comprova o vínculo da resposta com a entrada. Os nomes antigos que
 contêm `acima_99` permanecem como contrato interno; o resolver aplica universal 90+.
+
+
+### Escolha de turno e contato comercial
+
+A nova etapa 18 pergunta uma única preferência de turno, sem prometer horário. A 19 apresenta o contato comercial com mensagem preenchida. Os tratamentos específicos preservam os componentes e o contexto inválido da escolha de turno é autônomo. Retorno válido ao primeiro follow-up pode avançar; não descartar a escolha recebida. Com plataforma, a apresentação do link passa à etapa 20; a satisfação é compartilhada em 21–24.

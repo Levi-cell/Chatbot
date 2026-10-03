@@ -16,11 +16,11 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### PERGUNTAS REUTILIZADAS NA INICIAL E NOS TRATAMENTOS, POR PARTICIPANTE
 MENSAGEM_REPETICAO_CLIENTE = (
-    "Vamos continuar com a reserva da sua *experiência Supera gratuita*? ☺️"
+    "Vamos continuar com a reserva do seu *momento Supera gratuito*? ☺️"
 )
 
 MENSAGEM_REPETICAO_DEPENDENTE = (
-    "Vamos continuar com a reserva da *experiência Supera gratuita* de "
+    "Vamos continuar com a reserva do *momento Supera gratuito* de "
     "{nome_dependente}? ☺️"
 )
 
@@ -72,7 +72,7 @@ def montar_mensagem_retorno_cliente_reforco_escolar_etapa9():
 def montar_mensagem_retorno_cliente_contexto_invalido_etapa9():
     return (
         "Olha, não consegui entender, deseja continuar com a reserva "
-        "da sua *experiência Supera gratuita*?"
+        "do seu *momento Supera gratuito*?"
 
     )
 
@@ -101,7 +101,7 @@ def montar_mensagem_retorno_dependente_reforco_escolar_etapa9(nome_dependente):
 def montar_mensagem_retorno_dependente_contexto_invalido_etapa9(nome_dependente):
     return (
         "Olha, não consegui entender, deseja continuar com a reserva "
-        f"da *experiência Supera gratuita* de {nome_dependente}? "
+        f"do *momento Supera gratuito* de {nome_dependente}? "
 
     )
 

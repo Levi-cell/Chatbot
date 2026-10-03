@@ -301,7 +301,7 @@ Implementação principal:
   etapa 4 apenas reapresenta a pergunta, sem evento, avanço ou persistência e
   sem criar uma etapa de confirmação adicional.
 - A etapa 11 introduz a triagem, as etapas 12 a 17 fazem as seis perguntas e a
-  etapa 18 apresenta o agendamento. A etapa 18 torna a conversa elegível ao
+  etapa 20 apresenta o agendamento quando há link; sem link, a 18 coleta o turno e a 19 entrega ao comercial. A 20 com link ou a 19 sem link torna a conversa elegível ao
   Funil, mas não encerra nem bloqueia o atendimento.
 - Na etapa 11, o clique em `Começar triagem` e confirmações textuais inequívocas
   disparam o mesmo evento `triagem_iniciada`. A validação aceita variações de
@@ -369,19 +369,19 @@ Implementação principal:
   avança sem tratamento de e-mail. A classificação da resposta permanece
   vinculada à conversa para que o Funil exiba `não tem` ou `não informado` sem
   inventar um endereço.
-- A etapa 19 registra uma nota de satisfação de 1 a 5. Na etapa 20, o cliente
-  escolhe se deseja comentar: a aceitação segue para a etapa 21 e a recusa
-  salta diretamente para a etapa 22. A etapa 21 coleta o comentário livre e
-  avança para 22 sem julgar seu conteúdo: `ok`, `sim`, emojis e pontuação também
+- A etapa 21 registra uma nota de satisfação de 1 a 5. Na etapa 22, o cliente
+  escolhe se deseja comentar: a aceitação segue para a etapa 23 e a recusa
+  salta diretamente para a etapa 24. A etapa 23 coleta o comentário livre e
+  avança para 24 sem julgar seu conteúdo: `ok`, `sim`, emojis e pontuação também
   são aceitos. Não há tratamento de contexto inválido nessa etapa. Uma recusa
   explícita ou resposta sem texto encerra sem comentário (`NULL`); botões antigos
   não são gravados como comentário. Mídias mantêm a orientação para escrever
   por texto, sem avançar. A recuperação usa o mesmo critério de persistência. Nota e
   comentário são internos, não compõem o payload do Funil e não encerram nem
   bloqueiam o atendimento.
-- A etapa 22 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
+- A etapa 24 encerra a conversa, registra `foi_agendado` e aplica o bloqueio de
   30 dias. A despedida usa `te receber` para titular e `receber você e
-  {nome_dependente}` para dependente, tanto no caminho 20 -> 22 quanto 21 -> 22.
+  {nome_dependente}` para dependente, tanto no caminho 22 -> 24 quanto 23 -> 24.
   O nome vem do dependente vinculado à conversa e à unidade; nunca substituir
   silenciosamente a rota de dependente pela de titular quando faltar esse dado.
 - Durante esse período, novas mensagens para a mesma unidade não iniciarão outro
@@ -399,8 +399,8 @@ Implementação principal:
 
 ### 6.1 Oportunidade no Funil de Vendas
 
-- Uma conversa torna-se elegível ao entrar na etapa 18.
-- As etapas 18 a 22 permanecem elegíveis. Assim, avançar na pesquisa antes do
+- Com link, uma conversa torna-se elegível ao entrar na etapa 20. Sem link, na etapa 19.
+- Com link, as etapas 20 a 24 permanecem elegíveis; sem link, 19 e 21 a 24. Assim, avançar na pesquisa antes do
   próximo ciclo do worker não remove a conversa da fila do Funil.
 - `lead_no_funil = TRUE` é a confirmação que impede um segundo envio da mesma
   conversa; nota e comentário da pesquisa não fazem parte do snapshot enviado.
@@ -527,7 +527,7 @@ o bot como último lado, junto do histórico e do recibo de envio.
 - Avanços, saltos e o retorno controlado `9 + retorno_adiado -> 8` são permitidos
   somente quando existe uma aresta explícita.
 - Um exemplo de salto autorizado é
-  `20 + comentario_satisfacao_recusado -> 22`.
+  `22 + comentario_satisfacao_recusado -> 24`.
 - A atualização utilizará a origem persistida no histórico da mensagem e será
   revalidada no `UPDATE` da conversa.
 - Um retry com resposta do bot existente reutilizará a etapa do histórico do
@@ -648,7 +648,7 @@ Nas etapas 7 e 9, o botão **Quero reservar** e confirmações digitadas como
 negócio, o aceite flexível não foi endurecido: expressões como `quero pensar melhor`
 continuam seguindo o reconhecimento existente. Negativas reconhecidas e pedidos
 informativos, como **quero saber como reservar**, não confirmam a oferta.
-**Talvez mais tarde** mantém o evento de adiamento. A etapa 18 apresenta
+**Talvez mais tarde** mantém o evento de adiamento. A etapa 20 apresenta
 **Já reservei** e aceita também as confirmações antigas de conclusão, como
 **já agendei**. Dizer **quero reservar** nessa etapa não comprova conclusão.
 Os nomes técnicos de eventos e colunas permanecem, incluindo `link_agendamento`
@@ -737,7 +737,7 @@ Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
 
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -751,7 +751,7 @@ valor, a mensagem esperada será:
 ```text
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -804,7 +804,7 @@ Mensagem esperada:
 Olha, o Supera não é reforço escolar.
 Nós trabalhamos a raiz da aprendizagem, desenvolvendo habilidades como atenção, concentração, memória e raciocínio — o alicerce necessário para aprender melhor em qualquer matéria. 🧠✨
 
-Mas bora lá:
+Vamos lá:
 
 (retomada neutra da etapa atual)
 ```
@@ -1382,9 +1382,9 @@ Implementação principal:
 | `status_pagamento` sem chamada Meta | Implementada conforme a regra | O valor controla a admissão da unidade, mas não registra nem remove o número na Meta. |
 | Desvinculação definitiva da unidade | Definida operacionalmente | Remover do WABA oficial e excluir individualmente pelo Admin. |
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
-| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 18–22, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
+| Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 20–24, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Follow-up antes do agendamento | Implementada | Primeiro lembrete após 7h; despedida e encerramento após outras 7h sem resposta, nas etapas 1–17, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
+| Follow-up antes do agendamento | Implementada | Primeiro lembrete após 7h; despedida e encerramento após outras 7h sem resposta, nas etapas 1–17 e a 18 somente para unidade sem link, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
 | Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
@@ -1410,7 +1410,7 @@ Implementado na V1.2.0. As instruções de operação vivem nos
 O worker proativo envia o lembrete definido em `messages/followup_messages.py`
 depois de sete horas sem reação à última resposta comum confirmada do bot.
 NULL equivale a stage zero.
-O envio exige conversa ativa em etapa 1–17, unidade válida e adimplente, ausência
+O envio exige conversa ativa em etapa 1–17 e a 18 somente para unidade sem link, unidade válida e adimplente, ausência
 de bloqueios, de entrada posterior no histórico e de fila pending/processing do
 mesmo par cliente/unidade, mesmo se ainda não vinculada à conversa. Uma fila
 respondida mas ainda aberta também adia o proativo até sua finalização.
@@ -1434,7 +1434,7 @@ Se a janela de 23h59 já expirou, não envia nem simula encerramento.
 
 O segundo envio exige recibo real do primeiro, correspondente ao último bot e ao
 `followup_last_sent_at`; marcação de legado sem recibo não permite uma despedida.
-As duas camadas são restritas às etapas 1–17, incluindo a 8. Uma reação antes do
+As duas camadas são restritas às etapas 1–17 e a 18 somente para unidade sem link, incluindo a 8. Uma reação antes do
 segundo envio cancela sua elegibilidade e mantém o processamento descrito abaixo.
 Depois do encerramento, outra mensagem abre novo ID de conversa, com stage zero
 e mensagem inicial da etapa 1, sem prefixo de retorno nem nome de cadastro antigo.
@@ -1480,7 +1480,7 @@ refazer a transição ou zerar um ciclo posterior. A exceção vale também para
 stage positivo legado sem data de envio; a elegibilidade proativa não muda.
 
 A migração inicial marca followup_stage = 1 para todas as conversas ativas antigas,
-incluindo etapas 18–21, e registra seus IDs, stages anteriores e a data da marcação
+incluindo etapas 20–23, e registra seus IDs, stages anteriores e a data da marcação
 em followup_legado. Não envia lembrete, não encerra conversas, não inventa recibo
 nem altera followup_last_sent_at. Stage positivo passa a indicar retomada pendente,
 por envio real ou marcação inicial; somente o histórico/recibo comprova envio.
@@ -1490,7 +1490,7 @@ Histórico, efeitos normais, marcação da retomada, reset para zero, eventual
 encerramento e finalização da fila pertencem ao mesmo commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
 concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
 seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
-novo ciclo somente nas etapas 1–17 e com as demais condições de envio atendidas.
+novo ciclo somente nas etapas 1–17 e a 18 somente para unidade sem link e com as demais condições de envio atendidas.
 Stage maior que um em conversa legada ainda ativa segue a mesma recuperação;
 stage 2 encerrado pelo novo proativo permanece como auditoria; negativo falha fechado.
 
@@ -1528,3 +1528,15 @@ não apaga valores anteriores nem cria um saldo fictício. A data exibida é a �
 coleta válida do worker. Fusos e fronteiras de meses existentes são preservados;
 mudança incompatível de conta/número/fuso exige revisão, sem misturar recortes.
 Procedimento operacional: [Consumo Meta](deploy/consumo_mensal_meta.md).
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

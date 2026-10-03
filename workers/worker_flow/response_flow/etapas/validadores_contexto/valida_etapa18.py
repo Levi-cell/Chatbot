@@ -1,56 +1,36 @@
+"""Aceita uma única preferência explícita de turno, sem inferir disponibilidade."""
+
 import re
+import unicodedata
 
-from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
-    normalizar_texto,
-)
-from workers.worker_flow.response_flow.transicoes.eventos import (
-    EVENTO_AGENDAMENTO_CONFIRMADO,
-)
-
-
-TIPO_TRATAMENTO_AGENDAMENTO_NAO_CONFIRMADO = (
-    "agendamento_nao_confirmado"
+PADRAO_TURNOS = re.compile(r"\b(manha|tarde|noite)\b")
+PADRAO_RECUSA = re.compile(r"\b(nao|n|nunca|nem|sem|nenhum|nenhuma|impossivel)\b")
+PADRAO_INDEFINICAO = re.compile(
+    r"\b(talvez|qualquer|indiferente|depende|duvida)\b|\btanto faz\b"
 )
 
-_CONFIRMACOES_ACEITAS = {
-    "ja reservei",
-    "reservei",
-    "ja fiz minha reserva",
-    "minha reserva esta concluida",
-    "consegui reservar",
-    "ja agendei",
-    "agendei",
-    "agendado",
-    "ja esta agendado",
-    "esta agendado",
-    "consegui agendar",
-    "agendamento feito",
-    "agendamento realizado",
-}
 
+def validar_etapa18(texto, tipo_mensagem="text"):
+    """Retorna o valor persistível, ou None para repetir a escolha.
 
-def validar_etapa18(conteudo_texto):
-    """Aceita somente confirmações curtas de conclusão da reserva.
-
-    O webhook coloca o título do botão no mesmo campo usado pelo texto. Assim,
-    clique e resposta digitada percorrem a mesma validação estrita.
+    Botões usam o próprio título como callback. A grafia 'amanhã' não é
+    confundida com o turno 'manhã'. Repetir o mesmo turno não cria dois turnos.
+    A presença de negação rejeita a frase inteira, como definido no produto.
     """
-    if not isinstance(conteudo_texto, str):
+    if tipo_mensagem not in {"text", "interactive_button"} or not isinstance(
+        texto, str
+    ):
         return None
-
-    texto_normalizado = _normalizar_resposta(conteudo_texto)
-
-    if texto_normalizado in _CONFIRMACOES_ACEITAS:
-        return EVENTO_AGENDAMENTO_CONFIRMADO
-
-    return None
-
-
-def _normalizar_resposta(texto):
-    texto_sem_acento = normalizar_texto(texto)
-    texto_sem_pontuacao = re.sub(
-        r"[^a-z0-9\s]",
-        " ",
-        texto_sem_acento,
+    normalizado = "".join(
+        c
+        for c in unicodedata.normalize("NFD", texto.casefold())
+        if unicodedata.category(c) != "Mn"
     )
-    return " ".join(texto_sem_pontuacao.split())
+    if (
+        "?" in texto
+        or PADRAO_RECUSA.search(normalizado)
+        or PADRAO_INDEFINICAO.search(normalizado)
+    ):
+        return None
+    turnos = set(PADRAO_TURNOS.findall(normalizado))
+    return next(iter(turnos)) if len(turnos) == 1 else None

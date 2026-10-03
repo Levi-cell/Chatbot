@@ -6,8 +6,8 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from core.integrations.whatsapp.pywa_functions import cliente
-from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa22
-from core.repositories.fluxo.contextos.etapa22 import buscar_contexto_etapa22
+from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa24
+from core.repositories.fluxo.contextos.etapa24 import buscar_contexto_etapa24
 from tests.helpers import FakeCursor
 from tests.unit.test_mensagens_reserva import cliente_simulado, contexto_resposta
 from workers.worker_flow import valida_historico as historico
@@ -34,13 +34,13 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
             for dependente in (False, True):
                 with self.subTest(texto=texto, dependente=dependente):
                     contexto = contexto_resposta(
-                        21, texto, {EVENTO_COMENTARIO: 22}, dependente=dependente
+                        23, texto, {EVENTO_COMENTARIO: 24}, dependente=dependente
                     )
                     wa = cliente_simulado()
                     with patch.object(cliente, "WhatsApp", return_value=wa):
                         envio = flow_sender(contexto)
                     wa.send_message.assert_called_once()
-                    self.assertEqual(envio["id_etapa_resultante"], 22)
+                    self.assertEqual(envio["id_etapa_resultante"], 24)
                     self.assertEqual(envio["evento_transicao"], EVENTO_COMENTARIO)
                     self.assertEqual(envio["comentario_satisfacao"], texto.strip())
                     self.assertFalse(envio.get("tratamento", False))
@@ -49,10 +49,10 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
                     )
 
     def test_dois_caminhos_de_finalizacao_buscam_participante_no_banco(self):
-        momento = datetime(2026, 9, 22, 10, tzinfo=timezone.utc)
+        momento = datetime(2026, 9, 24, 10, tzinfo=timezone.utc)
         for origem, texto, evento in (
-            (20, "Prefiro não comentar", EVENTO_RECUSA),
-            (21, "Gostei", EVENTO_COMENTARIO),
+            (22, "Prefiro não comentar", EVENTO_RECUSA),
+            (23, "Gostei", EVENTO_COMENTARIO),
         ):
             for dependente in (False, True):
                 for prefixo in (None, "Olá novamente, Maria!\n\n"):
@@ -71,7 +71,7 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
                             "buscar_resposta_bot_por_mensagem_cliente": None,
                             "buscar_contexto_saudacao_retorno": ("Maria", None),
                             "montar_saudacao_retorno": prefixo,
-                            "listar_transicoes_permitidas": {evento: 22},
+                            "listar_transicoes_permitidas": {evento: 24},
                             "atualizar_conversa_mensagem_cliente": None,
                         }
                         for nome, retorno in retornos.items():
@@ -121,7 +121,7 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
                         self.assertEqual(
                             despedida, wa.send_message.call_args.kwargs["text"]
                         )
-                        self.assertEqual(envio["id_etapa_resultante"], 22)
+                        self.assertEqual(envio["id_etapa_resultante"], 24)
                         self.assertEqual(envio["evento_transicao"], evento)
                         wa.send_message.assert_called_once()
 
@@ -137,12 +137,12 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
             ("button", "Prefiro não comentar", None),
         ):
             with self.subTest(tipo=tipo, texto=texto):
-                contexto = contexto_resposta(21, texto, {EVENTO_COMENTARIO: 22})
+                contexto = contexto_resposta(23, texto, {EVENTO_COMENTARIO: 24})
                 contexto["tipo_mensagem_atual"] = tipo
                 wa = cliente_simulado()
                 with patch.object(cliente, "WhatsApp", return_value=wa):
                     envio = flow_sender(contexto)
-                self.assertEqual(envio["id_etapa_resultante"], 22)
+                self.assertEqual(envio["id_etapa_resultante"], 24)
                 self.assertEqual(envio["comentario_satisfacao"], esperado)
                 retry = dict(envio, resposta_ja_existia=True)
                 del retry["comentario_satisfacao"]
@@ -160,14 +160,14 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
 
     def test_midia_continua_pedindo_comentario_em_texto(self):
         for tipo in ("image", "audio", "video", "document", "sticker"):
-            contexto = contexto_resposta(21, "", {EVENTO_COMENTARIO: 22})
+            contexto = contexto_resposta(23, "", {EVENTO_COMENTARIO: 24})
             contexto["tipo_mensagem_atual"] = tipo
             wa = cliente_simulado()
             with self.subTest(tipo=tipo), patch.object(
                 cliente, "WhatsApp", return_value=wa
             ):
                 envio = flow_sender(contexto)
-                self.assertEqual(envio["id_etapa_resultante"], 21)
+                self.assertEqual(envio["id_etapa_resultante"], 23)
                 self.assertEqual(
                     envio["tipo_tratamento"], "tipo_mensagem_nao_suportado"
                 )
@@ -176,14 +176,14 @@ class ComentarioFinalizacaoTests(unittest.TestCase):
     def test_dependente_sem_nome_nao_recebe_despedida_de_titular(self):
         for resultado in (None, (None, None), (True, None), (True, " ")):
             with self.subTest(resultado=resultado), self.assertRaises(ValueError):
-                buscar_contexto_etapa22(1, 2, FakeCursor(fetchone_result=resultado))
-        with patch.object(etapa22, "conta_wa") as conta:
+                buscar_contexto_etapa24(1, 2, FakeCursor(fetchone_result=resultado))
+        with patch.object(etapa24, "conta_wa") as conta:
             with self.assertRaises(ValueError):
-                etapa22.enviar_etapa22("5511999999999", "phone", status_dependente=True)
+                etapa24.enviar_etapa24("5511999999999", "phone", status_dependente=True)
             conta.assert_not_called()
 
     def test_transicao_ausente_nao_envia_encerramento(self):
-        contexto = contexto_resposta(21, "ok", {})
+        contexto = contexto_resposta(23, "ok", {})
         wa = cliente_simulado()
         with patch.object(cliente, "WhatsApp", return_value=wa), self.assertRaises(
             ValueError

@@ -352,7 +352,7 @@ da conexão e dos commits proativos. Não faz dequeue nem chama validadores de e
 `FOLLOWUP_WORKER_ENABLED` é falso por padrão em execução manual; a unit systemd
 o habilita explicitamente. Lote padrão: 20; intervalo entre lotes: 60 segundos.
 As candidatas são processadas uma por vez, com lock e transações independentes.
-Somente etapas 1–17 admitem novos lembretes; etapas 18–22 são inelegíveis.
+Etapas 1–17 admitem novos lembretes; a 18 somente quando a unidade está sem link. As etapas 19–24 são inelegíveis.
 A paginação visita candidatos posteriores mesmo quando os primeiros falham.
 Uma falha individual não interrompe o lote. A candidata pode ser tentada novamente
 quando a paginação voltar ao início, depois de revalidar todas as condições; não
@@ -376,7 +376,7 @@ sem nome de dependente coletado, mantém a versão do titular.
 Para despachar, todas as condições
 precisam continuar válidas na releitura após adquirir o lock:
 
-- conversa ativa, sem finalização, em etapa 1–17 não terminal;
+- conversa ativa, sem finalização, em etapa 1–17 e a 18 somente para unidade sem link não terminal;
 - primeiro envio: `followup_stage = 0` (`NULL` equivale a zero); segundo: stage 1
   com recibo do primeiro correspondente ao último bot e ao `followup_last_sent_at`;
 - última mensagem da conversa é do bot, confirmada como `sent`, com pelo menos
@@ -438,8 +438,8 @@ da versão antiga continuam recuperáveis, mesmo que tenham repetido a etapa.
 Na etapa 8, qualquer reação leva à 9 pelo evento `cliente_retornou`, sem repetir
 a 8 nem interpretar a reação como resposta à 9. O histórico do cliente e o
 checkpoint mantêm a origem 8; a resposta registra o destino 9.
-Stage positivo legado nas etapas 18–21 também usa a validação normal, embora
-essas etapas continuem inelegíveis para novos lembretes. A etapa 22 é terminal.
+Stage positivo legado nas etapas 20–23 também usa a validação normal, embora
+essas etapas continuem inelegíveis para novos lembretes. A etapa 24 é terminal.
 
 ### Operação e logs
 
@@ -471,3 +471,15 @@ O ciclo usa advisory lock próprio de sessão, HTTP fora de transação, agenda
 persistida por unidade/mês e upsert protegido de leituras antigas. Não altera
 locks, retries ou regras do atendimento, follow-up e Funil. Falhas preservam
 totais e última coleta válida. Detalhes em [deploy](../deploy/consumo_mensal_meta.md).
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

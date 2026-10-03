@@ -5,9 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from core.integrations.whatsapp.messages import etapa6_messages, etapa7_messages
-from core.integrations.whatsapp.messages import etapa9_messages, etapa18_messages
+from core.integrations.whatsapp.messages import etapa9_messages, etapa20_messages
 from core.integrations.whatsapp.pywa_functions import cliente
-from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa7, etapa18
+from core.integrations.whatsapp.pywa_functions.pywa_senders import etapa7, etapa20
 from core.repositories.atendimento.followup import buscar_contexto_repeticao
 from tests.unit.test_followup import contexto as contexto_followup
 from workers.worker_flow.response_flow import repeticao_followup
@@ -23,8 +23,8 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa7
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa9 import (
     validar_etapa9,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import (
-    validar_etapa18,
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
+    validar_etapa20,
 )
 from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
     validar_pergunta_financeira_etapa4,
@@ -44,7 +44,7 @@ from core.integrations.whatsapp.messages.tratamentos.midia import (
 from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
     MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR,
 )
-from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
+from core.repositories.fluxo.contextos.etapa20 import buscar_contexto_etapa20
 from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
 from workers.worker_flow.response_flow.repeticao_followup import (
     enviar_repeticao_followup,
@@ -273,8 +273,8 @@ class MensagensReservaTests(unittest.TestCase):
         retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9(
             "Maria", "Lucas"
         )
-        self.assertIn("*experiência Supera gratuita* de Lucas", retorno)
-        self.assertNotIn("*experiência Supera gratuita* de Maria", retorno)
+        self.assertIn("*momento Supera gratuito* de Lucas", retorno)
+        self.assertNotIn("*momento Supera gratuito* de Maria", retorno)
 
     def test_fim_da_triagem_apresenta_reserva_para_o_participante_correto(self):
         for dependente in (False, True):
@@ -282,7 +282,7 @@ class MensagensReservaTests(unittest.TestCase):
                 ctx = contexto_resposta(
                     17,
                     "Nunca",
-                    {"triagem_pergunta_6_respondida": 18},
+                    {"triagem_pergunta_6_respondida": 20},
                     dependente=dependente,
                 )
                 ctx.update(
@@ -293,7 +293,7 @@ class MensagensReservaTests(unittest.TestCase):
                 wa.send_message.return_value = SimpleNamespace(id="wamid.reserva")
                 with patch.object(cliente, "WhatsApp", return_value=wa):
                     envio = resolver_etapa17.resolve_etapa17(ctx)
-                self.assertEqual(envio["id_etapa_resultante"], 18)
+                self.assertEqual(envio["id_etapa_resultante"], 20)
                 self.assertEqual(
                     envio["evento_transicao"], "triagem_pergunta_6_respondida"
                 )
@@ -302,9 +302,9 @@ class MensagensReservaTests(unittest.TestCase):
                     wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
                 )
                 experiencia = (
-                    "a *experiência Supera gratuita* de Lucas"
+                    "o *momento Supera gratuito* de Lucas"
                     if dependente
-                    else "sua *experiência Supera gratuita*"
+                    else "seu *momento Supera gratuito*"
                 )
                 self.assertIn(f"Para reservar {experiencia}", envio["mensagem_bot"])
                 self.assertNotIn("{", envio["mensagem_bot"])
@@ -314,7 +314,7 @@ class MensagensReservaTests(unittest.TestCase):
     def test_texto_enviado_e_historico_permanecem_identicos(self):
         for modulo, enviar, extra in (
             (etapa7, etapa7.enviar_etapa7_cliente, "Maria"),
-            (etapa18, etapa18.enviar_etapa18, "https://example.com/horarios"),
+            (etapa20, etapa20.enviar_etapa20, "https://example.com/horarios"),
         ):
             with self.subTest(modulo=modulo.__name__):
                 wa = MagicMock()
@@ -328,7 +328,7 @@ class MensagensReservaTests(unittest.TestCase):
                     (
                         "demonstração prática gratuita"
                         if modulo is etapa7
-                        else "experiência Supera gratuita"
+                        else "momento Supera gratuito"
                     ),
                     envio["mensagem_bot"],
                 )
@@ -338,7 +338,7 @@ class MensagensReservaTests(unittest.TestCase):
                 )
 
     def test_followup_mantem_etapa_e_envia_uma_unica_saudacao(self):
-        for numero in (7, 9, 18):
+        for numero in (7, 9, 20):
             for dependente in (False, True):
                 with self.subTest(etapa=numero, dependente=dependente):
                     ctx = contexto_followup()
@@ -362,16 +362,16 @@ class MensagensReservaTests(unittest.TestCase):
                         (
                             "experiência Supera exclusiva"
                             if numero == 7
-                            else "experiência Supera gratuita"
+                            else "momento Supera gratuito"
                         ),
                         envio["mensagem_bot"],
                     )
                     self.assertNotIn("evento_transicao", envio)
-                    if numero == 18:
+                    if numero == 20:
                         experiencia = (
-                            "a *experiência Supera gratuita* de Lucas"
+                            "o *momento Supera gratuito* de Lucas"
                             if dependente
-                            else "sua *experiência Supera gratuita*"
+                            else "seu *momento Supera gratuito*"
                         )
                         self.assertIn(
                             f"Para reservar {experiencia}", envio["mensagem_bot"]
@@ -416,6 +416,9 @@ class MensagensReservaTests(unittest.TestCase):
             "https://example.com",
             None,
             True,
+            "tarde",
+            35,
+            "5511999990000",
             False,
         )
         dados = buscar_contexto_repeticao(8, 2, cursor)
@@ -462,14 +465,14 @@ class AceiteReservaTests(unittest.TestCase):
         self.assertEqual(validar_etapa7("Talvez mais tarde"), "oferta_adiada")
         self.assertEqual(validar_etapa9("Talvez mais tarde"), "retorno_adiado")
 
-    def test_etapa18_so_avanca_com_conclusao(self):
+    def test_etapa20_so_avanca_com_conclusao(self):
         for texto in (
-            *etapa18_messages.montar_botoes_etapa18(),
+            *etapa20_messages.montar_botoes_etapa20(),
             "já reservei!",
             "Já agendei",
             "agendamento feito",
         ):
-            self.assertEqual(validar_etapa18(texto), "agendamento_confirmado")
+            self.assertEqual(validar_etapa20(texto), "agendamento_confirmado")
         for texto in (
             "Reservar agora",
             "Quero reservar",
@@ -478,7 +481,7 @@ class AceiteReservaTests(unittest.TestCase):
             "vou reservar",
             "sim",
         ):
-            self.assertIsNone(validar_etapa18(texto))
+            self.assertIsNone(validar_etapa20(texto))
 
 
 def cliente_simulado():
@@ -599,7 +602,7 @@ class ComposicaoTratamentosTests(unittest.TestCase):
             ):
                 with self.subTest(dependente=dependente, texto=texto, tipo=tipo):
                     ctx = contexto_resposta(
-                        18, texto, {"agendamento_confirmado": 19}, dependente=dependente
+                        20, texto, {"agendamento_confirmado": 21}, dependente=dependente
                     )
                     ctx.update(
                         tipo_mensagem_atual=tipo,
@@ -609,7 +612,7 @@ class ComposicaoTratamentosTests(unittest.TestCase):
                     wa = cliente_simulado()
                     with patch.object(cliente, "WhatsApp", return_value=wa):
                         envio = flow_sender(ctx)
-                    self.assertEqual(envio["id_etapa_resultante"], 18)
+                    self.assertEqual(envio["id_etapa_resultante"], 20)
                     self.assertNotIn("evento_transicao", envio)
                     self.assertEqual("de Lucas" in envio["mensagem_bot"], dependente)
                     self.assertEqual(
@@ -630,7 +633,7 @@ class ContextoReservaTests(unittest.TestCase):
                 dependente,
                 "Lucas",
             )
-            dados = buscar_contexto_etapa18(10, 2, cursor)
+            dados = buscar_contexto_etapa20(10, 2, cursor)
             self.assertEqual(dados["nome_dependente"], "Lucas" if dependente else None)
             sql, params = cursor.execute.call_args.args
             self.assertEqual(params, (10, 2))
@@ -641,4 +644,4 @@ class ContextoReservaTests(unittest.TestCase):
         cursor = MagicMock()
         cursor.fetchone.return_value = ("https://example.com", "Maria", True, None)
         with self.assertRaisesRegex(ValueError, "Nome do dependente"):
-            buscar_contexto_etapa18(10, 2, cursor)
+            buscar_contexto_etapa20(10, 2, cursor)

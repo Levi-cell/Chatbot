@@ -73,7 +73,7 @@ def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
         SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, u.nome_agente,
                u.genero, u.link_agendamento, u.link_instagram,
                c.status_dependente,
-               e.encerra_automaticamente
+               c.turno, cl.idade, u.numero_comercial, e.encerra_automaticamente
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
         JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
@@ -98,6 +98,9 @@ def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
                 "link_agendamento",
                 "link_instagram",
                 "status_dependente",
+                "turno",
+                "idade_cliente",
+                "numero_comercial",
                 "terminal",
             ),
             row,
@@ -207,7 +210,9 @@ CONSULTA_ELEGIVEIS = """
         ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1
     ) b ON TRUE
     WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
-      AND c.id_etapa_atual BETWEEN 1 AND 17 AND e.encerra_automaticamente IS FALSE
+      AND (c.id_etapa_atual BETWEEN 1 AND 17 OR
+           (c.id_etapa_atual = 18 AND NULLIF(TRIM(u.link_agendamento), '') IS NULL))
+      AND e.encerra_automaticamente IS FALSE
       AND COALESCE(c.followup_stage, 0) IN (0, 1) AND c.last_message_from = 'bot'
       AND c.last_interaction_at = b.received_data_hora
       AND b.received_data_hora <= clock_timestamp() - INTERVAL '7 hours'

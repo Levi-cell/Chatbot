@@ -20,7 +20,8 @@ from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
 from core.repositories.fluxo.contextos.etapa9 import buscar_contexto_etapa9
 from core.repositories.fluxo.contextos.etapa10 import buscar_contexto_etapa10
 from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
-from core.repositories.fluxo.contextos.etapa22 import buscar_contexto_etapa22
+from core.repositories.fluxo.contextos.etapa20 import buscar_contexto_etapa20
+from core.repositories.fluxo.contextos.etapa24 import buscar_contexto_etapa24
 from core.repositories.fluxo.contextos.triagem import buscar_contexto_triagem
 from core.repositories.fluxo.transicoes import listar_transicoes_permitidas
 from workers.worker_flow.response_flow.transicoes.contexto_transicao import (
@@ -40,9 +41,11 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_15_TRIAGEM_PERGUNTA_4,
     ETAPA_16_TRIAGEM_PERGUNTA_5,
     ETAPA_17_TRIAGEM_PERGUNTA_6,
-    ETAPA_18_AGENDAMENTO,
-    ETAPA_20_DECISAO_COMENTARIO,
-    ETAPA_21_COMENTARIO_SATISFACAO,
+    ETAPA_18_ESCOLHA_TURNO,
+    ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
+    ETAPA_20_AGENDAMENTO,
+    ETAPA_22_DECISAO_COMENTARIO,
+    ETAPA_23_COMENTARIO_SATISFACAO,
 )
 
 
@@ -314,27 +317,38 @@ def valida_historico(mensagem, contexto_banco, cursor, *, retorno_followup=False
             "status_dependente_contexto_triagem"
         )
 
-    # A resposta da pergunta 6 envia a etapa 18, e os tratamentos da própria
-    # etapa 18 repetem a mensagem. Os dois ciclos precisam do link da unidade.
+    # As rotas de reserva compartilham dados, mas só a etapa 20 exige plataforma.
     if id_etapa_cliente in {
         ETAPA_17_TRIAGEM_PERGUNTA_6,
-        ETAPA_18_AGENDAMENTO,
+        ETAPA_18_ESCOLHA_TURNO,
+        ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
     }:
-        contexto_especifico_etapa.update(
-            buscar_contexto_etapa18(
-                id_conversa,
-                contexto_banco["id_unidade"],
-                cursor,
-            )
+        dados_reserva = buscar_contexto_etapa18(
+            id_conversa, contexto_banco["id_unidade"], cursor
         )
-
-    # Tanto a recusa na etapa 20 quanto o comentário na 21 podem enviar a 22.
+        if dados_reserva.pop("status_dependente_reserva") != contexto_conversa.get(
+            "status_dependente"
+        ):
+            raise ValueError(
+                "Destino de atendimento divergente na preparação de sua reserva"
+            )
+        contexto_especifico_etapa.update(dados_reserva)
+    elif (
+        id_etapa_cliente == ETAPA_20_AGENDAMENTO
+        and not resposta_bot_para_mensagem_atual
+    ):
+        # No replay, o histórico já comprova o envio e o mapa reconstrói a
+        # transição. Uma alteração posterior no link não invalida esse envio.
+        contexto_especifico_etapa.update(
+            buscar_contexto_etapa20(id_conversa, contexto_banco["id_unidade"], cursor)
+        )
+    # Tanto a recusa na etapa 22 quanto o comentário na 23 podem enviar a 24.
     # Respostas já gravadas são reaproveitadas; não precisam remontar a despedida.
     if not resposta_bot_para_mensagem_atual and id_etapa_cliente in {
-        ETAPA_20_DECISAO_COMENTARIO,
-        ETAPA_21_COMENTARIO_SATISFACAO,
+        ETAPA_22_DECISAO_COMENTARIO,
+        ETAPA_23_COMENTARIO_SATISFACAO,
     }:
-        contexto_finalizacao = buscar_contexto_etapa22(
+        contexto_finalizacao = buscar_contexto_etapa24(
             id_conversa,
             contexto_banco["id_unidade"],
             cursor,

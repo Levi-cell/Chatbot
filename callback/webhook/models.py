@@ -1,3 +1,5 @@
+from core.integrations.whatsapp.numero_comercial import numero_comercial_whatsapp_valido
+from core.validacoes.turno import ROTULOS_TURNO
 from core.validacoes.suporte_por_idade import IDADES_MINIMAS_SUPORTE
 
 from django.conf import settings
@@ -50,6 +52,11 @@ class Dependente(models.Model):
 
 
 class Conversa(models.Model):
+    turno = models.CharField(
+        "turno de preferência", max_length=5, blank=True, null=True,
+        choices=list(ROTULOS_TURNO.items()),
+        help_text="Preferência informada no atendimento; não confirma dia ou horário.",
+    )
     id_conversa = models.AutoField(primary_key=True)
     id_cliente = models.ForeignKey(Cliente, models.DO_NOTHING, db_column='id_cliente')
     id_unidade = models.ForeignKey('Unidade', models.DO_NOTHING, db_column='id_unidade')
@@ -299,7 +306,10 @@ class Unidade(models.Model):
     id_fuso = models.IntegerField(blank=True, null=True, editable=False)
     nome_fuso = models.TextField(blank=True, null=True, editable=False)
     fuso_verificado_em = models.DateTimeField(blank=True, null=True, editable=False)
-    link_agendamento = models.CharField(unique=True, max_length=400)
+    link_agendamento = models.CharField(
+        unique=True, max_length=400, blank=True, null=True,
+        help_text="Vazio: coleta o turno e entrega ao comercial após a triagem.",
+    )
     link_instagram = models.CharField(
         max_length=400,
         blank=True,
@@ -325,6 +335,9 @@ class Unidade(models.Model):
 
     def clean(self):
         super().clean()
+        self.link_agendamento = (self.link_agendamento or "").strip() or None
+        if self.link_agendamento is None and not numero_comercial_whatsapp_valido(self.numero_comercial):
+            raise ValidationError({"numero_comercial": "Informe um número comercial válido para atender sem link."})
         if self.id_usuario_monitoramento_id and (
             self.id_usuario_monitoramento.is_staff
             or self.id_usuario_monitoramento.is_superuser

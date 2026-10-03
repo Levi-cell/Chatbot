@@ -9,7 +9,7 @@ MENSAGEM_TRATAMENTO_REFORCO_ESCOLAR = (
     "atenção, concentração, memória e raciocínio — o alicerce necessário "
     "para aprender melhor em qualquer matéria. 🧠✨\n\n"
 )
-PONTE_TRATAMENTO_REFORCO_ESCOLAR = "Mas bora lá:\n\n"
+PONTE_TRATAMENTO_REFORCO_ESCOLAR = "Vamos lá:\n\n"
 
 
 def montar_mensagem_tratamento_reforco_escolar(mensagem_repeticao):

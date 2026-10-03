@@ -9006,7 +9006,7 @@ Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
 
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -9020,7 +9020,7 @@ valor, a mensagem esperada será:
 ```text
 Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
-Mas bora lá:
+Vamos lá:
 
 Me diz, qual o seu primeiro nome?
 ```
@@ -9073,7 +9073,7 @@ Mensagem esperada:
 Olha, o Supera não é reforço escolar.
 Nós trabalhamos a raiz da aprendizagem, desenvolvendo habilidades como atenção, concentração, memória e raciocínio — o alicerce necessário para aprender melhor em qualquer matéria. 🧠✨
 
-Mas bora lá:
+Vamos lá:
 
 (retomada neutra da etapa atual)
 ```
@@ -10808,7 +10808,7 @@ reservar não são aceites; na etapa 18, intenção de reservar não comprova co
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
 O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
-sua pergunta de retomada, introduzida por `Mas bora lá:` uma única vez.
+sua pergunta de retomada, introduzida por `Vamos lá:` uma única vez.
 `tratamentos_universais.py` apenas reexporta os imports antigos por compatibilidade.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o
@@ -11146,7 +11146,7 @@ Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outr
 
 Uma dúvida não precisa receber todo o discurso comercial novamente. O
 tratamento financeiro e o de reforço escolar usam o prefixo compartilhado,
-uma ponte como `Mas bora lá:` e a pergunta necessária para continuar.
+uma ponte como `Vamos lá:` e a pergunta necessária para continuar.
 Não acumular conectivos nem repetir esse prefixo dentro da mesma resposta.
 
 ## 3. A etapa 1 é a exceção de entrada

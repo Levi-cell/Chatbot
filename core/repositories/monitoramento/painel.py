@@ -58,7 +58,7 @@ def listar_conversas(id_unidade, inicio, fim, cursor):
                )
         )
         SELECT c.id_cliente, c.id_conversa, c.status_dependente,
-               c.id_etapa_atual, cl.nome AS nome_cliente, cl.waid_telefone,
+               c.id_etapa_atual, c.turno, cl.nome AS nome_cliente, cl.waid_telefone,
                cl.email, cl.idade AS idade_titular,
                cl.profissao AS profissao_cliente, c.profissao AS profissao_conversa,
                d.nome_dependente, d.idade AS idade_dependente,
@@ -223,7 +223,7 @@ def buscar_etapas(id_unidade, inicio, fim, cursor):
           FROM chatbot.etapa e
           LEFT JOIN ultimas_conversas c
             ON c.id_etapa_atual = e.id_etapa AND c.ordem = 1
-         WHERE e.id_etapa BETWEEN 1 AND 22
+         WHERE e.id_etapa BETWEEN 1 AND 24
          GROUP BY e.id_etapa, e.nome_etapa ORDER BY e.id_etapa
     """, tuple(parametros))
     return _linhas(cursor)

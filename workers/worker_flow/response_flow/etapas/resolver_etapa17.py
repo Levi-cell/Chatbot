@@ -4,12 +4,14 @@ from workers.worker_flow.response_flow.repeticao_followup import (
     enviar_repeticao_followup,
 )
 
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa18 import enviar_etapa18
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa17 import (
     enviar_etapa17_cliente_contexto_invalido,
     enviar_etapa17_dependente_contexto_invalido,
 )
-from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa18 import (
-    enviar_etapa18,
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa20 import (
+    enviar_etapa20,
 )
 from core.logging_config import short_value
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_triagem import (
@@ -17,7 +19,9 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_t
     validar_resposta_triagem,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_18_AGENDAMENTO,
+    ETAPA_18_ESCOLHA_TURNO,
+    ETAPA_20_AGENDAMENTO,
+    EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK,
     EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -30,7 +34,7 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
 - VALIDAR A RESPOSTA DA PERGUNTA 6
-- ENCAMINHAR PARA O AGENDAMENTO AUTORIZADO PELO MAPA
+- ESCOLHER TURNO OU PLATAFORMA CONFORME O LINK ATUAL E O MAPA
 """
 
 
@@ -76,41 +80,39 @@ def resolve_etapa17(contexto_historico):
             phone_id_unidade,
         )
 
-    # VALIDANDO DESTINO
-    # Esta etapa produz um único evento e um único destino. O conjunto fica
-    # explícito; _destinos_esperados_por_evento é usado com múltiplos eventos.
+    evento = (
+        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA if link_agendamento
+        else EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK
+    )
+    # VALIDANDO DESTINOS
+    # O contexto leu o link atual da unidade neste ciclo; não congelamos a configuração.
     etapa_destino = resolver_destino_transicao(
-        contexto_historico,
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-        destinos_esperados={ETAPA_18_AGENDAMENTO},
+        contexto_historico, evento,
+        destinos_esperados=_destinos_esperados_por_evento(evento),
     )
-
-    logger.info(
-        "etapa17_resposta_validada | acao=enviar_etapa18 "
-        "id_conversa=%s id_mensagem_fila=%s evento=%s "
-        "etapa_destino=%s resposta=%s status_dependente=%s",
-        contexto_historico["id_conversa"],
-        mensagem_cliente["id_mensagem_fila"],
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-        etapa_destino,
-        resposta_triagem,
-        status_dependente,
-    )
-
-    contexto_envio = enviar_etapa18(
-        cliente_telefone,
-        phone_id_unidade,
-        link_agendamento,
-        nome_dependente=nome_dependente if status_dependente else None,
-    )
+    if etapa_destino == ETAPA_18_ESCOLHA_TURNO:
+        contexto_envio = enviar_etapa18(
+            cliente_telefone, phone_id_unidade,
+            nome_dependente if status_dependente else None,
+        )
+    else:
+        contexto_envio = enviar_etapa20(
+            cliente_telefone, phone_id_unidade, link_agendamento,
+            nome_dependente=nome_dependente if status_dependente else None,
+        )
     contexto_envio["resposta_triagem"] = resposta_triagem
-
+    logger.info("triagem_concluida | id_conversa=%s destino=%s", contexto_historico["id_conversa"], etapa_destino)
     return anexar_transicao_ao_contexto_envio(
-        contexto_historico,
-        contexto_envio,
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
-        etapa_destino,
+        contexto_historico, contexto_envio, evento, etapa_destino,
     )
+
+
+def _destinos_esperados_por_evento(evento):
+    return {
+        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA: {ETAPA_20_AGENDAMENTO},
+        EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK: {ETAPA_18_ESCOLHA_TURNO},
+    }[evento]
+
 
 
 def _logar_tratamento_contexto(contexto_historico):

@@ -74,13 +74,13 @@ class FollowupPostgresTests(unittest.TestCase):
             CREATE TABLE chatbot.webhook_flood_evento
                 (wa_id_cliente VARCHAR(100), phone_id_unidade VARCHAR(100), received_at TIMESTAMPTZ);
             INSERT INTO chatbot.etapa(id_etapa, nome_etapa)
-            SELECT etapa, 'Etapa de teste ' || etapa::text FROM generate_series(1, 22) AS etapa;
+            SELECT etapa, 'Etapa de teste ' || etapa::text FROM generate_series(1, 24) AS etapa;
             INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome, idade) VALUES (1, '5511999999999', 'Ana', 35);
             INSERT INTO chatbot.unidade
                 (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel,
-                 telefone, waba_id, phone_number_id, link_agendamento)
+                 telefone, numero_comercial, waba_id, phone_number_id, link_agendamento)
             VALUES (1, 'Unidade Teste', 'Suh', 'feminino', 'teste', 'teste@example.com',
-                    '5511888888888', 'waba-teste', 'phone-teste', 'https://example.com/agendar');
+                '5511888888888', '5511999999998', 'waba-teste', 'phone-teste', 'https://example.com/agendar');
             INSERT INTO chatbot.conversa(id_conversa, id_cliente, id_unidade, id_etapa_atual)
             VALUES (1, 1, 1, 11);
         """
@@ -197,7 +197,7 @@ class FollowupPostgresTests(unittest.TestCase):
 
     def test_segundo_apenas_etapas1_a17_incluindo8_e_guardas_de_silencio(self):
         _, _ = self._primeiro_followup_vencido()
-        for etapa in range(1, 23):
+        for etapa in range(1, 25):
             with self.subTest(etapa=etapa):
                 self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=%s", (etapa,))
                 self.assertEqual(repo.reler_elegivel(1, self.cursor) is not None, etapa <= 17)
@@ -266,9 +266,9 @@ class FollowupPostgresTests(unittest.TestCase):
         self.cursor.execute("""
             INSERT INTO chatbot.unidade
                 (id_unidade,nome_unidade,nome_agente,genero,cnpj,email_responsavel,
-                 telefone,waba_id,phone_number_id,link_agendamento)
+                 telefone,numero_comercial,waba_id,phone_number_id,link_agendamento)
             VALUES(2,'Outra','Mia','feminino','outro','outro@example.com',
-                   '5511777777777','outra-waba','outro-phone','https://example.com');
+                   '5511777777777','5511999999997','outra-waba','outro-phone','https://example.com');
             INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
             VALUES(3,1,2,1);
         """)
@@ -335,7 +335,7 @@ class FollowupPostgresTests(unittest.TestCase):
 
     def test_bloqueios_stage_e_unidade_impedem_despacho(self):
         # Mesmo ativas e não terminais, as etapas a partir do agendamento são excluídas.
-        for etapa in range(1, 23):
+        for etapa in range(1, 25):
             with self.subTest(etapa=etapa):
                 self.cursor.execute("SAVEPOINT faixa_etapa")
                 self.cursor.execute(

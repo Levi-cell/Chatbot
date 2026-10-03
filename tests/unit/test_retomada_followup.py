@@ -54,12 +54,13 @@ class RetomadaValidadaTests(unittest.TestCase):
             (9, "Talvez mais tarde", 8),
             (10, "ana@example.com", 11),
             (11, "Começar triagem", 12),
-            *((etapa, "Às vezes", etapa + 1) for etapa in range(12, 18)),
-            (18, "Já agendei", 19),
-            (19, "5", 20),
-            (20, "Sim", 21),
-            (20, "Não", 22),
-            (21, "Gostei do atendimento", 22),
+            *((etapa, "Às vezes", etapa + 1) for etapa in range(12, 17)),
+            (17, "Às vezes", 20),
+            (20, "Já agendei", 21),
+            (21, "5", 22),
+            (22, "Sim", 23),
+            (22, "Não", 24),
+            (23, "Gostei do atendimento", 24),
         ]
         for dependente in (False, True):
             for etapa, texto, destino in casos:
@@ -80,7 +81,7 @@ class RetomadaValidadaTests(unittest.TestCase):
 
     def test_resposta_sem_contexto_repete_neutra_com_botoes_e_rodape(self):
         for dependente in (False, True):
-            for etapa in (*range(1, 8), *range(9, 21)):
+            for etapa in (*range(1, 8), *range(9, 18), 20, 21, 22):
                 with self.subTest(etapa=etapa, dependente=dependente):
                     cx = self.preparar(etapa, "???", dependente)
                     envio, payload = self.enviar(cx)
@@ -88,7 +89,7 @@ class RetomadaValidadaTests(unittest.TestCase):
                     self.assertFalse(envio.get("tratamento", False))
                     self.assertNotIn("evento_transicao", envio)
                     self.assertNotIn("não consegui entender", envio["mensagem_bot"])
-                    if etapa in (2, 3, 7, 9, 11, *range(12, 18), 19, 20):
+                    if etapa in (2, 3, 7, 9, 11, *range(12, 18), 21, 22):
                         self.assertTrue(payload.get("buttons"))
                     if etapa in (2, 3, 7, 9, *range(12, 18)):
                         self.assertTrue(
@@ -97,12 +98,12 @@ class RetomadaValidadaTests(unittest.TestCase):
                         )
                     if etapa == 2:
                         self.assertNotIn("Prazer", envio["mensagem_bot"])
-                    if dependente and etapa in (6, 7, 9, 11, *range(12, 18), 18):
+                    if dependente and etapa in (6, 7, 9, 11, *range(12, 18), 20):
                         self.assertIn("Bia", envio["mensagem_bot"])
 
     def test_tratamentos_especificos_preservam_prioridades(self):
         for dependente in (False, True):
-            for etapa in (*range(1, 8), 9, 10, 11, 18):
+            for etapa in (*range(1, 8), 9, 10, 11, 20):
                 for tipo, texto, tratamento in (
                     ("image", "Quanto custa?", "tipo_mensagem_nao_suportado"),
                     ("text", "Quanto custa o curso?", "pergunta_financeira"),

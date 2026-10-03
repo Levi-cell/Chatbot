@@ -28,12 +28,15 @@ TRANSICOES_INICIAIS = (
     (14, "triagem_pergunta_3_respondida", 15),
     (15, "triagem_pergunta_4_respondida", 16),
     (16, "triagem_pergunta_5_respondida", 17),
-    (17, "triagem_pergunta_6_respondida", 18),
-    (18, "agendamento_confirmado", 19),
-    (19, "satisfacao_avaliada", 20),
-    (20, "comentario_satisfacao_aceito", 21),
-    (20, "comentario_satisfacao_recusado", 22),
-    (21, "comentario_satisfacao_recebido", 22),
+    (17, "triagem_pergunta_6_respondida", 20),
+    (17, "triagem_concluida_sem_link", 18),
+    (18, "turno_escolhido", 19),
+    (19, "avaliacao_solicitada", 21),
+    (20, "agendamento_confirmado", 21),
+    (21, "satisfacao_avaliada", 22),
+    (22, "comentario_satisfacao_aceito", 23),
+    (22, "comentario_satisfacao_recusado", 24),
+    (23, "comentario_satisfacao_recebido", 24),
 )
 
 # O mapa declara o fluxo completo conhecido. Resolvers e senders continuam

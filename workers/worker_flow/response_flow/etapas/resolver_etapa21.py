@@ -1,22 +1,23 @@
 import logging
 
+from workers.worker_flow.response_flow.repeticao_followup import (
+    enviar_repeticao_followup,
+)
+
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa21 import (
-    enviar_etapa21_midia,
+    enviar_etapa21_contexto_invalido,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa22 import (
     enviar_etapa22,
 )
 from core.logging_config import short_value
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    TIPOS_MENSAGEM_ACEITOS_ETAPA20,
-)
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa21 import (
-    normalizar_comentario_etapa21,
-    recusou_comentario_etapa21,
+    TIPO_TRATAMENTO_SATISFACAO_INVALIDA,
+    validar_etapa21,
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
-    ETAPA_22_FINALIZACAO,
-    EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+    ETAPA_22_DECISAO_COMENTARIO,
+    EVENTO_SATISFACAO_AVALIADA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
     anexar_transicao_ao_contexto_envio,
@@ -24,83 +25,76 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 )
 
 
-logger = logging.getLogger("worker.etapa21")
+"""
+ESSE ARQUIVO TEM DUAS RESPONSABILIDADES
 
-TIPO_TRATAMENTO_MIDIA = "tipo_mensagem_nao_suportado"
+- VALIDAR UMA UNICA NOTA DA PESQUISA DE SATISFACAO
+- ENCAMINHAR PARA A DECISAO DE COMENTARIO AUTORIZADA PELO MAPA
+"""
+
+
+logger = logging.getLogger("worker.etapa21")
 
 
 def resolve_etapa21(contexto_historico):
-    """Coleta o comentário livre e encaminha para a etapa terminal."""
-    tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
     texto_cliente = contexto_historico.get("texto_cliente_atual") or ""
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
 
-    if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA20:
-        _logar_tratamento(
-            contexto_historico,
-            TIPO_TRATAMENTO_MIDIA,
-        )
-        return enviar_etapa21_midia(
+    # VALIDANDO A NOTA DA PESQUISA
+    nota_satisfacao = validar_etapa21(texto_cliente)
+
+    if nota_satisfacao is None:
+        if contexto_historico.get("retorno_followup"):
+            return enviar_repeticao_followup(contexto_historico)
+        _logar_tratamento_contexto(contexto_historico)
+        return enviar_etapa21_contexto_invalido(
             cliente_telefone,
             phone_id_unidade,
         )
 
-    desistiu = recusou_comentario_etapa21(
-        texto_cliente,
-        tipo_mensagem,
-    )
-    comentario_satisfacao = normalizar_comentario_etapa21(
-        texto_cliente,
-        tipo_mensagem,
-    )
-
-    # Comentário livre não tem resposta certa: frases curtas, emojis e pontuação
-    # também concluem a etapa. Uma recusa explícita encerra com comentário NULL.
+    # VALIDANDO DESTINO
+    # A etapa 21 produz um unico evento e um unico destino.
     etapa_destino = resolver_destino_transicao(
         contexto_historico,
-        EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
-        destinos_esperados={ETAPA_22_FINALIZACAO},
+        EVENTO_SATISFACAO_AVALIADA,
+        destinos_esperados={ETAPA_22_DECISAO_COMENTARIO},
     )
 
     logger.info(
-        "etapa21_comentario_recebido | acao=enviar_etapa22 "
+        "etapa21_satisfacao_validada | acao=enviar_etapa22 "
         "id_conversa=%s id_mensagem_fila=%s evento=%s "
-        "etapa_destino=%s comentario_preenchido=%s desistiu=%s tipo=%s",
+        "etapa_destino=%s nota=%s",
         contexto_historico["id_conversa"],
         mensagem_cliente["id_mensagem_fila"],
-        EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+        EVENTO_SATISFACAO_AVALIADA,
         etapa_destino,
-        bool(comentario_satisfacao),
-        desistiu,
-        tipo_mensagem,
+        nota_satisfacao,
     )
 
     contexto_envio = enviar_etapa22(
         cliente_telefone,
         phone_id_unidade,
-        status_dependente=contexto_historico["status_dependente"],
-        nome_dependente=contexto_historico.get("nome_dependente"),
     )
-    contexto_envio["comentario_satisfacao"] = comentario_satisfacao
+    contexto_envio["nota_satisfacao"] = nota_satisfacao
 
     return anexar_transicao_ao_contexto_envio(
         contexto_historico,
         contexto_envio,
-        EVENTO_COMENTARIO_SATISFACAO_RECEBIDO,
+        EVENTO_SATISFACAO_AVALIADA,
         etapa_destino,
     )
 
 
-def _logar_tratamento(contexto_historico, motivo):
+def _logar_tratamento_contexto(contexto_historico):
     mensagem = contexto_historico["mensagem_cliente_atual"]
 
     logger.info(
         "resposta_cliente_tratamento | motivo=%s "
         "acao=tratar_sem_avancar id_conversa=%s id_mensagem_fila=%s "
         "cliente=%s phone_number_id=%s tipo=%s etapa_cliente=%s",
-        motivo,
+        TIPO_TRATAMENTO_SATISFACAO_INVALIDA,
         contexto_historico["id_conversa"],
         mensagem["id_mensagem_fila"],
         short_value(mensagem["cliente_telefone"]),

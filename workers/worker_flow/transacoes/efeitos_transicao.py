@@ -1,5 +1,8 @@
 import logging
 
+from core.repositories.atendimento.turnos import salvar_turno_conversa
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import validar_etapa18
+
 from core.logging_config import short_value
 from core.repositories.atendimento.clientes import (
     atualizar_email_cliente,
@@ -22,14 +25,14 @@ from core.repositories.fluxo.pesquisa_satisfacao import (
     salvar_comentario_satisfacao,
     salvar_nota_satisfacao,
 )
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa19 import (
-    validar_etapa19,
-)
-from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa20 import (
-    TIPOS_MENSAGEM_ACEITOS_ETAPA20,
-)
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa21 import (
-    normalizar_comentario_etapa21,
+    validar_etapa21,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa22 import (
+    TIPOS_MENSAGEM_ACEITOS_ETAPA22,
+)
+from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa23 import (
+    normalizar_comentario_etapa23,
 )
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import (
     validar_nome_cliente,
@@ -74,11 +77,16 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_15_TRIAGEM_PERGUNTA_4,
     ETAPA_16_TRIAGEM_PERGUNTA_5,
     ETAPA_17_TRIAGEM_PERGUNTA_6,
-    ETAPA_18_AGENDAMENTO,
-    ETAPA_19_PESQUISA_SATISFACAO,
-    ETAPA_20_DECISAO_COMENTARIO,
-    ETAPA_21_COMENTARIO_SATISFACAO,
-    ETAPA_22_FINALIZACAO,
+    ETAPA_18_ESCOLHA_TURNO,
+    ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
+    EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK,
+    EVENTO_TURNO_ESCOLHIDO,
+    EVENTO_AVALIACAO_SOLICITADA,
+    ETAPA_20_AGENDAMENTO,
+    ETAPA_21_PESQUISA_SATISFACAO,
+    ETAPA_22_DECISAO_COMENTARIO,
+    ETAPA_23_COMENTARIO_SATISFACAO,
+    ETAPA_24_FINALIZACAO,
     EVENTO_AGENDAMENTO_CONFIRMADO,
     EVENTO_CLIENTE_RETORNOU,
     EVENTO_COMENTARIO_SATISFACAO_ACEITO,
@@ -446,92 +454,109 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 17
     if etapa_origem == ETAPA_17_TRIAGEM_PERGUNTA_6:
-        # 17 -> 18: registra a resposta da pergunta 6.
-        if evento == EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA:
-            _exigir_destino(
-                etapa_origem,
-                evento,
-                etapa_destino,
-                ETAPA_18_AGENDAMENTO,
-            )
-            return _persistir_resposta_triagem(
-                contexto_historico,
-                contexto_envio,
-                cursor,
-            )
+        destinos = {
+            EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA: ETAPA_20_AGENDAMENTO,
+            EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK: ETAPA_18_ESCOLHA_TURNO,
+        }
+        if evento in destinos:
+            # 17 -> 18 ou 20: as duas rotas preservam a sexta resposta da triagem.
+            _exigir_destino(etapa_origem, evento, etapa_destino, destinos[evento])
+            return _persistir_resposta_triagem(contexto_historico, contexto_envio, cursor)
 
     # ETAPA 18
-    if etapa_origem == ETAPA_18_AGENDAMENTO:
-        # 18 -> 19: o cliente confirmou o agendamento e inicia a pesquisa.
+    if etapa_origem == ETAPA_18_ESCOLHA_TURNO and evento == EVENTO_TURNO_ESCOLHIDO:
+        # 18 -> 19: salvar o turno no mesmo commit do movimento da conversa.
+        _exigir_destino(etapa_origem, evento, etapa_destino, ETAPA_19_ENCAMINHAMENTO_COMERCIAL)
+        turno = contexto_envio.get("turno")
+        if turno is None:
+            # A resposta do bot já persistida dispensa novo envio; a mensagem
+            # original contém a preferência necessária para reconstruir o efeito.
+            turno = validar_etapa18(
+                contexto_historico.get("texto_cliente_atual"),
+                contexto_historico.get("tipo_mensagem_atual"),
+            )
+        return salvar_turno_conversa(
+            contexto_historico["id_conversa"], contexto_historico["id_unidade"], turno, cursor,
+        )
+
+    # ETAPA 19
+    if etapa_origem == ETAPA_19_ENCAMINHAMENTO_COMERCIAL and evento == EVENTO_AVALIACAO_SOLICITADA:
+        # 19 -> 21: apenas apresenta a pesquisa, sem salvar uma nota nesta aresta.
+        _exigir_destino(etapa_origem, evento, etapa_destino, ETAPA_21_PESQUISA_SATISFACAO)
+        return {"pesquisa_apresentada": True}
+
+    # ETAPA 20
+    if etapa_origem == ETAPA_20_AGENDAMENTO:
+        # 20 -> 21: o cliente confirmou o agendamento e inicia a pesquisa.
         if evento == EVENTO_AGENDAMENTO_CONFIRMADO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_19_PESQUISA_SATISFACAO,
+                ETAPA_21_PESQUISA_SATISFACAO,
             )
-            return _confirmar_agendamento_da_etapa18(
+            return _confirmar_agendamento_da_etapa20(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
-    # ETAPA 19
-    if etapa_origem == ETAPA_19_PESQUISA_SATISFACAO:
-        # 19 -> 20: registra a nota normalizada da pesquisa de satisfacao.
+    # ETAPA 21
+    if etapa_origem == ETAPA_21_PESQUISA_SATISFACAO:
+        # 21 -> 22: registra a nota normalizada da pesquisa de satisfacao.
         if evento == EVENTO_SATISFACAO_AVALIADA:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_20_DECISAO_COMENTARIO,
+                ETAPA_22_DECISAO_COMENTARIO,
             )
-            return _persistir_nota_satisfacao_da_etapa19(
+            return _persistir_nota_satisfacao_da_etapa21(
                 contexto_historico,
                 contexto_envio,
                 cursor,
             )
 
-    # ETAPA 20
-    if etapa_origem == ETAPA_20_DECISAO_COMENTARIO:
-        # 20 -> 21: confirma que o cliente deseja escrever um comentario.
+    # ETAPA 22
+    if etapa_origem == ETAPA_22_DECISAO_COMENTARIO:
+        # 22 -> 23: confirma que o cliente deseja escrever um comentario.
         if evento == EVENTO_COMENTARIO_SATISFACAO_ACEITO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_21_COMENTARIO_SATISFACAO,
+                ETAPA_23_COMENTARIO_SATISFACAO,
             )
-            return _confirmar_decisao_comentario_da_etapa20(
+            return _confirmar_decisao_comentario_da_etapa22(
                 contexto_historico,
                 evento,
                 etapa_destino,
             )
 
-        # 20 -> 22: registra a recusa explicita e encerra o atendimento.
+        # 22 -> 24: registra a recusa explicita e encerra o atendimento.
         if evento == EVENTO_COMENTARIO_SATISFACAO_RECUSADO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_22_FINALIZACAO,
+                ETAPA_24_FINALIZACAO,
             )
-            return _persistir_recusa_comentario_da_etapa20(
+            return _persistir_recusa_comentario_da_etapa22(
                 contexto_historico,
                 cursor,
             )
 
-    # ETAPA 21
-    if etapa_origem == ETAPA_21_COMENTARIO_SATISFACAO:
-        # 21 -> 22: registra o comentario livre antes da finalizacao.
+    # ETAPA 23
+    if etapa_origem == ETAPA_23_COMENTARIO_SATISFACAO:
+        # 23 -> 24: registra o comentario livre antes da finalizacao.
         if evento == EVENTO_COMENTARIO_SATISFACAO_RECEBIDO:
             _exigir_destino(
                 etapa_origem,
                 evento,
                 etapa_destino,
-                ETAPA_22_FINALIZACAO,
+                ETAPA_24_FINALIZACAO,
             )
-            return _persistir_comentario_satisfacao_da_etapa21(
+            return _persistir_comentario_satisfacao_da_etapa23(
                 contexto_historico,
                 contexto_envio,
                 cursor,
@@ -1224,12 +1249,12 @@ def _persistir_resposta_triagem(
     }
 
 
-def _confirmar_agendamento_da_etapa18(
+def _confirmar_agendamento_da_etapa20(
     contexto_historico,
     evento,
     etapa_destino,
 ):
-    """Confirma a aresta 18 -> 19 sem criar dado de negocio adicional."""
+    """Confirma a aresta 20 -> 21 sem criar dado de negocio adicional."""
     logger.info(
         "agendamento_confirmado_persistido | acao=confirmar_transicao "
         "evento=%s etapa_origem=%s etapa_resultante=%s id_conversa=%s",
@@ -1245,7 +1270,7 @@ def _confirmar_agendamento_da_etapa18(
     }
 
 
-def _persistir_nota_satisfacao_da_etapa19(
+def _persistir_nota_satisfacao_da_etapa21(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -1254,13 +1279,13 @@ def _persistir_nota_satisfacao_da_etapa19(
     nota_satisfacao = contexto_envio.get("nota_satisfacao")
 
     if nota_satisfacao is None:
-        nota_satisfacao = validar_etapa19(
+        nota_satisfacao = validar_etapa21(
             contexto_historico.get("texto_cliente_atual") or ""
         )
 
     if nota_satisfacao is None:
         raise ValueError(
-            "Nota de satisfacao ausente na transicao 19 -> 20 "
+            "Nota de satisfacao ausente na transicao 21 -> 22 "
             f"(id_conversa={contexto_historico['id_conversa']})"
         )
 
@@ -1288,7 +1313,7 @@ def _persistir_nota_satisfacao_da_etapa19(
     }
 
 
-def _confirmar_decisao_comentario_da_etapa20(
+def _confirmar_decisao_comentario_da_etapa22(
     contexto_historico,
     evento,
     etapa_destino,
@@ -1309,7 +1334,7 @@ def _confirmar_decisao_comentario_da_etapa20(
     }
 
 
-def _persistir_recusa_comentario_da_etapa20(
+def _persistir_recusa_comentario_da_etapa22(
     contexto_historico,
     cursor,
 ):
@@ -1326,7 +1351,7 @@ def _persistir_recusa_comentario_da_etapa20(
         "etapa_resultante=%s id_conversa=%s inserido=%s",
         EVENTO_COMENTARIO_SATISFACAO_RECUSADO,
         contexto_historico["id_etapa_origem_transicao"],
-        ETAPA_22_FINALIZACAO,
+        ETAPA_24_FINALIZACAO,
         contexto_historico["id_conversa"],
         resultado["inserido"],
     )
@@ -1337,7 +1362,7 @@ def _persistir_recusa_comentario_da_etapa20(
     }
 
 
-def _persistir_comentario_satisfacao_da_etapa21(
+def _persistir_comentario_satisfacao_da_etapa23(
     contexto_historico,
     contexto_envio,
     cursor,
@@ -1350,12 +1375,12 @@ def _persistir_comentario_satisfacao_da_etapa21(
         tipo_mensagem = contexto_historico.get("tipo_mensagem_atual")
         # Reconstruir o mesmo resultado do primeiro processamento, inclusive NULL
         # quando não houve texto ou o cliente recusou comentar. Mídia não avança.
-        if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA20:
+        if tipo_mensagem not in TIPOS_MENSAGEM_ACEITOS_ETAPA22:
             raise ValueError(
-                "Tipo de mensagem não permitido na transição 21 -> 22 "
+                "Tipo de mensagem não permitido na transição 23 -> 24 "
                 f"(id_conversa={contexto_historico['id_conversa']})"
             )
-        comentario_satisfacao = normalizar_comentario_etapa21(
+        comentario_satisfacao = normalizar_comentario_etapa23(
             texto_cliente,
             tipo_mensagem,
         )

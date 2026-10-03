@@ -1,7 +1,7 @@
-"""Participante da conversa usado na despedida, a partir das etapas 20 e 21."""
+"""Participante da conversa usado na despedida, a partir das etapas 22 e 23."""
 
 
-def buscar_contexto_etapa22(id_conversa, id_unidade, cursor):
+def buscar_contexto_etapa24(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT c.status_dependente, d.nome_dependente
