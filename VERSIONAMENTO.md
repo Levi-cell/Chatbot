@@ -114,6 +114,10 @@ Commit: `d4104cfc444be88fef9deea1d0d3b4c5f04000da`
 
 Commit: `0b01c3a0fee52a24add7e4e1c0133eeee6099615`
 
+### V1.8.1 — Explicações de consumo para franqueados
+
+Commit: `2f4e2c9433d03b21d608c795c0d4cc6a0a3b7e2f`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.
