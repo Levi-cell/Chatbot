@@ -122,6 +122,10 @@ Commit: `2f4e2c9433d03b21d608c795c0d4cc6a0a3b7e2f`
 
 Commit: `1c2a1ae349fe2c0d28ba5b632a8b71072945d4ae`
 
+### V1.9.1 — Correção dos botões e turnos
+
+Commit: `6775ac9fb8eee9b601e976bb912b9e153c9f05af`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

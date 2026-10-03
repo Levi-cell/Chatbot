@@ -221,7 +221,7 @@ class FluxoReservaTests(unittest.TestCase):
             self.assertNotIn("evento_transicao", envio)
             self.assertNotIn("turno", envio)
             if tratamento == "contexto_invalido":
-                self.assertIn("*apenas um turno*", envio["mensagem_bot"])
+                self.assertIn("Para continuar, escolha apenas um turno.", envio["mensagem_bot"])
             with patch.object(efeitos, "salvar_turno_conversa") as salvar:
                 efeitos.atualizar_banco_conforme_transicao_de_etapa(
                     ctx, envio, object()
