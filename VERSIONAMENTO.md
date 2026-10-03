@@ -124,7 +124,7 @@ Commit: `1c2a1ae349fe2c0d28ba5b632a8b71072945d4ae`
 
 ### V1.9.1 — Correção dos botões e turnos
 
-Commit: `6775ac9fb8eee9b601e976bb912b9e153c9f05af`
+Commit: `afa9c14ae030277210897e479a906f2b52c47a58`
 
 ## Padrão de numeração a partir da V1.2.0
 

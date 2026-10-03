@@ -608,14 +608,14 @@ class RetornoEtapa8Tests(unittest.TestCase):
 class ProativoTests(unittest.TestCase):
     def test_primeiro_personaliza_convite_sem_reutilizar_nomes_antigos(self):
         for etapa, dependente, nome_dependente, nome_titular, saudacao, convite in (
-            (1, False, None, "Ana", "Olá! ☺️", "receber você na nossa unidade para sua"),
-            (1, True, "Bia", "Ana", "Olá! ☺️", "receber você na nossa unidade para sua"),
-            (2, False, "Bia", " Ana ", "Olá, Ana! ☺️", "receber você na nossa unidade para sua"),
-            (8, True, " Bia ", "Ana", "Olá, Ana! ☺️", "receber você e Bia na nossa unidade para a"),
-            (5, True, None, "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
-            (5, True, "", "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
-            (5, True, "   ", "Ana", "Olá, Ana! ☺️", "receber vocês na nossa unidade para a"),
-            (2, False, None, None, "Olá! ☺️", "receber você na nossa unidade para sua"),
+            (1, False, None, "Ana", "Olá! ☺️", "receber você para sua"),
+            (1, True, "Bia", "Ana", "Olá! ☺️", "receber você para sua"),
+            (2, False, "Bia", " Ana ", "Olá, Ana! ☺️", "receber você para sua"),
+            (8, True, " Bia ", "Ana", "Olá, Ana! ☺️", "receber você e Bia para a"),
+            (5, True, None, "Ana", "Olá, Ana! ☺️", "receber vocês para a"),
+            (5, True, "", "Ana", "Olá, Ana! ☺️", "receber vocês para a"),
+            (5, True, "   ", "Ana", "Olá, Ana! ☺️", "receber vocês para a"),
+            (2, False, None, None, "Olá! ☺️", "receber você para sua"),
         ):
             with self.subTest(etapa=etapa, dependente=dependente, nome=nome_dependente):
                 texto = montar_mensagem_followup(
@@ -623,7 +623,7 @@ class ProativoTests(unittest.TestCase):
                     status_dependente=dependente, nome_dependente=nome_dependente,
                 )
                 self.assertTrue(texto.startswith(saudacao + "\n\n"))
-                self.assertIn(convite + " *experiência Supera gratuita*! 🧡", texto)
+                self.assertIn(convite + " *experiência Supera* por cortesia da unidade! 🧡", texto)
                 self.assertEqual(len(texto.split("\n\n")), 4)
                 self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
                 self.assertNotIn("\n\n\n", texto)
@@ -769,7 +769,7 @@ class ProativoTests(unittest.TestCase):
         self.assertTrue(ok)
         texto = enviar.call_args.kwargs["mensagem"]
         self.assertTrue(texto.startswith("Olá, Maria! ☺️\n\n"))
-        self.assertIn("receber você e Pedro na nossa unidade", texto)
+        self.assertIn("receber você e Pedro para a *experiência Supera* por cortesia da unidade", texto)
         self.assertIn("Podemos continuar seu atendimento por aqui?", texto)
         self.assertNotIn("Ana", texto)
         self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
@@ -780,6 +780,7 @@ class ProativoTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("Oi Ana, tudo bem? ☺️", enviar.call_args.kwargs["mensagem"])
         self.assertIn("Abraços, Suh.", enviar.call_args.kwargs["mensagem"])
+        self.assertNotIn("por cortesia da unidade", enviar.call_args.kwargs["mensagem"])
         self.assertEqual(persistir.call_args.args[0]["followup_stage"], 1)
         ok, conn, _, persistir, _, _ = self._processar(
             stage=1, erro_envio=RuntimeError("Meta")

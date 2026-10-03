@@ -1,4 +1,4 @@
-"""Orientação financeira compartilhada; a experiência oferecida é gratuita."""
+"""Esclarece a cortesia na orientação financeira, sem repeti-la na pergunta."""
 
 from .composicao import compor_tratamento
 
@@ -6,7 +6,7 @@ from .composicao import compor_tratamento
 MENSAGEM_TRATAMENTO_FINANCEIRO = (
     "Olha, demais informações como valores de investimento são *exclusivas* para cada aluno e "
     "só são possíveis de determinar após a "
-    "sua *experiência supera gratuita* na unidade.\n\n"
+    "sua *experiência Supera* por cortesia da unidade.\n\n"
 )
 PONTE_TRATAMENTO_FINANCEIRO = "Vamos lá:\n\n"
 

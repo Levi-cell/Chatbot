@@ -185,10 +185,10 @@ MENSAGEM_ORIGEM_CONTATO_COMERCIAL_ETAPA6 = (
 )
 MENSAGEM_PEDIDO_COMERCIAL_TITULAR_ETAPA6 = (
     "Me chamo {nome_titular}, tenho {idade_participante} anos "
-    "e gostaria de reservar minha experiência Supera gratuita."
+    "e gostaria de reservar minha experiência Supera."
 )
 MENSAGEM_PEDIDO_COMERCIAL_DEPENDENTE_ETAPA6 = (
-    "Me chamo {nome_titular} e gostaria de reservar uma experiência Supera gratuita "
+    "Me chamo {nome_titular} e gostaria de reservar uma experiência Supera "
     "para {nome_dependente}, que tem {idade_participante} anos."
 )
 

@@ -28,20 +28,29 @@ formulário nem pressioná-la a continuar.
   moderação. Não é obrigatório colocar um emoji em cada pergunta.
 - Reservar a comemoração para momentos compatíveis com progresso ou aceite.
   Após uma resposta não compreendida, orientar sem culpar nem comemorar.
-- Usar **experiência Supera gratuita**, **demonstração prática exclusiva**,
+- Usar **experiência Supera**, **demonstração prática exclusiva**,
   **presentear**, **reservar** e **sua reserva**, conforme o contexto.
   O atendimento não oferece curso ou matrícula gratuitos.
 - Alternar alguns usos existentes de **experiência Supera** com **momento Supera**,
   mantendo os dois termos no atendimento. A retomada da oferta (9), a escolha
-  do turno (18) e a reserva pelo link (20) usam **momento Supera gratuito**;
+  do turno (18) e a reserva pelo link (20) usam **momento Supera**;
   a oferta inicial e o encaminhamento comercial preservam **experiência Supera**.
-  Ajustar os artigos e adjetivos (`seu momento`, `o momento de`, `gratuito`).
+  Ajustar os artigos (`seu momento`, `o momento de`) e manter o nome do
+  dependente como participante, sem atribuir a experiência ao titular.
   Não inserir esses termos em mensagens que antes não mencionavam a experiência.
-- Na oferta inicial da etapa 7, destacar **demonstração prática gratuita**
+- Na oferta inicial da etapa 7, destacar **demonstração prática**, seguida de
+  **por cortesia da unidade**,
   logo na abertura, antes da explicação da avaliação. Encerrar com o convite
   para reservar a **experiência Supera exclusiva**. A gratuidade não pode ficar
   escondida somente no fim da oferta.
-- Não reintroduzir `agendamento`, `aula gratuita`, nome de diretor ou cortesia
+- Concentrar `por cortesia da unidade` na apresentação inicial da oferta (7)
+  e nos lembretes proativos. Com uma ou duas pausas, serão cerca de duas ou três
+  menções; essa é uma orientação editorial, sem contador ou limite técnico.
+  Retomadas, escolha de turno, link e pedidos ao comercial não repetem a expressão.
+  O tratamento financeiro pode mencioná-la uma vez para esclarecer a cortesia,
+  sem repeti-la na pergunta seguinte. Outros tratamentos omitem o complemento.
+  Não voltar a usar `gratuita` ou `gratuito` nesses textos.
+  Não reintroduzir `agendamento`, `aula gratuita` ou nome de diretor
   como redação da oferta. Identificadores técnicos e textos legados aceitos
   pelos validadores têm outro papel e permanecem compatíveis.
 - Usar negrito do WhatsApp (`*texto*`) para a oferta ou ação mais importante,
@@ -129,11 +138,11 @@ Exemplo da diferença na oferta:
 
 ```text
 Entrada normal:
-Maravilha, {nome_titular}! ☺️ Queremos te presentear com uma *demonstração prática gratuita* na nossa unidade!
+Maravilha, {nome_titular}! ☺️ Queremos te presentear com uma *demonstração prática* por cortesia da unidade!
 [explicação da avaliação + pergunta sobre sua experiência Supera exclusiva]
 
 Resposta não compreendida:
-Olha, não consegui entender se você quer reservar sua experiência Supera gratuita.
+Olha, não consegui entender se você quer reservar sua experiência Supera.
 Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outro momento.
 ```
 
@@ -299,8 +308,10 @@ montador; não usar o nome do dependente para saudar quem está conversando.
 Mídia, financeiro e reforço continuam usando apenas tratamento + pergunta de
 repetição, sem `Maravilha` nem a apresentação completa. Follow-up usa sua
 saudação + repetição, e contexto inválido conserva a mensagem própria.
-Nos demais pontos do atendimento, `experiência Supera gratuita` continua
-adequado para reforçar a gratuidade, sem trocar todos os textos por `exclusiva`.
+Nos demais pontos do atendimento, usar apenas `experiência Supera` ou
+`momento Supera`, sem repetir a cortesia nem trocar tudo por `exclusiva`.
+A orientação financeira é a exceção: esclarece a cortesia uma vez, seguida
+da pergunta neutra da etapa, sem repetir o complemento.
 
 Alterar palavras não pode transformar a pergunta em outra decisão. O texto,
 os botões, a interpretação de texto digitado e o evento precisam concordar.
@@ -331,9 +342,9 @@ O montador `montar_mensagem_contato_comercial_etapa6` identifica o chatbot,
 a unidade e o cliente, usando os dados da conversa. Depois, adapta o pedido:
 
 - Titular: `Me chamo {nome_titular}, tenho {idade_participante} anos e gostaria
-  de reservar minha experiência Supera gratuita.`
+  de reservar minha experiência Supera.`
 - Dependente: `Me chamo {nome_titular} e gostaria de reservar uma experiência
-  Supera gratuita para {nome_dependente}, que tem {idade_participante} anos.`
+  Supera para {nome_dependente}, que tem {idade_participante} anos.`
 
 A origem comum é `Olá, vim do atendimento com {artigo} {nome_agente}, chatbot
 da unidade {nome_unidade}.` O artigo acompanha o gênero do agente. A idade vem
@@ -399,7 +410,12 @@ após mais 7h sem resposta desde o envio real do primeiro.
 O primeiro lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
 no atendimento; na etapa 1, usa `Olá! ☺️`, sem aproveitar nomes antigos.
 Começa com “Queremos muito continuar te ajudando! Será um prazer receber” e oferece a
-**experiência Supera gratuita** na unidade. Após `\n\n`, sempre pergunta
+**experiência Supera por cortesia da unidade**. A oferta inicial e um ou dois
+lembretes somam duas ou três menções no cenário usual. Novas pausas com retomada
+podem gerar mais lembretes: não há contador nem consulta extra para limitar
+essa expressão. Retornos e outras etapas não repetem o complemento; dúvidas
+financeiras podem acrescentar a menção necessária ao esclarecimento.
+Após `\n\n`, sempre pergunta
 “Podemos continuar seu atendimento por aqui?”, nas etapas 1–17 e nas duas rotas,
 inclusive depois da oferta. A pergunta final não varia conforme a etapa.
 No convite, para titular usa “receber você”; para dependente com nome, “receber
@@ -562,7 +578,7 @@ Exemplo de composição com um fragmento compartilhado:
 ### APRESENTAÇÃO INICIAL DO TITULAR
 APRESENTACAO_TITULAR = (
     "Maravilha, {nome_titular}! ☺️ Queremos te presentear com uma "
-    "*demonstração prática gratuita* na nossa unidade!\n"
+    "*demonstração prática* por cortesia da unidade!\n"
 )
 
 ### TRECHO USADO NA MENSAGEM INICIAL E NA REPETIÇÃO

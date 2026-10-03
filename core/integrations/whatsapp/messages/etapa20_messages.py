@@ -86,11 +86,11 @@ def montar_botoes_etapa20():
 
 # Apenas formata titular/dependente e link; o contexto fornece os dados da rota.
 def _descrever_experiencia(nome_dependente):
-    experiencia = "seu *momento Supera gratuito*"
+    experiencia = "seu *momento Supera*"
     if nome_dependente is not None:
         if not isinstance(nome_dependente, str) or not nome_dependente.strip():
             raise ValueError("Nome do dependente inválido para apresentar sua reserva")
-        experiencia = f"o *momento Supera gratuito* de {nome_dependente.strip()}"
+        experiencia = f"o *momento Supera* de {nome_dependente.strip()}"
     return experiencia
 
 

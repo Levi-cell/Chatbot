@@ -9,7 +9,7 @@ from core.integrations.whatsapp.messages.tratamentos.midia import (
 
 TITULO_BOTAO_COMERCIAL = "Falar com consultor"
 MENSAGEM_REPETICAO_ETAPA19 = (
-    "Nossa equipe entrará em contato para reservar {participante} na nossa unidade.\n\n"
+    "Nossa equipe entrará em contato para reservar {participante}.\n\n"
     "Você também pode falar com nosso consultor pelo botão abaixo "
     "para combinar o melhor dia e horário para sua reserva.\n\n"
     "Se quiser avaliar nosso atendimento, é só me avisar por aqui!"
@@ -23,9 +23,9 @@ def montar_mensagem_etapa19(
     nome_dependente=None, *, pedir_texto=False, repeticao=False
 ):
     participante = (
-        f"a *experiência Supera gratuita* de {nome_dependente}"
+        f"a *experiência Supera* de {nome_dependente}"
         if nome_dependente
-        else "sua *experiência Supera gratuita*"
+        else "sua *experiência Supera*"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA19.format(participante=participante)
     if pedir_texto:

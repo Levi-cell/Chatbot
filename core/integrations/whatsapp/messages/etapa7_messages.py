@@ -17,8 +17,8 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 APRESENTACAO_TITULAR = (
     "Maravilha, {nome_titular}! ☺️\n\n "
-    "Queremos te presentear com uma *demonstração prática gratuita* na nossa "
-    "unidade!\n\n"
+    "Queremos te presentear com uma *demonstração prática* "
+    "por cortesia da unidade!\n\n"
     "Você também participará de uma avaliação cognitiva para conhecer melhor suas "
     "habilidades de memória, atenção, concentração e raciocínio lógico.\n\n"
 )
@@ -39,8 +39,8 @@ MENSAGEM_PADRAO_TITULAR = compor_mensagem_inicial(
 ### APRESENTAÇÃO INICIAL DO DEPENDENTE
 APRESENTACAO_DEPENDENTE = (
     "Maravilha, {nome_titular}! ☺️ \n\n"
-    "Queremos presentear {nome_dependente} com uma *demonstração prática gratuita* na "
-    "nossa unidade!\n\n"
+    "Queremos presentear {nome_dependente} com uma *demonstração prática* "
+    "por cortesia da unidade!\n\n"
     "{nome_dependente} também participará de uma avaliação cognitiva para conhecer melhor as "
     "habilidades de memória, atenção, concentração e raciocínio lógico.\n\n"
 )
@@ -85,7 +85,7 @@ def montar_mensagem_oferta_cliente_reforco_escolar_etapa7():
 def montar_mensagem_oferta_cliente_contexto_invalido_etapa7():
     return (
         "Olha, não consegui entender, vamos"
-        " reservar o melhor dia e horário para sua *experiência Supera gratuita*? 🧡"
+        " reservar o melhor dia e horário para sua *experiência Supera*? 🧡"
     )
 
 
@@ -132,7 +132,7 @@ def montar_mensagem_oferta_dependente_reforco_escolar_etapa7(nome_dependente):
 def montar_mensagem_oferta_dependente_contexto_invalido_etapa7(nome_dependente):
     return (
         "Olha, não consegui entender, "
-        "vamos reservar o melhor dia e horário para a *experiência Supera gratuita* de"
+        "vamos reservar o melhor dia e horário para a *experiência Supera* de"
         f" {nome_dependente}? 🧡"
     )
 

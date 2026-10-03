@@ -36,9 +36,9 @@ def montar_botoes_etapa18():
 
 def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=False):
     participante = (
-        f"o *momento Supera gratuito* de {nome_dependente}"
+        f"o *momento Supera* de {nome_dependente}"
         if nome_dependente
-        else "seu *momento Supera gratuito*"
+        else "seu *momento Supera*"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA18.format(participante=participante)
     if tratamento == "financeiro":

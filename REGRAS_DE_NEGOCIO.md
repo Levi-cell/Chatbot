@@ -332,7 +332,7 @@ Implementação principal:
 - Todo botão para o comercial leva uma mensagem pronta, inclusive o universal 90+.
   O texto identifica o chatbot pelo nome e artigo conforme seu gênero, a unidade
   e o cliente que está conversando. Na rota de titular, inclui sua idade e o
-  desejo de reservar sua experiência Supera gratuita. Na rota de dependente,
+  desejo de reservar sua experiência Supera. Na rota de dependente,
   identifica também o nome e a idade do dependente e pede a experiência para ele.
   A idade é a informada na resposta atual da etapa 6, nunca uma idade antiga
   nem a idade do dependente atribuída ao titular. A origem vem da unidade
@@ -610,15 +610,33 @@ nem tratamento específico, reapresenta a pergunta neutra. A etapa 8 continua
 avançando diretamente para a 9. O retorno não soma saudações; quando repete a
 etapa, usa sua pergunta neutra sem repetir apresentação ou despedida.
 
-A oferta inicial da etapa 7 destaca **demonstração prática gratuita** logo na
+A oferta inicial da etapa 7 destaca **demonstração prática por cortesia da unidade** logo na
 abertura, antes da explicação da avaliação de habilidades, e termina com o
 convite para reservar uma **experiência Supera exclusiva**. A saudação
 `Maravilha, {nome_titular}! ☺️` se dirige a quem conversa nas duas rotas;
 quando há dependente, a demonstração, a avaliação e a reserva mencionam
-`nome_dependente` como participante. As demais etapas e os tratamentos podem
-continuar reforçando **experiência Supera gratuita**. Gratuidade da experiência
+`nome_dependente` como participante. Gratuidade da experiência
 não significa curso ou matrícula gratuitos. Não há nome/gênero de diretor ou
 novas colunas para essa oferta.
+
+Concentrar **por cortesia da unidade** na apresentação inicial da oferta
+(etapa 7) e nos lembretes proativos. O objetivo é reduzir a repetição, não impor
+um limite técnico: a oferta e um ou dois lembretes somam duas ou três menções.
+Retomadas, escolha de turno, envio do link, mensagens ao comercial e perguntas
+repetidas usam apenas experiência ou momento Supera, sem esse complemento.
+No tratamento financeiro, manter uma menção na orientação que esclarece a
+cortesia; a pergunta seguinte não a repete. Essa dúvida pode acrescentar uma
+menção ao atendimento. Outros tratamentos não repetem a expressão.
+Não reintroduzir `gratuita` ou `gratuito` nos textos enviados ao cliente.
+
+Cada lembrete pode mencionar a cortesia. A despedida do segundo follow-up
+consecutivo não usa a expressão. Se houver mais pausas com retomada, poderão
+ocorrer mais menções. A redução é apenas editorial, sem contador, consulta
+adicional ao banco, coluna ou migração nova.
+Preservar a alternância entre experiência e momento Supera.
+Respostas do cliente com a redação anterior continuam
+aceitas, e as classificações de gratuidade da Meta no painel de consumo mantêm
+seu significado próprio.
 
 O atendimento deve ser acolhedor e convidativo, com frases naturais, emojis
 discretos e negrito moderado. A oferta usa **presentear**, e a comemoração
@@ -721,7 +739,7 @@ mensalidade, investimento ou termo equivalente:
 
 1. a mensagem do cliente será registrada no histórico;
 2. o bot explicará que os valores de investimento são definidos após a
-   experiência Supera gratuita na unidade, com orientação da equipe;
+   experiência Supera por cortesia da unidade, com orientação da equipe;
 3. a mensagem também reapresentará a pergunta da etapa atual;
 4. a conversa não avançará por causa da pergunta de valor;
 5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
@@ -735,7 +753,7 @@ Feminino:  Bom dia/Boa tarde/Boa noite! Sou a {nome_agente}, assistente do {nome
 
 Hoje vou te ajudar a dar os primeiros passos para conhecer o Supera! 🧡
 
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
+Olha, os valores de investimento são definidos após a *experiência Supera* por cortesia da unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Vamos lá:
 
@@ -749,7 +767,7 @@ Se a etapa 1 já tiver sido apresentada e o cliente responder perguntando sobre
 valor, a mensagem esperada será:
 
 ```text
-Olha, os valores de investimento são definidos após a *experiência Supera gratuita* na unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
+Olha, os valores de investimento são definidos após a *experiência Supera* por cortesia da unidade. Assim, nossa equipe poderá orientar você sobre a opção mais adequada. ☺️
 
 Vamos lá:
 

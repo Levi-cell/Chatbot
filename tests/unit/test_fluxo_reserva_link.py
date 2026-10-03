@@ -200,7 +200,9 @@ class FluxoReservaTests(unittest.TestCase):
                     "João, que tem 12 anos" if dependente else "tenho 40 anos", pretexto
                 )
                 self.assertIn("turno da ", pretexto)
-                self.assertIn("experiência Supera gratuita", envio["mensagem_bot"])
+                self.assertIn("*experiência Supera*", envio["mensagem_bot"])
+                self.assertNotIn("por cortesia da unidade", envio["mensagem_bot"])
+                self.assertNotIn("por cortesia da unidade", pretexto)
 
     def test_tratamentos_permanecem_na18_sem_efeito(self):
         for texto, tipo, tratamento in (

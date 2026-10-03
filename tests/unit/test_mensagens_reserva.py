@@ -165,7 +165,8 @@ class GratuidadeExperienciaTests(unittest.TestCase):
             self.assertEqual(envio["id_etapa_resultante"], 7)
             self.assertEqual(envio["tipo_tratamento"], "pergunta_financeira")
             self.assertNotIn("evento_transicao", envio)
-            self.assertIn("*experiência supera gratuita*", envio["mensagem_bot"].casefold())
+            self.assertIn("*experiência supera*", envio["mensagem_bot"].casefold())
+            self.assertEqual(envio["mensagem_bot"].count("por cortesia da unidade"), 1)
             self.assertIn("valores de investimento", envio["mensagem_bot"])
 
 
@@ -210,7 +211,7 @@ class MensagensReservaTests(unittest.TestCase):
                     paragrafos = oferta.split("\n\n")
                     self.assertEqual(paragrafos[0].strip(), "Maravilha, Maria! ☺️")
                     self.assertIn(
-                        "*demonstração prática gratuita*", paragrafos[1]
+                        "*demonstração prática* por cortesia da unidade", paragrafos[1]
                     )
                     self.assertIn("*experiência Supera exclusiva*", oferta)
                     self.assertNotIn("{nome", oferta)
@@ -268,13 +269,13 @@ class MensagensReservaTests(unittest.TestCase):
         financeiro = etapa6_messages.montar_mensagem_idade_dependente_etapa6_financeiro(
             "Lucas"
         )
-        self.assertIn("*experiência supera gratuita*", financeiro.casefold())
+        self.assertIn("*experiência supera*", financeiro.casefold())
         self.assertIn("qual é a idade de Lucas?", financeiro)
         retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9(
             "Maria", "Lucas"
         )
-        self.assertIn("*momento Supera gratuito* de Lucas", retorno)
-        self.assertNotIn("*momento Supera gratuito* de Maria", retorno)
+        self.assertIn("*momento Supera* de Lucas", retorno)
+        self.assertNotIn("*momento Supera* de Maria", retorno)
 
     def test_fim_da_triagem_apresenta_reserva_para_o_participante_correto(self):
         for dependente in (False, True):
@@ -302,9 +303,9 @@ class MensagensReservaTests(unittest.TestCase):
                     wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
                 )
                 experiencia = (
-                    "o *momento Supera gratuito* de Lucas"
+                    "o *momento Supera* de Lucas"
                     if dependente
-                    else "seu *momento Supera gratuito*"
+                    else "seu *momento Supera*"
                 )
                 self.assertIn(f"Para reservar {experiencia}", envio["mensagem_bot"])
                 self.assertNotIn("{", envio["mensagem_bot"])
@@ -326,15 +327,15 @@ class MensagensReservaTests(unittest.TestCase):
                 )
                 self.assertIn(
                     (
-                        "demonstração prática gratuita"
+                        "*demonstração prática* por cortesia da unidade"
                         if modulo is etapa7
-                        else "momento Supera gratuito"
+                        else "*momento Supera*"
                     ),
                     envio["mensagem_bot"],
                 )
                 self.assertNotRegex(
                     envio["mensagem_bot"].lower(),
-                    r"cortesia|agendamento|aula\s+\*?gratuita",
+                    r"agendamento|aula\s+\*?gratuita",
                 )
 
     def test_followup_mantem_etapa_e_envia_uma_unica_saudacao(self):
@@ -362,16 +363,17 @@ class MensagensReservaTests(unittest.TestCase):
                         (
                             "experiência Supera exclusiva"
                             if numero == 7
-                            else "momento Supera gratuito"
+                            else "momento Supera"
                         ),
                         envio["mensagem_bot"],
                     )
                     self.assertNotIn("evento_transicao", envio)
+                    self.assertNotIn("por cortesia da unidade", envio["mensagem_bot"])
                     if numero == 20:
                         experiencia = (
-                            "o *momento Supera gratuito* de Lucas"
+                            "o *momento Supera* de Lucas"
                             if dependente
-                            else "seu *momento Supera gratuito*"
+                            else "seu *momento Supera*"
                         )
                         self.assertIn(
                             f"Para reservar {experiencia}", envio["mensagem_bot"]
@@ -561,6 +563,10 @@ class ComposicaoTratamentosTests(unittest.TestCase):
                         envio["mensagem_bot"], wa.send_message.call_args.kwargs["text"]
                     )
                     if tratamento:
+                        self.assertEqual(
+                            envio["mensagem_bot"].count("por cortesia da unidade"),
+                            1 if tratamento == "pergunta_financeira" else 0,
+                        )
                         self.assertEqual(envio["tipo_tratamento"], tratamento)
                         self.assertNotIn("evento_transicao", envio)
                         self.assertNotIn("Maravilha", envio["mensagem_bot"])
@@ -613,6 +619,10 @@ class ComposicaoTratamentosTests(unittest.TestCase):
                     with patch.object(cliente, "WhatsApp", return_value=wa):
                         envio = flow_sender(ctx)
                     self.assertEqual(envio["id_etapa_resultante"], 20)
+                    self.assertEqual(
+                        envio["mensagem_bot"].count("por cortesia da unidade"),
+                        1 if texto == "Quanto custa?" else 0,
+                    )
                     self.assertNotIn("evento_transicao", envio)
                     self.assertEqual("de Lucas" in envio["mensagem_bot"], dependente)
                     self.assertEqual(

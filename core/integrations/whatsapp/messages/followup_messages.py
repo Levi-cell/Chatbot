@@ -6,8 +6,8 @@ from .tratamentos.retorno_followup import montar_saudacao_retomada_followup
 MENSAGEM_LEMBRETE_FOLLOWUP = (
     "{saudacao}\n\n"
     "Queremos muito continuar te ajudando! Será um prazer receber "
-    "{participantes} na nossa unidade para {artigo_experiencia} "
-    "*experiência Supera gratuita*! 🧡\n\n"
+    "{participantes} para {artigo_experiencia} "
+    "*experiência Supera* por cortesia da unidade! 🧡\n\n"
     "Podemos continuar seu atendimento por aqui?"
 )
 RODAPE_LEMBRETE_FOLLOWUP = "Estaremos te esperando!"

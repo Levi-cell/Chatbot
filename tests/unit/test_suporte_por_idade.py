@@ -165,7 +165,7 @@ class SuportePorIdadeTests(unittest.TestCase):
                         f'Olá, vim do atendimento com {artigo} {nome_agente}, '
                         'chatbot da unidade Supera São João & Centro + Sul. '
                         f'Me chamo Ana & José, tenho {limite + 1} anos '
-                        'e gostaria de reservar minha experiência Supera gratuita.'
+                        'e gostaria de reservar minha experiência Supera.'
                     ]})
                     self.assertEqual(envio['tipo_mensagem'], 'interactive_cta_url')
                     self.assertEqual(envio['motivo_encerramento'], 'encaminhado_suporte_idoso')
@@ -195,11 +195,11 @@ class SuportePorIdadeTests(unittest.TestCase):
                         'chatbot da unidade Supera Santo Antônio de Jesus. '
                     )
                     pedido = (
-                        'Me chamo Maria e gostaria de reservar uma experiência Supera gratuita '
+                        'Me chamo Maria e gostaria de reservar uma experiência Supera '
                         'para João, que tem 100 anos.'
                         if dependente else
                         'Me chamo Maria, tenho 100 anos '
-                        'e gostaria de reservar minha experiência Supera gratuita.'
+                        'e gostaria de reservar minha experiência Supera.'
                     )
                     self.assertEqual(parse_qs(link.query), {'text': [origem + pedido]})
                     self.assertEqual(enviado['buttons'].title, 'Falar com Consultor')
