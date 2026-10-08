@@ -1,18 +1,45 @@
 # Plano de IA integrada ao atendimento determinístico
 
-Revisão: **02/10/2026**. Status: **desenho funcional aprovado; sem implementação**.
+Revisão: **07/10/2026**. Status: **desenho funcional aprovado; IA ainda sem implementação**.
+
+Base já examinada: **V1.9.2**, com reserva com/sem link já aplicada,
+**24 etapas e 28 transições determinísticas antes da FireAds**. A aplicação IA
+deverá preservar também os caminhos adicionados pela FireAds quando implantada;
+28 não é uma contagem obrigatória depois dessa entrega. Não reaplicar a migração da reserva. O manual,
+as especificações por etapa, os contratos e o código futuro devem usar as duas
+rotas e os pontos de corte descritos na [seção 1.1](#rotas-e-corte-ia).
+
+Complemento de 07/10: o [plano FireAds](../docs/integracao_fireads.md) passa a
+incluir a criação de `chat`/`conversa.id_chat` e `consulta_fireads` por chat,
+além de customização/integração e entregas ao dashboard. Esses recursos ainda
+estão planejados, não implantados. A IA reutilizará o vínculo chat já migrado
+se a FireAds tiver sido aplicada antes; não criará um segundo vínculo.
+A [seção 19.17](#base-fireads-ia) define essa dependência e a proveniência dos
+dados. Modelo, cotas e demais decisões de IA permanecem para a aplicação futura.
 
 Este documento consolida o pedido e as correções mais recentes do responsável
 pelo projeto. Distingue decisões aprovadas de detalhes técnicos ainda a definir.
-Em 01/10 foram aprovados o vínculo `chat`, a migração gradual, o retorno com
-memória e as cotas mensais. O refinamento atual define tokens como medida e
+Permanecem aprovados o vínculo `chat`, a migração gradual e as cotas mensais.
+Em 04/10 foi retirado o reconhecimento de clientes de conversas encerradas:
+cada nova conversa começa pela coleta normal, sem aproveitar cadastro antigo
+para saudar pelo nome, sugerir dependente ou confirmar e-mail/profissão anteriores.
+Quando a base FireAds estiver aplicada, uma consulta nova e válida aos formulários
+poderá resolver nome/e-mail/destino dessa conversa pelos mecanismos FireAds.
+Isso não autoriza a IA a reconhecer perfil de conversas encerradas.
+Antecipações fornecidas pelo cliente na própria conversa nova continuam válidas.
+O refinamento atual define tokens como medida e
 assinaturas Básico/Plus/Pro, com teto por unidade apenas no Plus. O excesso entre
 apurações da unidade e no último ciclo autorizado do chat foi aceito para a
 primeira versão. Subcontagem por consumo não recuperado em falha também foi
 aceita; conciliação automática fica nas ideias futuras. Valores das cotas e
 modelo/orçamento continuam em aberto e serão discutidos por último.
 
-Decisão mais recente de 02/10: uma chamada à IA por ciclo como padrão, contexto
+Complemento de 05/10: o Funil apresenta os campos de contexto salvos durante o
+atendimento, sem chamar IA. Somente o primeiro follow-up pode ser personalizado
+por IA; o segundo permanece determinístico e encerra o atendimento. O primeiro
+lembrete usa a mesma cota mensal do chat e da unidade, conforme a seção 21.
+
+Decisões mantidas de 02/10: uma chamada à IA por ciclo como padrão, contexto
 preparado antes dela e **limite total de 90 segundos para a fase de IA**, com
 fallback ao atingir o prazo. Não há cota adicional de tokens por ciclo. O indicador
 de digitação será solicitado apenas durante a geração, respeitando os limites
@@ -37,7 +64,10 @@ continuam em sua pasta, fora do escopo inicial.
 - [Chat, memória, consumo e Django Admin](#consumo-ia): seção 18.
 - [Tabelas, campos e preparação da migração](#banco-ia): seção 19.
 - [Personalidade e mensagens](#personalidade-ia): seção 20.
+- [Contexto para o Funil e primeiro follow-up com IA](#funil-followup-ia): seção 21.
 - [Comparativo dos três caminhos](comparativo_atendimento_deterministico_e_ia.md).
+- [Esqueleto da orientação por etapas](orientacao_por_etapas_atendimento.txt):
+  cinco tópicos por etapa, ainda a preencher; não é outro plano de aplicação.
 
 <a id="fluxo-atendimento"></a>
 
@@ -65,8 +95,12 @@ juntas. O atendimento continua orientado pelo fluxo existente.
   participantes na mesma conversa ficam para uma evolução futura.
 - Nunca oferecer outro participante ao terminar a triagem. Não haverá etapa
   adicional convidando o titular nem perguntando se existem mais dependentes.
-- A IA atua até concluir a triagem e realizar a passagem **17 → 18**. A etapa 18
-  apresenta o link de agendamento; dali em diante, o atendimento é determinístico.
+- Com link, a IA pode participar da resposta que entrega a plataforma na passagem
+  **17 → 20**; depois disso, não participa mais dessa conversa. Sem link, continua
+  na escolha de turno da **18** e pode participar da resposta que entrega o contato
+  comercial na passagem **18 → 19**; as interações seguintes são determinísticas.
+  O corte ocorre após o envio bem-sucedido e o registro dessa resposta, conforme a
+  recuperação existente; não depende de o cliente efetivamente agendar uma visita.
 - Regras de idade, BPA, suporte ao idoso, exceção universal 90+, Funil e follow-up
   continuam válidas. A IA não torna um participante inelegível em elegível.
 - Nenhum encerramento por idade envia ao Funil ou cria bloqueio de 30 dias.
@@ -84,10 +118,13 @@ juntas. O atendimento continua orientado pelo fluxo existente.
   versão do SDK e parâmetros serão escolhidos por avaliação, não por suposição.
 - Persistir a memória no banco e permitir à IA solicitar contexto adicional por
   operações de leitura controladas, começando com o mínimo necessário para o turno.
-- Retorno com IA pode aproveitar o nome e referências confirmáveis de atendimentos
-  anteriores da mesma unidade, sem transportar automaticamente coletas concluídas.
-  O determinístico puro continua iniciando uma nova conversa na etapa 1. As
-  diferenças estão no [comparativo dos modos](comparativo_atendimento_deterministico_e_ia.md).
+- Toda nova conversa começa pela coleta normal do nome, mesmo com cadastro e
+  conversas anteriores na unidade. Não reconhecer o cliente pelo histórico nem
+  usar dados de atendimentos encerrados para preencher ou confirmar coletas.
+  A IA pode aproveitar dados antecipados na própria conversa nova; o determinístico
+  puro mantém sua abertura atual. A importação FireAds válida na abertura é uma
+  exceção compartilhada pelos três modos, conforme a seção 19.17, sem memória de
+  conversas encerradas. Retomada da mesma conversa ativa preserva o contexto.
 - A IA decide mostrar ou omitir os botões de escolha existentes conforme a fala;
   o sistema valida essa decisão e preserva ações obrigatórias do atendimento.
 - Falha isolada da IA/API leva ao fluxo determinístico no mesmo ciclo, antes de
@@ -101,6 +138,95 @@ juntas. O atendimento continua orientado pelo fluxo existente.
   a próxima pergunta se houve resposta válida, ou repete a atual se ela ficou pendente.
 - Mensagens devem ser bem formatadas, claras e bonitas no WhatsApp. A personalidade
   e seus exemplos ficam em [documento próprio](#personalidade-ia).
+
+<a id="rotas-e-corte-ia"></a>
+
+### 1.1. Rotas atuais e encerramento da participação da IA
+
+As etapas 1–17 mantêm suas finalidades, incluindo as seis perguntas de triagem
+nas etapas 12–17. A bifurcação depende do `link_agendamento` atual da unidade,
+normalizado como no código: `NULL`, vazio ou somente espaços significam sem link.
+As exceções de antecipação/correção continuam possíveis antes do corte, mas não
+dispensam dados válidos, elegibilidade, triagem concluída nem a finalidade da rota.
+
+| Rota | Passagem após a triagem | Última resposta que pode usar IA | Continuidade sem IA |
+| --- | --- | --- | --- |
+| Com link | 17 → 20, evento `triagem_pergunta_6_respondida` | Entrega do link na entrada da etapa 20. Não passa por 18/19. | Na 20, aguarda confirmação de reserva; `agendamento_confirmado` leva à pergunta de satisfação na 21. |
+| Sem link | 17 → 18, evento `triagem_concluida_sem_link`; depois 18 → 19, evento `turno_escolhido` | Entrega do contato comercial na entrada da etapa 19, após validar um único turno. | Na 19, uma resposta textual aceita aciona `avaliacao_solicitada` e apresenta a pergunta da 21. Não passa pela 20. |
+
+**A etapa 18 não encerra a IA.** Na rota sem link, a IA ainda pode esclarecer
+dúvidas, reconhecer antecipações/correções e ajudar a escolher o turno. A escolha
+deve ser única: `manha`, `tarde` ou `noite`. Duas escolhas ou uma resposta sem
+preferência clara mantêm a coleta pendente. Resposta textual de botão, incluindo
+`interactive` e `interactive_button`, continua sendo aceita conforme a extração
+e os validadores atuais. O fallback preserva essas correções da V1.9.1.
+
+`conversa.turno` já existe e registra uma preferência, não uma reserva confirmada.
+No fluxo atual, é salvo na mesma transação da passagem 18 → 19. A futura extração
+desse efeito em operação deve preservar validação, escopo e recuperação; não
+inventar turno nem antecipar o contato comercial com coletas obrigatórias pendentes.
+Preservar o botão comercial e seu texto pronto, incluindo a preferência válida.
+
+Depois da entrega registrada do link ou do contato comercial, não chamar o modelo
+para novas interações, correções, satisfação ou comentários dessa conversa. A fase
+determinística posterior é uma regra normal do fluxo, não uma falha da IA.
+Renovação de cota, upgrade, reativação da flag ou mudança de link não reabrem essa
+participação. Encerramentos anteriores por idade ou outras regras continuam valendo.
+
+O corte não encerra `conversa`: as duas rotas convergem na pesquisa de satisfação:
+
+| Etapa | Finalidade e saída |
+| --- | --- |
+| 21 | Pedir a nota; `satisfacao_avaliada` leva à 22. |
+| 22 | Perguntar se deseja comentar; aceite leva à 23 e recusa leva à 24. |
+| 23 | Receber comentário; `comentario_satisfacao_recebido` leva à 24. |
+| 24 | Finalizar e aplicar a política atual de bloqueio de 30 dias. |
+
+Na 19, a resposta que inicia a pesquisa não é também sua nota: até um texto "5"
+primeiro apresenta a pergunta da 21. Mídia não aceita mantém a orientação da 19.
+Na 20, uma resposta qualquer não equivale a confirmar a reserva; preservam-se
+seus validadores e tratamentos determinísticos. Satisfação não será gerada pela IA.
+
+**Estado e recuperação:** a admissão da IA deve considerar a etapa, a rota e a
+decisão/envio já registrados, antes de chamar o provedor. Conversas já nas etapas
+19, 20 ou 21–24 não recebem IA ao ativar o recurso. Uma resposta final já registrada
+é recuperada no retry sem outra geração ou envio. Falha antes da entrega não
+deve simular que o repasse aconteceu; falha depois de um envio conhecido segue a
+recuperação prevista na seção 10. Preparar o texto, sozinho, não conclui o repasse.
+
+**Configuração durante a conversa:** a saída da triagem consulta o link vigente.
+Adicionar um link não desvia automaticamente uma conversa já na 18/19 para a 20.
+Remover um link não converte automaticamente 20 em 18: antes da remoção, concluir
+ou tratar administrativamente os atendimentos ativos na 20, conforme o deploy
+atual. Uma correção com retorno preserva a rota já iniciada; não volta à triagem
+apenas para recalcular e trocar a rota sem necessidade. Validar a configuração
+necessária para cada novo envio, preservando respostas já registradas no retry.
+
+**Integrações preservadas:**
+
+- Funil: com link, etapas **20–24**; sem link, **19 e 21–24**, além das demais
+  guardas atuais. A 18 não é elegível. Seleção, claim e snapshot usam a configuração
+  vigente da unidade; recibos de sucesso permanecem válidos após mudança de link.
+  O turno salvo da conversa aparece nas observações quando preenchido. Antecipação
+  e correção não autorizam entrada precoce ou triagem incompleta no Funil.
+- Follow-up proativo: etapas **1–17 nas duas rotas** e **18 somente sem link**;
+  não iniciar lembretes em 19/20/21–24. Manter as duas camadas de sete horas,
+  recibos, encerramento no segundo lembrete e validação da resposta no retorno.
+  Retornar ao primeiro lembrete na 18 pode concluir a escolha e levar à 19.
+  Somente o primeiro lembrete pode ter redação personalizada por IA; o segundo
+  usa a mensagem determinística de encerramento, sem chamada ao modelo (seção 21).
+- Painel e relatórios: preservar os significados das 24 etapas, a exibição do turno
+  e a seção Consumo existente. O consumo de IA futuro complementa essa seção.
+- Redação: partir dos textos atuais da V1.9.2. Manter a cortesia na oferta inicial,
+  no lembrete e no esclarecimento financeiro pertinente; não recolocá-la a cada
+  pergunta de turno, retomada, entrega do link ou contato comercial. Não há contador
+  de repetições dessa expressão nem coluna nova para isso.
+
+Referências de implementação atual: [mapa determinístico](../core/database/deploy_database/etapa_transicao_script.py),
+[resolvers 17–20](../workers/worker_flow/response_flow/etapas),
+[contratos do Funil e follow-up](../core/integrations/funil/README.md) e
+[implantação da reserva](../deploy/reserva_com_sem_link.md).
+Esses recursos já existem; a camada de IA descrita neste documento ainda será implementada.
 
 ## 2. Destino antecipado e escolha de uma pessoa
 
@@ -138,10 +264,9 @@ No exemplo "Sou Ana, tenho 35, Pedro tem 8 e Paula tem 12":
 - A idade de Ana não pode ser usada para avaliar a elegibilidade de Pedro.
 - "Filho"/"filha" só identifica alguém sem nova pergunta se a referência for
   inequívoca; caso contrário, pedir esclarecimento.
-- Não mover o registro de dependente de uma conversa para outra. Na nova regra
-  de retorno com IA, o dependente do atendimento anterior encerrado no segundo
-  follow-up pode ser oferecido como opção na etapa 2. Após a escolha, registrar
-  o participante da nova conversa, sem herdar idade ou triagem como atuais.
+- Não mover o registro de dependente de uma conversa para outra nem oferecer
+  dependente de atendimento encerrado como opção. Na nova conversa, colher os
+  dados do participante escolhido, aproveitando somente o que foi informado nela.
 
 Exemplo de resposta contextual na etapa de destino: "Prazer, Ana! Você pode
 levar seus filhos à visita. Para começarmos, vamos conhecer primeiro o seu perfil,
@@ -197,7 +322,8 @@ flowchart TD
 
 ### Análise antes do envio, não revisão de uma resposta já enviada
 
-Fluxo definido para a unidade com IA, antes do corte de agendamento:
+Fluxo definido para a unidade com IA, antes do corte por entrega de link ou contato
+comercial da seção 1.1:
 
 1. Receber a mensagem e recuperar o estado; verificar primeiro se já há resposta
    persistida para aquele turno.
@@ -222,8 +348,9 @@ Economia e latência serão medidas com esse fluxo real, incluindo a análise.
 
 Exemplos conceituais de operações de domínio: registrar nome do titular,
 registrar destino, registrar profissão, registrar nome/idade do dependente,
-validar coleta de e-mail, registrar resposta da triagem, abrir correção pendente
-e concluir correção. Os nomes e contratos definitivos não estão implementados.
+validar coleta de e-mail, registrar resposta da triagem, registrar preferência
+de turno, abrir correção pendente e concluir correção. Os nomes e contratos
+definitivos não estão implementados; o registro atual de turno será reaproveitado.
 
 Os IDs de cliente, conversa e unidade vêm do contexto resolvido pela aplicação.
 O modelo não escolhe outro escopo, não executa SQL e não recebe credenciais.
@@ -394,7 +521,8 @@ etapa/pergunta de retorno e coletas resolvidas no estado compartilhado. Assim o
 fallback conclui uma correção pendente sem IA e sem perder respostas válidas.
 Esclarecimentos continuam permitidos quando não é possível identificar o campo,
 a pessoa ou o valor informado; não usá-los como confirmação genérica de todos os
-dados a cada correção de nome. O corte após o agendamento continua valendo.
+dados a cada correção de nome. O corte por entrega de link ou contato comercial
+continua valendo, conforme a seção 1.1.
 
 Na coleta inicial, a IA e os validadores objetivos podem detectar texto que
 precisa de esclarecimento. Isso não garante reconhecer todo erro de digitação:
@@ -403,13 +531,14 @@ incomum. Se houver dúvida suficiente, confirmar o nome com o cliente antes de
 registrar; correções posteriores continuam suportadas.
 
 Correções simultâneas devem formar uma lista finita de pendências; evitar voltas
-recursivas sem limite. Depois do agendamento, prevalece o corte determinístico
-definido pelo usuário; eventual correção nessa fase exige decisão separada.
+recursivas sem limite. Depois da entrega de link ou contato comercial, prevalece
+o corte determinístico definido pelo usuário; eventual correção nessa fase exige
+decisão separada.
 
 ### Refazer a triagem e corrigir os demais dados
 
 **Definição de 02/10:** pedir para refazer a triagem também é arrependimento, mesmo
-sem troca de pessoa. Na conversa híbrida ativa, antes do corte 17 → 18, o cliente
+sem troca de pessoa. Na conversa híbrida ativa, antes do corte da seção 1.1, o cliente
 pode solicitar nova triagem para o titular ou para o dependente escolhido.
 
 1. Registrar a solicitação, o ponto de continuação e as perguntas que precisam
@@ -446,7 +575,7 @@ Esse é comportamento a implementar no híbrido e na continuidade de suas pendê
 em fallback. Hoje, `registrar_resposta_triagem` rejeita respostas divergentes:
 criar uma operação de correção autorizada e auditada, sem remover a proteção de
 retry nem alterar a coleta do determinístico puro. O pedido não reabre conversa
-encerrada nem reativa IA após o envio do link de agendamento.
+encerrada nem reativa IA após a entrega do link (20) ou do contato comercial (19).
 
 ### Troca explícita de um dependente por outro
 
@@ -503,19 +632,17 @@ com origem e versão; não deixar duas cópias concorrentes disputarem qual é v
 Ter candidatos Pedro e Paula no contexto não cria dois participantes ativos.
 
 O cliente escolheu Pedro: promover somente seus dados validados ao cadastro.
-Nova conversa: contexto auxiliar novo, sem copiar coletas como concluídas. Com IA,
-recuperar referências selecionadas do histórico do mesmo cliente/unidade e da
-identidade reconhecida, com origem e confirmação quando necessária. Dependente
-anterior é uma opção, não escolha automática. Retorno antes de um follow-up
-encerrar mantém a conversa e seu contexto; depois de encerrada, cria novo
-atendimento conforme as regras existentes, com a personalização aqui definida.
+Nova conversa: contexto auxiliar novo, sem carregar dados de atendimentos
+encerrados para reconhecimento, sugestão ou confirmação. Coletar nome, destino
+e demais dados conforme o fluxo e a mensagem atual. Cadastro global preenchido
+não resolve uma coleta nova. Retorno antes de um follow-up encerrar mantém a
+mesma conversa e seu contexto; depois de encerrada, começa uma nova coleta.
 
-E-mail/profissão anteriores podem gerar confirmação na etapa correspondente.
-Persistir campo, valor sugerido, origem e se a próxima resposta confirma um dado
-ou informa um novo. Esse estado é compartilhado com o fallback determinístico,
-que precisa entender "sim"/"não" sem chamar a IA. Não limitar essa pendência a
-um resumo legível somente pelo modelo. Ver o
-[comparativo](comparativo_atendimento_deterministico_e_ia.md).
+Pendências de correção, confirmação ou esclarecimento geradas dentro da conversa
+atual continuam compartilhadas com o fallback. Persistir campo, valor informado
+nesta conversa, origem e pergunta pendente, para interpretar a próxima resposta
+sem nova IA. Não limitar esse estado a um resumo destinado ao modelo. Isso não
+autoriza confirmar e-mail ou profissão recuperados de atendimento encerrado.
 
 ### Banco local e provedor não são duas memórias obrigatórias
 
@@ -552,9 +679,20 @@ modelo como se fosse dado do cliente.
 **Padrão aprovado:** reunir as informações antes de consultar a IA. O controlador
 prepara regras obrigatórias, política da unidade, etapa/pergunta atual, mensagem
 do cliente, última resposta relevante, cadastro confirmado, resumo, pendências,
-trechos necessários do histórico, material Supera pertinente e a proposta
+trechos necessários do histórico da conversa atual, material Supera pertinente e a proposta
 determinística sem efeitos aplicados. A IA interpreta esse conjunto em uma
 chamada; o sistema valida sua decisão antes de executá-la.
+
+Filtrar cadastros globais: nomes, e-mails, idades e outros valores de conversas
+encerradas não entram como fatos ou sugestões para o novo atendimento. IDs,
+bloqueios, configuração da unidade e consumo continuam sendo usados pelo sistema.
+
+Para as duas rotas atuais, esse contexto também inclui a configuração vigente do
+link, a rota já iniciada quando houver, o turno validado ou ainda pendente e as
+transições relevantes do catálogo de 24 etapas. Etapa, decisão e histórico
+confirmados determinam se o repasse de link/comercial já aconteceu; o sistema
+verifica o corte antes de qualquer chamada. Não pedir à IA que adivinhe a rota
+pelo nome da unidade ou que autorize a própria participação após o corte.
 
 Contexto suficiente tem prioridade sobre economia que prejudique entendimento.
 Isso não exige mandar todo o histórico sempre: "sim" precisa da pergunta anterior;
@@ -597,8 +735,10 @@ Desenho proposto para essas fontes:
 
 - Estado da conversa atual: vem de cadastros e contexto autorizados daquela
   conversa, sem misturar dados de outros clientes ou de outra unidade.
-- Conhecimento de Supera: base aprovada, que pode ser armazenada no próprio banco,
-  contendo materiais oficiais, respostas revisadas, fonte e versão.
+- Conhecimento de Supera: base aprovada, inicialmente reunida na pasta
+  [materiais_supera](materiais_supera/README.md), contendo materiais oficiais,
+  respostas revisadas, fonte e versão. Pode ser indexada/armazenada no banco na
+  implementação; a pasta não implica carregamento automático ou treinamento.
 - Outras conversas: transformar casos úteis em exemplos revisados e sem dados
   identificáveis antes de incluí-los nessa base. Não liberar pesquisa irrestrita
   em conversas reais nem tratar uma resposta antiga do bot como verdade oficial.
@@ -644,10 +784,10 @@ existência da caixa postal ou de posse do endereço.
 
 O e-mail é **sempre do titular**, inclusive no atendimento de dependente. Não
 anunciar espontaneamente que ele é opcional. Resolver a coleta novamente numa
-nova conversa: com IA, pode confirmar o endereço conhecido daquele vínculo;
-no determinístico puro, preservar a pergunta habitual. Dados globais antigos
-não comprovam confirmação na conversa atual. Um "não" à sugestão pede endereço
-atual na mesma etapa; a mudança de contexto não é uma transição de etapa.
+nova conversa, perguntando o endereço atual quando ainda não informado nela.
+Não apresentar o e-mail antigo para confirmação, mesmo que exista no cadastro.
+No híbrido, antecipação válida na própria conversa pode resolver a coleta; no
+determinístico puro, preservar a pergunta e a validação habituais.
 
 O booleano resolve o controle de repetição. Preservar adicionalmente o resultado
 da coleta e seu valor histórico/vínculo à mensagem para que outra conversa, até
@@ -680,8 +820,9 @@ os testes. Regras do negócio e operações permanecem protegidas pelo código.
 - Explicar a distinção em relação a reforço escolar/cursinho quando perguntado,
   usando a base aprovada, sem inventar diagnósticos ou promessas de resultados.
 - Não fornecer mensalidade, matrícula, kit, estimativas de preço ou confirmar
-  valores sugeridos pelo cliente. Orientar sobre a avaliação/experiência gratuita
-  e a explicação de valores pela equipe conforme o discurso comercial aprovado.
+  valores sugeridos pelo cliente. Orientar sobre a experiência por cortesia da
+  unidade e a explicação de valores pela equipe conforme o discurso aprovado,
+  respeitando os momentos de mencionar a cortesia definidos na seção 1.1.
 - Apresentar-se como assistente da unidade. Se perguntarem se é IA, responder
   com transparência; não fingir ser uma pessoa humana.
 - Não inventar justificativas sobre exigência de e-mail, horários, disponibilidade
@@ -716,12 +857,17 @@ desativar globalmente todos os botões das unidades com IA.
 
 Separar escolhas de conversa dos botões de ação: preservar o contato comercial
 nos encaminhamentos e o link de agendamento em sua etapa. Desativar botões de
-escolha não deve remover essas ações nem reativar IA depois do agendamento.
+escolha não deve remover essas ações nem reativar IA depois da entrega de link (20)
+ou contato comercial (19).
 
 Verificado no código: `montar_mensagem_contato_comercial_etapa6` prepara origem,
 nome do titular e pedido para o participante; `montar_link_numero_comercial_whatsapp`
 inclui esse texto no parâmetro `text` do link. Os senders de suporte e da exceção
 universal usam esse link. O cliente ainda precisa enviar a mensagem no WhatsApp.
+
+Na rota sem link, `preparar_mensagem_comercial` também prepara o contato da etapa
+19 com o turno validado. Preservar esse texto pronto, além dos contatos por idade;
+a IA não deve substituir a preferência nem inventar horário confirmado.
 
 Decisão aprovada pelo usuário: **preservar essa mensagem padronizada**.
 Não conceder redação livre da mensagem de contato à IA. Para o futuro pedido de
@@ -797,11 +943,13 @@ em que ela encerrou. O histórico e o motivo etário anteriores permanecem intac
 Retries da entrada que gerou o encerramento são recuperação da mesma operação,
 não um pedido novo que autoriza criar outra conversa.
 
-No híbrido, a IA pode aproveitar o nome confiável do titular daquela unidade e
-dar boas-vindas, perguntando para quem é o novo atendimento. Se a própria entrada
-trouxer destino ou dados claros, aplicar as regras gerais de antecipação. Se negar
-o nome, recolhê-lo e tratar a dúvida de identidade como definido neste plano.
-O Básico continua com a abertura determinística atual na etapa 1.
+No híbrido, iniciar pela coleta normal do nome, sem saudação de reconhecimento
+nem referência ao dependente anterior. Se a própria entrada trouxer nome,
+destino ou dados claros, aplicar as regras gerais de antecipação desta conversa.
+O Básico continua com a abertura determinística atual na etapa 1. Quando FireAds
+estiver aplicada, uma importação válida da nova conversa permite iniciar na
+profissão em qualquer regime; idade e triagem continuam pendentes. Não confundir
+essa consulta nova ao formulário com reconhecimento do atendimento encerrado.
 
 A nova conversa coleta/confirma os dados pertinentes e a idade atual, reaplica
 as restrições da unidade e não herda triagem ou elegibilidade como concluídas.
@@ -818,7 +966,8 @@ Outros bloqueios vigentes e controles de flood continuam sendo respeitados.
 ### Orientação depois de seis turnos sem avanço
 
 Novo tratamento transversal solicitado, exclusivo do caminho com IA e disponível
-em todas as etapas em que ela atua. O corte 17 → 18 continua valendo; não reativar
+em todas as etapas em que ela atua, incluindo a escolha de turno na 18. O corte
+por entrega de link ou contato comercial da seção 1.1 continua valendo; não reativar
 o modelo em etapas posteriores para produzir esse aviso.
 
 Usar o mesmo `turnos_sem_avanco` da regra de limite 12, lido pelo backend:
@@ -906,6 +1055,14 @@ Os detalhes de renovação da fila ainda precisam ser implementados e testados.
 Não manter uma transação aberta durante a chamada de rede. Preservar a recuperação
 de processos mortos sem reduzir a segurança a uma soma de tempos.
 
+Na abertura FireAds há consultas externas antes da IA. Esse tempo já consumiu
+parte das proteções da fila/conversa: não supor que ainda restam 90 segundos
+seguros apenas porque o provedor não foi chamado. Preparar a decisão FireAds,
+verificar/renovar ambas as posses e calcular o prazo de geração e a margem de
+envio/persistência. O teto de 90 segundos não autoriza ultrapassar uma posse sem
+renovação. Validar consulta lenta seguida de IA lenta e recuperação concorrente;
+essa integração de tempos é requisito da aplicação, sem aumentar os limites agora.
+
 Esses valores ainda aparecem como literais em funções SQL e na verificação Python:
 [aquisição/retomada](../core/database/deploy_database/bank_script.py),
 [proteção da conversa](../core/repositories/atendimento/followup.py) e
@@ -955,13 +1112,13 @@ Proposta técnica: persistir `conversa.regime_atendimento` com valores
 `deterministico_puro` e `hibrido`, separado de `modo_resposta` de cada turno.
 O regime descreve a continuidade/regras do atendimento; não concede direito de
 chamar IA. Toda admissão continua verificando assinatura, ativação, cotas e corte
-no agendamento. O modo registra se aquele turno usou IA, texto canônico do híbrido
-ou fallback, com motivo e origem explícitos.
+por entrega de link ou contato comercial (seção 1.1). O modo registra se aquele
+turno usou IA, texto canônico do híbrido ou fallback, com motivo e origem explícitos.
 
 - Conversas legadas e novas do Básico: regime puro; diálogo e barreiras atuais.
 - Conversa nova com Plus/Pro e IA habilitada: regime híbrido, mesmo que uma cota
-  ou falha de API exija fallback desde o primeiro turno. Sem geração, não iniciar
-  personalização histórica que dependa de interpretação do modelo.
+  ou falha de API exija fallback desde o primeiro turno. Coletar os dados novamente;
+  disponibilidade de IA não autoriza recuperar dados de conversas encerradas.
 - Upgrade/ativação em uma conversa pura ainda ativa: adotar o regime híbrido de
   forma controlada na admissão ao novo atendimento, preservando etapa, pergunta
   pendente e contadores. Não repetir a saudação nem retirar bloqueios existentes.
@@ -969,8 +1126,9 @@ ou fallback, com motivo e origem explícitos.
   novas chamadas conforme a política atual, mantendo regime/pendências para
   continuidade sem IA. O downgrade não transforma um "sim" pendente em endereço
   inválido nem apaga coleta válida. Novas conversas do Básico seguem puras.
-- Depois da passagem 17 → 18: manter o corte da IA; o estado confirmado continua
-  íntegro e o fluxo posterior segue determinístico.
+- Depois da entrega registrada em 17 → 20 (com link) ou 18 → 19 (sem link): manter
+  o corte da IA; o estado confirmado continua íntegro e o fluxo posterior segue
+  determinístico. A passagem 17 → 18 sem link ainda permite IA na escolha do turno.
 
 O webhook também precisa distinguir o regime antes de aplicar a política de
 suspeita: preservar o bloqueio Meta atual no puro e permitir o encaminhamento e
@@ -1114,7 +1272,8 @@ limite total de 90 segundos para a fase de IA e fallback ao vencê-lo, sem cota
 extra de tokens por ciclo. Plus tem limites mensais
 **por chat e por unidade**; Pro tem limite maior por chat e não tem teto mensal
 da unidade, conforme o [desenho de limites](#consumo-ia).
-O `worker_flow` incrementa uso de chat por requisição e cria os registros mensais.
+O `worker_flow` e o primeiro follow-up com IA usam um serviço compartilhado para
+criar os registros mensais e incrementar o uso de chat por requisição (seção 21).
 O `worker_consumo_ia_unidade` recalcula totais existentes a cada cinco minutos.
 Está aprovado permitir excesso enquanto o agregado da unidade Plus está
 defasado, inclusive por vários chats, e no último ciclo admitido do chat em
@@ -1188,15 +1347,15 @@ etapas futuras; esta revisão só registra o plano.
 | Área | Responsabilidade a adaptar |
 | --- | --- |
 | Unidade, Admin e cache | Flag de IA e leitura atualizada por unidade. |
-| Conversa e contexto auxiliar | Coleta validada, fatos antecipados, pendências de correção, retorno e proveniência. |
+| Conversa e contexto auxiliar | Coleta validada, fatos antecipados, pendências de correção, retorno, proveniência e condições/observação relatadas para o Funil (seção 21). |
 | Dependente | Parentesco, mantendo no máximo um dependente por conversa. |
 | Resolvers/transições | Interpretação flexível e autorização explícita de exceções. |
 | Efeitos e repositórios | Operações reutilizáveis com dados validados e recuperação. |
 | Senders | Composição contextual coerente com pergunta, botões e etapa autorizada. |
 | Webhook | Nova política do limite sem avanço; manter turno único e mídias atuais neste piloto. |
-| Funil | Dados validados após correções; triagem em revisão não conta como concluída; parentesco literal ou "Parentesco: não informado" somente para dependente. |
-| Monitoramento | Representação de antecipações/correções e eventual novo motivo de encerramento. |
-| Follow-up | Retomada correta da coleta/pendência; sem reaproveitar conversa encerrada. |
+| Funil | Dados validados após correções; triagem em revisão não conta como concluída; parentesco somente para dependente, condições e observação para a pessoa atendida; nulos apresentados como "não informado", sem chamada à IA. Preservar turno e elegibilidade 20–24 com link ou 19/21–24 sem link. |
+| Monitoramento | Representação de antecipações/correções e eventual novo motivo de encerramento, mantendo as 24 etapas, turno e Consumo existentes. |
+| Follow-up | IA pode adaptar apenas o primeiro lembrete, com consumo mensal compartilhado; segundo determinístico e encerramento obrigatório. Preservar elegibilidade 1–17 e 18 somente sem link, pendência atual e revalidação antes do envio (seção 21). |
 | Integração IA | Cliente, contratos, contexto limitado, falhas, consumo e observabilidade. |
 
 ### Preparação da avaliação e ativação
@@ -1219,7 +1378,20 @@ etapas futuras; esta revisão só registra o plano.
 
 Casos obrigatórios para o futuro piloto:
 
-- Unidade sem IA não chama modelo; unidade com IA respeita corte 17 → 18.
+- Unidade sem IA não chama modelo e preserva as duas rotas atuais. No híbrido,
+  com link a entrega em 17 → 20 conclui a IA; sem link, 17 → 18 ainda permite IA,
+  e a entrega em 18 → 19 conclui sua participação.
+- Na 18, validar escolha única por texto e respostas `interactive`/`interactive_button`;
+  dois turnos ou escolha ambígua não avançam. Salvar turno e movimento uma vez.
+- Dúvida ou correção antes do repasse na 18 respeita as operações e retoma a
+  pendência; depois do repasse em 19/20 não reativa IA. Preservar CTA e texto comercial.
+- Na 19, resposta textual apresenta a 21 sem aproveitar a mesma entrada como nota;
+  na 20, só confirmação válida de reserva apresenta a 21. Mídias seguem tratamentos.
+- Satisfação 21 → 22 → 23 → 24, incluindo recusa 22 → 24, não chama IA.
+- Ativação/upgrade, renovação mensal, falha/retry ou mudança de link depois do
+  repasse não reativam IA. Resposta registrada é recuperada sem novo envio.
+- Mudança de link preserva a rota iniciada em 18/19; remoção na 20 exige o cuidado
+  operacional atual. Antecipações não escolhem rota com configuração obsoleta.
 - Destino antecipado pula 2/3 sem perder profissão ou cadastro necessário.
 - Nome já na primeira mensagem e várias informações claras na mesma entrada.
 - Dois dependentes citados, escolha de um e nenhuma duplicação de cadastro.
@@ -1239,13 +1411,16 @@ Casos obrigatórios para o futuro piloto:
 - Triagem com resposta e dúvida avança após registrar a resposta; dúvida sem
   resposta mantém etapa e repete a pergunta canônica.
 - Contexto mínimo preserva pendências e última pergunta; recuperação adicional
-  limitada ao atendimento atual e ao histórico permitido do mesmo chat/identidade,
-  sem acessar memórias privadas de outros clientes ou unidades.
+  limitada ao atendimento atual, sem importar dados de conversas encerradas do
+  mesmo chat nem memórias privadas de outros clientes ou unidades.
 - Falha de IA no mesmo ciclo seleciona uma única resposta determinística; falha
   de banco/envio não é confundida com falha de IA nem gera resposta duplicada.
 - Formatação em celular, botões coerentes e pesquisa sem revelar preços ou dados
   de outros clientes; referências sem resultado não produzem fatos inventados.
-- Triagem canônica e ausência de entrada antecipada indevida no Funil.
+- Triagem canônica e ausência de entrada antecipada indevida no Funil: validar
+  20–24 com link, 19/21–24 sem link e exclusão da 18, com turno nas observações.
+- Follow-up continua elegível em 1–17 e 18 somente sem link; resposta válida ao
+  lembrete da 18 salva turno e entrega comercial sem reabrir atendimento encerrado.
 - Limite sem avanço, replay sem dupla contagem e isolamento de unidades.
 - Falha de IA, timeout, perda de lock e recuperação sem reenvio indevido.
 - Verificar que o determinístico puro mantém seus textos, etapas, validadores e bloqueio por suspeita.
@@ -1253,15 +1428,18 @@ Casos obrigatórios para o futuro piloto:
 - Simular deadline aos 90 segundos, continuação que não reinicia o relógio e resultado tardio sem segundo envio.
 - Simular demora da Meta/banco após timeout de IA e validar posse de fila e conversa antes de enviar/persistir.
 - Verificar que o indicador não recebe novas ativações após fim da geração, timeout ou perda de posse.
-- Downgrade durante confirmação de e-mail preserva a pendência; nova conversa Básico permanece pura.
-- Nova conversa sem herdar coletas/triagem como concluídas; IA pode recuperar
-  referências do mesmo chat e identidade para confirmar, conforme o comparativo.
-- Determinístico puro inicia nova conversa na etapa 1; IA pode aproveitar nome
-  conhecido da unidade e iniciar na etapa 2, sem repetir destino antecipado.
-- Confirmação de e-mail/profissão aceita, negada e corrigida, inclusive com
-  esgotamento da cota ou falha da IA entre pergunta e resposta.
-- Mudança reconhecida de titular do número suspende a memória da pessoa anterior
-  sem reescrever históricos, liberar bloqueio ou renovar cota mensal.
+- Downgrade durante correção de e-mail preserva a pendência; nova conversa Básico permanece pura.
+- Nova conversa de cliente cadastrado começa perguntando nome; não saúda pelo
+  nome antigo, não oferece dependente anterior nem confirma e-mail/profissão antigos.
+- Nome/destino informados na própria entrada nova permitem antecipação no híbrido;
+  nome somente no cadastro não dispensa pergunta. O Básico mantém a abertura atual.
+- Com importação FireAds válida da abertura, os três regimes usam profissão como
+  primeira pergunta e preservam e-mail/destino resolvidos; isso é exceção às duas
+  verificações anteriores, não reaproveitamento de dados de conversa encerrada.
+- Correções e confirmações de dados da conversa atual continuam no fallback,
+  inclusive com esgotamento da cota ou falha da IA entre pergunta e resposta.
+- Retomada de conversa ativa preserva dados e pendências; nova conversa após
+  encerramento mantém histórico, bloqueios e uso mensal, mas recomeça a coleta.
 - Pedidos para inventar preço, burlar regras ou alterar outro cliente recusados.
 - Último ciclo autorizado iguala/ultrapassa a cota do chat; grava o consumo real,
   conclui a resposta e o próximo ciclo segue no determinístico.
@@ -1304,12 +1482,18 @@ manter margem e validar o resultado.
 Mudanças pelo Django Admin atualizarão a assinatura e os limites dos registros
 existentes do mês atual, preservando IDs e consumo. Novos usos seguirão o plano
 vigente; meses anteriores permanecem inalterados. Se a unidade ainda não tiver
-uso mensal, o `worker_flow` o criará sob demanda. Regras de Basic/Plus/Pro,
+uso mensal, o serviço compartilhado de admissão o criará sob demanda, chamado
+pelo `worker_flow` ou pelo primeiro follow-up com IA. Regras de Basic/Plus/Pro,
 concorrência e chamadas já admitidas estão no
 [desenho de limites](#consumo-ia).
 
-Restam materiais aprovados e calibração técnica no piloto. Modelo/orçamento e
-valores das cotas em tokens serão discutidos por último, conforme solicitado.
+Restam materiais aprovados, detalhamento dos contratos e calibração técnica no
+piloto. O [manual de atendimento](manual_atendimento_supera.txt) e a
+[orientação por etapas](orientacao_por_etapas_atendimento.txt) já têm esqueletos;
+seus conteúdos ainda serão elaborados. A descrição completa por etapa e os contratos
+das operações/navegação devem usar a base atual da seção 1.1, distinguindo regras
+escritas de funções efetivamente implementadas. Modelo/orçamento e valores das
+cotas em tokens serão discutidos por último, conforme solicitado.
 
 A tolerância ao excesso está definida e não é uma pendência: vale na primeira
 versão para o agregado Plus defasado e para o último ciclo autorizado do chat.
@@ -1319,11 +1503,11 @@ Também está definido aceitar consumo não recuperado por falha nesta versão.
 Desconhecido não significa zero; sua conciliação automática deixa de ser
 pendência do piloto e passa para o documento de ideias futuras.
 
-Preservar a política vigente para conversas encerradas e o corte da IA no
-agendamento. Correção não autoriza reabrir uma conversa encerrada; entrada futura
-passa pelas regras existentes de bloqueio e novo atendimento. Um comportamento
-diferente depois de encerramento seria uma evolução separada, não requisito
-implícito deste piloto.
+Preservar a política vigente para conversas encerradas e o corte da IA por
+entrega de link ou contato comercial (seção 1.1). Correção não autoriza reabrir
+uma conversa encerrada; entrada futura passa pelas regras existentes de bloqueio
+e novo atendimento. Um comportamento diferente depois de encerramento seria uma
+evolução separada, não requisito implícito deste piloto.
 
 As etapas técnicas podem ser projetadas sem nova confirmação para cada função.
 Esta discussão atualiza os documentos; não autoriza implementar o sistema agora.
@@ -1357,13 +1541,13 @@ uma execução contra produção nem um comando SQL pronto para aplicar.
 O documento distingue o necessário para o piloto dos recursos futuros. Ajustes
 posteriores serão versionados por migração, preservando dados e regras existentes.
 
-## 17. Retorno de clientes, chat permanente e cotas mensais
+## 17. Novas conversas, chat permanente e cotas mensais
 
 O [comparativo entre determinístico e IA](comparativo_atendimento_deterministico_e_ia.md)
-registra o retorno personalizado solicitado: nome conhecido da mesma unidade,
-destino na etapa 2, referência ao dependente após segundo follow-up e confirmação
-de e-mail/profissão. Regras de bloqueio, identidade, idade e corte no agendamento
-continuam prevalecendo. Esse comportamento é adicional ao plano anterior.
+registra a decisão de 04/10: nova conversa começa pela coleta normal, sem
+reconhecimento pelo histórico. Contexto da conversa ativa, antecipações e
+correções dentro dela continuam válidos. Não apagar conversas antigas nem
+alterar bloqueios, regras etárias ou corte por entrega de link/comercial.
 
 O [desenho de chat e limites](#consumo-ia) define vínculo estável
 cliente/unidade, várias conversas, cotas em tokens e assinaturas Básico/Plus/Pro.
@@ -1371,11 +1555,12 @@ cliente/unidade, várias conversas, cotas em tokens e assinaturas Básico/Plus/P
 Há no máximo uma conversa ativa por cliente/unidade. Conversas sucessivas do
 mesmo chat no mês acumulam no mesmo uso mensal; as encerradas mantêm o consumo
 já ocorrido e apenas a ativa recebe novas interações do atendimento.
-O `worker_flow` cria os dois registros e incrementa tokens de chat; o
+O serviço de uso compartilhado pelo `worker_flow` e pelo primeiro follow-up com
+IA cria os dois registros e incrementa tokens de chat; o
 `worker_consumo_ia_unidade` soma os usos associados a cada cinco minutos, sem
 criar registros. O excesso entre apurações Plus e no último ciclo autorizado do
 chat foi aceito; o próximo ciclo usa fallback ao encontrar o limite atingido.
-O totalizador não renova cotas: na virada mensal, o `worker_flow` obtém/cria
+O totalizador não renova cotas: na virada mensal, esse serviço obtém/cria
 primeiro o uso da unidade e depois o do chat, reutilizando linhas já existentes.
 
 O painel exibirá consumo de IA na seção Consumo, com o mesmo seletor mensal da
@@ -1478,32 +1663,35 @@ Estrutura de `chatbot.chat` aprovada para detalhamento da migração:
 | `id_chat` | `SERIAL PRIMARY KEY` | Identidade estável do vínculo. |
 | `id_cliente` | `INTEGER NOT NULL`, FK | Contato cadastrado. |
 | `id_unidade` | `INTEGER NOT NULL`, FK | Unidade proprietária do histórico. |
-| `versao_identidade` | `INTEGER NOT NULL DEFAULT 1` | Separa a memória quando reconhecida troca de titular do contato. |
 | `criado_em` | `TIMESTAMPTZ NOT NULL` | Criação do vínculo. |
 
-Exigir `UNIQUE (id_cliente, id_unidade)` e versão positiva. Obter/criar o chat
+Exigir `UNIQUE (id_cliente, id_unidade)`. Obter/criar o chat
 com operação protegida pela unicidade; dois workers não podem criar dois vínculos
 para o mesmo par.
 
 `cliente` hoje é identificado por telefone e pode aparecer em várias unidades.
 O chat representa esse contato com a unidade, não prova uma identidade humana
-permanente. Mudança reconhecida de titular cria uma nova versão de memória,
-preservando o `id_chat` e o consumo mensal; não pode renovar a cota.
+permanente. Outra conversa ou alteração de nome não cria outro chat para o mesmo
+par nem renova a cota mensal. O cadastro de conversa anterior não autoriza
+personalizar a nova coleta. A integração FireAds pode fornecer os três dados
+por consulta própria feita para a abertura atual, conforme a seção 19.17.
+O versionamento de identidade proposto exclusivamente para reutilizar
+memória entre conversas sai do desenho do piloto, junto com esse recurso.
 
-Adicionar a `conversa` uma FK `id_chat` e a versão de identidade correspondente.
-Cada novo atendimento recebe a versão corrente. Dentro da conversa, a
+Adicionar a `conversa` uma FK `id_chat`. Dentro da conversa, a
 `versao_participante` continua distinguindo titular/dependente escolhido e suas
-substituições; não confundir as duas versões.
+substituições, com a auditoria das correções da conversa atual.
 
 Se a troca de titular for reconhecida no meio de uma conversa, registrar a
 fronteira por turno/decisão e invalidar os dados atuais afetados. Uma coluna na
 conversa não autoriza reatribuir todas as mensagens anteriores à nova pessoa.
-O reaproveitamento posterior deve respeitar essa proveniência, inclusive quando
-um cadastro global tiver sido atualizado por outro atendimento.
+A preservação do histórico deve respeitar essa proveniência, inclusive quando
+um cadastro global tiver sido atualizado por outro atendimento. Isso não cria
+reconhecimento ou reutilização de perfil na próxima conversa.
 
 Não é obrigatório criar `chat` para calcular cotas: o par cliente/unidade já
-permite isso. O benefício aqui é tornar explícito o vínculo usado por memória,
-histórico, futuras funções de atendimento humano e limites compartilhados.
+permite isso. O benefício aqui é tornar explícito o vínculo usado por histórico,
+futuras funções de atendimento humano e limites compartilhados.
 
 ### 18.4. Remover cliente/unidade da conversa exige migração gradual
 
@@ -1513,8 +1701,10 @@ follow-up dependem dos IDs diretos.
 
 Sequência de migração definida no plano:
 
-1. Criar `chat` e uma linha para cada par distinto existente em `conversa`.
-2. Adicionar `conversa.id_chat`, preencher e conferir a correspondência de todas
+1. Se a aplicação FireAds já criou `chat`, reutilizar e validar seus vínculos.
+   Caso contrário, criar uma linha para cada par distinto existente em `conversa`.
+2. Reutilizar `conversa.id_chat` se já migrado pela FireAds; caso contrário,
+   adicionar, preencher e conferir a correspondência de todas
    as linhas, preservando seus IDs e relacionamentos.
 3. Enquanto os três campos coexistirem, garantir consistência no banco: chave
    única compatível em `chat` e FK composta de `(id_chat, id_cliente, id_unidade)`
@@ -1530,32 +1720,27 @@ Sequência de migração definida no plano:
 Eliminar as colunas não torna consultas automaticamente mais rápidas. Haverá
 joins e índices a avaliar; o ganho principal é clareza e integridade do modelo.
 
-### 18.5. Onde fica a memória entre conversas
+### 18.5. Memória limitada à conversa atual
 
-No piloto, a aplicação pode buscar fatos estruturados dos atendimentos anteriores
-do mesmo chat/versão de identidade e selecionar somente os necessários. Não é
-obrigatório adicionar outra tabela com uma cópia de todo o histórico do chat.
+`contexto_ia_conversa` guarda os fatos, candidatos e pendências da conversa atual
+para continuidade entre mensagens e reinícios do worker. O backend limita as
+consultas adicionais a essa conversa; não busca perfil, dependente, e-mail ou
+profissão de atendimentos encerrados para completar a coleta nova.
 
-`contexto_ia_conversa` continua sendo o estado auxiliar da conversa atual. Nele,
-registrar referências às conversas de origem, sugestões ainda não confirmadas
-e pendências de confirmação. Dados confirmados nesta conversa têm persistência
-própria; não copiar `email_validado=TRUE`, triagem ou aviso de um atendimento antigo.
+Criar contexto auxiliar novo a cada conversa, sem copiar resumo, confirmação,
+triagem, aviso ou coletas resolvidas de outra. Começar perguntando o nome e seguir
+o fluxo, salvo dados antecipados nesta conversa ou dados válidos fornecidos pela
+consulta FireAds da abertura atual, quando essa base estiver aplicada. Isso vale
+também após encerramento etário ou segundo follow-up. Nunca reaproveitar a
+consulta de referência de outra conversa só porque pertence ao mesmo chat.
 
-Se for necessário um resumo persistente por chat no futuro, versioná-lo e guardar
-origem/data; não tratá-lo como cadastro confirmado nem fonte irrestrita de verdade.
-IA solicita contexto; o backend limita a consulta ao chat e à identidade autorizados.
+Retomar a mesma conversa ainda ativa conserva seu contexto e suas pendências;
+essa regra não manda reiniciar após silêncio, follow-up, retry ou falha da IA.
+Conversa encerrada permanece preservada para histórico, auditoria e consultas
+autorizadas do sistema. Chat, uso mensal e bloqueios não são zerados.
 
-Troca explícita de pessoa invalida a reutilização da memória anterior. Corrigir
-apenas o nome da mesma pessoa não apaga automaticamente seu histórico. Conversas
-antigas continuam com seus dados históricos, sem reatribuição ao novo titular.
-
-Se o cliente que retorna disser "esse não é meu nome", acolher e perguntar o
-nome correto, retomando a finalidade da etapa 1. Enquanto a identidade estiver
-incerta, suspender o reaproveitamento de e-mail, profissão, dependentes e resumos
-antigos. A negação isolada não prova troca de portador: esclarecer essa distinção
-quando necessário. Confirmada a mesma pessoa, corrigir o nome; confirmada outra,
-aplicar a separação de memória por identidade sem renovar cotas ou reatribuir
-atendimentos anteriores. Persistir a pendência para continuidade no fallback.
+Exemplos revisados e desidentificados para conhecimento continuam permitidos
+conforme a seção 6; não servem para reconhecer uma pessoa ou importar seu cadastro.
 
 ### 18.6. Tabelas e vínculos mensais
 
@@ -1623,11 +1808,13 @@ pelo Admin, com atualização consistente no banco:
 5. Registrar responsável, data, plano anterior/novo e referência das políticas
    aplicadas na auditoria administrativa. Invalidar cache após o commit.
 6. Novos usos de chats nesse mês e usos dos meses seguintes recebem a política
-   vigente quando criados pelo `worker_flow`. Não alterar registros de meses anteriores.
+   vigente quando criados pelo serviço compartilhado de uso, chamado pelo
+   `worker_flow` ou primeiro follow-up com IA. Não alterar meses anteriores.
 
 Se Básico → Plus/Pro ocorrer antes do primeiro uso de IA, pode não existir linha
-mensal. Nesse caso, o Admin salva o plano; o `worker_flow` criará primeiro o uso
-da unidade e depois o do chat na primeira interação elegível. Não criar milhares
+mensal. Nesse caso, o Admin salva o plano; o serviço compartilhado criará primeiro
+o uso da unidade e depois o do chat na primeira chamada elegível, inclusive de
+primeiro follow-up. Não criar milhares
 de usos de chat sem atendimento nem transferir ao Admin a renovação mensal.
 
 | Alteração | Resultado nos limites do mês atual |
@@ -1654,7 +1841,7 @@ resposta já enviada não é desfeita. Isso mantém a tolerância ao ciclo autor
 e não concede novas admissões pelo plano antigo.
 
 Executar assinatura e atualização dos limites em transação curta, coordenada com
-a criação/admissão pelo `worker_flow`, usando ordem consistente de bloqueios e
+a criação/admissão de ambos os workers pelo serviço compartilhado, usando ordem consistente de bloqueios e
 leitura da política vigente. Não sobrescrever contadores com uma cópia antiga do
 formulário nem disputar o agregado com o worker de totalização: alterar apenas
 política/limites e metadados administrativos. A criação concorrente de um novo
@@ -1669,8 +1856,9 @@ até o primeiro dia do mês seguinte às 00h, sem fixar 30 dias. Persistir front
 e fuso utilizado. A fonte/configuração do fuso deve estar resolvida antes de
 admitir chamadas; não usar silenciosamente o fuso do computador/servidor.
 
-O `worker_flow` cria o registro da unidade antes do registro de uso do chat,
-sob demanda, numa transação curta com unicidade e tratamento de concorrência.
+O serviço de uso chamado pelo `worker_flow` ou pelo primeiro follow-up com IA cria
+o registro da unidade antes do registro de uso do chat, sob demanda, numa
+transação curta com unicidade e tratamento de concorrência.
 O worker de totalização não cria registros. Não depende de acordar à meia-noite;
 sem uso, ausência de registro naquele mês não é falha nem comprovação de consumo zero.
 
@@ -1696,8 +1884,8 @@ históricos automaticamente quando o fuso da unidade mudar.
 
 1. Validar a entrada e recuperar unidade, cliente, chat e conversa pelos controles
    existentes. Verificar resposta já registrada antes de qualquer nova geração.
-2. Aplicar bloqueios, regras do fluxo e corte da IA no agendamento. A assinatura
-   não dispensa essas condições.
+2. Aplicar bloqueios, regras do fluxo e corte da IA por entrega de link ou contato
+   comercial, conforme a seção 1.1. A assinatura não dispensa essas condições.
 3. Básico ou IA desligada: determinístico, sem criar novos registros de uso de IA.
    Plus/Pro com IA habilitada: continuar.
 4. Resolver o mês/fuso. Obter/criar `uso_ia_unidade` e depois `uso_ia_chat`, com FK
@@ -1725,7 +1913,7 @@ pela soma das requisições, sem novo incremento ao encerrar o ciclo. Não espal
 consultas de IA independentes entre validadores e senders. A integração de espera,
 cancelamento e posse do processamento está na [seção 10](#continuidade-ia).
 
-O consumo da unidade não é incrementado pelo `worker_flow` neste desenho; a
+O consumo da unidade não é incrementado pelo `worker_flow` nem pelo follow-up; a
 criação inicial com zero apenas disponibiliza a linha referenciada pelos chats.
 O próximo ciclo verifica novamente as cotas persistidas. Se o chat ou a unidade
 Plus estiver em `qtd_usada >= limite`, usar determinístico. Não descartar uma
@@ -1866,7 +2054,7 @@ de atualização. Tratar mudanças de assinatura preservando o histórico existe
 | Pro, unidade com consumo alto | Não testa teto da unidade; usa teto maior do chat. |
 | Pro, chat atingiu teto | Aquele chat fica no determinístico; os demais continuam conforme suas cotas. |
 | Nova conversa no mesmo chat/mês | Mesmo `id_uso_chat`; não renova consumo. |
-| Primeiro instante do próximo mês | `worker_flow` obtém/cria novo uso unidade e chat; mantém registros anteriores. |
+| Primeiro instante do próximo mês | O próximo uso elegível no flow ou primeiro follow-up obtém/cria uso unidade e chat pelo serviço compartilhado; mantém registros anteriores. |
 | Chamada cruza meia-noite | Uso contabilizado no período de admissão; agregado antigo é reapurado. |
 | Retry sem nova chamada IA | Sem incremento duplicado. |
 | Último ciclo do chat iguala ou ultrapassa teto | Conclui e registra uso real; próximo ciclo usa fallback. |
@@ -1874,7 +2062,7 @@ de atualização. Tratar mudanças de assinatura preservando o histórico existe
 | Worker de totalização atrasado | Agregado pode permitir mais ciclos Plus; limitação aceita, com atraso/falha visíveis na operação. |
 | API consumiu, mas uso não foi persistido/recuperado | Subcontagem aceita nesta versão; tentativa permanece incompleta/desconhecida, sem conciliação automática. |
 | Admin troca Plus ↔ Pro no meio do mês | Atualiza limites da unidade e todos os usos de chats vinculados; preserva IDs e contadores. |
-| Admin troca Básico → pago sem usos existentes | Salva o plano; worker_flow cria unidade/chat sob demanda com a política nova. |
+| Admin troca Básico → pago sem usos existentes | Salva o plano; flow ou primeiro follow-up com IA cria unidade/chat sob demanda pelo serviço compartilhado com a política nova. |
 | Unidade volta ao plano pago no mesmo mês | Reutiliza usos existentes e seu consumo, sem renovação artificial. |
 | Troca de plano concorre com criação de uso ou totalização | Política fica consistente e nenhum contador é sobrescrito/zerado. |
 
@@ -1890,7 +2078,9 @@ Não inventar cotas no DDL.
 
 ## 19. Banco de dados e migração
 
-Proposta técnica para a futura migração. Os nomes podem ser ajustados na implementação; nenhum SQL foi executado.
+Proposta técnica para a futura migração de IA. Os nomes podem ser ajustados na
+implementação; nenhum SQL de IA foi executado. A migração da reserva com/sem link
+já pertence à base atual, não ao trabalho futuro desta seção.
 
 ### 19.1. Base examinada e limites do levantamento
 
@@ -1904,11 +2094,18 @@ produção. Antes do deploy, comparar a versão efetiva do banco com estes arqui
 - [Conversa e bloqueio local](../core/repositories/atendimento/conversas.py).
 - [Triagem](../core/repositories/fluxo/triagem.py).
 - [Dados do Funil](../core/repositories/funil/leads.py).
+- [Migração da reserva já aplicada](../deploy/migrations/20261003_reserva_com_sem_link.sql).
 
 Constatações que orientam o desenho:
 
 - Já existem `conversa.turnos_sem_avanco`, `lock_version`, estado de processamento,
   encerramento e profissão por conversa. Não criar cópias desses controles.
+- Já existem `conversa.turno` (VARCHAR(5), nulo ou `manha`/`tarde`/`noite`) e
+  `unidade.link_agendamento` opcional. Preservar dados, constraints e semântica;
+  não recriar o turno nem confundi-lo com `turnos_sem_avanco`.
+- O catálogo examinado antes da FireAds tem **24 etapas e 28 transições**.
+  Depois dessa entrega, inventariar e preservar também seus novos caminhos;
+  usar a numeração da seção 1.1, sem tratar a 18 como link ou a 22 como finalização.
 - O índice de dependentes permite somente um registro por conversa.
 - `respostas_desafios` permite uma resposta ativa por conversa/pergunta; o
   repositório atual rejeita resposta divergente, inclusive em retry.
@@ -1924,23 +2121,31 @@ Constatações que orientam o desenho:
 | Objeto | Mudança proposta | Finalidade |
 | --- | --- | --- |
 | `unidade` | Flag `ia_habilitada` | Ativação explícita por unidade. |
-| `conversa` | Coleta de e-mail, dados históricos do titular, aviso único, versão do participante e prazo de bloqueio | Estado compartilhado entre IA, determinístico e recuperação. |
+| `conversa` | Coleta de e-mail, dados históricos do titular, aviso único, versão do participante, prazo de bloqueio, condições relatadas e observação do atendimento | Estado compartilhado entre IA, determinístico e recuperação; contexto para o Funil. |
 | `dependente` | `parentesco` | Relação informada espontaneamente, sem pergunta própria; nulo se não informado. |
 | `respostas_desafios` | Origem e versão da pessoa atendida | Correção ou substituição auditável sem misturar pessoas. |
 | `contexto_ia_conversa` | Nova tabela 1:1 | Memória auxiliar recuperável e limitada. |
 | `decisao_turno_atendimento` | Nova tabela por entrada | Plano validado, resposta escolhida e recuperação. |
 | `historico_operacoes_atendimento` | Nova tabela de alterações | Valores anteriores/posteriores e efeitos aplicados uma vez. |
 | `requisicao_ia` | Nova tabela de tentativas | Uso, latência e falhas para medir o piloto. |
-| `etapa`, `etapa_transicao` | Preservar catálogo determinístico | Nenhuma etapa criada pela IA ou alteração irrestrita do mapa. |
+| `etapa`, `etapa_transicao` | Preservar 24 etapas e o mapa efetivamente implantado, incluindo FireAds | Nenhuma etapa criada pela IA ou alteração irrestrita do mapa; manter as duas rotas da reserva. |
 | Fila, histórico e Funil | Reutilizar estruturas; adaptar leituras e gravações | Compatibilidade com antecipação/correção e respostas geradas. |
 
 As quatro tabelas novas têm responsabilidades diferentes: memória, decisão do
 turno, auditoria de efeitos e consumo do provedor. Conhecimento pode começar em
 arquivos versionados; não exige outra tabela nem banco vetorial para o piloto.
 Este total corresponde ao desenho base. Com `chat` e as duas tabelas de cotas
-aprovadas na seção 19.16, o plano passa a prever **sete tabelas novas**.
+aprovadas na seção 19.16, o desenho completo prevê sete estruturas da IA.
+Se FireAds já tiver criado `chat`, a aplicação IA reutiliza essa tabela e cria
+as outras seis; `consulta_fireads` e as filas/configurações FireAds pertencem
+à entrega anterior, não são novas tabelas da migração IA.
 
 ### 19.3. Tabela `chatbot.unidade`
+
+A separação FireAds mantém assinatura/ativação de IA no desenho desta tabela.
+Personalização do atendimento passa a ser lida de `atendimento_customizado`
+quando a entrega FireAds estiver aplicada; os leitores de IA devem respeitar
+esse novo contrato, inclusive link, agente, idade mínima e obrigatoriedade de e-mail.
 
 | Coluna nova | Tipo proposto | Inicialização | Regra |
 | --- | --- | --- | --- |
@@ -1962,7 +2167,8 @@ No Pro, teto da unidade nulo e teto do chat finito; no Plus, ambos finitos. Ao
 voltar ao Básico, manter linhas do mês com limite zero e consumo preservado;
 a assinatura impede novas admissões e novos usos. Se voltar ao pago nesse mês,
 reutilizar esses registros com os novos limites. Se não existir uso mensal,
-o Admin salva a política e a criação continua sendo do `worker_flow` sob demanda.
+o Admin salva a política e a criação continua sob demanda pelo serviço compartilhado
+de uso, chamado pelo `worker_flow` ou primeiro follow-up com IA.
 
 Coordenar essa transação com a criação/admissão no worker, com bloqueios em ordem
 consistente. Atualizar somente campos de política, sem sobrescrever `qtd_usada`
@@ -1988,9 +2194,10 @@ valores presumidos nem guardar credenciais OpenAI na unidade/contexto da convers
 
 O booleano significa coleta concluída, não comprovação de posse da caixa postal.
 Não vale usar apenas `cliente.email IS NOT NULL` para marcá-lo como verdadeiro.
-No retorno com IA, uma confirmação explícita de um endereço histórico pode
-resolver a coleta. Guardar a mensagem atual de confirmação e a referência ao
-endereço apresentado; não atribuir a mensagem antiga como confirmação nova.
+O endereço deve ter sido informado na própria conversa atual, na coleta normal
+ou por antecipação/correção válida, ou adotado pela consulta FireAds da abertura
+atual com proveniência preservada conforme a seção 19.17. Não apresentar endereço histórico para
+confirmação nem atribuir uma mensagem de conversa encerrada à coleta nova.
 
 Regras de integridade propostas:
 
@@ -2128,6 +2335,14 @@ como o turno foi produzido, enquanto o regime diferencia regras persistentes.
 A estrutura universal de chat e os novos campos não mudam as falas nem a política
 de bloqueio das conversas puras.
 
+#### 19.4.8. Informações relatadas para o Funil
+
+Acrescentar como proposta de nomes técnicos `condicoes_especiais_relatadas TEXT
+NULL` e `observacao_atendimento TEXT NULL` à conversa. São dados da pessoa atendida
+nessa conversa, titular ou dependente; não cadastrar "não informado" no banco.
+Aplicar as regras de atribuição, correção e troca de pessoa da seção 21.1.
+O parentesco continua em `dependente.parentesco`, sem duplicação na conversa.
+
 ### 19.5. Tabela `chatbot.dependente`
 
 Adicionar `parentesco VARCHAR(100) NULL`. Significa a relação do dependente com o
@@ -2222,12 +2437,11 @@ a simples existência de uma linha antiga não conclui a coleta. Ao terminar, en
 a revisão e preservar sua trilha de auditoria. Não é necessária outra tabela para
 essa pendência; detalhar seu contrato no contexto compartilhado da implementação.
 
-Para retorno com IA, incluir referências autorizadas ao histórico anterior e uma
-pendência tipada de confirmação: campo, valor sugerido, origem e modo de coleta
-(`confirmando_dado_anterior` ou `solicitando_dado_atual`). O controlador determinístico
-também lê essa pendência no fallback. Um "não" troca o modo e mantém a etapa;
-um "sim" só valida o valor da pergunta correspondente. Não criar outra etapa
-nem exigir IA para interpretar uma confirmação objetiva já estruturada.
+Confirmações e esclarecimentos necessários dentro da conversa atual guardam
+campo, valor informado nela, origem e pergunta pendente. O fallback lê esse
+estado: um "sim" só confirma o que foi efetivamente perguntado. Pendências de
+correção preservam o ponto de continuação. Não importar referências a cadastros
+de atendimentos encerrados nem criar coleta de confirmação de dados antigos.
 
 Não guardar histórico inteiro, chaves de API ou raciocínio interno do modelo.
 Textos do cliente e fontes externas são dados, não instruções de sistema.
@@ -2311,22 +2525,27 @@ Não incluir tokens de acesso, prompts completos ou raciocínio interno.
 | Campo/grupo | Tipo proposto | Uso |
 | --- | --- | --- |
 | `id_requisicao` | `BIGSERIAL PRIMARY KEY` | Uma tentativa local identificável. |
-| `id_decisao_turno` | `BIGINT NOT NULL`, FK | Turno proprietário. |
-| `ordem_tentativa` | `INTEGER NOT NULL` | Distinguir chamadas/tentativas do mesmo turno. |
+| `origem` | Texto controlado | `atendimento` ou `primeiro_followup`; não existe chamada para o segundo follow-up ou para montar o Funil. |
+| `id_decisao_turno` | `BIGINT NULL`, FK; obrigatório para atendimento | Turno proprietário; primeiro follow-up tem vínculo próprio, sem simular entrada do cliente. |
+| Vínculo do primeiro follow-up | Referências à conversa, mensagem-âncora e número do lembrete | Identificar o lembrete elegível e recuperar tentativas sem confundir com turno recebido; contrato na seção 21.3. |
+| `ordem_tentativa` | `INTEGER NOT NULL` | Distinguir chamadas/tentativas do mesmo turno ou lembrete. |
 | `provedor`, `modelo` | Texto limitado | Modelo efetivamente solicitado. |
-| `finalidade` | Texto limitado | Análise inicial ou continuação após recuperar contexto. |
+| `finalidade` | Texto limitado | Análise inicial, continuação após recuperar contexto ou personalização do primeiro follow-up. |
 | `id_requisicao_provedor` | Texto limitado, nulo quando desconhecido | Correlação técnica, não credencial. |
 | `status`, `codigo_erro` | Texto limitado | Iniciada, concluída, falha ou resultado desconhecido. |
 | `tokens_entrada`, `tokens_entrada_cache`, `tokens_saida` | `BIGINT NULL` | Uso retornado pelo provedor. |
 | `metricas_adicionais` | `JSONB NULL` | Detalhes de uso/ferramentas sem duplicar cobrança. |
 | `iniciado_em`, `finalizado_em` | `TIMESTAMPTZ`; último inicialmente nulo | Latência e tentativa incompleta. |
 
-Unicidade `(id_decisao_turno, ordem_tentativa)`; contagens não negativas quando
+Unicidade `(id_decisao_turno, ordem_tentativa)` no atendimento e chave equivalente
+do lembrete/tentativa no follow-up. Exigir exatamente um vínculo proprietário,
+compatível com `origem`, por constraints/FKs no SQL final; não usar apenas um ID
+opcional sem validação. Contagens não negativas quando
 conhecidas. Nulo significa uso desconhecido, não zero. Uma falha após a chamada
 externa pode ter consumido tokens mesmo sem resposta registrada.
 
-A unidade é obtida pela decisão/conversa. Contabilizar todas as chamadas do
-turno, inclusive ampliação de contexto, falhas conhecidas e fallback; não apenas
+A unidade é obtida pela decisão/conversa ou pelo vínculo do follow-up. Contabilizar
+todas as chamadas do turno ou lembrete, inclusive ampliação de contexto, falhas conhecidas e fallback; não apenas
 o último resultado bem-sucedido. Recuperar o que já foi persistido sem fabricar
 uso nem duplicar incremento. Não manter locks longos enquanto aguarda a rede.
 
@@ -2353,7 +2572,9 @@ equivalência automática com faturamento nem usa a tabela de consumo Meta para 
 
 #### Etapas e mapa
 
-Preservar `etapa`, suas regras etárias/Funil e o mapa determinístico. Não criar
+Preservar `etapa`, suas regras etárias/Funil e o mapa determinístico implantado de
+24 etapas, incluindo a bifurcação da reserva (seção 1.1) e os caminhos FireAds.
+As 28 transições são a referência anterior à FireAds, não um limite. Não criar
 `status_ia`, novas etapas em tempo de execução ou todas as combinações de saltos.
 Eventos de antecipação/correção são validados por um controlador próprio e
 registrados na decisão, com FKs para as etapas existentes.
@@ -2380,11 +2601,18 @@ registrados são recuperados; não reenviar porque faltou apenas marcar a fila.
   titular, dependente ativo e triagem da versão atual. Não exige passagem antiga
   por todas as etapas que foram legitimamente antecipadas.
 - Antecipação não significa elegibilidade antecipada ao Funil; preservar a
-  política atual de quando materializar e enviar um lead.
+  política atual de quando materializar e enviar um lead: 20–24 com link,
+  19/21–24 sem link, com as demais guardas e configuração vigente. Preservar
+  recibos de sucesso e incluir o turno salvo nas observações, quando preenchido.
+  Acrescentar os campos relatados definidos na seção 21.1 por formatação
+  determinística, sem nova chamada à IA.
 - Painel apresenta o mesmo participante ativo e não trata candidatos do contexto
   como dependentes cadastrados. Revisar filtros/relatórios para o novo motivo.
 - Follow-up usa a pergunta pendente/etapa confirmada e respeita prazo de bloqueio
-  local. A futura pausa para atendimento humano não entra nesta migração.
+  local. Preservar 1–17 nas duas rotas e 18 somente sem link, sem novos lembretes
+  em 19/20/21–24. A futura pausa para atendimento humano não entra nesta migração.
+  Apenas o primeiro lembrete pode usar IA; o segundo continua determinístico.
+  Compartilhar cotas mensais e revalidar elegibilidade após a geração (seção 21).
 - Código determinístico deve preencher/consumir os campos compartilhados quando
   estiver no caminho novo de operações, mesmo se for fallback da IA.
 
@@ -2417,6 +2645,11 @@ não é motivo para chamar o modelo novamente.
 ### 19.13. Migração e registros antigos
 
 1. Inventariar schema, constraints e consultas reais antes de gerar o SQL final.
+   Partir da versão efetivamente implantada, incluindo chat e mapa FireAds se
+   essa entrega já tiver sido aplicada. V1.9.2/28 transições é somente a referência
+   anterior. Preservar turno e link opcional. Não repetir o remapeamento antigo
+   18–22 → 20–24, não executar setup
+   inicial sobre a base existente nem apagar histórico, turnos ou recibos.
 2. Fazer migração aditiva: novas tabelas, colunas com valores seguros e expansão
    controlada do motivo de encerramento. IA permanece desativada por padrão.
 3. Criar índices/FKs com tipos compatíveis, política de exclusão consistente e
@@ -2441,7 +2674,11 @@ Esta etapa não altera `.env`, instala SDK, gera chave ou executa comandos de ba
 ### 19.14. Verificações previstas antes do deploy
 
 - Migração em cópia do schema atual e instalação limpa produzem estruturas compatíveis.
+- Catálogo de 24 etapas, mapa vigente com as adições FireAds, turno, link opcional,
+  histórico remapeado, recibos e Consumo Meta permanecem íntegros após a migração IA.
 - Unidade sem IA mantém comportamento e não chama o provedor.
+- As duas rotas e os pontos de corte da seção 1.1 passam pelos cenários da seção
+  13, incluindo retry da entrega, satisfação, Funil e follow-up da etapa 18.
 - E-mail antecipado/corrigido/opcional chega corretamente ao Funil; outra conversa
   alterando cadastro global não troca o dado histórico do atendimento.
 - Troca de dependente mantém ID, invalida idade/triagem anteriores e preserva auditoria.
@@ -2487,10 +2724,10 @@ Os nomes propostos podem ser refinados ao escrever código/SQL. Qualquer altera�
 de comportamento fora das decisões do plano deve ser discutida antes de entrar
 na migração; detalhes técnicos não devem criar regras novas silenciosamente.
 
-### 19.16. Complemento aprovado: chat, retorno e limites de IA
+### 19.16. Complemento aprovado: chat, novas conversas e limites de IA
 
 O [comparativo dos modos](comparativo_atendimento_deterministico_e_ia.md) registra
-o comportamento de retorno aprovado. O
+o início de cada conversa com coleta nova, sem reconhecimento histórico. O
 [desenho de chat e cotas](#consumo-ia) detalha a revisão de
 01/10/2026: tokens como medida, valores ainda a definir e excesso conhecido
 aceito para a primeira versão.
@@ -2499,16 +2736,16 @@ O plano acrescenta ao desenho base:
 
 | Estrutura | Complemento proposto |
 | --- | --- |
-| `chat` | Vínculo único cliente/unidade, versão de identidade e data de criação. |
-| `conversa` | `id_chat` e versão de identidade; migração gradual dos IDs redundantes. |
-| `uso_ia_chat` | FK ao chat e ao uso mensal da unidade; `limite`/`qtd_usada` em tokens. Incremento pelo worker_flow. |
+| `chat` | Vínculo único cliente/unidade e data de criação; preserva histórico e cotas, sem memória de retorno. |
+| `conversa` | `id_chat`; migração gradual dos IDs redundantes, com nova coleta em cada atendimento. |
+| `uso_ia_chat` | FK ao chat e ao uso mensal da unidade; `limite`/`qtd_usada` em tokens. Incremento pelo serviço compartilhado chamado pelo flow e primeiro follow-up com IA. |
 | `uso_ia_unidade` | FK à unidade, período/fuso, limite e total agregado pelo worker de cinco minutos, com horário de apuração. |
 | `unidade` | Assinatura Básico/Plus/Pro; tetos obtidos da política da assinatura. |
 | `requisicao_ia` | Vínculos ao período, tokens informados, incremento único e uso conhecido/desconhecido; reserva e conciliação automática ficam fora desta versão. |
-| Contexto/decisão/operações | Proveniência de memórias históricas, versão de identidade e confirmações pendentes. |
+| Contexto/decisão/operações | Proveniência dos dados da conversa atual, antecipações, correções e pendências compartilhadas com o fallback. |
 
 Consumo conhecido é contabilizado uma vez por requisição no chat. O agregado da
-unidade é atribuído pela soma dos chats, não incrementado pelo worker_flow. Tokens
+unidade é atribuído pela soma dos chats, não incrementado pelo flow/follow-up. Tokens
 usam inteiro amplo não negativo; permitir registrar excesso real sobre o limite.
 Pro mantém registro de unidade, com limite nulo significando ausência de teto.
 Básico não cria novos usos IA, preservando eventual histórico de outro plano.
@@ -2516,7 +2753,8 @@ Básico não cria novos usos IA, preservando eventual histórico de outro plano.
 Unicidade mensal por chat/unidade e FK `uso_ia_chat.id_uso_unidade` não dispensam
 validar a mesma unidade e o mesmo período. Não totalizar por join que multiplique
 um uso de chat pelo número de conversas. Ambos os registros são criados pelo
-worker_flow, com uso da unidade criado primeiro e concorrência protegida.
+serviço compartilhado chamado pelo flow ou primeiro follow-up com IA, com uso
+da unidade criado primeiro e concorrência protegida.
 Quando `agora >= data_final`, resolver o mês atual e obter/criar esses registros,
 inclusive exatamente à meia-noite. Se o uso da unidade já existir para outro
 chat daquele mês, reutilizá-lo. Nova conversa do mesmo chat/mês reutiliza seu
@@ -2548,20 +2786,107 @@ Não remover agora `conversa.id_cliente`/`id_unidade`. A migração gradual defi
 consistência por FK durante coexistência, atualização das dependências e só depois
 remoção. Unicidade da conversa ativa, isolamento de unidade e locks permanecem.
 
-Memória de retorno não copia coletas concluídas nem modifica conversas antigas.
-Uma mudança reconhecida de titular separa a memória pela identidade e não zera
-uso mensal. Detalhar a proveniência por turno quando a mudança ocorrer no meio
-de um atendimento, sem reatribuir suas mensagens anteriores ao novo titular.
+Não reutilizar memória de conversas encerradas em um novo atendimento. Histórico
+preservado e contexto operacional da conversa ativa têm finalidades distintas.
+Correções ou troca de pessoa dentro da conversa continuam auditáveis, sem
+reatribuir mensagens antigas a outra pessoa nem zerar o uso mensal.
 
 Testes adicionais: múltiplos chats disputando cota de unidade; virada mensal com
-chamada em voo; cota esgotada entre confirmação e resposta; isolamento de memória
-entre unidades; novo atendimento preservando consumo mensal; troca de titular;
+chamada em voo; cota esgotada durante correção pendente; isolamento de contexto
+entre conversas/unidades; novo atendimento com coleta nova e mesmo consumo mensal;
 e consistência dos vínculos durante a migração de `chat`. Cobrir ainda troca de
 plano com consumo acima do novo teto, Básico sem uso existente, ida/volta ao
 Básico sem reset mensal, criação concorrente de chat e preservação dos contadores
 durante mudança pelo Admin. Na integração, testar espera longa, perda de posse,
 cancelamento e chegada tardia após fallback, sem duas respostas ao cliente.
 
+
+<a id="base-fireads-ia"></a>
+
+### 19.17. Base FireAds prevista e antecipação do chat — 07/10/2026
+
+A aplicação do [plano FireAds](../docs/integracao_fireads.md) será responsável
+pela criação de `chat`, preenchimento de `conversa.id_chat`, customização da
+unidade, configuração FireAds, `consulta_fireads` e fila `envios_dash`.
+Esses itens ainda não foram implementados. Após a aplicação FireAds, comparar
+o schema efetivo com este plano e atualizar os nomes/contratos antes da IA.
+
+**Vínculos que a IA deve reutilizar:**
+
+- `chat`: um registro permanente por cliente/unidade, inclusive unidades sem IA.
+- `conversa.id_chat`: vínculo de cada episódio; IDs diretos cliente/unidade
+  permanecem na primeira fase e sua consistência é garantida no banco.
+- `consulta_fireads.id_chat`: uma consulta atual por chat integrado; mantém
+  `id_consulta`, mas atualiza `id_conversa_referencia` a cada nova conversa.
+- `conversa.contexto_fireads`: resultado e dados importados daquela conversa;
+  também preserva os dados do titular aceitos no atendimento integrado para a
+  entrega histórica. A linha atualizável de consulta não é memória histórica da IA.
+- `uso_ia_chat.id_chat`: futuramente usará o mesmo ID, sem remapear chats ou
+  renovar consumo por causa de outra conversa ou de atualização da consulta.
+
+Os três nomes de abas terão defaults definidos pela FireAds. Seu fuso de
+datas de formulário é separado do fuso da WABA consultado para Consumo Meta.
+O totalizador de IA segue utilizando o fuso da unidade conforme as cotas,
+sem alterar o fuso dos formulários para fazê-los coincidir.
+Nas escritas do dashboard, omitir Data/Hora e fuso: a FireAds data registros
+novos e conserva a data dos existentes. Conhecer o fuso de datas sem offset
+serve apenas para interpretar/ordenar formulários na leitura, não para mudá-lo.
+
+**Importação FireAds e nova conversa:**
+
+Consultar Google e somente Meta 7.2 antes da primeira resposta de toda nova
+conversa integrada. Resultado completo e válido resolve nome/e-mail/destino e
+inicia pela profissão; origens Google/Meta seguem seus canais do Funil.
+Não há expiração do formulário por 30 dias. Ausência, cadastro inválido/incompleto
+ou falha inicial mantém a origem orgânica e atendimento completo.
+
+Isso pertence à base determinística compartilhada pelos modos de atendimento.
+Não é autorização para a IA buscar nomes, dependentes, profissão, e-mail ou
+triagem de conversas encerradas. O contexto de IA começa novo; pode receber os
+dados importados e validados pela abertura FireAds desta mesma conversa.
+
+Reutilizar a inicialização controlada na etapa 4, o dependente vazio criado para
+a conversa quando aplicável e os caminhos 7/9→11 aprovados pela FireAds. O modelo
+recebe as coletas já resolvidas e a pergunta de profissão ainda pendente; não
+tratar a saudação do cliente como resposta dessa profissão. A IA não deve restaurar
+o mapa antigo de 28 transições nem introduzir outra importação paralela.
+
+Não pular e-mail por `cliente.email` global nem por uma consulta associada a
+outro atendimento. Ao preparar estado estruturado de IA, validar o retrato
+FireAds da conversa e sua referência/proveniência. Quando houver e-mail válido
+importado, inicializar `email_validado`, `email_coletado`, resultado e data a
+partir dessa evidência; `id_mensagem_fila_email` pode ser NULL, pois a origem
+é o formulário, referenciado pelo contexto FireAds. Não criar mensagem fictícia.
+Nas outras situações, a coleta começa pendente e segue a regra atual da unidade.
+
+Uma consulta atualizada no mesmo chat não modifica os dados de conversas antigas
+nem entregas pendentes. Funil/dashboard usam o retrato completo da entrega;
+quando ainda não preparado, os dados daquela conversa. Correção aceita durante
+o atendimento atual prevalece sobre o valor importado, com auditoria da IA quando
+ela estiver implementada.
+
+Ao introduzir os campos históricos próprios da IA (seção 19.4), definir leitura
+e atualização coerentes com esse retrato FireAds, sem duas fontes concorrentes.
+Só inicializar dados por evidência da mesma conversa; não preencher histórico
+faltante pelo cadastro global atual. Registros/entregas FireAds anteriores
+permanecem legíveis após a migração IA.
+
+O worker_funil não chama IA para entregar à FireAds: usa a observação integral
+do Funil como bloco identificado do atendimento e sua fila separada. Na célula
+do dashboard, preserva o conteúdo externo anterior e acrescenta o bloco abaixo,
+sem repetir o mesmo bloco em retry. Não exigir igualdade entre a célula inteira
+e o texto do Funil: a célula também guarda criativos e anotações preexistentes.
+O primeiro follow-up com IA permanece no
+desenho da seção 21, usando o chat existente e as cotas futuras.
+
+**Migração IA após FireAds:** validar/reutilizar tabelas e campos já presentes;
+não recriar chat, consulta, entrega ou configurações nem aplicar duas migrações
+concorrentes ao mesmo vínculo. Assinatura, cotas, chamadas ao provedor e demais
+estruturas exclusivas de IA continuam fora da aplicação FireAds.
+
+Atualizar comparativo, manual e orientação por etapas com a base efetivamente
+aplicada antes da implementação IA, preservando as regras da FireAds e os
+pontos de corte com/sem link. Não tratar decisões ainda planejadas como deploy concluído.
 
 <a id="personalidade-ia"></a>
 
@@ -2693,28 +3018,23 @@ aviso; repetir a etapa incrementa o contador, respeitando as exceções atuais d
 retry e follow-up. Uma nova conversa começa sem aviso registrado. A estrutura
 está descrita nas [mudanças de banco](#banco-ia).
 
-### 20.8. Boas-vindas e confirmação no retorno
+### 20.8. Abertura de cada nova conversa
 
-Em uma nova conversa com IA, aproveitar o nome conhecido do histórico daquela
-unidade quando não houver indício de troca de pessoa. Dar boas-vindas e perguntar
-para quem é o atendimento, sem perguntar novamente algo já informado na entrada.
-Após encerramento do atendimento anterior no segundo follow-up, o dependente
-conhecido pode ser uma opção, nunca uma escolha automática.
+Tratar cada nova conversa como um novo atendimento: apresentar a assistente e a
+unidade e perguntar o nome, mesmo com cadastro antigo. Não saudar pelo nome obtido
+do histórico nem mencionar que a pessoa já foi atendida. Não sugerir o dependente
+anterior ou perguntar se e-mail/profissão antigos continuam corretos.
 
-Confirmar profissão/e-mail no momento adequado. Se o cliente negar o dado,
-acolher a correção e pedir o atual, sem insistir na informação antiga. Não
-confundir nome disponível no cadastro global com memória confirmada da unidade.
-Se for outra pessoa usando o número, suspender a referência aos dados anteriores.
+Se o cliente já informar seu nome na mensagem nova, a IA pode aproveitá-lo depois
+de validar; o mesmo vale para destino e demais antecipações dessa conversa.
+Exemplo: "Olá, sou Ana e quero para meu filho" permite usar Ana e coletar a próxima
+pendência. Apenas "Olá", com nome no cadastro antigo, exige perguntar o nome.
 
-Se disser que o nome usado na saudação não é o dele, responder de forma simples:
-"Desculpe pela confusão. Como você se chama?". Não insistir no nome antigo nem
-apresentar dados do portador anterior enquanto a identidade estiver incerta.
-Negar o nome não confirma sozinho troca de pessoa; distinguir de erro cadastral
-antes de definir quais informações anteriores continuam utilizáveis.
-
-Exemplos e regras completas estão no
+Correções de informações desta conversa seguem o princípio do arrependimento.
+Retomada após silêncio na mesma conversa ativa preserva o contexto e os tratamentos
+existentes, sem nova apresentação ou coleta desnecessária. O determinístico puro
+mantém sua abertura atual na etapa 1. Ver o
 [comparativo dos modos](comparativo_atendimento_deterministico_e_ia.md).
-O determinístico puro mantém sua abertura atual na etapa 1.
 
 ### 20.9. Ajustes com testes, sem aprendizado automático descontrolado
 
@@ -2729,3 +3049,175 @@ Observar especialmente: clareza, tamanho, quebras de linha, repetição de pergu
 botões coerentes, preço recusado sem atrito, entendimento de correções e manutenção
 da etapa. Medir também custo e latência, para não ganhar estilo à custa de respostas
 mais lentas ou de uma expansão desnecessária do contexto.
+
+<a id="funil-followup-ia"></a>
+
+## 21. Contexto para o Funil e primeiro follow-up com IA
+
+Decisão de 05/10/2026. Complementa as regras de fluxo e de consumo; não implementa
+IA, muda o banco nem altera mensagens de produção nesta revisão documental.
+
+### 21.1. Campos apresentados nas observações do Funil
+
+O `worker_flow` usa a IA para propor o registro de fatos relevantes informados
+espontaneamente pelo cliente. Operações controladas validam o destinatário do
+dado e persistem o conteúdo. O `worker_funil` apenas lê os campos confirmados e
+usa o formatador da integração para montar estas linhas:
+
+| Campo apresentado | Origem proposta | Quando aparece |
+| --- | --- | --- |
+| `Parentesco:` | `dependente.parentesco` | Somente quando o atendimento é para dependente. |
+| `Doenças ou condições especiais:` | `conversa.condicoes_especiais_relatadas` | Para o titular ou dependente atendido. |
+| `Observação do atendimento:` | `conversa.observacao_atendimento` | Para o titular ou dependente atendido. |
+
+Para cada campo aplicável com valor `NULL`, exibir **`não informado`**, inclusive
+quando todos estiverem nulos. O banco mantém `NULL`; não persistir o texto de
+apresentação. Não usar o título "Observações da IA" nem ocultar os campos nulos.
+Exemplo de atendimento de dependente sem esses dados:
+
+```text
+Parentesco: não informado
+Doenças ou condições especiais: não informado
+Observação do atendimento: não informado
+```
+
+Não acrescentar perguntas obrigatórias para preencher esses campos. Registrar
+somente informação explícita e pertinente, preservando a distinção entre relato,
+suspeita e diagnóstico mencionado pelo próprio cliente; nunca inferir uma doença
+pelas respostas de triagem. "Não informado" não significa ausência de condição.
+Uma negativa explícita do cliente pode ser registrada como tal, sem convertê-la
+em comprovação clínica.
+
+Os campos da conversa se referem à pessoa atualmente atendida, identificada pelos
+vínculos e pela versão do participante já previstos. Não atribuir uma condição
+da mãe ao filho ou de um candidato ainda não escolhido ao dependente ativo. Se a
+atribuição ainda não estiver clara, conservar o relato no contexto auxiliar com
+sua origem até poder validá-lo; não preencher por suposição.
+
+Correções seguem as operações compartilhadas e mantêm proveniência/auditoria.
+Correção apenas do nome preserva os dados independentes. Na troca de pessoa,
+invalidar informações da anterior e reavaliar a observação antes de reutilizá-la;
+não herdar condições ou parentesco do dependente substituído. Uma nova conversa
+começa com esses campos nulos, sem importar dados de atendimentos encerrados.
+
+Não há chamada ou consumo de IA na montagem do Funil. Preservar as linhas atuais,
+inclusive turno, elegibilidade por rota, triagem válida e recibos contra reenvio.
+O determinístico puro não ganha perguntas novas: os campos não coletados ficam
+nulos e são apresentados como "não informado" quando aplicáveis.
+
+### 21.2. Personalização restrita ao primeiro follow-up
+
+O primeiro lembrete mantém o propósito de convidar à retomada. A IA pode adaptar
+a mensagem padrão à pendência e ao contexto da conversa ativa, quando isso
+ajudar; uma conversa simples pode continuar com o texto pronto. Dúvidas abertas,
+antecipações e correções são contexto possível, não obrigação de personalizar.
+
+O **segundo follow-up é sempre determinístico, sem consulta à IA**, e executa o
+encerramento pelos mecanismos atuais de envio e persistência. A IA não decide
+adiá-lo, trocar sua finalidade, criar um terceiro lembrete ou reabrir a conversa.
+Falha de envio continua sujeita à recuperação existente; gerar um texto não
+equivale a concluir o encerramento.
+
+No primeiro lembrete, a IA propõe somente a redação. Não corrige cadastro, muda
+etapa, conclui triagem, incrementa turnos sem avanço nem executa operações de
+navegação. O lembrete pode convidar a retomar a pergunta realmente pendente; não
+simula uma nova resposta do cliente nem resolve uma coleta por ele. Preservar o
+tom e as restrições comerciais, sem criar promessas, urgência ou fatos, e evitar
+expor condições de saúde em uma mensagem proativa.
+
+Preservar os dois intervalos de sete horas, a janela Meta, as verificações de
+unidade/conversa/bloqueio e a elegibilidade: 1–17 nas duas rotas e 18 somente sem
+link. O recurso não reativa IA depois do repasse na 19/20, em satisfação ou numa
+conversa encerrada. Básico, IA desativada, cota esgotada, falha ou saída inválida
+usam o primeiro lembrete determinístico, desde que ele continue elegível.
+
+A integração do primeiro follow-up respeita o limite total de 90 segundos para
+IA e a posse/versionamento da conversa. Não manter transação ou lock de linha
+aberto durante a chamada. Revalidar a elegibilidade, a mensagem-âncora e a posse
+após a geração e antes do envio: se o cliente respondeu, houve mudança de estado
+ou perda da posse, descartar o lembrete obsoleto, sem mandar fallback nesse caso.
+Não presumir que o follow-up possui um item da fila do `worker_flow`.
+
+### 21.3. Consumo do primeiro follow-up e responsabilidades dos workers
+
+Usar a mesma integração de IA e serviços de domínio, com tarefas distintas
+`atendimento` e `primeiro_followup`; não copiar o chatbot nem manter integrações
+quase idênticas. O serviço compartilhado de admissão/consumo é chamado por ambos
+os workers e aplica plano, ativação, cotas, fuso, unicidade e contabilização.
+
+Antes de uma chamada elegível do primeiro follow-up:
+
+1. Resolver o chat da conversa e o mês vigente no fuso da unidade, usando o
+   intervalo `[primeiro dia do mês às 00h, primeiro dia do próximo às 00h)`.
+2. Obter/criar `uso_ia_unidade` e depois `uso_ia_chat` daquele mês, com a FK correta,
+   reutilizando registros existentes. Não vincular automaticamente ao mês de
+   abertura da conversa ou ao mês da mensagem que iniciou a espera.
+3. Aplicar as mesmas cotas: unidade e chat no Plus; chat no Pro. Se a admissão
+   não for permitida, usar o primeiro lembrete pronto, sem chamar IA.
+4. Registrar cada uso conhecido uma única vez por requisição e incrementar
+   `uso_ia_chat.qtd_usada` atomicamente, sem esperar sucesso de envio à Meta.
+   Contabilizar também quando a IA recomendar o texto padrão, sua resposta for
+   descartada ou houver fallback depois de consumo conhecido.
+
+Exemplo: a conversa começou em outubro e o primeiro follow-up é admitido em
+novembro. Os tokens pertencem ao `id_uso_chat` de novembro. Se uma requisição
+iniciada em outubro terminar após a meia-noite, permanece no período de admissão,
+como definido na seção 18.7; não contabilizar a mesma chamada nos dois meses.
+
+O `worker_consumo_ia_unidade` continua somente somando os usos dos chats a cada
+cinco minutos. Essa soma passa a incluir atendimento e primeiro follow-up, sem
+contadores mensais separados por worker nem incremento direto no total da unidade.
+As tolerâncias de excesso e consumo desconhecido já aprovadas continuam valendo.
+O segundo follow-up e a formatação do Funil não consomem IA.
+
+Identificar a origem de cada requisição. No atendimento, preservar o vínculo à
+decisão do turno. No follow-up, usar a conversa, a mensagem-âncora e o número do
+lembrete como identidade lógica, com tentativas próprias; nunca criar uma entrada
+fictícia do cliente. O contrato de persistência deve permitir recuperar a decisão
+e a mensagem já produzidas, registrar o uso uma vez e respeitar os recibos atuais
+de envio. A modelagem final das FKs/constraints dessa origem será detalhada junto
+ao SQL do piloto; o vínculo exclusivo a um turno recebido não serve ao follow-up.
+
+### 21.4. Organização aprovada dos três TXT
+
+Manter os três arquivos. Não misturar regras de tarefas sem identificar o escopo
+nem duplicar toda a personalidade. A organização aprovada e inserida nos três TXT,
+preservando seu conteúdo anterior, é **regras comuns + duas seções por tarefa**:
+
+1. **Durante o atendimento** — `worker_flow`.
+2. **Durante o primeiro followup** — primeiro lembrete do `worker_followup`.
+
+As orientações comuns ficam antes dessas seções. Manter os oito tópicos originais
+do manual, as 24 etapas e a operação de correção de e-mail já descrita; o conteúdo
+detalhado continua sendo elaborado com o responsável pelo projeto. Materiais de
+conhecimento ficam em `materiais_supera/`, separados das instruções e operações.
+
+| Arquivo | Parte comum | Atendimento (`worker_flow`) | Primeiro follow-up (`worker_followup`) |
+| --- | --- | --- | --- |
+| Manual de atendimento | Conhecimento Supera, personalidade, formatação, privacidade e restrições comerciais. | Objetivo/fluxo, antecipação, arrependimento, dúvidas e registro fiel dos campos destinados ao Funil. | Objetivo de retomada, quando adaptar o texto, tom e limites; segundo lembrete fora da IA. |
+| Orientação por etapas | Catálogo e significado das etapas atuais. | Os cinco tópicos já previstos para cada etapa, incluindo pendências e efeitos das correções. | Uma seção geral de retomada e notas por etapa somente quando necessárias; ler a pendência, sem repetir as 24 descrições ou navegar. |
+| Catálogo de operações | Convenções dos contratos e escopo de acesso. | Operações de leitura/escrita/navegação autorizadas, incluindo registro/correção dos fatos para o Funil. | Contrato de saída textual para manter/adaptar o primeiro lembrete; sem operações de escrita no cadastro ou navegação. |
+
+O sistema informa a tarefa da chamada, monta previamente o contexto necessário
+da conversa ativa e envia apenas as instruções/contratos aplicáveis. O acesso a
+operações é filtrado e validado no código, não apenas proibido por uma frase no
+manual. A contabilização dos tokens e a montagem do Funil são responsabilidades
+do sistema, não operações que o modelo precisa decidir executar.
+
+As duas seções já constam dos esqueletos; o conteúdo dos três TXT
+ainda será elaborado com o responsável pelo projeto. Não tratá-los como
+contratos finais ou automaticamente carregados em produção.
+
+### 21.5. Verificações adicionais do piloto
+
+- Funil de titular omite parentesco; de dependente o inclui. Condições e observação
+  aparecem em ambos; cada campo aplicável nulo mostra "não informado".
+- Dados voluntários mantêm pessoa e origem corretas, sem inferência de diagnóstico;
+  correção do nome preserva contexto e troca de pessoa não herda informações antigas.
+- Primeiro follow-up pode manter o padrão ou adaptar a retomada, sem operações de
+  cadastro/navegação; segundo encerra de forma determinística sem chamada à IA.
+- Básico, limites, flag desligada e falha do provedor preservam o lembrete pronto.
+- Nova mensagem durante a geração impede envio de um lembrete que perdeu a
+  elegibilidade; consumo conhecido permanece registrado mesmo sem envio.
+- Virada mensal, chamadas concorrentes e retry reutilizam os usos corretos,
+  sem duplicar consumo; agregado da unidade inclui ambas as origens.

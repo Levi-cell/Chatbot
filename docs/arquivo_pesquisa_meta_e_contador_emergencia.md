@@ -2,7 +2,7 @@
 
 Arquivado em 29/09/2026 a pedido do usuário. Preserva integralmente o plano anterior, incluindo contador local, faturas, permissões, fusos e atualização do PyWa. É referência histórica, não o plano vigente nem autorização para implementar essas alternativas.
 
-O fluxo vigente está em [proposta_controle_mensagens_meta.md](proposta_controle_mensagens_meta.md).
+O fluxo implementado está documentado em [consumo mensal Meta](../deploy/consumo_mensal_meta.md).
 
 ---
 

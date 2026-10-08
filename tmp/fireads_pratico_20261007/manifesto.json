@@ -1,0 +1,278 @@
+[
+  {
+    "passo": 1,
+    "arquivo": "core/integrations/fireads/__init__.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "89630ee8e4e225cfbfcecae927fe97163c71517b482a807f0661ff774952586e"
+  },
+  {
+    "passo": 2,
+    "arquivo": "core/integrations/fireads/cliente.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "70f0cdd652cf30f306c8b1aab469622eb9c3c46891c97ee5ca07d2a466dc4358"
+  },
+  {
+    "passo": 3,
+    "arquivo": "core/integrations/fireads/contrato.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "f5d8e46e1786b5586bd1e3f69d4385f4b9c9682a44cd7449577552920aadef9b"
+  },
+  {
+    "passo": 4,
+    "arquivo": "core/repositories/fireads/__init__.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "abdeed536b056e35657b33e7308c10b72a610b624b09277d8a7e4172b696be37"
+  },
+  {
+    "passo": 5,
+    "arquivo": "core/repositories/fireads/consulta.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "987abe976dc7efd95181f70c448f45b7030b44de12b552c70690945738952dbf"
+  },
+  {
+    "passo": 6,
+    "arquivo": "core/repositories/fireads/envios.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "60baff6d4e6e99a9f261bba571f616ff233bb00e34b41a1d1bf87574f9439654"
+  },
+  {
+    "passo": 7,
+    "arquivo": "workers/worker_flow/fireads.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "88b0e4469929569c497e7a92d9038ba4a13c1baa73ed5b300c988dc334d4b973"
+  },
+  {
+    "passo": 8,
+    "arquivo": "core/repositories/atendimento/conversas.py",
+    "sha256_base": "55c17b2306f1f2d02b2dc1170bc6409aac12f289d311c2b8763b2d33c2e7da8a",
+    "sha256_codigo": "e6576eaa98d309f0e16f65c4b1c4f03939c24c8443865df9c95737cbbb13bcb1"
+  },
+  {
+    "passo": 9,
+    "arquivo": "core/repositories/fluxo/contextos/etapa1.py",
+    "sha256_base": "83e2336fdcb3ee585855de25a85970416767d0de611c9e12721da417e39ccf00",
+    "sha256_codigo": "e0804ed3d2684beda139368617006ecdb5ebfb5b112bd294ced11861b2699353"
+  },
+  {
+    "passo": 10,
+    "arquivo": "core/repositories/fluxo/contextos/etapa10.py",
+    "sha256_base": "c7698e77f197f01a09a361f52ed7f3815cd4cff5c2ac032e639de52655415dca",
+    "sha256_codigo": "67c0cb051836ee986989e4599282de134503e1228d0ac4458bb2203e27ddd16d"
+  },
+  {
+    "passo": 11,
+    "arquivo": "core/repositories/fluxo/contextos/etapa18.py",
+    "sha256_base": "f053b8c689f85d7217b01f9ebd946ee378b865bbaa87a52956c626f5ca67846b",
+    "sha256_codigo": "999a642b7be790ff73109bcac4db9aa459830150b4426b1a5b99416fa15f95fb"
+  },
+  {
+    "passo": 12,
+    "arquivo": "core/repositories/fluxo/contextos/etapa20.py",
+    "sha256_base": "b5f9ef04e48b6ebeefa08d08ab5b2db2465d3cb1021c1c734d015976aac986a8",
+    "sha256_codigo": "c7500b48b956ac251fbeaeb89d5e14b1eb2b9b34048ac6744aca0046ea7b5b67"
+  },
+  {
+    "passo": 13,
+    "arquivo": "core/repositories/fluxo/contextos/etapa6.py",
+    "sha256_base": "ee9dbe1caea4bfe6713c240e0d5151a88dc93076dd7d2c272b63d67bd6626ae1",
+    "sha256_codigo": "2db8f395a8a34370fb85a426881ecb4a4883eed275a316704c070ad598dff6b0"
+  },
+  {
+    "passo": 14,
+    "arquivo": "core/repositories/fluxo/contextos/etapa7.py",
+    "sha256_base": "031e4a2bcb91569dc652344a2c4f45df6c3ad06ae7f4e762147dcf6a9de214b5",
+    "sha256_codigo": "be144fe54ec0996873910db8e41610e230d008f407375f01af8a43746a712c3f"
+  },
+  {
+    "passo": 15,
+    "arquivo": "core/repositories/fluxo/contextos/etapa9.py",
+    "sha256_base": "de6eb71ede05833ebbeabb363056576392a7c4f5e030d59fbc571ae9f0ea64e9",
+    "sha256_codigo": "42efd0bb40c5b73530a2f1cf54f60a8fec9f724229113d416583edd55f6d94dc"
+  },
+  {
+    "passo": 16,
+    "arquivo": "core/integrations/whatsapp/messages/etapa4_messages.py",
+    "sha256_base": "6bae2ef71f98e4468e57e9df2285bdd6d4bb3939208c612cd4bcaabf903ff609",
+    "sha256_codigo": "09870cd92a62ab97e32842572b175b7ffbf884e621e94b67ebe52d2844232332"
+  },
+  {
+    "passo": 17,
+    "arquivo": "core/integrations/whatsapp/pywa_functions/pywa_senders/etapa4.py",
+    "sha256_base": "492e0cb798aad311cf2dd08e633683b57a1c4e42e4ce81b8b594ef7a9aa04945",
+    "sha256_codigo": "cad5c46489cc11556a18ffd6ecbae1dbda6e9825aae9bc5469e86bbd7a959c84"
+  },
+  {
+    "passo": 18,
+    "arquivo": "workers/worker_flow/response_flow/etapas/resolver_etapa7.py",
+    "sha256_base": "54b7f664060eb255aaf424885f58a45bb1ef1325d7e651c2bb705e527ca4dc32",
+    "sha256_codigo": "75430b1d6645df0cd7d2b7158d9bfef05b97e47c866bbf7c45fc41b4336e8f8a"
+  },
+  {
+    "passo": 19,
+    "arquivo": "workers/worker_flow/response_flow/etapas/resolver_etapa9.py",
+    "sha256_base": "8f13a2fa58341b015c54dd2587ee810f1cd7cba4061b45a910608f72d872b1a1",
+    "sha256_codigo": "d2b61df06540cd4a2aaf712d05062e8e82e826b15b08c2026cdd3a68f8c16279"
+  },
+  {
+    "passo": 20,
+    "arquivo": "workers/worker_flow/response_flow/flow_sender.py",
+    "sha256_base": "f9e5d0a9658a4f0d101c8f7862764cb38fc8bbcb068f73291f8cc2bc52920a70",
+    "sha256_codigo": "a3db4dd4898306fce37925db1389e2737f3f4e4bc3bc60a2f16944cb2d2e77e6"
+  },
+  {
+    "passo": 21,
+    "arquivo": "workers/worker_flow/response_flow/flow_worker.py",
+    "sha256_base": "95dc04cf2db276908dcfd18360ece508fda117bc1411f393d0b74f2eead8f55c",
+    "sha256_codigo": "d2ffff06d8ac57177378c32540aa769294cd80ab4068ec02dd2cb23fcd723ffe"
+  },
+  {
+    "passo": 22,
+    "arquivo": "workers/worker_flow/transacoes/efeitos_transicao.py",
+    "sha256_base": "543967d40b6c28f0d339f77fabc9a22fd9889d52e64ca1491df21ad29ee4d0cc",
+    "sha256_codigo": "7400c8a204aac738c21acf3c8d825819afda3aa7fe741e5343a1e6c3cedffe1a"
+  },
+  {
+    "passo": 23,
+    "arquivo": "workers/worker_flow/transacoes/movimento_conversa.py",
+    "sha256_base": "79a7911127900cfd3f915656255b84d127e9f26acd90a7d22960b974ab89f8fc",
+    "sha256_codigo": "e81f61c2ed4cdf31baaf483fb70acc19b800ae2664b050f14f2c112d110166fb"
+  },
+  {
+    "passo": 24,
+    "arquivo": "workers/worker_flow/transacoes/persistencia_resposta.py",
+    "sha256_base": "a7b3c45e63552c3818db59e15f52a91ce463746313af5208e43beabeda076211",
+    "sha256_codigo": "3db8ec95601a0f6055460a197ebae6feee27aa178516c3a2b17a62d077cabbe3"
+  },
+  {
+    "passo": 25,
+    "arquivo": "workers/worker_flow/valida_historico.py",
+    "sha256_base": "1d728fbc04658fe22431f086c72796af8b43769b9cd2d116c340a14554d68644",
+    "sha256_codigo": "059275d2737f28014a013c5644540033815d6baaaa3c4f0dd8a374e060aadb83"
+  },
+  {
+    "passo": 26,
+    "arquivo": "core/repositories/funil/envios.py",
+    "sha256_base": "b1acb4ddb40d5ea7576bc644dac3b6dbc4229f3791809caf04df63c80fdc577a",
+    "sha256_codigo": "343749a244c958ec65a76981be1e4c379634c7656d51b1f5e80c5f4d0d36886f"
+  },
+  {
+    "passo": 27,
+    "arquivo": "core/repositories/funil/leads.py",
+    "sha256_base": "88a9d01acbaa1aa54c8efa120b7f72fd35b2c35c6bb4ac13939b5831772ca0aa",
+    "sha256_codigo": "aac0f5ac7f866641dd868c78e143784cfb81378a1bab3cbfb129ce9421140af9"
+  },
+  {
+    "passo": 28,
+    "arquivo": "core/integrations/funil/oportunidades.py",
+    "sha256_base": "d120b7cd421c82aa23f3f721f0c832e448662100395360bc5f07401279547724",
+    "sha256_codigo": "a806f89cf4876fe277c691ad53894152239d45202f6dec049332597ecc3ab2b9"
+  },
+  {
+    "passo": 29,
+    "arquivo": "workers/worker_funil/fireads.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "ba56dcba4a5c69be04916ae7d27df87d31a255b37b05c0f69e0ff4fb2783f2cf"
+  },
+  {
+    "passo": 30,
+    "arquivo": "workers/worker_funil/funil_worker.py",
+    "sha256_base": "192a41a3ab0e00e8630db4afda5be9470f5a3de7ba5e069d335271b14899c486",
+    "sha256_codigo": "4f0fe1e22ca22fb3275b61522299f310e9fafd1b1e45d7f66656def98183e210"
+  },
+  {
+    "passo": 31,
+    "arquivo": "workers/worker_funil/processamento.py",
+    "sha256_base": "593ed6cc2bf3416606c4d50030b0773a454973383c9201aa69f7b64163bf31ed",
+    "sha256_codigo": "cedf5223746ee5d7c73528baf67459aab3556171319fb5fbeb5a7c2eed451e1a"
+  },
+  {
+    "passo": 32,
+    "arquivo": "core/repositories/atendimento/followup.py",
+    "sha256_base": "33553952ab49a854f219a374060cae4ad59963090ce1192ebe00d0d21b76a0d6",
+    "sha256_codigo": "e19bd07bedd2f39a1dfc32b1b340004cdd31212a84ea757ed69bbc3f979c77b5"
+  },
+  {
+    "passo": 33,
+    "arquivo": "core/repositories/monitoramento/painel.py",
+    "sha256_base": "8fa8bc07a36b887a7918e5598d58dad177ab86da2d7168d21e376a024797e157",
+    "sha256_codigo": "2594f9604781fa9b18a927b0d7333134a5cf3c1166828cd8d07969ac8f955bee"
+  },
+  {
+    "passo": 34,
+    "arquivo": "utilitarios/reports_functions/total.py",
+    "sha256_base": "780377a8813fcc559abba6e5c71976e54cee6c4ea56145211e5038b2084f24cd",
+    "sha256_codigo": "70511b2e7fb0d4f617b1386c336122677d58fbdf2b6355d1acd6368fe9affeca"
+  },
+  {
+    "passo": 35,
+    "arquivo": "utilitarios/reports_functions/weekly.py",
+    "sha256_base": "29a36d4d573a1addc688cf80deb0f28626eead6b404cc7478008f14d40e5969d",
+    "sha256_codigo": "0cb00d1c8a6a81a06c55c08e2b620ce66707307eb3f7940ac0867c58ccb6bca4"
+  },
+  {
+    "passo": 36,
+    "arquivo": "callback/webhook/models.py",
+    "sha256_base": "e19238f9718578f98adc31f27347841dd12f0cc6e218de723c85b498440f3823",
+    "sha256_codigo": "21e2421b610501c0f31fe84c8b63fb910c1c7489c3fe7b345b7b90f595a086db"
+  },
+  {
+    "passo": 37,
+    "arquivo": "callback/webhook/admin.py",
+    "sha256_base": "2d966fd97ad029c43d8d85fcbce55c8873da9678f8c8951e9c022eee782c02a0",
+    "sha256_codigo": "a62bbde667472a6db9e24d80826dc0a69fcbfc471f3b156cd0f2878d8ba27a9e"
+  },
+  {
+    "passo": 38,
+    "arquivo": "core/database/deploy_database/etapa_transicao_script.py",
+    "sha256_base": "94f832d8a783fc51c5e5226261e742fcae82bf9888c348e4009132c6de7b0537",
+    "sha256_codigo": "9806e3cec4dd5fe7eca99525c26052b6543dafa69c0962b0635099cef8a4ef99"
+  },
+  {
+    "passo": 39,
+    "arquivo": "core/database/deploy_database/fireads_script.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "7310c568f19b159b34a7acf83a6aa9e12686b60d31472e717e0d2ea563f4c278"
+  },
+  {
+    "passo": 40,
+    "arquivo": "core/database/deploy_database/setup_database.py",
+    "sha256_base": "0117837d161d0a3aedf55a676f4deb88a633710309f68f4eb80933f1bd8f2bde",
+    "sha256_codigo": "c890888ceccf398275c07197193d1ccd87388d0f1a4803a06ec7d0fe7be713d0"
+  },
+  {
+    "passo": 41,
+    "arquivo": "tests/unit/test_fireads.py",
+    "sha256_base": "novo",
+    "sha256_codigo": "1b13ef6ed1fca95434213b53ad885b2aaa8d0b6a9bfefedee83bc9e7747c4e62"
+  },
+  {
+    "passo": 42,
+    "arquivo": "tests/unit/test_fluxo_reserva_link.py",
+    "sha256_base": "a57c0e2fcb6759494a55f20bc232f8cc5c3af456dc2ae124c72aba1497d27c89",
+    "sha256_codigo": "d37175fa802d2c8c84211742bf6e1f49822c6842c671691659314f6ac781f7c8"
+  },
+  {
+    "passo": 43,
+    "arquivo": "tests/unit/test_monitoramento_unidade.py",
+    "sha256_base": "3c5be6dd379a93bfd398609e0739e71d0b069d3908e74afbfeb2944491b1057c",
+    "sha256_codigo": "4fbae93a0921594bb877e1442bd1a661b43f9154b4889c872112ebeaacdbe376"
+  },
+  {
+    "passo": 44,
+    "arquivo": "tests/unit/test_suporte_por_idade.py",
+    "sha256_base": "3eafd78ec116cea8804a4737cee08ee2e76d899eb85fd0c1a2c2bde087aa19d0",
+    "sha256_codigo": "e77c69cc654c3ce575413d0e6ee7a06c614ff8e6503d1f6ceeeeba2230c1f2ee"
+  },
+  {
+    "passo": 45,
+    "arquivo": "tests/unit/test_worker_flow_runtime.py",
+    "sha256_base": "98f12dc0f1226c0f558eccaa0f6f7f541eb97147d1b1d72f2d97cac34392060f",
+    "sha256_codigo": "03821bb5769d4164932b23a83636f00e246591ef1622d3ffd65222cf3f56b721"
+  },
+  {
+    "passo": 46,
+    "arquivo": "deploy/migrations/20261007_fireads_chat_customizacao.sql",
+    "sha256_base": "novo",
+    "sha256_codigo": "7380877b75e5c685dc9ccccfe8a4328f5812b4e6027cbefd642296f64633268a"
+  }
+]

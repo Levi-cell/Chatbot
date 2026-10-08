@@ -1,0 +1,50 @@
+import logging
+
+import psycopg
+
+from core.config_env import env_int, env_optional, env_required
+
+logger = logging.getLogger("db.connection")
+
+setup = {
+    "host": env_required("DB_HOST"),
+    "dbname": env_required("DB_NAME"),
+    "user": env_required("DB_USER"),
+    "password": env_required("DB_PASSWORD"),
+    "port": env_int("DB_PORT", 5432),
+}
+
+_db_sslmode = env_optional("DB_SSLMODE")
+_db_sslrootcert = env_optional("DB_SSLROOTCERT")
+
+if _db_sslmode:
+    setup["sslmode"] = _db_sslmode
+
+if _db_sslrootcert:
+    setup["sslrootcert"] = _db_sslrootcert
+
+
+def get_conn(application_name=None, *, connect_timeout=None):
+    connect_kwargs = dict(setup)
+
+    if application_name:
+        connect_kwargs["application_name"] = application_name
+
+    if connect_timeout is not None:
+        if type(connect_timeout) is not int or connect_timeout <= 0:
+            raise ValueError("connect_timeout deve ser inteiro positivo")
+        connect_kwargs["connect_timeout"] = connect_timeout
+
+    conn = psycopg.connect(**connect_kwargs)
+    logger.debug(
+        "banco_conexao_aberta | acao=connect host=%s database=%s user=%s application_name=%s",
+        setup["host"],
+        setup["dbname"],
+        setup["user"],
+        application_name,
+    )
+    return conn
+
+
+# conn.close automaticamente fecha qualquer cursor associado a ela.
+# Se fizer conn.close, nao precisa fazer cursor.close.

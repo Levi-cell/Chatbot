@@ -126,6 +126,10 @@ Commit: `1c2a1ae349fe2c0d28ba5b632a8b71072945d4ae`
 
 Commit: `afa9c14ae030277210897e479a906f2b52c47a58`
 
+### V1.9.2 — Cortesia e mensagens menos repetitivas
+
+Commit: `395d1eb0321507cdc67d92e93b4ebe530bd57915`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

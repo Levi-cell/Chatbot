@@ -1,0 +1,37 @@
+[Unit]
+Description=Chatbot - webhook Django via Gunicorn
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=chatbot
+Group=chatbot
+WorkingDirectory=/opt/chatbot/app
+EnvironmentFile=/etc/chatbot/chatbot.env
+Environment=PYTHONPATH=/opt/chatbot/app
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/chatbot/venv/bin/gunicorn --no-control-socket --chdir /opt/chatbot/app/callback --bind 127.0.0.1:8000 --workers 2 --threads 2 --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - callback.wsgi:application
+Restart=always
+RestartSec=5s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=chatbot-webhook
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+RestrictSUIDSGID=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

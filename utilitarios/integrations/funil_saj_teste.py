@@ -186,6 +186,13 @@ def criar_parser():
 
 
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+
+    # Executar pelo Run da IDE, sem parâmetros, envia o lead de teste ao CRM.
+    if not argv:
+        argv = ["send-test", "--confirm-real-send"]
+
     parser = criar_parser()
     args = parser.parse_args(argv)
 

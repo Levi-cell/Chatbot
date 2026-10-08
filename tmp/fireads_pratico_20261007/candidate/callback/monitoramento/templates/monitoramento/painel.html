@@ -1,0 +1,183 @@
+{% load static %}
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#1c321d">
+  <meta name="referrer" content="same-origin">
+  <title>Monitoramento · ESL Tech</title>
+  <link rel="stylesheet" href="{% static 'monitoramento/css/painel.css' %}?v=20260926-comercial-tabela">
+  <link rel="stylesheet" href="{% static 'monitoramento/css/consumo.css' %}?v=20260929-consumo-explicado">
+  <script src="{% static 'monitoramento/js/consumo.js' %}?v=20260929-consumo-explicado" defer></script>
+  <script src="{% static 'monitoramento/js/painel.js' %}?v=20261003-reserva-turno" defer></script>
+</head>
+<body data-url-conversas="{% url 'monitoramento:dados_conversas' %}"
+      data-url-mensagens="{% url 'monitoramento:dados_conversas' %}"
+      data-url-relatorio="{% url 'monitoramento:dados_relatorio' %}"
+      data-url-faixa-etaria="{% url 'monitoramento:dados_faixa_etaria' %}"
+      data-url-csv="{% url 'monitoramento:contatos_csv' %}"
+      data-url-consumo="{% url 'monitoramento:dados_consumo' %}"
+      data-url-consumo-pdf="{% url 'monitoramento:consumo_pdf' %}"
+      data-url-login="{% url 'monitoramento:login' %}">
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <header class="cabecalho-app">
+    <div class="marca-app">
+      <img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt="ESL Tech" width="116" height="48">
+      <span class="divisor" aria-hidden="true"></span>
+      <div><strong>Monitoramento</strong><span id="nomeUnidade">{{ nome_unidade }}</span></div>
+    </div>
+    <nav class="seletor-secao" aria-label="Seções do monitoramento">
+      <button type="button" class="ativo" data-secao="conversas" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 3V5Z"/></svg>Conversas
+      </button>
+      <button type="button" data-secao="relatorios" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10m7 10V4m7 16v-7"/></svg>Relatórios
+      </button>
+      <button type="button" data-secao="consumo" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16M6 14V9m6 5V4m6 10v-3"/></svg>Consumo
+      </button>
+    </nav>
+    <div class="acoes-cabecalho">
+      <span class="estado-atualizacao" id="estadoAtualizacao" role="status"><i></i>Atualizado agora</span>
+      <form method="post" action="{% url 'monitoramento:sair' %}">{% csrf_token %}<button type="submit" class="botao-sair" aria-label="Sair da conta">Sair</button></form>
+    </div>
+  </header>
+
+  <div class="faixa-consulta" role="note">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8v.1"/></svg>
+    <p><strong>Ambiente somente para monitoramento.</strong> Nenhuma mensagem pode ser enviada por aqui. Para falar com um contato, use o número comercial da unidade.</p>
+  </div>
+
+  <main id="conteudo">
+    <section id="secaoConversas" class="secao-painel" aria-labelledby="tituloConversas">
+      <header class="barra-contexto">
+        <div><h1 id="tituloConversas">Conversas</h1><p id="periodoConversas">Carregando período…</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div class="app-conversas">
+        <aside class="lista-conversas" aria-label="Lista de conversas">
+          <div class="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4 4"/></svg><input id="buscaConversas" type="search" placeholder="Pesquisar contato" aria-label="Pesquisar contato"></div>
+          <div id="grupoFiltros" class="grupo-filtros">
+          <nav class="filtros-conversas" aria-label="Filtrar conversas">
+            <button type="button" class="ativo" data-filtro="todas">Todas</button>
+            <button type="button" data-filtro="comercial">Comercial</button>
+            <button type="button" data-filtro="followup">Follow-up</button>
+            <button type="button" data-filtro="funil">Funil</button>
+            <button type="button" data-filtro="avaliadas">Avaliadas</button>
+          </nav>
+          <button id="informacaoFiltros" class="informacao-filtros" type="button" aria-label="Entenda os filtros" aria-expanded="false" aria-controls="legendaFiltros">i</button>
+          <div id="legendaFiltros" class="legenda-filtros" hidden>
+            <strong>Entenda os filtros</strong>
+            <dl>
+              <dt>Todas</dt><dd>Chats com mensagens do cliente no período.</dd>
+              <dt>Comercial</dt><dd>A última conversa encerrou por idade e merece análise. Nem todos receberam o contato comercial.</dd>
+              <dt>Follow-up</dt><dd>A última conversa está no primeiro ou segundo follow-up. O segundo encerra o atendimento.</dd>
+              <dt>Funil</dt><dd>Envio ao funil confirmado no período. Não confirma agendamento ou venda.</dd>
+              <dt>Avaliadas</dt><dd>Nota de satisfação registrada no período.</dd>
+            </dl>
+          </div>
+          </div>
+          <div id="listaConversas" class="rolagem-lista" aria-live="polite"><div class="estado-vazio carregando">Carregando conversas…</div></div>
+        </aside>
+        <section class="janela-chat" aria-label="Histórico da conversa">
+          <header class="topo-chat" id="topoChat" hidden>
+            <button type="button" id="voltarConversas" class="voltar" aria-label="Voltar para a lista">‹</button>
+            <div class="avatar" id="avatarContato"></div>
+            <div class="identidade-contato"><h2 id="nomeContato"></h2><p id="detalhesContato"></p><div id="tagsContato" class="tags-contato"></div></div>
+            <button type="button" id="alternarDetalhes" class="detalhes-botao" aria-expanded="false">Detalhes</button>
+          </header>
+          <div class="painel-detalhes" id="painelDetalhes" hidden></div>
+          <div class="mensagens" id="mensagensChat">
+            <div class="marca-dagua" aria-hidden="true"><img src="{% static 'monitoramento/img/esl-tech.svg' %}" alt=""></div>
+            <div class="boas-vindas"><span>ESL Tech</span><h2>Acompanhe cada atendimento.</h2><p>Selecione um contato para visualizar toda a conversa consolidada.</p></div>
+          </div>
+          <button id="irFinal" type="button" class="ir-final" aria-label="Ir para a mensagem mais recente" hidden>↓</button>
+          <footer class="rodape-chat">Conteúdo privado da unidade · consulta somente leitura</footer>
+        </section>
+      </div>
+    </section>
+
+    <section id="secaoRelatorios" class="secao-painel secao-relatorios" aria-labelledby="tituloRelatorios" hidden>
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">INTELIGÊNCIA COMERCIAL</p><h1 id="tituloRelatorios">Relatórios</h1><p id="periodoRelatorios">Selecione um período para interpretar os resultados.</p></div>
+        <label class="seletor-periodo">Período
+          <select data-periodo>
+            {% for chave, rotulo in periodos %}<option value="{{ chave }}">{{ rotulo }}</option>{% endfor %}
+          </select>
+        </label>
+      </header>
+      <div id="conteudoRelatorio" class="conteudo-relatorio"><div class="cartao carregando-relatorio">Preparando os indicadores…</div></div>
+    </section>
+    <section id="secaoConsumo" class="secao-painel secao-consumo" aria-labelledby="tituloConsumo" hidden>
+      <header class="barra-contexto">
+        <div><p class="sobrelinha">MENSAGENS E COBERTURA</p><h1 id="tituloConsumo">Consumo</h1><p>Entenda o uso das mensagens e o que está incluído para sua unidade.</p></div>
+        <label class="seletor-periodo" for="mesConsumo">Mês de referência
+          <select id="mesConsumo" disabled><option value="">Carregando meses…</option></select>
+        </label>
+      </header>
+      <div id="avisoConsumo" class="consumo-aviso" role="status" hidden></div>
+      <div id="conteudoConsumo" aria-busy="false"><div class="cartao consumo-vazio">Preparando o consumo mensal…</div></div>
+      <details class="cartao consumo-ajuda" id="ajudaConsumo">
+        <summary>Como funcionam a gratuidade e a cobertura?</summary>
+        <div class="consumo-explicacoes">
+          <div>
+            <h2>72 horas de mensagens gratuitas</h2>
+            <p>Quando o cliente chega por um <strong>anúncio da Meta, como no Facebook ou Instagram, com botão para conversar no WhatsApp</strong>, pode abrir um período de mensagens gratuitas. Um anúncio em outra plataforma não dá esse benefício só por ter um link para o WhatsApp.</p>
+            <p>Segundo a documentação da Meta, esse período dura <strong>72 horas a partir da primeira resposta do chatbot</strong> à mensagem que veio do anúncio. O chatbot precisa responder em até 24 horas após o cliente enviar essa mensagem.</p>
+            <p>Também pode valer para o botão de WhatsApp de uma página do Facebook. O cliente precisa chegar pelo aplicativo no celular, e a Meta deve reconhecer essa origem. As mensagens gratuitas desse período não gastam a reserva mensal.</p>
+          </div>
+          <div>
+            <h2>1.000 mensagens gratuitas de reserva</h2>
+            <p>A cada mês, a Meta oferece uma reserva de <strong>1.000 respostas comuns do chatbot por número de WhatsApp</strong>, compartilhada entre todos os clientes da unidade. Ela é usada quando:</p>
+            <ul>
+              <li>O cliente chega sem o período gratuito de 72 horas, por exemplo, por indicação ou por um anúncio fora da Meta.</li>
+              <li>O cliente veio de um anúncio da Meta, mas suas 72 horas gratuitas já terminaram.</li>
+            </ul>
+            <p>A reserva se renova no início de cada mês. O que sobrar não passa para o mês seguinte.</p>
+          </div>
+          <div>
+            <h2>A ESL Tech cobre mais 1.000 mensagens</h2>
+            <p>Se a reserva gratuita acabar, a Meta começa a cobrar pelas próximas respostas comuns do chatbot.</p>
+            <p>A <strong>ESL Tech assume as primeiras 1.000 dessas mensagens cobradas no mês</strong>. Só a quantidade que ultrapassar essa cobertura fica por conta da unidade, conforme as condições do serviço.</p>
+            <p>No indicador “Cobradas pela Meta”, você vê a divisão: quantas a ESL Tech assume e quantas ficam para a unidade.</p>
+          </div>
+        </div>
+        <div class="consumo-prazo-resposta">
+          <h2>As 24 horas para responder continuam valendo</h2>
+          <p><strong>Cada nova mensagem do cliente abre ou renova 24 horas para o chatbot responder normalmente.</strong> Se o cliente ficar 24 horas sem escrever, a Meta só permite modelos de mensagem previamente aprovados, chamados <em>templates</em>, até ele mandar outra mensagem.</p>
+          <p>São dois prazos diferentes: <strong>as 72 horas definem a gratuidade; as 24 horas permitem as respostas comuns.</strong> Uma nova mensagem do cliente renova as 24 horas, mas não reinicia aquelas 72 horas. Dentro das 72 horas, os templates também são gratuitos.</p>
+        </div>
+        <details class="consumo-exemplos">
+          <summary>Ver exemplos com horários e quantidades</summary>
+          <div class="consumo-explicacoes">
+            <div><h3>Cliente veio de um anúncio da Meta</h3><p>Ana escreve na segunda às 10h e o chatbot responde às 10h05. A gratuidade vai até quinta às 10h05. Se Ana não escrever de novo, as respostas comuns só podem ser enviadas até terça às 10h. Depois disso, apenas templates, até ela voltar a escrever.</p></div>
+            <div><h3>Cliente chegou por indicação</h3><p>Pedro recebeu o número de um amigo e escreveu para a unidade. As respostas comuns do chatbot usam a reserva mensal. Se a unidade já usou 750 das 1.000 mensagens, ainda restam 250, para Pedro e os demais clientes.</p></div>
+            <div><h3>A reserva gratuita acabou</h3><p>A unidade usou as 1.000 mensagens de reserva e, depois, teve mais 1.300 mensagens cobradas pela Meta. A ESL Tech assume 1.000 dessas mensagens. As 300 restantes ficam por conta da unidade.</p></div>
+          </div>
+        </details>
+        <div class="consumo-situacoes">
+          <h2>O que significa a situação de cada mês?</h2>
+          <dl>
+            <div><dt><span class="consumo-estado em_andamento">Em andamento</span></dt><dd>É o mês atual. Os números são parciais e continuam sendo atualizados conforme recebemos os dados da Meta.</dd></div>
+            <div><dt><span class="consumo-estado em_conferencia">Em conferência</span></dt><dd>O mês terminou. Continuamos consultando a Meta todos os dias para conferir possíveis ajustes. A primeira conferência para concluir o mês acontece no dia 25 do mês seguinte.</dd></div>
+            <div><dt><span class="consumo-estado consolidado">Consolidado</span></dt><dd>Os números coincidiram na conferência da ESL Tech e o acompanhamento automático desse mês foi concluído. Isso não significa que a Meta já fechou a fatura.</dd></div>
+          </dl>
+          <p class="consumo-nota">Se houver diferença nos números ou não for possível concluir a consulta no dia 25, a conferência continua diariamente. A próxima tentativa de conclusão fica para o dia 25 do mês seguinte.</p>
+        </div>
+        <p class="consumo-nota">Este painel acompanha as respostas comuns do chatbot em conversas individuais. Templates fora das 72 horas têm regras de cobrança próprias. A reserva gratuita é do número de WhatsApp: se ele também for usado por outro sistema, esse uso pode consumir a mesma reserva. Os números vêm da Meta e podem ser revisados por ela.</p>
+      </details>
+      <div class="consumo-downloads">
+        <p>Leve esses números com você.<span>Relatórios de consumo com períodos, quantidades e cobertura.</span></p>
+        <div><button type="button" id="pdfConsumoMes" class="consumo-botao" disabled>Baixar PDF deste mês</button><button type="button" id="pdfConsumoTodos" class="consumo-botao secundario" disabled>Baixar PDF de todos os meses</button></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

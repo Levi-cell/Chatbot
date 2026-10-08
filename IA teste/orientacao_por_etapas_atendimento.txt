@@ -1,0 +1,509 @@
+ORIENTAÇÃO POR ETAPAS — ATENDIMENTO SUPERA
+
+Revisão: 04/10/2026
+Base: V1.9.2 — catálogo atual de 24 etapas.
+Status: esqueleto para preenchimento; não é um guia concluído.
+
+Referências: plano_ia_hibrida_atendimento.md e
+comparativo_atendimento_deterministico_e_ia.md.
+Os IDs e nomes abaixo correspondem ao catálogo atual do projeto.
+
+ORIENTAÇÕES PARA PREENCHIMENTO
+- Descrever os cinco tópicos de cada etapa com base no código e nas decisões
+  aprovadas do plano. Onde um tópico não se aplicar, explicar o motivo.
+- Diferenciar coleta de dado, confirmação, apresentação e finalização. Nem toda
+  etapa coleta informação ou permite um novo avanço.
+- Respeitar as rotas com e sem link e o encerramento da participação da IA.
+  Descrever uma etapa neste arquivo não autoriza a IA a atuar nela.
+- Uma nova conversa começa com coleta nova, sem reconhecimento por atendimentos
+  encerrados. Antecipações da própria conversa continuam permitidas no híbrido.
+- Registrar dependências de uma correção sem invalidar dados independentes.
+- Este TXT descreve o comportamento; operações, validações e navegação serão
+  implementadas em código. Seu carregamento para a IA ainda será implementado.
+
+SEÇÃO 1: DURANTE O ATENDIMENTO
+Aplicação: worker_flow. Preservar as 24 etapas e seus cinco tópicos abaixo.
+As orientações gerais de preenchimento também se aplicam à seção de follow-up,
+respeitando as permissões específicas de cada tarefa.
+
+ETAPA 01 — Saudação e nome do cliente
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 02 — Destino do atendimento
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 03 — Confirmação do destino do atendimento
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 04 — Profissão do cliente
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 05 — Nome do dependente
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 06 — Idade do aluno
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 07 — Oferta de aula experimental e avaliação cognitiva
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 08 — Oferta adiada e Instagram
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 09 — Confirmação de retorno ao atendimento
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 10 — Email
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 11 — Introdução à triagem cognitiva
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 12 — Triagem cognitiva - pergunta 1
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 13 — Triagem cognitiva - pergunta 2
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 14 — Triagem cognitiva - pergunta 3
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 15 — Triagem cognitiva - pergunta 4
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 16 — Triagem cognitiva - pergunta 5
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 17 — Triagem cognitiva - pergunta 6
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 18 — Escolha do turno para a demonstração prática
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 19 — Encaminhamento ao comercial após a triagem
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 20 — Sua reserva pela plataforma da unidade
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 21 — Pesquisa de satisfação - nota
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 22 — Pesquisa de satisfação - opção de comentário
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 23 — Pesquisa de satisfação - comentário
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+ETAPA 24 — Finalização do atendimento
+
+1. Sua finalidade e qual informação coleta.
+[A preencher.]
+
+2. Quando a resposta permite avançar.
+[A preencher.]
+
+3. Quais regras e dados precisam ser verificados.
+[A preencher.]
+
+4. Quais informações uma correção afeta.
+[A preencher.]
+
+5. Em quais condições aquela etapa acontece, incluindo presença ou ausência de link.
+[A preencher.]
+
+-------------------------------------------------------------------------------
+
+SEÇÃO 2: DURANTE O PRIMEIRO FOLLOWUP
+Aplicação: primeiro lembrete do worker_followup. Esta seção orienta a retomada;
+não cria uma etapa nova nem duplica as descrições das 24 etapas acima.
+
+1. FINALIDADE E PERGUNTA PENDENTE
+Convidar à continuidade da conversa ativa usando a etapa e a pergunta realmente
+pendente, inclusive uma correção em andamento. [Detalhar exemplos de retomada.]
+
+2. QUANDO A PERSONALIZAÇÃO É PERMITIDA
+Somente no primeiro follow-up elegível: etapas 1–17 nas duas rotas e etapa 18
+somente sem link, respeitando as demais verificações do sistema.
+Não iniciar lembretes em 19/20/21–24 nem depois do encerramento da conversa.
+
+3. CONTEXTO QUE PRECISA SER CONSIDERADO
+Usar os dados confirmados e trechos pertinentes da conversa atual.
+[Detalhar o contexto necessário e exemplos por etapa quando fizer diferença.]
+
+4. LIMITES DA RETOMADA
+O lembrete não avança, retrocede ou conclui coletas; não modifica os dados.
+Uma pendência de correção orienta a redação, sem ser resolvida pelo follow-up.
+
+5. CONTINUIDADE APÓS O LEMBRETE
+A resposta do cliente volta ao worker_flow e aos controles atuais do atendimento.
+O segundo follow-up segue sua mensagem determinística e encerra o atendimento,
+sem consulta à IA. [Detalhar exemplos sem repetir todo o catálogo de etapas.]

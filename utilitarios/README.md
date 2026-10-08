@@ -277,12 +277,13 @@ também inclui `mes_em_andamento`, `timezone_id`, `total_mensagens`,
 `mensagens_cobradas_meta`, `mensagens_assumidas_esl` e `mensagens_excedentes_unidade`.
 A divisão ESL/unidade aplica o benefício mensal proposto de 1.000 mensagens
 cobradas, sem somá-las novamente ao total e sem calcular valores monetários.
-Na meia-noite exata do primeiro dia, a consulta rejeita intervalo vazio; o futuro
-worker deve programar a primeira coleta após a virada, por exemplo às 00:01.
+Na meia-noite exata do primeiro dia, a consulta rejeita intervalo vazio; a coleta
+deve ocorrer após a virada, conforme a agenda do worker de consumo.
 
-Plano vigente: [consumo mensal, worker e seção Consumo](../docs/proposta_controle_mensagens_meta.md).
+Entrega implementada: [consumo mensal, worker e seção Consumo](../deploy/consumo_mensal_meta.md).
 O [histórico da pesquisa e contador de emergência](../docs/arquivo_pesquisa_meta_e_contador_emergencia.md)
-foi preservado separadamente. Banco, worker, painel e PDFs ainda não foram aplicados.
+foi preservado separadamente. Banco, worker, painel e PDFs já estão implementados;
+o contador local de emergência continua sendo uma alternativa não aplicada.
 
 O saldo é **estimado**, para números usados exclusivamente em conversas
 individuais pela WABA consultada. Não inclui grupos ou consumo de outras contas

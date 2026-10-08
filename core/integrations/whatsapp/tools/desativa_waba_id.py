@@ -40,6 +40,10 @@ def desativar_waba_id(waba_id):
         response.status_code,
     )
 
+    # resposta = _normalizar_resposta(response)
+    #
+    # print(resposta)
+
     return response.status_code, _normalizar_resposta(response)
 
 
@@ -60,3 +64,5 @@ def _normalizar_resposta(response):
             "success": response.ok,
             "text": response.text,
         }
+
+# desativar_waba_id(1036697869129349)

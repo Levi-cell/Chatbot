@@ -1,0 +1,56 @@
+CATÁLOGO DE OPERAÇÕES — ATENDIMENTO SUPERA
+
+BASE COMUM ÀS DUAS TAREFAS
+Este arquivo descreve os contratos; as permissões também precisam existir no código.
+O sistema fornece somente os contratos aplicáveis à tarefa da chamada.
+Os exemplos e contratos ainda serão detalhados antes da implementação.
+
+SEÇÃO 1: DURANTE O ATENDIMENTO
+Aplicação: worker_flow. Operações de dados e navegação autorizadas pelo sistema.
+
+OPERAÇÃO: corrigir_email_titular
+
+Finalidade:
+Corrigir o e-mail do titular na conversa atual.
+
+Quando usar:
+Quando o cliente informar que o e-mail está errado
+e fornecer um novo endereço.
+
+Dado necessário:
+Novo e-mail.
+
+Efeito:
+Validar e atualizar o endereço, preservando o histórico
+da alteração.
+
+Navegação:
+Não muda a etapa automaticamente.
+
+-------------------------------------------------------------------------------
+
+SEÇÃO 2: DURANTE O PRIMEIRO FOLLOWUP
+Aplicação: primeiro lembrete do worker_followup.
+Esta tarefa devolve uma proposta textual; não recebe operações de alteração
+de cadastro ou de navegação da seção 1.
+
+CONTRATO DE RESPOSTA: propor_primeiro_followup
+
+Finalidade:
+Manter a mensagem padrão ou propor uma adaptação para retomar a conversa ativa.
+
+Dados recebidos:
+Mensagem padrão, pergunta pendente e contexto relevante fornecido pelo sistema.
+
+Saída:
+[Definir o formato para indicar manter o padrão ou devolver o texto adaptado.]
+
+Efeitos e navegação:
+Nenhuma alteração de cadastro, etapa ou coleta é solicitada pela IA nesta tarefa.
+Validação, rechecagem de elegibilidade, envio e persistência do lembrete pertencem
+ao sistema. O serviço compartilhado registra o consumo no uso mensal do chat;
+isso não depende de uma operação solicitada pelo modelo.
+
+Fora do escopo:
+O segundo follow-up é determinístico e encerra o atendimento. A montagem das
+observações do Funil também é determinística; nenhum deles chama a IA.

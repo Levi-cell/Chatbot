@@ -29,7 +29,7 @@ outras categorias no painel como consequência desta proposta.
 
 Documentos relacionados:
 
-- [Plano de consumo mensal](../proposta_controle_mensagens_meta.md).
+- [Consumo mensal implementado e implantação](../../deploy/consumo_mensal_meta.md).
 - [Pesquisa histórica e contador de emergência](../arquivo_pesquisa_meta_e_contador_emergencia.md).
 
 O contador arquivado continua sendo uma alternativa separada. Esta proposta não
