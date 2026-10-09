@@ -1,4 +1,6 @@
 import logging
+from workers.worker_flow.fireads import email_importado
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa11 import enviar_etapa11
 
 from workers.worker_flow.response_flow.repeticao_followup import (
     enviar_repeticao_followup,
@@ -158,6 +160,10 @@ def resolve_etapa9(contexto_historico):
             phone_id_unidade,
         )
 
+    # Somente o snapshot desta conversa autoriza aproveitar o e-mail.
+    if evento_transicao == 'retorno_confirmado' and email_importado(contexto_historico):
+        evento_transicao = 'retorno_confirmado_email_fireads'
+
     # VALIDANDO DESTINO(S)
     # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
     destinos_esperados = _destinos_esperados_por_evento(
@@ -191,6 +197,11 @@ def resolve_etapa9(contexto_historico):
             phone_id_unidade,
             link_instagram,
         )
+    elif evento_transicao == 'retorno_confirmado_email_fireads':
+        contexto_envio = enviar_etapa11(
+            cliente_telefone, phone_id_unidade,
+            status_dependente=status_dependente, nome_dependente=nome_dependente,
+        )
     else:
         contexto_envio = enviar_etapa10(
             cliente_telefone,
@@ -208,6 +219,9 @@ def resolve_etapa9(contexto_historico):
 
 
 def _destinos_esperados_por_evento(evento_transicao):
+    if evento_transicao == 'retorno_confirmado_email_fireads':
+        return {11}
+
     if evento_transicao == EVENTO_RETORNO_CONFIRMADO:
         return {ETAPA_10_EMAIL}
 

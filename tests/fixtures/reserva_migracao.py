@@ -18,7 +18,7 @@ ETAPAS_LEGADAS = tuple(etapa for etapa in ETAPAS if etapa[0] <= 17) + (
 TRANSICOES_LEGADAS = tuple(
     (origem, evento, destino)
     for origem, evento, destino in etapa_transicao_script.TRANSICOES_INICIAIS
-    if origem <= 16
+    if origem <= 16 and not evento.endswith('_email_fireads')
 ) + (
     (17, "triagem_pergunta_6_respondida", 18),
     (18, "agendamento_confirmado", 19),

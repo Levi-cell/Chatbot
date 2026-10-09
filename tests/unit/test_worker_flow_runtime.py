@@ -338,6 +338,7 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(conn.rollbacks, 0)
 
     def _patch_fluxo_base(self, stack, conn, eventos):
+        stack.enter_context(patch.object(flow_worker, "preparar_abertura", side_effect=lambda contexto, *_: contexto))
         stack.enter_context(
             patch.object(
                 flow_worker, "reler_conversa", side_effect=lambda contexto, *_: contexto

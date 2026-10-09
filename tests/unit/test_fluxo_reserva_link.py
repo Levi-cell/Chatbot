@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from urllib.parse import parse_qs, urlparse
 
 from django.core.exceptions import ValidationError
-from webhook.models import Unidade
+from webhook.models import Unidade, AtendimentoCustomizado
 from core.database.deploy_database.etapa_transicao_script import (
     TRANSICOES_INICIAIS as TRANSICOES,
 )
@@ -111,7 +111,7 @@ class TurnoTests(unittest.TestCase):
 
     def test_unidade_sem_link_exige_contato_e_normaliza_vazio(self):
         for link in (None, "", "   "):
-            unidade = Unidade(link_agendamento=link, numero_comercial="(71) 99999-9999")
+            unidade = AtendimentoCustomizado(link_agendamento=link, numero_comercial="(71) 99999-9999")
             unidade.clean()
             self.assertIsNone(unidade.link_agendamento)
             unidade.numero_comercial = None

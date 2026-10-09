@@ -1,4 +1,5 @@
 import logging
+from workers.worker_flow.fireads import preparar_abertura
 
 import psycopg
 from core.cache.cache_unidade import UnidadeNaoEncontrada
@@ -185,6 +186,9 @@ def worker_flow():
                 continue
 
             contexto_banco = reler_conversa(contexto_banco, lock_version, cursor_ciclo)
+            contexto_banco = preparar_abertura(
+                contexto_banco, mensagem, lock_version, conn_ciclo, cursor_ciclo
+            )
             contexto_conversa = contexto_banco["conversa"]
             contexto_historico = preparar_retorno_followup(
                 mensagem,

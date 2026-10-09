@@ -105,7 +105,10 @@ class MigracaoReservaLinkPostgresTests(unittest.TestCase):
         mapa = self.conn.execute(
             'SELECT id_etapa_origem,evento,id_etapa_destino FROM chatbot.etapa_transicao ORDER BY id_etapa_origem,evento'
         ).fetchall()
-        self.assertEqual(mapa, sorted(TRANSICOES_INICIAIS))
+        # A migração de reserva precede os dois atalhos adicionados pela FireAds.
+        self.assertEqual(mapa, sorted(
+            t for t in TRANSICOES_INICIAIS if not t[1].endswith('_email_fireads')
+        ))
         for id_transicao, origem, evento, destino in transicoes_antes:
             self.assertEqual(self.conn.execute(
                 'SELECT id_etapa_origem,evento,id_etapa_destino FROM chatbot.etapa_transicao WHERE id_transicao=%s',

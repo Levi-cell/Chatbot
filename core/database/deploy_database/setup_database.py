@@ -1,4 +1,5 @@
 import logging
+from core.database.deploy_database.fireads_script import criar_estrutura_fireads
 
 from core.cache.cache_reset import resetar_cache_redis_dev
 from core.database.connection_check import connection_teste_psql
@@ -46,6 +47,7 @@ def setup_database_aws():
     # 4. Catálogos executáveis do fluxo de atendimento.
     insere_etapa_once()
     criar_e_povoar_transicoes_etapa()
+    criar_estrutura_fireads()
 
     # 5. O cache derivado só é reconstruído após o banco estar completo.
     resetar_cache_redis_dev()

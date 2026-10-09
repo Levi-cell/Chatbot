@@ -58,3 +58,28 @@ def montar_mensagem_reforco_escolar_etapa4():
 ### CONTEXTO INVÁLIDO: MENSAGEM PRÓPRIA, SEM CONCATENAR A REPETIÇÃO
 def montar_mensagem_contexto_profissao_invalida_etapa4():
     return ORIENTACAO_CONTEXTO_ETAPA4
+
+
+def montar_abertura_fireads(contexto, *, tratamento=None):
+    """Primeira resposta após importação completa; pergunta continua na etapa 4."""
+    dados = contexto['contexto_fireads']['dados_titular']
+    genero = contexto.get('genero')
+    if genero not in {'masculino', 'feminino'} or not contexto.get('nome_agente'):
+        raise ValueError('Apresentação da unidade incompleta')
+    artigo = 'a' if genero == 'feminino' else 'o'
+    abertura = (
+        f"Olá, {dados['nome']}! Seja muito bem-vindo(a)! Sou {artigo} "
+        f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
+        "Vi que você já preencheu um dos nossos formulários. Para continuarmos "
+        "com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok?"
+    )
+    pergunta = MENSAGEM_REPETICAO_ETAPA4
+    if tratamento == 'tipo_mensagem_nao_suportado':
+        pergunta = montar_mensagem_tratamento_midia(pergunta)
+    elif tratamento == 'duvida_reforco_escolar':
+        pergunta = montar_mensagem_tratamento_reforco_escolar(pergunta)
+    elif tratamento == 'pergunta_financeira':
+        pergunta = montar_mensagem_tratamento_financeiro(pergunta)
+    elif tratamento is not None:
+        raise ValueError('Tratamento de abertura FireAds desconhecido')
+    return abertura + '\n\n' + pergunta

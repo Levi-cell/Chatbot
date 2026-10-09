@@ -9,6 +9,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 import psycopg
+from tests.fixtures.fireads import aplicar_fireads
 from psycopg.conninfo import conninfo_to_dict
 
 from core.database.deploy_database import bank_script, etapa_transicao_script
@@ -87,6 +88,7 @@ class FollowupPostgresTests(unittest.TestCase):
         )
         with patch.object(etapa_transicao_script, "transacao_deploy", transacao_local):
             etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+        aplicar_fireads(cls.cursor)
         cls.conn.commit()
 
     @classmethod
@@ -265,18 +267,19 @@ class FollowupPostgresTests(unittest.TestCase):
         self.assertEqual(chats()[0]["followup_stage"], 2)
         self.cursor.execute("""
             INSERT INTO chatbot.unidade
-                (id_unidade,nome_unidade,nome_agente,genero,cnpj,email_responsavel,
-                 telefone,numero_comercial,waba_id,phone_number_id,link_agendamento)
-            VALUES(2,'Outra','Mia','feminino','outro','outro@example.com',
-                   '5511777777777','5511999999997','outra-waba','outro-phone','https://example.com');
-            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
-            VALUES(3,1,2,1);
+                (id_unidade,nome_unidade,cnpj,email_responsavel,telefone,waba_id,phone_number_id)
+            VALUES(2,'Outra','outro','outro@example.com','5511777777777','outra-waba','outro-phone');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial,link_agendamento)
+            VALUES(2,'Mia','feminino','5511999999997','https://example.com');
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(1,2);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 3,id_chat,1,2,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=2;
         """)
         # O mesmo cliente em outra unidade não pode esconder o follow-up daqui.
         self.assertEqual(chats()[0]["followup_stage"], 2)
         self.cursor.execute("""
-            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
-            VALUES(2,1,1,1)
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 2,id_chat,1,1,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=1
         """)
         # A nova conversa nem possui histórico no período: ainda assim oculta a antiga.
         self.assertEqual(chats()[0]["followup_stage"], 0)
@@ -592,8 +595,11 @@ class MigracaoLegadoPostgresTests(unittest.TestCase):
             """
             INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome)
             VALUES (2,'5511999999992','Bia'), (3,'5511999999993','Caio'), (4,'5511999999994','Davi');
-            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,status_ativa,followup_stage)
-            VALUES (2,2,1,18,TRUE,NULL), (3,3,1,11,FALSE,0), (4,4,1,11,TRUE,2);
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(2,1),(3,1),(4,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual,status_ativa,followup_stage)
+            SELECT v.cid,h.id_chat,v.cid,1,v.etapa,v.ativa,v.stage FROM
+                (VALUES(2,18,TRUE,NULL::INTEGER),(3,11,FALSE,0),(4,11,TRUE,2)) v(cid,etapa,ativa,stage)
+                JOIN chatbot.chat h ON h.id_cliente=v.cid AND h.id_unidade=1;
         """
         )
         self.conn.commit()
@@ -636,8 +642,9 @@ class MigracaoLegadoPostgresTests(unittest.TestCase):
         self.cursor.execute(
             """
             INSERT INTO chatbot.cliente(id_cliente,waid_telefone) VALUES(5,'5511999999995');
-            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual)
-            VALUES(5,5,1,1);
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(5,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 5,id_chat,5,1,1 FROM chatbot.chat WHERE id_cliente=5 AND id_unidade=1;
         """
         )
         self.conn.commit()

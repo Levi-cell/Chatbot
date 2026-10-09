@@ -1,6 +1,7 @@
 """Processa uma reserva do Funil preservando a fronteira transacional."""
 
 import json
+from core.repositories.fireads.envios import congelar
 import logging
 
 import psycopg
@@ -43,13 +44,14 @@ def processar_envio_funil(envio, conn, cursor):
         _validar_integracao_ativa(integracao)
 
         payload = montar_payload_oportunidade(dados_lead)
+        payload, canal, url_funil = congelar(dados_lead, payload, integracao, cursor)
 
         # O SELECT não deve manter uma transação aberta durante a chamada HTTP.
         conn.commit()
 
         resultado = enviar_oportunidade(
-            link_api_carrossel=integracao["link_api_carrossel"],
-            codigo_canal_venda=integracao["codigo_canal_venda"],
+            link_api_carrossel=url_funil,
+            codigo_canal_venda=canal,
             payload=payload,
             timeout=FUNIL_HTTP_TIMEOUT,
         )

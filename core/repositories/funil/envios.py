@@ -17,7 +17,7 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
         FROM (
             SELECT c.id_conversa
             FROM chatbot.conversa c
-            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
@@ -60,7 +60,7 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
             FROM chatbot.funil_envios fe
             JOIN chatbot.conversa c
               ON c.id_conversa = fe.id_conversa
-            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao

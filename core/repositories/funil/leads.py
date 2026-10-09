@@ -23,11 +23,11 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             triagem.respostas,
             coleta_email.conteudo_texto AS resposta_email_conversa,
             NULLIF(BTRIM(u.link_agendamento), '') AS link_agendamento,
-            c.turno
+            c.turno, c.origem_fireads, c.contexto_fireads
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u
+        JOIN chatbot.unidade_atendimento u
           ON u.id_unidade = c.id_unidade
         JOIN chatbot.etapa etapa_atual
           ON etapa_atual.id_etapa = c.id_etapa_atual
@@ -87,7 +87,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
     if resultado is None:
         return None
 
-    return {
+    dados = {
         "link_agendamento": resultado[13],
         "turno": resultado[14],
         "id_conversa": resultado[0],
@@ -106,3 +106,13 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             resultado[12] if len(resultado) > 12 else None
         ),
     }
+
+    if len(resultado) > 16 and resultado[15] is not None:
+        dados['origem_fireads'] = resultado[15]
+        dados['contexto_fireads'] = resultado[16]
+        retrato = (resultado[16] or {}).get('dados_titular') or {}
+        if 'nome' not in retrato or 'resultado_email' not in retrato:
+            raise ValueError('Coletas históricas FireAds incompletas para o Funil')
+        dados.update(nome_cliente=retrato['nome'], email_cliente=retrato.get('email'),
+                     idade_cliente=retrato.get('idade'), resultado_email_fireads=retrato['resultado_email'])
+    return dados

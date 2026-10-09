@@ -1,22 +1,22 @@
 # Plano prático — FireAds, chat e atendimento customizado
 
-**Revisão: 08/10/2026. Status: preparado para revisão e aplicação futura.**
+**Revisão: 08/10/2026. Status: código aplicado localmente; deploy e migração de produção pendentes.**
 
-Este documento contém o código integral de **46 arquivos**, um por passo.
+Este documento contém o código integral de **53 arquivos**, um por passo.
 O último passo contém a migração SQL completa para executar no DBeaver no dia
-do deploy. Os códigos foram preparados e testados em uma cópia isolada; a
-aplicação em uso, o RDS, a Meta, o Funil e o dashboard não foram alterados por
-esta preparação. Não basta alterar o Python sem executar a migração correspondente.
+do deploy. O código foi aplicado no projeto local e validado com PostgreSQL
+descartável. A VM, o RDS e os serviços de produção não foram alterados.
+Não iniciar o código novo sobre o banco antigo.
 
-Base: **V1.9.2 — 395d1eb0321507cdc67d92e93b4ebe530bd57915**, considerando também
-o conteúdo local dos arquivos no momento desta revisão. Os arquivos que já
-existem devem ser substituídos integralmente pelos blocos abaixo somente na
-fase autorizada de aplicação. Arquivos novos devem ser criados nos caminhos
-indicados. Os caminhos são relativos à raiz do repositório.
+Base de aplicação: **backup 37b0265, de 08/10/2026**, sobre a V1.9.2.
+Os blocos refletem os arquivos aplicados e os ajustes encontrados durante a
+revisão. Os hashes registram a base anterior à aplicação; não são hashes dos
+arquivos já alterados. Os caminhos são relativos à raiz do repositório.
+
+Resultado e ordem do deploy: [Aplicação FireAds](fireads_aplicacao_e_deploy.md).
 
 O histórico detalhado das decisões permanece em
-[Requisitos e decisões FireAds](integracao_fireads_requisitos.md). Para a
-implementação, prevalecem os contratos concretos deste plano. Não implementar
+[Requisitos e decisões FireAds](integracao_fireads_requisitos.md). A implementação segue os contratos concretos deste plano. Não implementar
 envio pelo webhook `organicosupera`, exclusão de leads, pesquisa de origem Meta
 por anúncio/post ou IA nesta entrega.
 
@@ -131,32 +131,36 @@ checados também após a resposta. Timeouts de conexão/leitura não equivalem a
 cancelamento remoto; por isso a posse da fila/conversa é conferida após a consulta
 e a entrega desconhecida espera outro ciclo antes de reconsultar o destino.
 
-## Validação desta preparação
+## Validação da aplicação em 08/10/2026
 
-- Verificação de sintaxe de todos os arquivos Python da cópia candidata.
-- Verificação Django de models e Admin: sem problemas encontrados.
-- Suíte de regressão: **476 testes descobertos, 419 executados sem falhas e 57
-  pulados** por exigirem DSNs explícitos de PostgreSQL descartável.
-- Depois da revisão do histórico da abertura importada, teste adicional confirma
-  registro inicial na etapa 4 e retry sem novo envio. Lote dirigido de 48 testes
-  passou, incluindo esse caso. Não foi necessário repetir testes de relatórios/login.
-- Migração executada em PostgreSQL WASM/PGlite local descartável: cópia da
-  personalização, preservação de conversas, agrupamento por chat, 30 transições,
-  reexecução, ativação controlada e constraints conferidos.
-- **24 consultas reais extraídas dos repositórios candidatos** executadas nesse
-  banco: consulta/importação, snapshot, início na profissão, leitura do lead,
-  congelamento, reserva, reagendamento e conclusão do dashboard.
-- Nenhuma chamada real de envio à Meta, ao Funil ou à FireAds; os testes HTTP usam
-  respostas simuladas do contrato fornecido. Nenhuma migração executada no RDS.
+- **487 testes executados, zero falhas, zero erros, zero pulados.**
+- PostgreSQL 16 local descartável, usando as sete DSNs explícitas da suíte.
+  Os 57 testes antes pulados foram executados; foram adicionados oito cenários
+  FireAds de banco e dois testes de Admin/apresentação.
+- Migração e reexecução preservam conversas, personalização, IDs e vínculos.
+  Testes com conexões separadas conferem perda de lock e disputa de reserva.
+- Validados importação de dependente, snapshot histórico, início na profissão,
+  salto de e-mail autorizado, fila independente, reagendamento e reconciliação
+  de bloco já escrito sem segundo POST.
+- Validados também os fluxos anteriores: reserva com/sem link, idade, satisfação,
+  follow-up, painel, autenticação, consumo Meta e relatórios.
+- Sintaxe Python e verificações Django de models/Admin sem erros.
+- HTTP de escrita simulado. Nenhuma mensagem ou lead foi enviado durante os testes.
+- Leitura real da API FireAds confirmou campos de ambas as fontes e novos valores
+  Google `Para mim`/`Para meu avô/avó`. Na Meta foi confirmado `pai_ou_mae`, incluído
+  no mapeamento de dependente.
 
-A execução PostgreSQL WASM valida SQL e dados em uma instância local, mas não
-simula múltiplas sessões PostgreSQL concorrentes nem permissões/latência do RDS.
-Conferir esses aspectos no ensaio de deploy antes de ativar a integração. Os
-57 testes pulados não estão sendo apresentados como aprovados.
+Durante a aplicação foram reforçados a validação do inline antes da chamada
+à Meta, a separação entre decisão de tratamento e composição da mensagem, e a
+recuperação do conteúdo congelado no repositório antes de reconstruí-lo no retry.
+As migrações históricas continuam testadas com o catálogo correspondente à época.
+
+Os testes locais não substituem a conferência operacional depois da migração
+na VM/RDS. O código aplicado ainda não foi implantado em produção.
 
 ## Aplicação e ativação no dia do deploy
 
-Preparar todos os arquivos e revisar o diff antes da implantação. Se o código
+Os arquivos estão aplicados localmente; revisar o diff antes da implantação. Se o código
 base tiver mudado, reconciliar as mudanças com a tabela de hashes abaixo; não
 substituir arquivos novos por uma cópia antiga sem revisão. Durante o deploy,
 parar os serviços que usam essas tabelas, atualizar o código, executar **inteiro**
@@ -171,9 +175,10 @@ integração **somente para Santo André**, selecionando a unidade pelo nome:
 - `url_dashbord`: `https://script.google.com/macros/s/AKfycbxnwj1DsFD6qqihceO2F4b-YRBe3nXwQ70SjWb45LtUVOzrRxMo6nHqKlvNC53EDOLX/exec`.
 - `url_operation`, referência opcional: `https://script.google.com/u/0/home/projects/1CVzuDR9S6N1EBc31kr7Eq-6N6URrcwmUyXyc0xmUVmYRC5lOOhtOJhij/edit`.
 - Manter os defaults das abas Google, Meta 7.2 e LEADS GERAL.
-- Conferir uma submissão do Google atualizado no retorno da API. O print confirma
-  as opções, mas a leitura anterior ainda continha apenas os valores antigos.
-  `contrato_validado` só deve ser marcado após essa conferência.
+- O Google atualizado foi conferido via API em 08/10: `Para mim` e
+  `Para meu avô/avó` chegaram no campo `Perfil/Faixa`. Os cabeçalhos Google e Meta
+  7.2 foram validados. Marcar `contrato_validado` na integração correspondente;
+  não habilitar outras unidades por associação.
 - Confirmar o fuso configurado na planilha. O relato de exibição **23:05** e a
   hipótese de Brasília não confirmam o fuso IANA. Se confirmado, preencher
   `America/Sao_Paulo`; enquanto desconhecido, manter nulo. Isso não altera datas externas.
@@ -193,8 +198,9 @@ orçamentos, manual e operações de IA continuam fora desta entrega.
 
 ## Índice e conferência da base
 
-Hash de base é SHA-256 do arquivo local antes da aplicação; `novo` indica criação.
-O conteúdo de cada bloco é completo, não um diff. Preserve o restante do projeto.
+Hash de base é SHA-256 do arquivo antes da aplicação; `novo` indica criação.
+Cada bloco abaixo contém o arquivo completo aplicado. A documentação de operação
+e testes também foi atualizada, sem alterações de comportamento da IA.
 
 | Passo | Arquivo | SHA-256 da base |
 | --- | --- | --- |
@@ -243,7 +249,14 @@ O conteúdo de cada bloco é completo, não um diff. Preserve o restante do proj
 | 43 | `tests/unit/test_monitoramento_unidade.py` | `3c5be6dd379a93bfd398609e0739e71d0b069d3908e74afbfeb2944491b1057c` |
 | 44 | `tests/unit/test_suporte_por_idade.py` | `3eafd78ec116cea8804a4737cee08ee2e76d899eb85fd0c1a2c2bde087aa19d0` |
 | 45 | `tests/unit/test_worker_flow_runtime.py` | `98f12dc0f1226c0f558eccaa0f6f7f541eb97147d1b1d72f2d97cac34392060f` |
-| 46 | `deploy/migrations/20261007_fireads_chat_customizacao.sql` | `novo` |
+| 46 | `tests/fixtures/fireads.py` | `novo` |
+| 47 | `tests/fixtures/reserva_migracao.py` | `edc4ef349af2e8ef1aa7b29c54cd56effb1b9b6dbe7f65d1db07f8870bd41c3f` |
+| 48 | `tests/integration/test_followup_postgres.py` | `15df37916884ff6df07806bc9fb1270c8ccb643da7e4ce7dd4f645fe5454d7a5` |
+| 49 | `tests/integration/test_reserva_link_postgres.py` | `9a67b5805be448f8035818e9099a0a71bc5c6c4e3239b26dc1a4c06d66334c9a` |
+| 50 | `tests/integration/test_migracao_reserva_link_postgres.py` | `0c2a74b6221e498e0000e194bb5975d9b1af6d374bebee6a2ce55c1630df1faf` |
+| 51 | `tests/integration/test_suporte_por_idade_postgres.py` | `e8319736e66e889cc4dfcfc41737b793ca64b7c1ca2f828c9769bb29047acc67` |
+| 52 | `tests/integration/test_fireads_postgres.py` | `novo` |
+| 53 | `deploy/migrations/20261007_fireads_chat_customizacao.sql` | `novo` |
 
 ## Passo 1 — Criar `core/integrations/fireads/__init__.py`
 
@@ -410,6 +423,9 @@ def destino(valor):
     if chave == "para mim":
         return False
     dependentes = {
+        # Valores do formulário e identificadores serializados pela Meta.
+        "pai ou mae",
+        "filho ou filha",
         "para meu pai mae",
         "para meu pai ou minha mae",
         "para meu avo avo",
@@ -643,6 +659,16 @@ def congelar(dados, payload, integracao_funil, cursor):
             integracao_funil["codigo_canal_venda"],
             integracao_funil["link_api_carrossel"],
         )
+    # No retry, a entrega já registrada é a fonte de verdade. Não reconstruir
+    # conteúdo/configuração a partir de cadastros que possam ter mudado depois.
+    cursor.execute(
+        "SELECT snapshot FROM chatbot.envios_dash WHERE id_conversa=%s",
+        (dados["id_conversa"],),
+    )
+    existente = cursor.fetchone()
+    if existente is not None:
+        salvo = existente[0]
+        return salvo["payload_funil"], salvo["canal"], salvo["url_funil"]
     canal = CANAIS[origem][1]
     estado = dados["contexto_fireads"]
     cursor.execute(
@@ -785,6 +811,28 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_n
 )
 
 logger = logging.getLogger("worker.fireads")
+
+
+def classificar_tratamento_abertura(contexto):
+    """A decisão fica no fluxo; messages apenas compõe o texto autorizado."""
+    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import (
+        validar_midia,
+    )
+    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
+        validar_pergunta_financeira,
+    )
+    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import (
+        validar_duvida_reforco_escolar,
+    )
+
+    texto = contexto.get("texto_cliente_atual") or ""
+    if validar_midia(contexto.get("tipo_mensagem_atual")):
+        return "tipo_mensagem_nao_suportado"
+    if validar_duvida_reforco_escolar(texto):
+        return "duvida_reforco_escolar"
+    if validar_pergunta_financeira(texto):
+        return "pergunta_financeira"
+    return None
 
 
 def decisao_organica(resultado, motivo=None):
@@ -1949,12 +1997,8 @@ def montar_mensagem_contexto_profissao_invalida_etapa4():
     return ORIENTACAO_CONTEXTO_ETAPA4
 
 
-def montar_abertura_fireads(contexto):
+def montar_abertura_fireads(contexto, *, tratamento=None):
     """Primeira resposta após importação completa; pergunta continua na etapa 4."""
-    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_midia import validar_midia
-    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import validar_pergunta_financeira
-    from workers.worker_flow.response_flow.etapas.validadores_universais.validador_reforco_escolar import validar_duvida_reforco_escolar
-
     dados = contexto['contexto_fireads']['dados_titular']
     genero = contexto.get('genero')
     if genero not in {'masculino', 'feminino'} or not contexto.get('nome_agente'):
@@ -1967,13 +2011,14 @@ def montar_abertura_fireads(contexto):
         "com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok?"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA4
-    texto = contexto.get('texto_cliente_atual') or ''
-    if validar_midia(contexto.get('tipo_mensagem_atual')):
+    if tratamento == 'tipo_mensagem_nao_suportado':
         pergunta = montar_mensagem_tratamento_midia(pergunta)
-    elif validar_duvida_reforco_escolar(texto):
+    elif tratamento == 'duvida_reforco_escolar':
         pergunta = montar_mensagem_tratamento_reforco_escolar(pergunta)
-    elif validar_pergunta_financeira(texto):
+    elif tratamento == 'pergunta_financeira':
         pergunta = montar_mensagem_tratamento_financeiro(pergunta)
+    elif tratamento is not None:
+        raise ValueError('Tratamento de abertura FireAds desconhecido')
     return abertura + '\n\n' + pergunta
 ```
 
@@ -1989,6 +2034,7 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
     montar_mensagem_financeiro_etapa4,
     montar_mensagem_midia_etapa4,
     montar_mensagem_reforco_escolar_etapa4,
+    montar_abertura_fireads,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -2128,12 +2174,13 @@ def _enviar_texto_etapa4(
         ) from erro
 
 
-def enviar_abertura_fireads(contexto):
-    from core.integrations.whatsapp.messages.etapa4_messages import montar_abertura_fireads
+def enviar_abertura_fireads(contexto, *, tratamento=None):
+    """Usa o mesmo envio/histórico da etapa 4, com a apresentação importada."""
     mensagem = contexto['mensagem_cliente_atual']
     return _enviar_texto_etapa4(
         mensagem['cliente_telefone'], mensagem['id_phone_unidade'],
-        montar_abertura_fireads(contexto), evento='fireads_abertura',
+        montar_abertura_fireads(contexto, tratamento=tratamento),
+        evento='fireads_abertura', tipo_tratamento=tratamento,
     )
 ```
 
@@ -2679,7 +2726,7 @@ def _logar_tratamento_texto(contexto_historico, motivo):
 
 ```python
 import logging
-from workers.worker_flow.fireads import email_importado
+from workers.worker_flow.fireads import email_importado, classificar_tratamento_abertura
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import enviar_abertura_fireads
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
@@ -2850,7 +2897,10 @@ def flow_sender(contexto_historico):
         )
 
     if id_etapa_atual is None and email_importado(contexto_historico):
-        return enviar_abertura_fireads(contexto_historico)
+        return enviar_abertura_fireads(
+            contexto_historico,
+            tratamento=classificar_tratamento_abertura(contexto_historico),
+        )
 
     if id_etapa_atual is None or id_etapa_atual == 1:
         return _resolver_com_saudacao(resolve_etapa1, contexto_historico)
@@ -10391,7 +10441,12 @@ class ConsumoMetaColeta(models.Model):
 class AtendimentoCustomizado(models.Model):
     Genero = Unidade.Genero
     id_customizacao = models.AutoField(primary_key=True)
-    id_unidade = models.OneToOneField(Unidade, models.CASCADE, db_column='id_unidade', related_name='atendimento_customizado')
+    id_unidade = models.OneToOneField(
+        Unidade,
+        models.CASCADE,
+        db_column="id_unidade",
+        related_name="atendimento_customizado",
+    )
     nome_agente = models.CharField("nome do agente", max_length=100)
     genero = models.CharField(
         "gênero do agente",
@@ -10407,9 +10462,8 @@ class AtendimentoCustomizado(models.Model):
         blank=True,
         null=True,
         default=None,
-        choices=[(None, "Desativado")] + [
-            (idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE
-        ],
+        choices=[(None, "Desativado")]
+        + [(idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE],
         help_text=(
             "Na etapa de idade, encaminha somente o titular a partir do limite "
             "até 89 anos e encerra sem bloqueio; 90+ é universal. Não altera a regra de e-mail."
@@ -10418,12 +10472,13 @@ class AtendimentoCustomizado(models.Model):
     email_obrigatorio = models.BooleanField(
         "e-mail obrigatório",
         default=True,
-        help_text=(
-            "Exige um e-mail válido, exceto do titular com 60 anos ou mais."
-        ),
+        help_text=("Exige um e-mail válido, exceto do titular com 60 anos ou mais."),
     )
     link_agendamento = models.CharField(
-        unique=True, max_length=400, blank=True, null=True,
+        unique=True,
+        max_length=400,
+        blank=True,
+        null=True,
         help_text="Vazio: coleta o turno e entrega ao comercial após a triagem.",
     )
     link_instagram = models.CharField(
@@ -10435,31 +10490,53 @@ class AtendimentoCustomizado(models.Model):
 
     def clean(self):
         super().clean()
-        self.link_agendamento = (self.link_agendamento or '').strip() or None
+        self.link_agendamento = (self.link_agendamento or "").strip() or None
         if not numero_comercial_whatsapp_valido(self.numero_comercial):
-            raise ValidationError({'numero_comercial': 'Informe um número comercial brasileiro válido.'})
+            raise ValidationError(
+                {"numero_comercial": "Informe um número comercial brasileiro válido."}
+            )
 
     def __str__(self):
         return str(self.id_unidade)
 
     class Meta:
         managed = False
-        db_table = 'atendimento_customizado'
-        verbose_name = 'Atendimento customizado'
-        verbose_name_plural = 'Atendimentos customizados'
+        db_table = "atendimento_customizado"
+        verbose_name = "Atendimento customizado"
+        verbose_name_plural = "Atendimentos customizados"
 
 
 class IntegracaoFireAds(models.Model):
     id_integracao_fireads = models.AutoField(primary_key=True)
-    id_unidade = models.OneToOneField(Unidade, models.CASCADE, db_column='id_unidade', related_name='integracao_fireads')
+    id_unidade = models.OneToOneField(
+        Unidade,
+        models.CASCADE,
+        db_column="id_unidade",
+        related_name="integracao_fireads",
+    )
     integracao_ativa = models.BooleanField(default=False)
     url_dashbord = models.URLField(max_length=1000)
-    url_operation = models.URLField(max_length=1000, blank=True, null=True, help_text='Referência do editor. Nunca usada para requisições.')
-    aba_google = models.CharField(max_length=200, default='Leads Google Ads (NÃO EDITAR)')
-    aba_meta = models.CharField(max_length=200, default='[FIRE] Leads Ads Geral - 7.2')
-    aba_destino = models.CharField(max_length=200, default='LEADS GERAL - Feedback')
-    fuso_formularios = models.CharField(max_length=100, null=True, blank=True, help_text='Somente interpretação de datas sem offset. Preencher após confirmação na planilha; não altera o fuso externo.')
-    contrato_validado = models.BooleanField(default=False, help_text='Confirmar nomes de abas, campos e valores recebidos do formulário atualizado antes de ativar.')
+    url_operation = models.URLField(
+        max_length=1000,
+        blank=True,
+        null=True,
+        help_text="Referência do editor. Nunca usada para requisições.",
+    )
+    aba_google = models.CharField(
+        max_length=200, default="Leads Google Ads (NÃO EDITAR)"
+    )
+    aba_meta = models.CharField(max_length=200, default="[FIRE] Leads Ads Geral - 7.2")
+    aba_destino = models.CharField(max_length=200, default="LEADS GERAL - Feedback")
+    fuso_formularios = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Somente interpretação de datas sem offset. Preencher após confirmação na planilha; não altera o fuso externo.",
+    )
+    contrato_validado = models.BooleanField(
+        default=False,
+        help_text="Confirmar nomes de abas, campos e valores recebidos do formulário atualizado antes de ativar.",
+    )
     ativada_em = models.DateTimeField(null=True, blank=True, editable=False)
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -10468,53 +10545,64 @@ class IntegracaoFireAds(models.Model):
         super().clean()
         from core.integrations.fireads.cliente import validar_url
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
         try:
             validar_url(self.url_dashbord)
         except ValueError as exc:
-            raise ValidationError({'url_dashbord': str(exc)})
-        self.fuso_formularios = (self.fuso_formularios or '').strip() or None
+            raise ValidationError({"url_dashbord": str(exc)})
+        self.fuso_formularios = (self.fuso_formularios or "").strip() or None
         if self.fuso_formularios:
             try:
                 ZoneInfo(self.fuso_formularios)
             except ZoneInfoNotFoundError:
-                raise ValidationError({'fuso_formularios': 'Fuso IANA inválido.'})
+                raise ValidationError({"fuso_formularios": "Fuso IANA inválido."})
         if self.integracao_ativa and not self.contrato_validado:
-            raise ValidationError({'contrato_validado': 'Confira o contrato de leitura antes de ativar.'})
+            raise ValidationError(
+                {"contrato_validado": "Confira o contrato de leitura antes de ativar."}
+            )
         abas = [self.aba_google, self.aba_meta, self.aba_destino]
         if any(not a.strip() for a in abas) or len(set(abas)) != 3:
-            raise ValidationError('Informe três abas distintas e não vazias.')
+            raise ValidationError("Informe três abas distintas e não vazias.")
 
     def __str__(self):
         return str(self.id_unidade)
 
     class Meta:
         managed = False
-        db_table = 'integracao_fireads'
-        verbose_name = 'Integração FireAds'
-        verbose_name_plural = 'Integrações FireAds'
+        db_table = "integracao_fireads"
+        verbose_name = "Integração FireAds"
+        verbose_name_plural = "Integrações FireAds"
 
 
 class Chat(models.Model):
     id_chat = models.BigAutoField(primary_key=True)
-    id_cliente = models.ForeignKey(Cliente, models.CASCADE, db_column='id_cliente')
-    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column='id_unidade')
+    id_cliente = models.ForeignKey(Cliente, models.CASCADE, db_column="id_cliente")
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
     criado_em = models.DateTimeField()
 
     def __str__(self):
-        return f'{self.id_cliente} / {self.id_unidade}'
+        return f"{self.id_cliente} / {self.id_unidade}"
 
     class Meta:
         managed = False
-        db_table = 'chat'
-        constraints = [models.UniqueConstraint(fields=['id_cliente','id_unidade'], name='uq_chat_cliente_unidade')]
+        db_table = "chat"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id_cliente", "id_unidade"], name="uq_chat_cliente_unidade"
+            )
+        ]
 
 
 class ConsultaFireAds(models.Model):
     id_consulta = models.BigAutoField(primary_key=True)
-    id_chat = models.OneToOneField(Chat, models.CASCADE, db_column='id_chat')
-    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column='id_unidade')
-    id_integracao_fireads = models.ForeignKey(IntegracaoFireAds, models.PROTECT, db_column='id_integracao_fireads')
-    id_conversa_referencia = models.ForeignKey(Conversa, models.CASCADE, db_column='id_conversa_referencia')
+    id_chat = models.OneToOneField(Chat, models.CASCADE, db_column="id_chat")
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
+    id_integracao_fireads = models.ForeignKey(
+        IntegracaoFireAds, models.PROTECT, db_column="id_integracao_fireads"
+    )
+    id_conversa_referencia = models.ForeignKey(
+        Conversa, models.CASCADE, db_column="id_conversa_referencia"
+    )
     consulta_concluida = models.BooleanField(default=False)
     resultado = models.CharField(max_length=30)
     dados = models.JSONField(null=True, blank=True)
@@ -10522,16 +10610,20 @@ class ConsultaFireAds(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'consulta_fireads'
-        verbose_name_plural = 'Consultas FireAds'
+        db_table = "consulta_fireads"
+        verbose_name_plural = "Consultas FireAds"
 
 
 class EnvioDash(models.Model):
     id_envio_dash = models.BigAutoField(primary_key=True)
-    id_conversa = models.OneToOneField(Conversa, models.CASCADE, db_column='id_conversa')
-    id_integracao_fireads = models.ForeignKey(IntegracaoFireAds, models.PROTECT, db_column='id_integracao_fireads')
-    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column='id_unidade')
-    status = models.CharField(max_length=20, default='pending')
+    id_conversa = models.OneToOneField(
+        Conversa, models.CASCADE, db_column="id_conversa"
+    )
+    id_integracao_fireads = models.ForeignKey(
+        IntegracaoFireAds, models.PROTECT, db_column="id_integracao_fireads"
+    )
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
+    status = models.CharField(max_length=20, default="pending")
     attempt_count = models.IntegerField(default=0)
     next_attempt_at = models.DateTimeField()
     processing_started_at = models.DateTimeField(null=True, blank=True)
@@ -10544,14 +10636,13 @@ class EnvioDash(models.Model):
 
     class Meta:
         managed = False
-        db_table = 'envios_dash'
-        verbose_name_plural = 'Envios ao dashboard'
+        db_table = "envios_dash"
+        verbose_name_plural = "Envios ao dashboard"
 ```
 
 ## Passo 37 — Substituir integralmente `callback/webhook/admin.py`
 
 ```python
-from .models import AtendimentoCustomizado, IntegracaoFireAds, Chat, ConsultaFireAds, EnvioDash
 import logging
 
 from django.contrib import admin, messages
@@ -10575,25 +10666,27 @@ from core.integrations.whatsapp.tools.usuarios import (
 from core.integrations.whatsapp.tools.validando_phone_waba import (
     validar_phone_number_id_da_waba,
 )
-from core.integrations.whatsapp.numero_comercial import (
-    numero_comercial_whatsapp_valido,
-)
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
     incrementar_versao_cache_unidades,
 )
 
 from .models import (
+    AtendimentoCustomizado,
     CacheControle,
+    Chat,
     Cliente,
     ClienteBloqueadoMeta,
     Conversa,
+    ConsultaFireAds,
     Dependente,
     Etapa,
+    EnvioDash,
     FilaMensagens,
     FunilEnvio,
     HistoricoMensagens,
     IntegracaoFunilUnidade,
+    IntegracaoFireAds,
     PesquisaSatisfacao,
     RespostasDesafios,
     Unidade,
@@ -10754,6 +10847,13 @@ class UnidadeAdmin(admin.ModelAdmin):
 
         return ()
 
+    def _create_formsets(self, request, obj, change):
+        formsets, inlines = super()._create_formsets(request, obj, change)
+        # O Django cria os inlines antes de validar o formulário principal.
+        # A chamada à Meta só pode acontecer com a personalização válida também.
+        request._unidade_formsets = formsets
+        return formsets, inlines
+
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         try:
             return super().changeform_view(
@@ -10806,6 +10906,13 @@ class UnidadeAdmin(admin.ModelAdmin):
                             request,
                             meta_validada=False,
                         )
+                    return
+
+                if any(
+                    not formset.is_valid()
+                    for formset in getattr(request, "_unidade_formsets", ())
+                ):
+                    self.add_error(None, "Confira os dados do atendimento customizado.")
                     return
 
                 waba_id = self.cleaned_data.get("waba_id")
@@ -11964,12 +12071,18 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
 
 @admin.register(AtendimentoCustomizado)
 class AtendimentoCustomizadoAdmin(admin.ModelAdmin):
-    list_display = ('id_customizacao', 'id_unidade', 'nome_agente', 'email_obrigatorio', 'link_agendamento')
-    list_select_related = ('id_unidade',)
-    search_fields = ('id_unidade__nome_unidade', 'nome_agente')
+    list_display = (
+        "id_customizacao",
+        "id_unidade",
+        "nome_agente",
+        "email_obrigatorio",
+        "link_agendamento",
+    )
+    list_select_related = ("id_unidade",)
+    search_fields = ("id_unidade__nome_unidade", "nome_agente")
 
     def get_readonly_fields(self, request, obj=None):
-        return ('id_unidade',) if obj else ()
+        return ("id_unidade",) if obj else ()
 
     def has_add_permission(self, request):
         return False  # A criação é feita junto da unidade, pelo inline obrigatório.
@@ -11980,13 +12093,19 @@ class AtendimentoCustomizadoAdmin(admin.ModelAdmin):
 
 @admin.register(IntegracaoFireAds)
 class IntegracaoFireAdsAdmin(admin.ModelAdmin):
-    list_display = ('id_integracao_fireads', 'id_unidade', 'integracao_ativa', 'contrato_validado', 'ativada_em')
-    list_select_related = ('id_unidade',)
-    search_fields = ('id_unidade__nome_unidade',)
-    readonly_fields = ('ativada_em', 'criado_em', 'atualizado_em')
+    list_display = (
+        "id_integracao_fireads",
+        "id_unidade",
+        "integracao_ativa",
+        "contrato_validado",
+        "ativada_em",
+    )
+    list_select_related = ("id_unidade",)
+    search_fields = ("id_unidade__nome_unidade",)
+    readonly_fields = ("ativada_em", "criado_em", "atualizado_em")
 
     def get_readonly_fields(self, request, obj=None):
-        return self.readonly_fields + (('id_unidade',) if obj else ())
+        return self.readonly_fields + (("id_unidade",) if obj else ())
 
     def has_delete_permission(self, request, obj=None):
         return False  # Desativar preserva vínculos e snapshots históricos.
@@ -12111,9 +12230,10 @@ def criar_e_povoar_transicoes_etapa():
 ```python
 """DDL único compartilhado com a migração manual do deploy."""
 
-from pathlib import Path
-from core.database.deploy_database.transacao_deploy import transacao_deploy
 import logging
+from pathlib import Path
+
+from core.database.deploy_database.transacao_deploy import transacao_deploy
 
 
 def criar_estrutura_fireads():
@@ -12247,6 +12367,52 @@ def estado():
 
 
 class FireAdsTests(unittest.TestCase):
+    def test_admin_nao_chama_meta_com_personalizacao_invalida(self):
+        from django.contrib.admin import AdminSite
+        from django.test import RequestFactory
+        from types import SimpleNamespace
+        from webhook.admin import UnidadeAdmin
+        from webhook.models import Unidade
+
+        admin = UnidadeAdmin(Unidade, AdminSite())
+        request = RequestFactory().post("/admin/")
+        request.user = SimpleNamespace(has_perm=lambda *_: True)
+        request._unidade_formsets = [Mock(is_valid=Mock(return_value=False))]
+        form_class = admin.get_form(request, fields=["waba_id", "phone_number_id"])
+        with patch.object(Unidade, "validate_unique"), patch.object(
+            Unidade, "validate_constraints"
+        ), patch.object(admin, "_preparar_meta_antes_de_salvar") as meta:
+            form = form_class(data={"waba_id": "123", "phone_number_id": "456"})
+            self.assertFalse(form.is_valid())
+            self.assertIn("atendimento customizado", str(form.non_field_errors()))
+            meta.assert_not_called()
+
+    def test_abertura_personalizada_preserva_tratamentos_sem_recoletar_nome(self):
+        from workers.worker_flow.fireads import classificar_tratamento_abertura
+        from core.integrations.whatsapp.messages.etapa4_messages import (
+            montar_abertura_fireads,
+        )
+
+        contexto = {
+            "contexto_fireads": estado(),
+            "nome_agente": "Dora",
+            "nome_unidade": "Supera Teste",
+            "genero": "feminino",
+        }
+        for tipo, texto, esperado in [
+            ("image", "", "tipo_mensagem_nao_suportado"),
+            ("text", "quanto custa?", "pergunta_financeira"),
+            ("text", "Oi", None),
+        ]:
+            with self.subTest(tipo=tipo, texto=texto):
+                contexto.update(tipo_mensagem_atual=tipo, texto_cliente_atual=texto)
+                tratamento = classificar_tratamento_abertura(contexto)
+                self.assertEqual(tratamento, esperado)
+                mensagem = montar_abertura_fireads(contexto, tratamento=tratamento)
+                self.assertIn("Ana Paula", mensagem)
+                self.assertIn("profiss", mensagem.lower())
+                self.assertNotIn("Como você se chama", mensagem)
+
     def test_abertura_importada_registra_etapa4_e_replay_nao_reenvia(self):
         from datetime import datetime, timezone
         from workers.worker_flow import valida_historico as historico
@@ -12255,35 +12421,86 @@ class FireAdsTests(unittest.TestCase):
 
         agora = datetime.now(timezone.utc)
         mensagem = {
-            'id_mensagem': 10, 'id_hash': 'wamid.teste', 'conteudo_texto': 'Olá',
-            'tipo_mensagem': 'text', 'cliente_telefone': NUMERO,
-            'id_phone_unidade': 'teste', 'unidade_telefone': '5511999990000', 'retry_count': 1,
+            "id_mensagem": 10,
+            "id_hash": "wamid.teste",
+            "conteudo_texto": "Olá",
+            "tipo_mensagem": "text",
+            "cliente_telefone": NUMERO,
+            "id_phone_unidade": "teste",
+            "unidade_telefone": "5511999990000",
+            "retry_count": 1,
         }
-        banco = {'id_cliente': 1, 'id_unidade': 1, 'contexto_fireads': estado(),
-                 'conversa': {'id_conversa': 2, 'id_etapa_atual': None,
-                              'last_message_from': 'cliente', 'status_dependente': False}}
+        banco = {
+            "id_cliente": 1,
+            "id_unidade": 1,
+            "contexto_fireads": estado(),
+            "conversa": {
+                "id_conversa": 2,
+                "id_etapa_atual": None,
+                "last_message_from": "cliente",
+                "status_dependente": False,
+            },
+        }
         with ExitStack() as stack:
-            inserir = stack.enter_context(patch.object(historico, 'inserir_historico_mensagem_cliente',
-                side_effect=lambda **k: (1, agora, k['id_etapa'], True)))
-            stack.enter_context(patch.object(historico, 'buscar_resposta_bot_por_mensagem_cliente', return_value=None))
-            stack.enter_context(patch.object(historico, 'listar_transicoes_permitidas',
-                return_value={'profissao_titular_valida': 6, 'profissao_dependente_valida': 5}))
-            stack.enter_context(patch.object(historico, 'buscar_contexto_etapa1',
-                return_value={'nome_unidade': 'Teste', 'nome_agente': 'Dora', 'genero': 'feminino'}))
-            stack.enter_context(patch.object(historico, 'atualizar_conversa_mensagem_cliente'))
+            inserir = stack.enter_context(
+                patch.object(
+                    historico,
+                    "inserir_historico_mensagem_cliente",
+                    side_effect=lambda **k: (1, agora, k["id_etapa"], True),
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    historico,
+                    "buscar_resposta_bot_por_mensagem_cliente",
+                    return_value=None,
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    historico,
+                    "listar_transicoes_permitidas",
+                    return_value={
+                        "profissao_titular_valida": 6,
+                        "profissao_dependente_valida": 5,
+                    },
+                )
+            )
+            stack.enter_context(
+                patch.object(
+                    historico,
+                    "buscar_contexto_etapa1",
+                    return_value={
+                        "nome_unidade": "Teste",
+                        "nome_agente": "Dora",
+                        "genero": "feminino",
+                    },
+                )
+            )
+            stack.enter_context(
+                patch.object(historico, "atualizar_conversa_mensagem_cliente")
+            )
             cx = historico.valida_historico(mensagem, banco, FakeCursor())
-        self.assertEqual(inserir.call_args.kwargs['id_etapa'], 4)
-        self.assertEqual(cx['id_etapa_origem_transicao'], 4)
-        with patch.object(sender, 'enviar_abertura_fireads', return_value={'id_etapa_resultante': 4}) as envio:
-            self.assertEqual(sender.flow_sender(cx)['id_etapa_resultante'], 4)
+        self.assertEqual(inserir.call_args.kwargs["id_etapa"], 4)
+        self.assertEqual(cx["id_etapa_origem_transicao"], 4)
+        with patch.object(
+            sender, "enviar_abertura_fireads", return_value={"id_etapa_resultante": 4}
+        ) as envio:
+            self.assertEqual(sender.flow_sender(cx)["id_etapa_resultante"], 4)
             envio.assert_called_once()
         # Banco confirmou resposta + movimento; só a fila precisou de retry.
-        cx.update(id_etapa_atual=4, resposta_bot_para_mensagem_atual={
-            'id_mensagem': 2, 'id_etapa': 4, 'id_hash_msg': 'wamid.bot'})
-        with patch.object(sender, 'enviar_abertura_fireads') as envio:
+        cx.update(
+            id_etapa_atual=4,
+            resposta_bot_para_mensagem_atual={
+                "id_mensagem": 2,
+                "id_etapa": 4,
+                "id_hash_msg": "wamid.bot",
+            },
+        )
+        with patch.object(sender, "enviar_abertura_fireads") as envio:
             resposta = sender.flow_sender(cx)
-            self.assertTrue(resposta['resposta_ja_existia'])
-            self.assertEqual(resolver_movimento_conversa(cx, resposta), 'sem_avanco')
+            self.assertTrue(resposta["resposta_ja_existia"])
+            self.assertEqual(resolver_movimento_conversa(cx, resposta), "sem_avanco")
             envio.assert_not_called()
 
     def test_mapeamento_sem_inferir_por_faixa_etaria(self):
@@ -12297,6 +12514,8 @@ class FireAdsTests(unittest.TestCase):
             "Para meu filho ou filha",
             "Para mim e outra pessoa",
             "mim_e_outra",
+            "pai_ou_mae",
+            "filho_ou_filha",
         ):
             self.assertIs(destino(valor), True, valor)
         for valor in (
@@ -14367,7 +14586,2012 @@ if __name__ == "__main__":
     unittest.main()
 ```
 
-## Passo 46 — Criar `deploy/migrations/20261007_fireads_chat_customizacao.sql`
+## Passo 46 — Criar `tests/fixtures/fireads.py`
+
+```python
+"""Migração real nas bases PostgreSQL descartáveis da suíte."""
+
+from pathlib import Path
+
+MIGRACAO_FIREADS = (
+    Path(__file__).resolve().parents[2]
+    / "deploy/migrations/20261007_fireads_chat_customizacao.sql"
+)
+
+
+def aplicar_fireads(cursor):
+    """Usa o DDL do deploy, preservando a transação controlada pelo teste."""
+    texto = MIGRACAO_FIREADS.read_text(encoding="utf-8")
+    ddl = texto.split("-- INICIO DDL FIREADS\n", 1)[1].split("-- FIM DDL FIREADS", 1)[0]
+    cursor.execute(ddl)
+```
+
+## Passo 47 — Substituir integralmente `tests/fixtures/reserva_migracao.py`
+
+```python
+"""Estado anterior à rota sem link, com dados sintéticos nas áreas preservadas."""
+
+from contextlib import contextmanager
+from unittest.mock import patch
+
+from core.database.deploy_database import bank_script, etapa_transicao_script
+from core.database.deploy_database.povoar_etapas import ETAPAS
+
+
+ETAPAS_LEGADAS = tuple(etapa for etapa in ETAPAS if etapa[0] <= 17) + (
+    (18, "Agendamento após a triagem cognitiva", False, 0, True),
+    (19, "Pesquisa de satisfação - nota", False, 0, True),
+    (20, "Pesquisa de satisfação - opção de comentário", False, 0, True),
+    (21, "Pesquisa de satisfação - comentário", False, 0, True),
+    (22, "Finalização do atendimento", True, 30, True),
+)
+
+TRANSICOES_LEGADAS = tuple(
+    (origem, evento, destino)
+    for origem, evento, destino in etapa_transicao_script.TRANSICOES_INICIAIS
+    if origem <= 16 and not evento.endswith('_email_fireads')
+) + (
+    (17, "triagem_pergunta_6_respondida", 18),
+    (18, "agendamento_confirmado", 19),
+    (19, "satisfacao_avaliada", 20),
+    (20, "comentario_satisfacao_aceito", 21),
+    (20, "comentario_satisfacao_recusado", 22),
+    (21, "comentario_satisfacao_recebido", 22),
+)
+
+
+def criar_base_legada(conn):
+    """O chamador já verificou banco vazio, local e exclusivo dos testes."""
+    cursor = conn.cursor()
+    cursor.execute("CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user(id SERIAL PRIMARY KEY)")
+
+    @contextmanager
+    def transacao_local(*_):
+        yield cursor
+
+    with patch.object(bank_script, "transacao_deploy", transacao_local), patch.object(
+        etapa_transicao_script, "transacao_deploy", transacao_local
+    ), patch.object(etapa_transicao_script, "TRANSICOES_INICIAIS", TRANSICOES_LEGADAS):
+        bank_script.criar_tabelas()
+        bank_script.criar_funcoes_lock()
+        # Os únicos deltas de schema desta entrega são turno e link opcional.
+        cursor.execute("ALTER TABLE chatbot.conversa DROP COLUMN turno")
+        cursor.execute("ALTER TABLE chatbot.unidade ALTER COLUMN link_agendamento SET NOT NULL")
+        cursor.executemany(
+            "INSERT INTO chatbot.etapa VALUES (%s,%s,%s,%s,%s)", ETAPAS_LEGADAS
+        )
+        etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+
+    cursor.execute("""
+        CREATE TABLE chatbot.historico_mensagens_202610
+        PARTITION OF chatbot.historico_mensagens
+        FOR VALUES FROM ('2026-10-01 00:00:00-03') TO ('2026-11-01 00:00:00-03');
+
+        INSERT INTO chatbot.unidade(id_unidade,nome_unidade,nome_agente,genero,cnpj,
+            email_responsavel,telefone,numero_comercial,waba_id,phone_number_id,link_agendamento,
+            id_fuso,nome_fuso,fuso_verificado_em)
+        VALUES (1,'Unidade teste','Suh','feminino','cnpj','teste@example.com','5511888888888',
+            '5511999999999','waba','phone','https://example.com/reserva',25,'America/Sao_Paulo',NOW());
+
+        INSERT INTO chatbot.cliente(id_cliente,nome,waid_telefone,idade,email)
+        SELECT id,'Cliente ' || id,'55119999999' || id,40,'cliente' || id || '@example.com'
+        FROM generate_series(18,22) id;
+        INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,
+            status_ativa,profissao,followup_stage,followup_last_sent_at,lead_no_funil,
+            processing,processing_started_at,lock_version,turnos_sem_avanco,
+            iniciou_em,finalizou_em,motivo_encerramento,last_message_from,last_interaction_at)
+        SELECT id,id,1,id,id <> 22,'Professora',1,'2026-09-28 13:00:00-03',id >= 20,
+            id=18,CASE WHEN id=18 THEN NOW()-INTERVAL '5 minutes' END,8,3,
+            '2026-09-28 10:00:00-03',CASE WHEN id=22 THEN '2026-09-29 10:00:00-03'::timestamptz END,
+            CASE WHEN id=22 THEN 'foi_agendado' END,'bot','2026-09-29 09:00:00-03'
+        FROM generate_series(18,22) id;
+
+        INSERT INTO chatbot.dependente(id_cliente,id_conversa,nome_dependente,idade)
+        VALUES (21,21,'João',12);
+        UPDATE chatbot.conversa SET status_dependente=TRUE WHERE id_conversa=21;
+
+        INSERT INTO chatbot.fila_mensagens(id_mensagem,id_conversa,received_data_hora,
+            cliente_telefone,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,
+            status,retry_count,processing_started_at)
+        SELECT id,id,'2026-09-29 09:00:00-03','55119999999' || id,'Já reservei',
+            'text','wamid.cliente.' || id,'phone','5511888888888',
+            CASE WHEN id=18 THEN 'processing' ELSE 'pending' END,1,NOW()-INTERVAL '5 minutes'
+        FROM generate_series(18,22) id;
+
+        INSERT INTO chatbot.historico_mensagens(id_conversa,id_etapa,received_data_hora,
+            cliente_telefone,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,
+            unidade_telefone,quem_enviou,status_envio,id_mensagem_fila,id_hash_cliente_origem)
+        SELECT id,id,'2026-09-29 09:00:00-03','55119999999' || id,'Já reservei','text',
+            'wamid.cliente.' || id,'phone','5511888888888','cliente',NULL,id,NULL
+        FROM generate_series(18,22) id;
+        INSERT INTO chatbot.historico_mensagens(id_conversa,id_etapa,received_data_hora,
+            cliente_telefone,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,
+            unidade_telefone,quem_enviou,status_envio,id_mensagem_fila,id_hash_cliente_origem)
+        SELECT id,CASE WHEN id=18 THEN 19 ELSE id END,'2026-10-01 09:01:00-03',
+            '55119999999' || id,'Resposta preservada','text','wamid.bot.' || id,
+            'phone','5511888888888','bot','sent',id,'wamid.cliente.' || id
+        FROM generate_series(18,22) id;
+
+        INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta)
+        SELECT 21,etapa,'Sim' FROM generate_series(12,17) etapa;
+        INSERT INTO chatbot.pesquisa_satisfacao(id_conversa,nota,comentario)
+        VALUES (22,5,'Muito bom! ☺️');
+        INSERT INTO chatbot.followup_retomada(id_conversa,id_mensagem_fila,id_hash_cliente,
+            id_etapa,stage_anterior,followup_em)
+        SELECT id,id,'wamid.cliente.' || id,id,1,'2026-09-28 13:00:00-03'
+        FROM generate_series(18,22) id;
+        INSERT INTO chatbot.followup_envio(id_conversa,id_ancora,ancora_em,id_historico_bot,enviado_em,id_hash_msg)
+        VALUES (18,100,'2026-09-28 06:00:00-03',101,'2026-09-28 13:00:00-03','wamid.followup');
+        INSERT INTO chatbot.followup_legado(id_conversa,stage_anterior) VALUES (19,0);
+        INSERT INTO chatbot.funil_envios(id_conversa,status,attempt_count,resposta_funil)
+        VALUES (20,'sent',1,'aceito'),(21,'processing',2,NULL);
+
+        INSERT INTO chatbot.consumo_mensal_meta(id_unidade,mes_referencia,waba_id,phone_number_id,
+            timezone_id,fuso_horario,data_hora_inicio,data_hora_fim,qtd_janela_gratuita,
+            qtd_franquia_consumida,qtd_cobradas_meta,consultado_ate,ultimo_sucesso_em,
+            status_apuracao,data_proxima_consolidacao)
+        VALUES (1,'2026-10-01','waba','phone',25,'America/Sao_Paulo',
+            '2026-10-01 00:00:00-03','2026-11-01 00:00:00-03',3000,750,0,
+            '2026-10-02 10:00:00-03','2026-10-02 10:00:00-03','em_andamento','2026-11-25');
+        INSERT INTO chatbot.consumo_meta_coletas(id_unidade,periodo,proxima_consulta_em,
+            ultima_tentativa_em,ultimo_erro,falhas_consecutivas)
+        VALUES (1,'2026-10','2026-10-02 11:00:00-03','2026-10-02 10:00:00-03',NULL,0);
+    """)
+    conn.commit()
+```
+
+## Passo 48 — Substituir integralmente `tests/integration/test_followup_postgres.py`
+
+```python
+"""Contrato PostgreSQL real. Exige banco local vazio chamado test_chatbot_followup."""
+
+import os
+import unittest
+from contextlib import contextmanager
+from datetime import timedelta
+from pathlib import Path
+from unittest.mock import patch
+from types import SimpleNamespace
+
+import psycopg
+from tests.fixtures.fireads import aplicar_fireads
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database import bank_script, etapa_transicao_script
+from core.repositories.atendimento import followup as repo
+from core.repositories.atendimento.conversas import (
+    tentar_lock_conversa,
+    unlock_conversa,
+)
+from workers.worker_flow.transacoes.retorno_followup import (
+    preparar_retorno_followup,
+    persistir_retorno_followup,
+)
+from workers.worker_flow.response_flow.retomada_followup import enviar_retorno_followup
+from core.integrations.whatsapp.pywa_functions import cliente as cliente_wa
+from core.repositories.monitoramento import painel
+from callback.monitoramento.apresentacao import consolidar_conversas
+from workers.worker_flow.valida_banco import valida_conversa
+from workers.worker_flow.valida_historico import valida_historico
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+
+DSN = os.environ.get("FOLLOWUP_TEST_DSN")
+MIGRACAO = (
+    Path(__file__).resolve().parents[2] / "deploy/migrations/followup_registros.sql"
+)
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class FollowupPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        parametros = conninfo_to_dict(DSN)
+        if (
+            parametros.get("host") not in {"127.0.0.1", "::1", "localhost"}
+            or parametros.get("dbname") != "test_chatbot_followup"
+        ):
+            raise RuntimeError(
+                "Teste exige host loopback e dbname=test_chatbot_followup"
+            )
+        cls.conn = psycopg.connect(DSN, connect_timeout=5)
+        cls.cursor = cls.conn.cursor()
+        cls.cursor.execute("SELECT to_regnamespace('chatbot')")
+        if cls.cursor.fetchone()[0] is not None:
+            cls.conn.close()
+            raise RuntimeError(
+                "Banco de teste não está vazio: schema chatbot já existe"
+            )
+        cls.cursor.execute(
+            "CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY);"
+        )
+
+        @contextmanager
+        def transacao_local(*_):
+            yield cls.cursor
+
+        with patch.object(bank_script, "transacao_deploy", transacao_local):
+            bank_script.criar_tabelas()
+            bank_script.criar_funcoes_lock()
+        # Colunas reais usadas nas barreiras; não simula o comportamento da Meta.
+        cls.cursor.execute(
+            """
+            CREATE TABLE chatbot.cliente_bloqueado_meta
+                (wa_id_cliente VARCHAR(100), phone_id_unidade VARCHAR(100));
+            CREATE TABLE chatbot.webhook_flood_evento
+                (wa_id_cliente VARCHAR(100), phone_id_unidade VARCHAR(100), received_at TIMESTAMPTZ);
+            INSERT INTO chatbot.etapa(id_etapa, nome_etapa)
+            SELECT etapa, 'Etapa de teste ' || etapa::text FROM generate_series(1, 24) AS etapa;
+            INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome, idade) VALUES (1, '5511999999999', 'Ana', 35);
+            INSERT INTO chatbot.unidade
+                (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel,
+                 telefone, numero_comercial, waba_id, phone_number_id, link_agendamento)
+            VALUES (1, 'Unidade Teste', 'Suh', 'feminino', 'teste', 'teste@example.com',
+                '5511888888888', '5511999999998', 'waba-teste', 'phone-teste', 'https://example.com/agendar');
+            INSERT INTO chatbot.conversa(id_conversa, id_cliente, id_unidade, id_etapa_atual)
+            VALUES (1, 1, 1, 11);
+        """
+        )
+        with patch.object(etapa_transicao_script, "transacao_deploy", transacao_local):
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+        aplicar_fireads(cls.cursor)
+        cls.conn.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.rollback()
+        cls.cursor.execute("DROP SCHEMA chatbot CASCADE")
+        cls.conn.commit()
+        cls.conn.close()
+
+    def setUp(self):
+        self.conn.rollback()
+        self.cursor.execute("SELECT clock_timestamp()")
+        self.agora = self.cursor.fetchone()[0]
+        self.ancora = self.agora - timedelta(hours=7, seconds=1)
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.historico_mensagens
+                (id_conversa, id_etapa, received_data_hora, cliente_telefone, conteudo_texto,
+                 tipo_mensagem, id_hash_msg, id_phone_unidade, unidade_telefone, quem_enviou, status_envio)
+            VALUES (1, 11, %s, '5511999999999', 'mensagem', 'text', 'wamid.cliente',
+                    'phone-teste', '5511888888888', 'cliente', NULL),
+                   (1, 11, %s, '5511999999999', 'Podemos começar?', 'text', 'wamid.bot',
+                    'phone-teste', '5511888888888', 'bot', 'sent');
+        """,
+            (self.ancora - timedelta(minutes=1), self.ancora),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_message_from = 'bot', last_interaction_at = %s WHERE id_conversa = 1",
+            (self.ancora,),
+        )
+
+    def tearDown(self):
+        self.conn.rollback()
+
+    def test_sete_horas_um_envio_e_reinicio_nao_duplica(self):
+        dados = repo.reler_elegivel(1, self.cursor)
+        self.assertIsNotNone(dados)
+        ok, versao = tentar_lock_conversa(1, self.cursor)
+        self.assertTrue(ok)
+        envio = {
+            "enviou": True,
+            "mensagem_bot": "Você viu a minha mensagem?",
+            "id_hash_msg_bot": "wamid.followup",
+        }
+        id_bot, data = repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "SELECT followup_stage, followup_last_sent_at FROM chatbot.conversa WHERE id_conversa=1"
+        )
+        self.assertEqual(self.cursor.fetchone(), (1, data))
+        self.cursor.execute(
+            "SELECT id_mensagem_fila, id_hash_cliente_origem FROM chatbot.historico_mensagens WHERE id_mensagem=%s AND received_data_hora=%s",
+            (id_bot, data),
+        )
+        self.assertEqual(self.cursor.fetchone(), (None, None))
+
+    def _primeiro_followup_vencido(self):
+        dados = repo.reler_elegivel(1, self.cursor)
+        _, versao = tentar_lock_conversa(1, self.cursor)
+        repo.persistir_followup(dados, {
+            "enviou": True, "mensagem_bot": "Primeiro lembrete",
+            "id_hash_msg_bot": "wamid.followup1",
+        }, versao, self.cursor)
+        # O primeiro envio acabou de acontecer: não basta a âncora original ter 7h.
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("""
+            UPDATE chatbot.historico_mensagens
+               SET received_data_hora=received_data_hora-INTERVAL '7 hours 1 second';
+            UPDATE chatbot.followup_envio
+               SET ancora_em=ancora_em-INTERVAL '7 hours 1 second',
+                   enviado_em=enviado_em-INTERVAL '7 hours 1 second';
+            UPDATE chatbot.conversa
+               SET last_interaction_at=last_interaction_at-INTERVAL '7 hours 1 second',
+                   followup_last_sent_at=followup_last_sent_at-INTERVAL '7 hours 1 second';
+        """)
+        return repo.reler_elegivel(1, self.cursor), versao
+
+    def _confirmar_segundo(self, dados, versao):
+        return repo.persistir_followup(dados, {
+            "enviou": True, "mensagem_bot": "Despedida",
+            "id_hash_msg_bot": "wamid.followup2",
+        }, versao, self.cursor)
+
+    def test_segundo_apos_mais_sete_horas_fecha_atomicamente_sem_terceiro(self):
+        dados, versao = self._primeiro_followup_vencido()
+        self.assertEqual(dados["followup_stage"], 1)
+        self.cursor.execute("UPDATE chatbot.conversa SET turnos_sem_avanco=4")
+        self.cursor.execute("SAVEPOINT antes_despedida")
+        _, encerrada_em = self._confirmar_segundo(dados, versao)
+        self.cursor.execute("""
+            SELECT followup_stage,status_ativa,motivo_encerramento,finalizou_em,
+                   followup_last_sent_at,id_etapa_atual,turnos_sem_avanco
+            FROM chatbot.conversa WHERE id_conversa=1
+        """)
+        self.assertEqual(self.cursor.fetchone(), (
+            2, False, "followup_sem_resposta", encerrada_em, encerrada_em, 11, 4,
+        ))
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
+        self.assertEqual(self.cursor.fetchone()[0], 2)
+        self.cursor.execute("ROLLBACK TO SAVEPOINT antes_despedida")
+        self.cursor.execute("SELECT followup_stage,status_ativa,finalizou_em FROM chatbot.conversa")
+        self.assertEqual(self.cursor.fetchone(), (1, True, None))
+        self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
+        self.assertEqual(self.cursor.fetchone()[0], 1)
+        self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.followup2'")
+        self.assertEqual(self.cursor.fetchone()[0], 0)
+
+    def test_segundo_apenas_etapas1_a17_incluindo8_e_guardas_de_silencio(self):
+        _, _ = self._primeiro_followup_vencido()
+        for etapa in range(1, 25):
+            with self.subTest(etapa=etapa):
+                self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=%s", (etapa,))
+                self.assertEqual(repo.reler_elegivel(1, self.cursor) is not None, etapa <= 17)
+        self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=8")
+        for sql in (
+            "UPDATE chatbot.conversa SET last_message_from='cliente'",
+            "UPDATE chatbot.conversa SET followup_last_sent_at=clock_timestamp()",
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=clock_timestamp() WHERE quem_enviou='cliente'",
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=clock_timestamp()-INTERVAL '24 hours' WHERE quem_enviou='cliente'",
+            "DELETE FROM chatbot.followup_envio",
+            "UPDATE chatbot.conversa SET followup_stage=2",
+            "UPDATE chatbot.unidade SET status_pagamento=FALSE",
+            """INSERT INTO chatbot.fila_mensagens
+                (received_data_hora,cliente_telefone,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone)
+                VALUES (clock_timestamp(),'5511999999999','Voltei','text','pendente','phone-teste','5511888888888')""",
+        ):
+            with self.subTest(guarda=sql):
+                self.cursor.execute("SAVEPOINT guarda_segundo")
+                self.cursor.execute(sql)
+                self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+                self.cursor.execute("ROLLBACK TO SAVEPOINT guarda_segundo")
+
+    def test_retorno_apos_segundo_abre_nova_conversa_sem_prefixo(self):
+        dados, versao = self._primeiro_followup_vencido()
+        self._confirmar_segundo(dados, versao)
+        unlock_conversa(1, versao, self.cursor)
+        # A fixture usa ID explícito; sincroniza apenas a sequência local do teste.
+        self.cursor.execute("SELECT setval(pg_get_serial_sequence('chatbot.conversa','id_conversa'), 1)")
+        nova = valida_conversa(1, 1, False, self.cursor)
+        self.assertNotEqual(nova["id_conversa"], 1)
+        self.assertIsNone(nova["id_etapa_atual"])
+        self.assertEqual(nova["followup_stage"], 0)
+        self.assertTrue(nova["status_ativa"])
+        mensagem = {
+            "id_mensagem": 10, "id_hash": "wamid.novo", "data_recebimento": self.agora,
+            "cliente_telefone": "5511999999999", "id_phone_unidade": "phone-teste",
+            "unidade_telefone": "5511888888888", "tipo_mensagem": "text",
+            "conteudo_texto": "Olá", "retry_count": 0,
+        }
+        self.cursor.execute("""
+            INSERT INTO chatbot.fila_mensagens
+                (id_mensagem,received_data_hora,cliente_telefone,conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone)
+            VALUES(10,clock_timestamp(),'5511999999999','Olá','text','wamid.novo','phone-teste','5511888888888')
+        """)
+        contexto_banco = {"id_cliente": 1, "id_unidade": 1, "conversa": nova}
+        self.assertIsNone(preparar_retorno_followup(mensagem, contexto_banco, self.cursor))
+        contexto = valida_historico(mensagem, contexto_banco, self.cursor)
+        self.assertIsNone(contexto["saudacao_retorno"])
+        with patch.object(cliente_wa, "WhatsApp") as wa:
+            wa.return_value.send_message.return_value = SimpleNamespace(id="wamid.abertura")
+            envio = flow_sender(contexto)
+        self.assertEqual(envio["id_etapa_resultante"], 1)
+        self.assertNotIn("te ver novamente", envio["mensagem_bot"])
+        self.assertIn("Suh", envio["mensagem_bot"])
+        self.cursor.execute("SELECT followup_stage,status_ativa FROM chatbot.conversa WHERE id_conversa=1")
+        self.assertEqual(self.cursor.fetchone(), (2, False))
+
+    def test_painel_considera_so_ultima_conversa_mesmo_fora_do_periodo(self):
+        dados, versao = self._primeiro_followup_vencido()
+        fim = self.agora + timedelta(days=1)
+        def chats(ate=fim):
+            return consolidar_conversas(painel.listar_conversas(1, None, ate, self.cursor))
+        self.assertEqual(chats()[0]["followup_stage"], 1)
+        self._confirmar_segundo(dados, versao)
+        self.assertEqual(chats()[0]["followup_stage"], 2)
+        self.cursor.execute("""
+            INSERT INTO chatbot.unidade
+                (id_unidade,nome_unidade,cnpj,email_responsavel,telefone,waba_id,phone_number_id)
+            VALUES(2,'Outra','outro','outro@example.com','5511777777777','outra-waba','outro-phone');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial,link_agendamento)
+            VALUES(2,'Mia','feminino','5511999999997','https://example.com');
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(1,2);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 3,id_chat,1,2,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=2;
+        """)
+        # O mesmo cliente em outra unidade não pode esconder o follow-up daqui.
+        self.assertEqual(chats()[0]["followup_stage"], 2)
+        self.cursor.execute("""
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 2,id_chat,1,1,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=1
+        """)
+        # A nova conversa nem possui histórico no período: ainda assim oculta a antiga.
+        self.assertEqual(chats()[0]["followup_stage"], 0)
+        self.assertEqual(chats(self.agora - timedelta(hours=1))[0]["followup_stage"], 0)
+        self.cursor.execute("""
+            INSERT INTO chatbot.historico_mensagens
+                (id_conversa,id_etapa,received_data_hora,cliente_telefone,conteudo_texto,tipo_mensagem,
+                 id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou)
+            VALUES(2,1,clock_timestamp(),'5511999999999','Oi','text','wamid.nova.conversa','phone-teste','5511888888888','cliente');
+            UPDATE chatbot.conversa SET followup_stage=1 WHERE id_conversa=2;
+        """)
+        chat = chats()[0]
+        self.assertEqual(chat["ids_conversa"], [1, 2])
+        self.assertEqual(chat["followup_stage"], 1)
+        self.cursor.execute("UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=2")
+        self.assertEqual(chats()[0]["followup_stage"], 0)
+
+    def test_antes_de_sete_horas_e_fora_da_janela_meta(self):
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='bot'",
+            (self.agora - timedelta(hours=6),),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_interaction_at=%s",
+            (self.agora - timedelta(hours=6),),
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='bot'",
+            (self.ancora,),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_interaction_at=%s", (self.ancora,)
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='cliente'",
+            (self.agora - timedelta(hours=24),),
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_fila_sem_vinculo_bloqueia_so_o_par_correto(self):
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.fila_mensagens
+                (received_data_hora, cliente_telefone, conteudo_texto, tipo_mensagem,
+                 id_hash_msg, id_phone_unidade, unidade_telefone)
+            VALUES (%s, '5511999999999', 'Olá', 'text', 'fila-test', 'outra-unidade', 'outro-numero');
+        """,
+            (self.agora,),
+        )
+        self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute(
+            "UPDATE chatbot.fila_mensagens SET id_phone_unidade='phone-teste'"
+        )
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_bloqueios_stage_e_unidade_impedem_despacho(self):
+        # Mesmo ativas e não terminais, as etapas a partir do agendamento são excluídas.
+        for etapa in range(1, 25):
+            with self.subTest(etapa=etapa):
+                self.cursor.execute("SAVEPOINT faixa_etapa")
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET id_etapa_atual=%s", (etapa,)
+                )
+                self.assertEqual(
+                    repo.reler_elegivel(1, self.cursor) is not None, etapa < 18
+                )
+                self.assertEqual(
+                    bool(repo.listar_elegiveis(self.cursor, 20)), etapa < 18
+                )
+                self.cursor.execute("ROLLBACK TO SAVEPOINT faixa_etapa")
+        for sql in (
+            "UPDATE chatbot.conversa SET followup_stage=1",
+            "UPDATE chatbot.conversa SET followup_stage=2",
+            "UPDATE chatbot.conversa SET followup_stage=-1",
+            "UPDATE chatbot.conversa SET turnos_sem_avanco=12",
+            "UPDATE chatbot.conversa SET status_ativa=FALSE",
+            "UPDATE chatbot.unidade SET status_pagamento=FALSE",
+            "INSERT INTO chatbot.cliente_bloqueado_meta VALUES ('5511999999999','phone-teste')",
+        ):
+            with self.subTest(sql=sql):
+                self.cursor.execute("SAVEPOINT variacao")
+                self.cursor.execute(sql)
+                self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+                self.cursor.execute("ROLLBACK TO SAVEPOINT variacao")
+
+    def test_unicidade_da_ancora_e_rollback_do_historico(self):
+        dados = repo.reler_elegivel(1, self.cursor)
+        _, versao = tentar_lock_conversa(1, self.cursor)
+        envio = {
+            "enviou": True,
+            "mensagem_bot": "Você viu a minha mensagem?",
+            "id_hash_msg_bot": "wamid.followup",
+        }
+        repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.cursor.execute("SAVEPOINT duplicado")
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            repo.persistir_followup(dados, envio, versao, self.cursor)
+        self.cursor.execute("ROLLBACK TO SAVEPOINT duplicado")
+        self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
+        self.assertEqual(self.cursor.fetchone()[0], 1)
+
+    def test_reset_e_marcador_sao_atomicos(self):
+        _, versao = tentar_lock_conversa(1, self.cursor)
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s",
+            (self.agora,),
+        )
+        contexto = {
+            "id_conversa": 1,
+            "lock_version": versao,
+            "id_etapa_atual": 11,
+            "stage_anterior": 1,
+            "followup_em": self.agora,
+            "mensagem_cliente_atual": {
+                "id_mensagem_fila": 10,
+                "id_hash_msg": "wamid.reacao",
+            },
+        }
+        self.cursor.execute("SAVEPOINT sem_marcador")
+        with self.assertRaises(ValueError):
+            repo.concluir_retomada(contexto, self.agora, self.cursor)
+        self.cursor.execute("ROLLBACK TO SAVEPOINT sem_marcador")
+        self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+        self.assertEqual(self.cursor.fetchone()[0], 1)
+        self.cursor.execute(
+            "INSERT INTO chatbot.followup_retomada(id_conversa,id_mensagem_fila,id_hash_cliente,id_etapa,stage_anterior,followup_em) VALUES(1,10,'wamid.reacao',11,1,%s)",
+            (self.agora,),
+        )
+        repo.concluir_retomada(contexto, self.agora, self.cursor)
+        self.cursor.execute(
+            "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0, self.agora, 0, 11))
+
+    def test_reacao_real_rollback_e_replay_preservam_ciclo_posterior(self):
+        self._verificar_reacao_real(origem=11, destino=11)
+
+    def test_reacao_etapa8_avanca_e_rollback_e_replay_preservam_ciclo(self):
+        self._verificar_reacao_real(origem=8, destino=9)
+
+    def test_nome_valido_avanca_e_grava_cliente_com_reset_atomico(self):
+        self._verificar_reacao_real(origem=1, destino=2, texto="Antonia")
+
+    def test_triagem_valida_avanca_e_grava_resposta_com_reset_atomico(self):
+        self._verificar_reacao_real(origem=12, destino=13, texto="Às vezes")
+
+    def test_tratamento_especifico_preserva_etapa_e_contador(self):
+        self._verificar_reacao_real(origem=6, destino=6, texto="Quanto custa?")
+
+    def _verificar_reacao_real(self, *, origem, destino, texto="???"):
+        mensagem = {
+            "id_mensagem": 10,
+            "id_hash": "wamid.reacao",
+            "data_recebimento": self.agora,
+            "cliente_telefone": "5511999999999",
+            "id_phone_unidade": "phone-teste",
+            "unidade_telefone": "5511888888888",
+            "tipo_mensagem": "text",
+            "conteudo_texto": texto,
+            "retry_count": 1,
+        }
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.fila_mensagens
+                (id_mensagem, id_conversa, received_data_hora, cliente_telefone,
+                 conteudo_texto, tipo_mensagem, id_hash_msg, id_phone_unidade,
+                 unidade_telefone, status)
+            VALUES (10, 1, %s, '5511999999999', %s, 'text',
+                    'wamid.reacao', 'phone-teste', '5511888888888', 'processing');
+            """,
+            (self.agora, texto),
+        )
+        for followup_em in (None, self.agora):
+            with self.subTest(legado=followup_em is None):
+                self.cursor.execute("SAVEPOINT ciclo_reacao")
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5, id_etapa_atual=%s",
+                    (followup_em, origem),
+                )
+                _, versao = tentar_lock_conversa(1, self.cursor)
+                contexto_banco = repo.reler_conversa(
+                    {"conversa": {"id_conversa": 1}, "id_cliente": 1, "id_unidade": 1},
+                    versao,
+                    self.cursor,
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                with patch.object(cliente_wa, "WhatsApp") as wa:
+                    wa.return_value.send_message.return_value = SimpleNamespace(
+                        id="wamid.repeticao"
+                    )
+                    envio = enviar_retorno_followup(contexto)
+                self.assertEqual(envio["id_etapa_resultante"], destino)
+                self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
+                self.assertEqual(self.cursor.fetchone()[0], 1)
+
+                # Uma falha deve reverter histórico, avanço (na etapa 8) e reset juntos.
+                self.cursor.execute("SAVEPOINT confirmacao")
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT confirmacao")
+                self.cursor.execute(
+                    "SELECT followup_stage, id_etapa_atual, turnos_sem_avanco FROM chatbot.conversa"
+                )
+                self.assertEqual(self.cursor.fetchone(), (1, origem, 5))
+                self.cursor.execute(
+                    "SELECT concluida_em FROM chatbot.followup_retomada"
+                )
+                self.assertIsNone(self.cursor.fetchone()[0])
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 3)
+
+                persistir_retorno_followup(contexto, envio, self.cursor)
+                self.cursor.execute(
+                    "SELECT followup_stage,followup_last_sent_at,turnos_sem_avanco,id_etapa_atual FROM chatbot.conversa"
+                )
+                self.assertEqual(
+                    self.cursor.fetchone(),
+                    (0, followup_em, 0 if origem != destino else 5, destino),
+                )
+                if origem == 1:
+                    self.cursor.execute(
+                        "SELECT nome FROM chatbot.cliente WHERE id_cliente=1"
+                    )
+                    self.assertEqual(self.cursor.fetchone()[0], "Antonia")
+                if origem == 12:
+                    self.cursor.execute(
+                        "SELECT resposta FROM chatbot.respostas_desafios WHERE id_conversa=1 AND id_etapa=12"
+                    )
+                    self.assertEqual(self.cursor.fetchone()[0], "às vezes")
+                self.cursor.execute(
+                    "SELECT conteudo_texto, id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.repeticao'"
+                )
+                self.assertEqual(
+                    self.cursor.fetchone(), (envio["mensagem_bot"], destino)
+                )
+                self.cursor.execute(
+                    "SELECT id_etapa FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.reacao'"
+                )
+                self.assertEqual(self.cursor.fetchone()[0], origem)
+                self.cursor.execute(
+                    "SELECT id_etapa, concluida_em FROM chatbot.followup_retomada"
+                )
+                etapa_checkpoint, concluida_em = self.cursor.fetchone()
+                self.assertEqual(etapa_checkpoint, origem)
+                self.assertIsNotNone(concluida_em)
+
+                # Simula recuperação da mesma fila após outro ciclo já ter começado.
+                self.cursor.execute(
+                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, id_etapa_atual=10",
+                    (self.agora + timedelta(hours=1),),
+                )
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                antes_replay = self.cursor.fetchone()[0]
+                contexto_banco = repo.reler_conversa(
+                    contexto_banco, versao, self.cursor
+                )
+                contexto = preparar_retorno_followup(
+                    mensagem, contexto_banco, self.cursor
+                )
+                self.assertIsNotNone(contexto["resposta_bot_para_mensagem_atual"])
+                final = persistir_retorno_followup(
+                    contexto,
+                    {"enviou": False, "id_hash_msg_bot": "wamid.repeticao"},
+                    self.cursor,
+                )
+                self.assertTrue(final["resposta_ja_existia"])
+                self.assertEqual(final["id_etapa_resultante"], destino)
+                self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+                self.assertEqual(self.cursor.fetchone()[0], antes_replay)
+                self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+                self.assertEqual(self.cursor.fetchone()[0], 4)
+                self.cursor.execute("ROLLBACK TO SAVEPOINT ciclo_reacao")
+
+    def test_dois_processos_lock_recusa_e_fencing(self):
+        # ROLLBACK remove apenas a fixture desta função. A conversa-base é confirmada.
+        self.conn.rollback()
+        ok, antiga = tentar_lock_conversa(1, self.cursor)
+        self.assertTrue(ok)
+        self.conn.commit()
+        try:
+            with psycopg.connect(DSN, connect_timeout=5) as outro:
+                with outro.cursor() as cursor:
+                    self.assertFalse(tentar_lock_conversa(1, cursor)[0])
+                    cursor.execute(
+                        "UPDATE chatbot.conversa SET processing_started_at=clock_timestamp()-INTERVAL '111 seconds' WHERE id_conversa=1"
+                    )
+                    ok, nova = tentar_lock_conversa(1, cursor)
+                    self.assertTrue(ok)
+                    self.assertGreater(nova, antiga)
+            with self.assertRaises(repo.LockConversaPerdido):
+                repo.proteger_conversa(1, antiga, self.cursor)
+            self.assertFalse(unlock_conversa(1, antiga, self.cursor))
+        finally:
+            self.conn.rollback()
+            self.cursor.execute(
+                "UPDATE chatbot.conversa SET processing=FALSE, processing_started_at=NULL WHERE id_conversa=1"
+            )
+            self.conn.commit()
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class MigracaoLegadoPostgresTests(unittest.TestCase):
+    def setUp(self):
+        # Reutiliza a base real e as verificações de banco vazio/loopback.
+        FollowupPostgresTests.setUpClass.__func__(type(self))
+        self.addCleanup(self.limpar_banco)
+        self.cursor.execute(
+            "DROP TABLE chatbot.followup_envio, chatbot.followup_retomada, chatbot.followup_legado"
+        )
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.cliente(id_cliente, waid_telefone, nome)
+            VALUES (2,'5511999999992','Bia'), (3,'5511999999993','Caio'), (4,'5511999999994','Davi');
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(2,1),(3,1),(4,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual,status_ativa,followup_stage)
+            SELECT v.cid,h.id_chat,v.cid,1,v.etapa,v.ativa,v.stage FROM
+                (VALUES(2,18,TRUE,NULL::INTEGER),(3,11,FALSE,0),(4,11,TRUE,2)) v(cid,etapa,ativa,stage)
+                JOIN chatbot.chat h ON h.id_cliente=v.cid AND h.id_unidade=1;
+        """
+        )
+        self.conn.commit()
+
+    def limpar_banco(self):
+        FollowupPostgresTests.tearDownClass.__func__(type(self))
+
+    def executar_migracao(self):
+        self.cursor.execute(MIGRACAO.read_text(encoding="utf-8"), prepare=False)
+        while self.cursor.nextset():
+            pass
+
+    def test_marca_ativas_preserva_dados_e_nao_reaplica(self):
+        self.cursor.execute(
+            "SELECT id_conversa, to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa"
+        )
+        antes = dict(self.cursor.fetchall())
+        self.conn.commit()
+        self.executar_migracao()
+        self.cursor.execute(
+            "SELECT id_conversa, to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa"
+        )
+        depois = dict(self.cursor.fetchall())
+        for id_conversa, original in antes.items():
+            esperado = dict(original)
+            if original["status_ativa"]:
+                esperado["followup_stage"] = 1
+            self.assertEqual(depois[id_conversa], esperado)
+        self.cursor.execute(
+            "SELECT id_conversa,stage_anterior FROM chatbot.followup_legado ORDER BY id_conversa"
+        )
+        self.assertEqual(self.cursor.fetchall(), [(1, 0), (2, None), (4, 2)])
+        self.cursor.execute(
+            "SELECT (SELECT COUNT(*) FROM chatbot.followup_envio), (SELECT COUNT(*) FROM chatbot.historico_mensagens)"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0, 0))
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=1"
+        )
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.cliente(id_cliente,waid_telefone) VALUES(5,'5511999999995');
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(5,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
+            SELECT 5,id_chat,5,1,1 FROM chatbot.chat WHERE id_cliente=5 AND id_unidade=1;
+        """
+        )
+        self.conn.commit()
+        with self.assertRaises(psycopg.errors.DuplicateTable):
+            self.executar_migracao()
+        self.conn.rollback()
+        self.cursor.execute(
+            "SELECT id_conversa,followup_stage FROM chatbot.conversa WHERE id_conversa IN (1,5) ORDER BY id_conversa"
+        )
+        self.assertEqual(self.cursor.fetchall(), [(1, 0), (5, 0)])
+
+    def test_legado_terminal_recusa_migracao_sem_marcar_ninguem(self):
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET id_etapa_atual=22 WHERE id_conversa=1"
+        )
+        self.conn.commit()
+        with self.assertRaises(psycopg.errors.RaiseException):
+            self.executar_migracao()
+        self.conn.rollback()
+        self.cursor.execute(
+            "SELECT followup_stage FROM chatbot.conversa WHERE id_conversa=1"
+        )
+        self.assertEqual(self.cursor.fetchone(), (0,))
+        self.cursor.execute("SELECT to_regclass('chatbot.followup_legado')")
+        self.assertIsNone(self.cursor.fetchone()[0])
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class MigracaoSegundoFollowupTests(unittest.TestCase):
+    def test_migracao_completa_preserva_dados_e_amplia_somente_motivo(self):
+        FollowupPostgresTests.setUpClass.__func__(type(self))
+        self.addCleanup(FollowupPostgresTests.tearDownClass.__func__, type(self))
+        self.cursor.execute("""
+            ALTER TABLE chatbot.conversa DROP CONSTRAINT ck_conversa_motivo_encerramento;
+            ALTER TABLE chatbot.conversa ADD CONSTRAINT ck_conversa_motivo_encerramento
+                CHECK(motivo_encerramento IS NULL OR motivo_encerramento IN
+                    ('idade_invalida','foi_agendado','encaminhado_suporte_idoso'));
+            SELECT to_jsonb(c) FROM chatbot.conversa c;
+        """)
+        while self.cursor.nextset():
+            pass
+        antes = self.cursor.fetchone()[0]
+        with self.assertRaisesRegex(ValueError, "SCHEMA_SEGUNDO_FOLLOWUP_AUSENTE"):
+            repo.validar_schema_followup(self.cursor)
+        self.conn.commit()
+        sql = (MIGRACAO.parent / "20260924_segundo_followup.sql").read_text(encoding="utf-8")
+        self.cursor.execute(sql, prepare=False)
+        while self.cursor.nextset():
+            pass
+        self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
+        self.assertEqual(self.cursor.fetchone()[0], antes)
+        repo.validar_schema_followup(self.cursor)
+        self.cursor.execute("UPDATE chatbot.conversa SET motivo_encerramento='followup_sem_resposta'")
+        self.cursor.execute("SELECT motivo_encerramento FROM chatbot.conversa")
+        self.assertEqual(self.cursor.fetchone()[0], "followup_sem_resposta")
+        self.cursor.execute("SAVEPOINT motivo_invalido")
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.cursor.execute("UPDATE chatbot.conversa SET motivo_encerramento='motivo_invalido'")
+        self.cursor.execute("ROLLBACK TO SAVEPOINT motivo_invalido")
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+## Passo 49 — Substituir integralmente `tests/integration/test_reserva_link_postgres.py`
+
+```python
+"""DDL final e SQL de runtime; não executa migração nem usa banco de produção."""
+
+from contextlib import contextmanager
+from datetime import timedelta
+import os
+import unittest
+from unittest.mock import patch
+
+import psycopg
+from tests.fixtures.fireads import aplicar_fireads
+from psycopg.conninfo import conninfo_to_dict
+from core.database.deploy_database import (
+    bank_script,
+    povoar_etapas,
+    etapa_transicao_script,
+)
+from core.repositories.atendimento import followup
+from core.repositories.atendimento.turnos import salvar_turno_conversa
+from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
+from core.repositories.fluxo.contextos.etapa20 import buscar_contexto_etapa20
+from core.repositories.funil import envios, leads
+from core.repositories.monitoramento.painel import listar_conversas
+from workers.worker_flow.transacoes.efeitos_transicao import (
+    atualizar_banco_conforme_transicao_de_etapa,
+)
+
+DSN = os.environ.get("RESERVA_LINK_TEST_DSN")
+
+
+@unittest.skipUnless(DSN, "Exige banco loopback vazio test_chatbot_reserva_link")
+class ReservaLinkPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        params = conninfo_to_dict(DSN)
+        locais = {"127.0.0.1", "::1", "localhost"}
+        if (
+            params.get("host") not in locais
+            or params.get("dbname") != "test_chatbot_reserva_link"
+            or params.get("service")
+            or (params.get("hostaddr") and params["hostaddr"] not in locais)
+        ):
+            raise RuntimeError(
+                "Teste exige loopback explícito e test_chatbot_reserva_link"
+            )
+        cls.conn = psycopg.connect(DSN, connect_timeout=5)
+        cls.cursor = cls.conn.cursor()
+        if (
+            cls.conn.info.host not in locais
+            or cls.conn.info.dbname != "test_chatbot_reserva_link"
+        ):
+            cls.conn.close()
+            raise RuntimeError("Conexão efetiva não corresponde ao banco de teste")
+        if (
+            cls.conn.execute("SELECT to_regnamespace('chatbot')").fetchone()[0]
+            is not None
+        ):
+            cls.conn.close()
+            raise RuntimeError("Recusado schema chatbot preexistente")
+        cls.conn.execute(
+            "CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user(id SERIAL PRIMARY KEY)"
+        )
+
+        @contextmanager
+        def transacao(*_):
+            yield cls.cursor
+
+        with patch.object(bank_script, "transacao_deploy", transacao), patch.object(
+            povoar_etapas, "transacao_deploy", transacao
+        ), patch.object(etapa_transicao_script, "transacao_deploy", transacao):
+            bank_script.criar_tabelas()
+            povoar_etapas.insere_etapa_once()
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+        cls.conn.execute("""
+            CREATE TABLE chatbot.cliente_bloqueado_meta(wa_id_cliente TEXT, phone_id_unidade TEXT);
+            CREATE TABLE chatbot.webhook_flood_evento(wa_id_cliente TEXT, phone_id_unidade TEXT, received_at TIMESTAMPTZ);
+            INSERT INTO chatbot.unidade(id_unidade,nome_unidade,nome_agente,genero,cnpj,email_responsavel,
+                telefone,numero_comercial,waba_id,phone_number_id,link_agendamento)
+            VALUES (1,'Unidade','Suh','feminino','cnpj','unidade@example.com','5571888888888',
+                '5571999999999','waba','phone',NULL);
+            INSERT INTO chatbot.cliente(id_cliente,nome,waid_telefone,idade,email)
+                VALUES (1,'Ana','5571777777777',40,'ana@example.com');
+            INSERT INTO chatbot.conversa(id_conversa,id_cliente,id_unidade,id_etapa_atual,profissao)
+                VALUES (1,1,1,17,'Professora');
+            INSERT INTO chatbot.integracao_funil_unidade(id_unidade,nome_widget,codigo_widget,link_api_carrossel,codigo_canal_venda)
+                VALUES (1,'Widget','cod','https://example.com/api','canal');
+        """)
+        aplicar_fireads(cls.cursor)
+        cls.conn.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.rollback()
+        cls.conn.execute("DROP SCHEMA chatbot CASCADE")
+        cls.conn.commit()
+        cls.conn.close()
+
+    def tearDown(self):
+        self.conn.rollback()
+
+    def configurar(self, link, etapa):
+        self.cursor.execute(
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento=%s WHERE id_unidade=1", (link,)
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET id_etapa_atual=%s,lead_no_funil=FALSE WHERE id_conversa=1",
+            (etapa,),
+        )
+        self.cursor.execute("DELETE FROM chatbot.funil_envios")
+
+    def test_matriz_funil_na_fila_claim_leitura_e_confirmacao(self):
+        for link in (None, "", "https://example.com"):
+            for etapa in range(17, 25):
+                with self.subTest(link=link, etapa=etapa):
+                    self.configurar(link, etapa)
+                    esperado = etapa >= 20 if link else etapa == 19 or etapa >= 21
+                    self.assertEqual(
+                        envios.sincronizar_envios_elegiveis(self.cursor), int(esperado)
+                    )
+                    envio = envios.reivindicar_proximo_envio(self.cursor)
+                    lead = leads.buscar_dados_lead_funil(1, self.cursor)
+                    self.assertEqual(envio is not None, esperado)
+                    self.assertEqual(lead is not None, esperado)
+                    if esperado:
+                        self.assertEqual(lead["link_agendamento"], link or None)
+                        self.assertTrue(
+                            envios.marcar_envio_como_concluido(
+                                envio["id_funil_envio"], 1, "ok", self.cursor
+                            )
+                        )
+                        self.assertEqual(
+                            envios.sincronizar_envios_elegiveis(self.cursor), 0
+                        )
+
+    def test_funil_pendente_revalida_link_adicionado(self):
+        self.configurar(None, 19)
+        self.assertEqual(envios.sincronizar_envios_elegiveis(self.cursor), 1)
+        self.conn.execute(
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
+        )
+        self.assertIsNone(envios.reivindicar_proximo_envio(self.cursor))
+        self.assertIsNone(leads.buscar_dados_lead_funil(1, self.cursor))
+        self.conn.execute(
+            "UPDATE chatbot.conversa SET id_etapa_atual=21 WHERE id_conversa=1"
+        )
+        self.assertIsNotNone(envios.reivindicar_proximo_envio(self.cursor))
+
+    def test_aceite_externo_e_confirmado_mesmo_com_link_adicionado(self):
+        self.configurar(None, 19)
+        self.assertEqual(envios.sincronizar_envios_elegiveis(self.cursor), 1)
+        envio = envios.reivindicar_proximo_envio(self.cursor)
+        self.assertIsNotNone(leads.buscar_dados_lead_funil(1, self.cursor))
+        # Simula a alteração após o despacho que o CRM confirmou com sucesso.
+        self.conn.execute(
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
+        )
+        self.assertTrue(
+            envios.marcar_envio_como_concluido(
+                envio["id_funil_envio"],
+                1,
+                "ok",
+                self.cursor,
+            )
+        )
+        self.conn.execute(
+            "UPDATE chatbot.conversa SET id_etapa_atual=21 WHERE id_conversa=1"
+        )
+        self.assertEqual(envios.sincronizar_envios_elegiveis(self.cursor), 0)
+        self.assertIsNone(envios.reivindicar_proximo_envio(self.cursor))
+
+    def test_limites_followup_por_configuracao_e_releitura(self):
+        agora = self.conn.execute("SELECT clock_timestamp()").fetchone()[0]
+        ancora = agora - timedelta(hours=7, minutes=1)
+        self.cursor.execute(
+            """
+            INSERT INTO chatbot.historico_mensagens(id_conversa,id_etapa,received_data_hora,cliente_telefone,
+                conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou,status_envio)
+            VALUES (1,17,%s,'5571777777777','Oi','text','wamid.cliente','phone','5571888888888','cliente',NULL),
+                   (1,17,%s,'5571777777777','Pergunta','text','wamid.bot','phone','5571888888888','bot','sent');
+            """,
+            (ancora - timedelta(minutes=1), ancora),
+        )
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET last_message_from='bot',last_interaction_at=%s WHERE id_conversa=1",
+            (ancora,),
+        )
+        for link in (None, "", "https://example.com"):
+            for etapa in (1, 17, 18, 19, 20, 21, 24):
+                with self.subTest(link=link, etapa=etapa):
+                    self.configurar(link, etapa)
+                    esperado = etapa <= 17 or etapa == 18 and not link
+                    self.assertEqual(
+                        followup.reler_elegivel(1, self.cursor) is not None, esperado
+                    )
+        self.configurar(None, 18)
+        self.assertIsNotNone(followup.reler_elegivel(1, self.cursor))
+        self.conn.execute(
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
+        )
+        self.assertIsNone(followup.reler_elegivel(1, self.cursor))
+
+    def test_turno_dominio_rollback_e_replay(self):
+        self.configurar(None, 18)
+        for turno in ("manha", "tarde", "noite"):
+            with self.conn.transaction():
+                self.conn.execute(
+                    "UPDATE chatbot.conversa SET turno=NULL WHERE id_conversa=1"
+                )
+                self.assertTrue(
+                    salvar_turno_conversa(1, 1, turno, self.cursor)["turno_persistido"]
+                )
+                self.assertTrue(
+                    salvar_turno_conversa(1, 1, turno, self.cursor)["turno_persistido"]
+                )
+        self.conn.execute("UPDATE chatbot.conversa SET turno=NULL WHERE id_conversa=1")
+        for invalido in ("manha/tarde", "dia", "manhã"):
+            with self.assertRaises(psycopg.Error), self.conn.transaction():
+                self.conn.execute(
+                    "UPDATE chatbot.conversa SET turno=%s WHERE id_conversa=1",
+                    (invalido,),
+                )
+        with self.assertRaisesRegex(RuntimeError, "simulada"), self.conn.transaction():
+            self.conn.execute(
+                "UPDATE chatbot.conversa SET id_etapa_atual=19 WHERE id_conversa=1"
+            )
+            atualizar_banco_conforme_transicao_de_etapa(
+                {
+                    "id_conversa": 1,
+                    "id_unidade": 1,
+                    "id_etapa_origem_transicao": 18,
+                    "texto_cliente_atual": "Pela manhã",
+                    "tipo_mensagem_atual": "text",
+                },
+                {
+                    "id_etapa_resultante": 19,
+                    "evento_transicao": "turno_escolhido",
+                    "resposta_ja_existia": True,
+                },
+                self.cursor,
+            )
+            raise RuntimeError("Falha final simulada")
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT id_etapa_atual,turno FROM chatbot.conversa WHERE id_conversa=1"
+            ).fetchone(),
+            (18, None),
+        )
+
+    def test_contexto_painel_e_funil_expoem_turno_sem_cruzar_unidades(self):
+        # A plataforma ainda é obrigatória para um novo envio na etapa 20.
+        # Removê-la não deve improvisar uma mudança de rota no atendimento ativo.
+        self.configurar("https://example.com", 20)
+        self.assertEqual(
+            buscar_contexto_etapa20(1, 1, self.cursor)["link_agendamento_unidade"],
+            "https://example.com",
+        )
+        self.configurar(None, 20)
+        with self.assertRaisesRegex(ValueError, "sem link de agendamento"):
+            buscar_contexto_etapa20(1, 1, self.cursor)
+        self.configurar(None, 19)
+        salvar_turno_conversa(1, 1, "noite", self.cursor)
+        self.assertEqual(buscar_contexto_etapa18(1, 1, self.cursor)["turno"], "noite")
+        self.assertEqual(
+            leads.buscar_dados_lead_funil(1, self.cursor)["turno"], "noite"
+        )
+        with self.assertRaises(ValueError):
+            buscar_contexto_etapa18(1, 2, self.cursor)
+        self.conn.execute("""
+            INSERT INTO chatbot.historico_mensagens(id_conversa,id_etapa,received_data_hora,cliente_telefone,
+                conteudo_texto,tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou)
+            VALUES (1,18,NOW(),'5571777777777','Pela noite','text','wamid.cliente','phone','5571888888888','cliente')
+        """)
+        fim = self.conn.execute(
+            "SELECT clock_timestamp() + INTERVAL '1 minute'"
+        ).fetchone()[0]
+        dados = listar_conversas(1, None, fim, self.cursor)
+        self.assertEqual(dados[0]["turno"], "noite")
+        self.assertEqual(listar_conversas(2, None, fim, self.cursor), [])
+```
+
+## Passo 50 — Substituir integralmente `tests/integration/test_migracao_reserva_link_postgres.py`
+
+```python
+"""Migração real, reversão e retomada; somente PostgreSQL local descartável."""
+
+from copy import deepcopy
+from pathlib import Path
+import json
+import os
+import unittest
+from unittest.mock import patch
+
+import psycopg
+from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database.etapa_transicao_script import TRANSICOES_INICIAIS
+from core.database.deploy_database.povoar_etapas import ETAPAS
+from core.repositories.atendimento.conversas import tentar_lock_conversa, unlock_conversa
+from tests.fixtures.reserva_migracao import criar_base_legada
+from workers.worker_flow.response_flow.flow_sender import flow_sender
+from workers.worker_flow.valida_historico import valida_historico
+
+
+DSN = os.environ.get('MIGRACAO_RESERVA_TEST_DSN')
+ROOT = Path(__file__).resolve().parents[2]
+MIGRACAO = ROOT / 'deploy/migrations/20261003_reserva_com_sem_link.sql'
+REVERSAO = ROOT / 'deploy/rollback/20261003_reserva_com_sem_link.sql'
+REFERENCIAS = {
+    'conversa': 'id_etapa_atual',
+    'historico_mensagens': 'id_etapa',
+    'respostas_desafios': 'id_etapa',
+    'followup_retomada': 'id_etapa',
+}
+TABELAS = tuple(REFERENCIAS) + (
+    'cliente', 'dependente', 'unidade', 'fila_mensagens', 'pesquisa_satisfacao',
+    'funil_envios', 'followup_envio', 'followup_legado', 'consumo_mensal_meta',
+    'consumo_meta_coletas',
+)
+
+
+@unittest.skipUnless(DSN, 'Exige MIGRACAO_RESERVA_TEST_DSN local em test_chatbot_migracao_reserva vazio')
+class MigracaoReservaLinkPostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        parametros = conninfo_to_dict(DSN)
+        locais = {'127.0.0.1', '::1', 'localhost'}
+        if (parametros.get('host') not in locais
+                or parametros.get('dbname') != 'test_chatbot_migracao_reserva'
+                or parametros.get('service')
+                or (parametros.get('hostaddr') and parametros['hostaddr'] not in locais)):
+            raise RuntimeError('Exige banco descartável test_chatbot_migracao_reserva em loopback')
+        cls.conn = psycopg.connect(DSN, autocommit=True, connect_timeout=5)
+        if (cls.conn.info.host not in locais
+                or cls.conn.info.dbname != 'test_chatbot_migracao_reserva'
+                or cls.conn.execute("SELECT to_regnamespace('chatbot')").fetchone()[0] is not None):
+            cls.conn.close()
+            raise RuntimeError('Banco de teste não está vazio ou não é o destino permitido')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def setUp(self):
+        self.addCleanup(self.limpar)
+        criar_base_legada(self.conn)
+
+    def limpar(self):
+        self.conn.execute('ROLLBACK')
+        # Apenas o schema criado por este teste, no destino validado acima.
+        self.conn.execute('DROP SCHEMA chatbot CASCADE')
+
+    def executar(self, caminho=MIGRACAO):
+        self.conn.execute(caminho.read_text(encoding='utf-8'), prepare=False)
+
+    def fotografia(self):
+        return {
+            tabela: [row[0] for row in self.conn.execute(sql.SQL(
+                'SELECT to_jsonb(t) FROM chatbot.{} t ORDER BY to_jsonb(t)'
+            ).format(sql.Identifier(tabela))).fetchall()]
+            for tabela in TABELAS
+        }
+
+    def assert_fotografia(self, esperado):
+        atual = self.fotografia()
+        for tabela in TABELAS:
+            with self.subTest(tabela=tabela):
+                ordenar = lambda row: json.dumps(row, sort_keys=True)
+                self.assertEqual(
+                    sorted(atual[tabela], key=ordenar),
+                    sorted(esperado[tabela], key=ordenar),
+                )
+
+    def test_preserva_dados_particoes_e_ids_e_mapeia_os_significados(self):
+        esperado = deepcopy(self.fotografia())
+        transicoes_antes = self.conn.execute(
+            'SELECT id_transicao,id_etapa_origem,evento,id_etapa_destino FROM chatbot.etapa_transicao ORDER BY id_transicao'
+        ).fetchall()
+        for tabela, coluna in REFERENCIAS.items():
+            for row in esperado[tabela]:
+                if row[coluna] is not None and 18 <= row[coluna] <= 22:
+                    row[coluna] += 2
+                if tabela == 'conversa':
+                    row['turno'] = None
+        self.executar()
+        self.assert_fotografia(esperado)
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.etapa ORDER BY id_etapa').fetchall(), list(ETAPAS))
+        mapa = self.conn.execute(
+            'SELECT id_etapa_origem,evento,id_etapa_destino FROM chatbot.etapa_transicao ORDER BY id_etapa_origem,evento'
+        ).fetchall()
+        # A migração de reserva precede os dois atalhos adicionados pela FireAds.
+        self.assertEqual(mapa, sorted(
+            t for t in TRANSICOES_INICIAIS if not t[1].endswith('_email_fireads')
+        ))
+        for id_transicao, origem, evento, destino in transicoes_antes:
+            self.assertEqual(self.conn.execute(
+                'SELECT id_etapa_origem,evento,id_etapa_destino FROM chatbot.etapa_transicao WHERE id_transicao=%s',
+                (id_transicao,),
+            ).fetchone(), (origem + (2 if origem >= 18 else 0), evento, destino + (2 if destino >= 18 else 0)))
+        self.assertEqual(self.conn.execute(
+            'SELECT tableoid::regclass::text,COUNT(*) FROM chatbot.historico_mensagens GROUP BY tableoid ORDER BY 1'
+        ).fetchall(), [('chatbot.historico_mensagens_202610', 5), ('chatbot.historico_mensagens_default', 5)])
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.conn.execute("UPDATE chatbot.conversa SET turno='dia' WHERE id_conversa=18")
+
+    def test_reexecucao_nao_desloca_novamente_nem_apaga_preferencias(self):
+        self.executar()
+        self.conn.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,turno='manha' WHERE id_conversa=18")
+        self.conn.execute('UPDATE chatbot.unidade SET link_agendamento=NULL')
+        antes = self.fotografia()
+        self.executar()
+        self.assert_fotografia(antes)
+
+    def test_reversao_antes_de_novos_atendimentos_e_reexecutavel(self):
+        antes = self.fotografia()
+        etapas = self.conn.execute('SELECT * FROM chatbot.etapa ORDER BY id_etapa').fetchall()
+        mapa = self.conn.execute('SELECT * FROM chatbot.etapa_transicao ORDER BY id_transicao').fetchall()
+        self.executar()
+        self.executar(REVERSAO)
+        self.assert_fotografia(antes)
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.etapa ORDER BY id_etapa').fetchall(), etapas)
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.etapa_transicao ORDER BY id_transicao').fetchall(), mapa)
+        self.executar(REVERSAO)
+        self.assert_fotografia(antes)
+
+    def test_reversao_recusa_dados_da_nova_rota_sem_apagar_nada(self):
+        self.executar()
+        self.conn.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,turno='tarde' WHERE id_conversa=18")
+        antes = self.fotografia()
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, 'Reversão recusada'):
+            self.executar(REVERSAO)
+        self.conn.execute('ROLLBACK')
+        self.assert_fotografia(antes)
+
+    def test_catalogo_desconhecido_aborta_sem_alteracoes_parciais(self):
+        self.conn.execute("UPDATE chatbot.etapa SET nome_etapa='Configuração não mapeada' WHERE id_etapa=18")
+        antes = self.fotografia()
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, 'Catálogo/mapa diferente'):
+            self.executar()
+        self.conn.execute('ROLLBACK')
+        self.assert_fotografia(antes)
+
+    def test_fk_desconhecida_com_set_null_aborta_antes_de_apagar_vinculo(self):
+        self.conn.execute('CREATE TABLE chatbot.referencia_extra(id INTEGER PRIMARY KEY, etapa INTEGER REFERENCES chatbot.etapa ON DELETE SET NULL)')
+        self.conn.execute('INSERT INTO chatbot.referencia_extra VALUES(1,18)')
+        with self.assertRaisesRegex(psycopg.errors.RaiseException, 'Referências de etapa não mapeadas'):
+            self.executar()
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.referencia_extra').fetchall(), [(1,18)])
+        self.assertEqual(self.conn.execute('SELECT id_etapa_atual FROM chatbot.conversa WHERE id_conversa=18').fetchone(), (18,))
+
+    def test_resposta_migrada_e_reaproveitada_mesmo_apos_remocao_do_link(self):
+        self.executar()
+        self.conn.execute('UPDATE chatbot.unidade SET link_agendamento=NULL')
+        conversa = self.conn.execute('SELECT to_jsonb(c) FROM chatbot.conversa c WHERE id_conversa=18').fetchone()[0]
+        recebido = self.conn.execute('SELECT received_data_hora FROM chatbot.fila_mensagens WHERE id_mensagem=18').fetchone()[0]
+        mensagem = {
+            'id_mensagem': 18, 'id_hash': 'wamid.cliente.18', 'data_recebimento': recebido,
+            'cliente_telefone': '5511999999918', 'id_phone_unidade': 'phone',
+            'unidade_telefone': '5511888888888', 'tipo_mensagem': 'text',
+            'conteudo_texto': 'Já reservei', 'retry_count': 2,
+        }
+        with self.conn.cursor() as cursor, patch(
+            'workers.worker_flow.valida_historico.buscar_contexto_etapa20',
+            side_effect=AssertionError('Replay não precisa do link para novo envio'),
+        ), patch('workers.worker_flow.response_flow.flow_sender.resolve_etapa20') as resolver:
+            contexto = valida_historico(mensagem, {
+                'id_cliente': 18, 'id_unidade': 1, 'conversa': conversa,
+            }, cursor)
+            envio = flow_sender(contexto)
+        resolver.assert_not_called()
+        self.assertTrue(envio['resposta_ja_existia'])
+        self.assertEqual(envio['id_etapa_resultante'], 21)
+        self.assertEqual(envio['evento_transicao'], 'agendamento_confirmado')
+
+    def test_locks_fila_e_fencing_continuam_funcionando_apos_remapeamento(self):
+        self.executar()
+        with self.conn.cursor() as cursor:
+            ok, nova_versao = tentar_lock_conversa(18, cursor)
+            self.assertTrue(ok)
+            self.assertGreater(nova_versao, 8)
+            self.assertFalse(unlock_conversa(18, 8, cursor))
+            self.assertTrue(unlock_conversa(18, nova_versao, cursor))
+        self.assertEqual(self.conn.execute(
+            'SELECT id_etapa_atual,status_ativa,followup_stage FROM chatbot.conversa WHERE id_conversa=22'
+        ).fetchone(), (24,False,1))
+```
+
+## Passo 51 — Substituir integralmente `tests/integration/test_suporte_por_idade_postgres.py`
+
+```python
+"""Migração real somente em PostgreSQL local descartável explicitamente indicado."""
+
+from contextlib import contextmanager
+from datetime import datetime, timezone
+import os
+from pathlib import Path
+import re
+import unittest
+from unittest.mock import patch
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database import bank_script
+from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
+from core.repositories.monitoramento import painel
+
+
+DSN = os.environ.get('SUPORTE_IDADE_TEST_DSN')
+MIGRACAO = Path(__file__).resolve().parents[2] / 'deploy/migrations/20260911_idade_minima_suporte.sql'
+REVERSAO = Path(__file__).resolve().parents[2] / 'deploy/rollback/20260911_idade_minima_suporte.sql'
+
+
+@unittest.skipUnless(DSN, 'Defina SUPORTE_IDADE_TEST_DSN para banco local vazio test_chatbot_suporte_idade')
+class SuporteIdadePostgresTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        params = conninfo_to_dict(DSN)
+        locais = {'127.0.0.1', '::1', 'localhost'}
+        if (params.get('host') not in locais
+                or params.get('dbname') != 'test_chatbot_suporte_idade'
+                or (params.get('hostaddr') and params['hostaddr'] not in locais)
+                or params.get('service')):
+            raise RuntimeError('Exige host loopback explícito e dbname=test_chatbot_suporte_idade')
+        cls.conn = psycopg.connect(DSN, connect_timeout=5, autocommit=True)
+        if cls.conn.info.host not in locais or cls.conn.info.dbname != 'test_chatbot_suporte_idade':
+            cls.conn.close()
+            raise RuntimeError('Conexão efetiva não corresponde ao banco descartável')
+        if cls.conn.execute("SELECT to_regnamespace('chatbot')").fetchone()[0] is not None:
+            cls.conn.close()
+            raise RuntimeError('Schema chatbot já existe: use um banco de teste vazio')
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def setUp(self):
+        self.conn.execute('CREATE SCHEMA chatbot')
+        self.addCleanup(self.limpar_schema)
+        self.conn.execute('''CREATE TABLE chatbot.unidade (
+            id_unidade SERIAL PRIMARY KEY, nome_unidade TEXT NOT NULL,
+            suporte_idoso BOOLEAN NOT NULL DEFAULT FALSE,
+            email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+            bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
+            numero_comercial TEXT
+        );
+        INSERT INTO chatbot.unidade(nome_unidade, suporte_idoso, email_obrigatorio, numero_comercial)
+        VALUES ('Ativa', TRUE, FALSE, '5571999999999'), ('Desativada', FALSE, TRUE, NULL);
+        CREATE TABLE chatbot.conversa (id_conversa INTEGER, followup_stage INTEGER, status_ativa BOOLEAN);
+        INSERT INTO chatbot.conversa VALUES (1, 1, TRUE), (2, 0, FALSE);
+        ''')
+
+    def limpar_schema(self):
+        self.conn.execute('ROLLBACK')
+        # Este schema foi criado pelo próprio teste após recusar um preexistente.
+        self.conn.execute('DROP SCHEMA chatbot CASCADE')
+
+    def migrar(self, sql=None):
+        self.conn.execute(sql or MIGRACAO.read_text(encoding='utf-8'))
+
+    def assert_dominio(self):
+        for idade in (None, 50, 60, 70, 80, 90):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (idade,))
+        for idade in (0, -1, 49, 55, 100):
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (idade,))
+
+    def test_conversao_preserva_unidades_conversas_e_dominio(self):
+        self.migrar()
+        self.assertEqual(self.conn.execute('''SELECT idade_minima_suporte, email_obrigatorio,
+            bpa_ativo, numero_comercial FROM chatbot.unidade ORDER BY id_unidade''').fetchall(),
+            [(60, False, False, '5571999999999'), (None, True, False, None)])
+        self.assertEqual(self.conn.execute('SELECT * FROM chatbot.conversa ORDER BY id_conversa').fetchall(),
+                         [(1, 1, True), (2, 0, False)])
+        self.assert_dominio()
+        self.conn.execute("INSERT INTO chatbot.unidade(nome_unidade) VALUES ('Nova')")
+        self.assertIsNone(self.conn.execute("SELECT idade_minima_suporte FROM chatbot.unidade WHERE nome_unidade='Nova'").fetchone()[0])
+
+    def test_reaplicacao_recusada_sem_perder_configuracao_nova(self):
+        self.migrar()
+        self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=70 WHERE id_unidade=1')
+        with self.assertRaisesRegex(psycopg.Error, 'já aplicada ou schema parcial'):
+            self.migrar()
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1').fetchone()[0], 70)
+
+    def test_schema_parcial_recusado(self):
+        self.conn.execute('ALTER TABLE chatbot.unidade ADD COLUMN idade_minima_suporte INTEGER')
+        with self.assertRaisesRegex(psycopg.Error, 'schema parcial'):
+            self.migrar()
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade').fetchall(), [(True,), (False,)])
+
+    def test_falha_pos_conversao_reverte_toda_a_transacao(self):
+        sql = MIGRACAO.read_text(encoding='utf-8').replace(
+            'DO $poscondicoes$\nBEGIN',
+            "DO $poscondicoes$\nBEGIN\n    RAISE EXCEPTION 'Falha injetada de teste';",
+        )
+        with self.assertRaisesRegex(psycopg.Error, 'Falha injetada'):
+            self.migrar(sql)
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute('SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade').fetchall(), [(True,), (False,)])
+        self.assertEqual(self.conn.execute("""SELECT COUNT(*) FROM information_schema.columns
+            WHERE table_schema='chatbot' AND table_name='unidade' AND column_name='idade_minima_suporte'""").fetchone()[0], 0)
+
+    def test_instalacao_limpa_usa_o_mesmo_dominio(self):
+        comandos = []
+
+        class CapturaDDL:
+            def execute(self, sql, *args): comandos.append(sql)
+
+        @contextmanager
+        def capturar(*args): yield CapturaDDL()
+
+        with patch.object(bank_script, 'transacao_deploy', capturar):
+            bank_script.criar_tabelas()
+        ddl_unidade = re.search(
+            r'CREATE TABLE IF NOT EXISTS chatbot\.unidade\s*\(.*?\n\s*\);',
+            '\n'.join(comandos), re.S,
+        ).group(0)
+        self.conn.execute('DROP TABLE chatbot.unidade; CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY)')
+        self.conn.execute(ddl_unidade)
+        self.conn.execute('''INSERT INTO chatbot.unidade
+            (id_unidade, nome_unidade, nome_agente, genero, cnpj, email_responsavel, telefone,
+             waba_id, phone_number_id, link_agendamento, numero_comercial)
+            VALUES (1, 'Nova', 'Suh', 'feminino', 'teste', 'teste@example.com', '5571999999999',
+                    'waba', 'phone', 'https://example.com', '5571999999999')''')
+        self.assertIsNone(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade').fetchone()[0])
+        for limite in (None, 50, 60, 70, 80):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s', (limite,))
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=90')
+
+    def test_reversao_preserva_politica_null_60(self):
+        self.migrar()
+        self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+        self.assertEqual(self.conn.execute(
+            'SELECT suporte_idoso, email_obrigatorio FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(True, False), (False, True)])
+
+    def test_reversao_recusa_faixas_novas(self):
+        self.migrar()
+        for limite in (50, 70, 80, 90):
+            self.conn.execute('UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1', (limite,))
+            with self.assertRaisesRegex(psycopg.Error, 'Há faixas novas configuradas'):
+                self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+            self.conn.execute('ROLLBACK')
+            self.assertEqual(self.conn.execute('SELECT idade_minima_suporte FROM chatbot.unidade WHERE id_unidade=1').fetchone()[0], limite)
+
+    def test_lock_ocupado_aborta_sem_converter_a_coluna(self):
+        with psycopg.connect(DSN, connect_timeout=5) as concorrente:
+            concorrente.execute('SELECT * FROM chatbot.unidade')
+            with self.assertRaises(psycopg.errors.LockNotAvailable):
+                self.migrar()
+            self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT suporte_idoso FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(True,), (False,)])
+
+    def test_falha_na_reversao_preserva_schema_e_valores_novos(self):
+        self.migrar()
+        sql = REVERSAO.read_text(encoding='utf-8').replace(
+            'DO $conferencia$\nBEGIN',
+            "DO $conferencia$\nBEGIN\n    RAISE EXCEPTION 'Falha na reversão';",
+        )
+        with self.assertRaisesRegex(psycopg.Error, 'Falha na reversão'):
+            self.conn.execute(sql)
+        self.conn.execute('ROLLBACK')
+        self.assertEqual(self.conn.execute(
+            'SELECT idade_minima_suporte FROM chatbot.unidade ORDER BY id_unidade'
+        ).fetchall(), [(60,), (None,)])
+        self.assert_dominio()
+
+    def test_contexto_e_relatorio_no_schema_completo_migrado(self):
+        # Usa o DDL real e a reversão para montar a estrutura anterior completa.
+        self.conn.execute('''
+            DROP TABLE chatbot.conversa, chatbot.unidade;
+            CREATE TABLE chatbot.auth_user (id SERIAL PRIMARY KEY);
+        ''')
+
+        @contextmanager
+        def transacao_local(*_):
+            with self.conn.cursor() as cursor:
+                yield cursor
+
+        with patch.object(bank_script, 'transacao_deploy', transacao_local):
+            bank_script.criar_tabelas()
+        self.conn.execute(REVERSAO.read_text(encoding='utf-8'))
+        self.conn.execute('''
+            INSERT INTO chatbot.unidade
+                (id_unidade, nome_unidade, nome_agente, genero, cnpj,
+                 email_responsavel, telefone, waba_id, phone_number_id,
+                 link_agendamento, numero_comercial, suporte_idoso)
+            SELECT n, 'Teste ' || n, 'Suh', 'feminino', 'cnpj-' || n,
+                   'teste' || n || '@example.com', '557199999999' || n,
+                   'waba-' || n, 'phone-' || n,
+                   'https://example.com/agendar/' || n, '5571999999999', TRUE
+              FROM generate_series(1, 2) AS n;
+            INSERT INTO chatbot.etapa (id_etapa, nome_etapa)
+            VALUES (6, 'Idade');
+            INSERT INTO chatbot.cliente (id_cliente, waid_telefone, nome)
+            VALUES (1, '5571999999901', 'Cliente Um'),
+                   (2, '5571999999902', 'Cliente Dois');
+            INSERT INTO chatbot.conversa
+                (id_conversa, id_unidade, id_cliente, id_etapa_atual,
+                 status_ativa, motivo_encerramento, finalizou_em)
+            VALUES (1, 1, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-01T00:00:00Z'),
+                   (2, 1, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z'),
+                   (3, 2, 1, 6, FALSE, 'encaminhado_suporte_idoso', '2026-09-02T00:00:00Z'),
+                   (4, 1, 2, 6, FALSE, 'encaminhado_suporte_idoso', '2026-10-01T00:00:00Z'),
+                   (5, 1, 1, 6, TRUE, NULL, NULL);
+        ''')
+        conversas_antes = self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall()
+        self.migrar()
+        self.assertEqual(self.conn.execute(
+            'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
+        ).fetchall(), conversas_antes)
+        # Adapta apenas a leitura do runtime à base histórica deste teste.
+        self.conn.execute('CREATE VIEW chatbot.unidade_atendimento AS SELECT * FROM chatbot.unidade')
+        inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
+        fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        with self.conn.cursor() as cursor:
+            for limite in (None, 50, 60, 70, 80, 90):
+                cursor.execute(
+                    'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
+                    (limite,),
+                )
+                if limite == 90:
+                    # A migração histórica permite 90; o runtime novo exige a posterior.
+                    with self.assertRaises(ValueError):
+                        buscar_contexto_etapa6(5, 1, cursor)
+                else:
+                    self.assertEqual(
+                        buscar_contexto_etapa6(5, 1, cursor)['idade_minima_suporte'], limite,
+                    )
+                self.assertEqual(
+                    painel.buscar_unidade(1, cursor)['idade_minima_suporte'], limite,
+                )
+                self.assertEqual(
+                    painel.contar_encaminhados_comercial_por_idade(1, inicio, fim, cursor),
+                    1,
+                )
+            with self.assertRaisesRegex(ValueError, 'não encontrado'):
+                buscar_contexto_etapa6(5, 2, cursor)
+            self.assertEqual(
+                painel.contar_encaminhados_comercial_por_idade(2, inicio, fim, cursor), 1,
+            )
+
+
+if __name__ == '__main__':
+    unittest.main()
+```
+
+## Passo 52 — Criar `tests/integration/test_fireads_postgres.py`
+
+```python
+"""FireAds em PostgreSQL local descartável; apenas HTTP é substituído."""
+
+from contextlib import contextmanager, ExitStack
+import os
+import unittest
+from unittest.mock import Mock, patch
+
+import psycopg
+from psycopg.conninfo import conninfo_to_dict
+
+from core.database.deploy_database import (
+    bank_script,
+    povoar_etapas,
+    etapa_transicao_script,
+)
+from core.repositories.atendimento.conversas import (
+    inserindo_em_conversa_caso_seja_nova,
+    tentar_lock_conversa,
+)
+from core.repositories.atendimento.followup import LockConversaPerdido
+from core.repositories.fireads import consulta, envios
+from core.repositories.funil.leads import buscar_dados_lead_funil
+from core.integrations.funil.oportunidades import montar_payload_oportunidade
+from core.integrations.fireads.contrato import bloco_observacoes
+from workers.worker_flow.fireads import preparar_abertura, interpretar
+from workers.worker_funil.fireads import processar
+from tests.fixtures.fireads import MIGRACAO_FIREADS, aplicar_fireads
+
+DSN = os.environ.get("FIREADS_TEST_DSN")
+NUMERO = "5511999990002"
+GOOGLE = {
+    "Nome": "Ana Paula Silva",
+    "Email": "ana@example.com",
+    "WhatsApp": NUMERO,
+    "Perfil/Faixa": "Para mim",
+    "Data/Hora": "08/10/2026 12:00",
+}
+
+
+@unittest.skipUnless(
+    DSN, "Exige FIREADS_TEST_DSN local e banco vazio test_chatbot_fireads"
+)
+class FireAdsPostgresTests(unittest.TestCase):
+    def setUp(self):
+        params = conninfo_to_dict(DSN)
+        locais = {"127.0.0.1", "::1", "localhost"}
+        if (
+            params.get("host") not in locais
+            or params.get("dbname") != "test_chatbot_fireads"
+            or params.get("service")
+            or (params.get("hostaddr") and params["hostaddr"] not in locais)
+        ):
+            raise RuntimeError("FireAds exige banco descartável explícito em loopback")
+        self.conn = psycopg.connect(DSN, connect_timeout=5)
+        self.addCleanup(self.conn.close)
+        if (
+            self.conn.info.host not in locais
+            or self.conn.info.dbname != "test_chatbot_fireads"
+        ):
+            raise RuntimeError("Destino efetivo não é o banco de teste")
+        if (
+            self.conn.execute("SELECT to_regnamespace('chatbot')").fetchone()[0]
+            is not None
+        ):
+            raise RuntimeError("Recusado schema chatbot preexistente")
+        self.addCleanup(self.limpar)
+        self.cursor = self.conn.cursor()
+        self.cursor.execute(
+            "CREATE SCHEMA chatbot; CREATE TABLE chatbot.auth_user(id SERIAL PRIMARY KEY)"
+        )
+
+        @contextmanager
+        def transacao(*_):
+            yield self.cursor
+
+        with ExitStack() as stack:
+            for module in (bank_script, povoar_etapas, etapa_transicao_script):
+                stack.enter_context(patch.object(module, "transacao_deploy", transacao))
+            bank_script.criar_tabelas()
+            bank_script.criar_funcoes_lock()
+            povoar_etapas.insere_etapa_once()
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+        self.cursor.execute("""
+            INSERT INTO chatbot.unidade(nome_unidade,nome_agente,genero,cnpj,email_responsavel,
+                telefone,numero_comercial,waba_id,phone_number_id)
+            VALUES('Teste FireAds','Dora','feminino','teste','unidade@example.com',
+                '5511999990000','5511999990001','waba-teste','phone-teste');
+            INSERT INTO chatbot.cliente(nome,waid_telefone,email) VALUES('Antigo','5511999990002','antigo@example.com');
+            INSERT INTO chatbot.conversa(id_cliente,id_unidade,status_ativa) VALUES(1,1,FALSE);
+        """)
+        aplicar_fireads(self.cursor)
+        self.cursor.execute("""
+            INSERT INTO chatbot.integracao_fireads(id_unidade,url_dashbord,contrato_validado,integracao_ativa)
+            VALUES(1,'https://script.google.com/macros/s/teste/exec',TRUE,TRUE);
+            INSERT INTO chatbot.integracao_funil_unidade(id_unidade,nome_widget,codigo_widget,
+                link_api_carrossel,codigo_canal_venda)
+            VALUES(1,'Teste','TESTE','https://example.com/api','113340');
+        """)
+        self.conn.commit()
+
+    def limpar(self):
+        self.conn.rollback()
+        self.conn.execute("DROP SCHEMA IF EXISTS chatbot CASCADE")
+        self.conn.commit()
+
+    def nova_conversa(self):
+        cid = inserindo_em_conversa_caso_seja_nova(1, 1, self.cursor)
+        self.conn.commit()
+        return cid
+
+    def preparar_mensagem(self):
+        cid = self.nova_conversa()
+        self.cursor.execute(
+            """INSERT INTO chatbot.fila_mensagens
+            (cliente_telefone,conteudo_texto,tipo_mensagem,id_phone_unidade,unidade_telefone,
+             id_hash_msg,id_conversa,status,retry_count,processing_started_at,received_data_hora)
+            VALUES(%s,'Oi','text','phone-teste','5511999990000','wamid.fireads',%s,'processing',1,clock_timestamp(),clock_timestamp())
+            RETURNING id_mensagem""",
+            (NUMERO, cid),
+        )
+        mensagem = {
+            "id_mensagem": self.cursor.fetchone()[0],
+            "retry_count": 1,
+            "cliente_telefone": NUMERO,
+        }
+        ok, versao = tentar_lock_conversa(cid, self.cursor)
+        self.assertTrue(ok)
+        self.conn.commit()
+        contexto = {
+            "id_cliente": 1,
+            "id_unidade": 1,
+            "conversa": {"id_conversa": cid, "id_etapa_atual": None},
+        }
+        return cid, mensagem, versao, contexto
+
+    def importar(self, cid):
+        abertura = consulta.buscar_abertura(cid, self.cursor)
+        ident = consulta.reservar_consulta(abertura, cid, self.cursor)
+        return consulta.concluir_consulta(
+            abertura, cid, ident, interpretar([GOOGLE], [], NUMERO, None), self.cursor
+        )
+
+    def preparar_envio(self):
+        cid = self.nova_conversa()
+        estado = self.importar(cid)
+        self.cursor.execute(
+            """UPDATE chatbot.conversa SET id_etapa_atual=19,turno='manha',
+            profissao='Professora',status_dependente=FALSE WHERE id_conversa=%s""",
+            (cid,),
+        )
+        self.cursor.execute("UPDATE chatbot.cliente SET idade=35 WHERE id_cliente=1")
+        self.cursor.execute(
+            """INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta)
+            SELECT %s,etapa,'Às vezes' FROM generate_series(12,17) etapa""",
+            (cid,),
+        )
+        consulta.guardar_coletas(
+            {"id_cliente": 1, "id_conversa": cid, "contexto_fireads": estado},
+            {"destino_dado": "cliente"},
+            self.cursor,
+        )
+        dados = buscar_dados_lead_funil(cid, self.cursor)
+        self.assertEqual(dados["nome_cliente"], "Ana Paula")
+        self.assertEqual(dados["idade_cliente"], 35)
+        payload = montar_payload_oportunidade(dados)
+        esperado = {
+            "codigo_canal_venda": "113340",
+            "link_api_carrossel": "https://example.com/api",
+        }
+        original = envios.congelar(dados, payload, esperado, self.cursor)
+        self.assertEqual(original[1], "113336")
+        self.assertEqual(envios.congelar(dados, {}, esperado, self.cursor), original)
+        self.assertIsNone(envios.reservar(self.cursor))  # Funil ainda não confirmou.
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s",
+            (cid,),
+        )
+        envio = envios.reservar(self.cursor)
+        self.conn.commit()
+        return envio
+
+    def test_migracao_preserva_personalizacao_conversas_e_reexecuta(self):
+        self.conn.execute(MIGRACAO_FIREADS.read_text(encoding="utf-8"), prepare=False)
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT nome_agente FROM chatbot.unidade_atendimento"
+            ).fetchone(),
+            ("Dora",),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT id_conversa,id_chat FROM chatbot.conversa"
+            ).fetchall(),
+            [(1, 1)],
+        )
+        self.nova_conversa()
+        self.assertEqual(
+            self.conn.execute("SELECT count(*) FROM chatbot.chat").fetchone()[0], 1
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT count(*) FROM chatbot.etapa_transicao"
+            ).fetchone()[0],
+            30,
+        )
+
+    def test_importacao_dependente_e_retry_recuperam_snapshot(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        api = Mock()
+        api.consultar.side_effect = [
+            {
+                "headers": list(GOOGLE),
+                "rows": [dict(GOOGLE, **{"Perfil/Faixa": "Para outra pessoa"})],
+            },
+            {
+                "headers": ["full_name", "email", "phone_number", "para_quem"],
+                "rows": [],
+            },
+        ]
+        with patch("workers.worker_flow.fireads.ClienteFireAds", return_value=api):
+            obtido = preparar_abertura(
+                contexto, mensagem, versao, self.conn, self.cursor
+            )
+        self.assertTrue(obtido["conversa"]["status_dependente"])
+        self.assertEqual(
+            self.conn.execute("SELECT nome,email FROM chatbot.cliente").fetchone(),
+            ("Ana Paula", "ana@example.com"),
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT count(*) FROM chatbot.dependente WHERE id_conversa=%s", (cid,)
+            ).fetchone()[0],
+            1,
+        )
+        with patch("workers.worker_flow.fireads.ClienteFireAds") as http:
+            self.assertEqual(
+                preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor),
+                obtido,
+            )
+            http.assert_not_called()
+
+    def test_lock_perdido_durante_http_nao_importa_dados(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+
+        def resposta(aba):
+            if "Google" in aba:
+                with psycopg.connect(DSN) as outro:
+                    outro.execute(
+                        "UPDATE chatbot.conversa SET lock_version=lock_version+1 WHERE id_conversa=%s",
+                        (cid,),
+                    )
+                return {"headers": list(GOOGLE), "rows": [GOOGLE]}
+            return {
+                "headers": ["full_name", "email", "phone_number", "para_quem"],
+                "rows": [],
+            }
+
+        api = Mock()
+        api.consultar.side_effect = resposta
+        with patch("workers.worker_flow.fireads.ClienteFireAds", return_value=api):
+            with self.assertRaises(LockConversaPerdido):
+                preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor)
+        self.conn.rollback()
+        self.assertEqual(
+            self.conn.execute("SELECT nome FROM chatbot.cliente").fetchone()[0],
+            "Antigo",
+        )
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT origem_fireads FROM chatbot.conversa WHERE id_conversa=%s",
+                (cid,),
+            ).fetchone()[0]
+        )
+
+    def test_nova_conversa_atualiza_consulta_sem_apagar_contexto_anterior(self):
+        cid = self.nova_conversa()
+        antigo = self.importar(cid)
+        self.cursor.execute(
+            "UPDATE chatbot.conversa SET status_ativa=FALSE WHERE id_conversa=%s",
+            (cid,),
+        )
+        novo = self.nova_conversa()
+        atual = self.importar(novo)
+        self.assertEqual(atual["id_consulta"], antigo["id_consulta"])
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT contexto_fireads FROM chatbot.conversa WHERE id_conversa=%s",
+                (cid,),
+            ).fetchone()[0],
+            antigo,
+        )
+        self.assertEqual(
+            self.conn.execute(
+                "SELECT id_conversa_referencia FROM chatbot.consulta_fireads"
+            ).fetchone()[0],
+            novo,
+        )
+
+    def test_retry_dash_reconcilia_bloco_sem_segundo_post(self):
+        envio = self.preparar_envio()
+        snap = envio["snapshot"]
+        bloco = bloco_observacoes(
+            envio["integracao"], envio["conversa"], snap["observacoes"]
+        )
+        api = Mock()
+        api.consultar.return_value = {
+            "headers": ["Nome", "Email", "WhatsApp", "Observação"],
+            "rows": [
+                {
+                    "_row": 2,
+                    "Nome": "Ana",
+                    "Email": "ana@example.com",
+                    "WhatsApp": NUMERO,
+                    "Observação": "FR002\n\n" + bloco,
+                }
+            ],
+        }
+        with patch("workers.worker_funil.fireads.ClienteFireAds", return_value=api):
+            self.assertTrue(processar(envio, self.conn, self.cursor))
+        api.enviar.assert_not_called()
+        self.assertTrue(
+            self.conn.execute(
+                "SELECT lead_no_dash FROM chatbot.conversa WHERE id_conversa=%s",
+                (envio["conversa"],),
+            ).fetchone()[0]
+        )
+
+    def test_falha_dash_fica_pending_preserva_funil_e_nao_tenta_no_mesmo_ciclo(self):
+        envio = self.preparar_envio()
+        api = Mock()
+        api.consultar.side_effect = TimeoutError("teste")
+        with patch("workers.worker_funil.fireads.ClienteFireAds", return_value=api):
+            self.assertFalse(processar(envio, self.conn, self.cursor))
+        self.assertEqual(
+            self.conn.execute("SELECT status FROM chatbot.envios_dash").fetchone()[0],
+            "pending",
+        )
+        self.assertIsNone(envios.reservar(self.cursor))
+        self.assertTrue(
+            self.conn.execute(
+                "SELECT lead_no_funil FROM chatbot.conversa WHERE id_conversa=%s",
+                (envio["conversa"],),
+            ).fetchone()[0]
+        )
+
+    def test_reserva_concorrente_nao_e_reivindicada_e_configuracao_mudada_bloqueia(
+        self,
+    ):
+        envio = self.preparar_envio()
+        with psycopg.connect(DSN) as outro:
+            self.assertIsNone(envios.reservar(outro.cursor()))
+        self.cursor.execute(
+            "UPDATE chatbot.integracao_fireads SET aba_destino='Outra aba'"
+        )
+        self.conn.commit()
+        with patch("workers.worker_funil.fireads.ClienteFireAds") as http:
+            self.assertFalse(processar(envio, self.conn, self.cursor))
+            http.assert_not_called()
+
+    def test_personalizacao_obrigatoria_e_chat_nao_cruza_unidades(self):
+        with self.assertRaises(psycopg.errors.RaiseException):
+            self.conn.execute("DELETE FROM chatbot.atendimento_customizado")
+            self.conn.commit()
+        self.conn.rollback()
+        with self.assertRaises(psycopg.errors.UniqueViolation):
+            self.conn.execute(
+                "INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(1,1)"
+            )
+        self.conn.rollback()
+        with self.assertRaises(psycopg.errors.ForeignKeyViolation):
+            self.conn.execute(
+                "UPDATE chatbot.conversa SET id_chat=999 WHERE id_conversa=1"
+            )
+```
+
+## Passo 53 — Criar `deploy/migrations/20261007_fireads_chat_customizacao.sql`
 
 **Último passo — migração SQL para o DBeaver.** Executar o bloco inteiro na janela de deploy descrita acima. Qualquer erro deve abortar a transação; não continuar apenas pelos comandos posteriores.
 

@@ -1,4 +1,5 @@
 import logging
+from core.repositories.fireads.consulta import guardar_coletas
 
 from core.repositories.atendimento.historico import inserir_historico_mensagem_bot
 from core.repositories.seguranca.suspeita_bot import (
@@ -87,6 +88,7 @@ def atualizar_banco_com_contexto_final(
         contexto_envio,
         cursor,
     )
+    guardar_coletas(contexto_historico, efeitos_transicao, cursor)
     intencao_encerramento = resolver_intencao_encerramento(
         contexto_historico,
         contexto_envio,

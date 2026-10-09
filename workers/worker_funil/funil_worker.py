@@ -1,6 +1,7 @@
 """Executa continuamente os ciclos de publicacao de leads no Funil."""
 
 import logging
+from workers.worker_funil.fireads import processar_lote
 import time
 
 import psycopg
@@ -102,6 +103,10 @@ def executar_ciclo_funil():
                 resumo["falhas"] += 1
             print("---------------PROXIMO ENVIO------------------")
 
+        # Fila independente: tentativas de dashboard não dependem de haver
+        # novos leads elegíveis ao Funil neste ciclo.
+        resumo['dash'] = processar_lote(conn, cursor, FUNIL_LIMITE_POR_CICLO)
+        logger.info('dash_ciclo | %s', resumo['dash'])
         return resumo
 
     except Exception:

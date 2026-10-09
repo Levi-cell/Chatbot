@@ -7,6 +7,7 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
     montar_mensagem_financeiro_etapa4,
     montar_mensagem_midia_etapa4,
     montar_mensagem_reforco_escolar_etapa4,
+    montar_abertura_fireads,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
@@ -144,3 +145,13 @@ def _enviar_texto_etapa4(
             phone_id_unidade=phone_id_unidade,
             cliente_telefone=cliente_telefone,
         ) from erro
+
+
+def enviar_abertura_fireads(contexto, *, tratamento=None):
+    """Usa o mesmo envio/histórico da etapa 4, com a apresentação importada."""
+    mensagem = contexto['mensagem_cliente_atual']
+    return _enviar_texto_etapa4(
+        mensagem['cliente_telefone'], mensagem['id_phone_unidade'],
+        montar_abertura_fireads(contexto, tratamento=tratamento),
+        evento='fireads_abertura', tipo_tratamento=tratamento,
+    )

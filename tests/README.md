@@ -256,7 +256,7 @@ python -m unittest tests.unit.test_fluxo_reserva_link tests.integration.test_res
 As demais suítes de integração precisam das próprias DSNs descritas acima.
 Sem as variáveis, os testes PostgreSQL são ignorados, não considerados aprovados.
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração atual de `atendimento_customizado.link_agendamento`, lida pela view `unidade_atendimento`, decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. A FireAds pode importar as coletas iniciais e pular o e-mail apenas mediante consulta válida da própria conversa.
 
 `conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
@@ -265,3 +265,31 @@ O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configura�
 Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
+
+## FireAds, chat e personalização da unidade
+
+`unit/test_fireads.py` cobre importação, valores Google/Meta, comparação de datas,
+e-mail validado da própria conversa, abertura na profissão, replay, tratamentos,
+preservação das observações, identidade ambígua e redirecionamento sem repetir POST.
+Também verifica que um inline inválido da personalização impede o cadastro na Meta.
+
+`integration/test_fireads_postgres.py` exige `FIREADS_TEST_DSN`, host loopback e banco
+vazio `test_chatbot_fireads`. Executa a migração real, confirma a preservação da
+personalização e dos vínculos, a reutilização do chat e a atualização da consulta
+sem alterar o contexto de uma conversa anterior. Usa conexões separadas para perda
+de lock e disputa de reserva. Confere também o congelamento do conteúdo do Funil,
+o retry do Dash, reagendamento e reconciliação de um bloco já escrito.
+
+```powershell
+$env:FIREADS_TEST_DSN = 'host=127.0.0.1 dbname=test_chatbot_fireads user=postgres'
+python -m unittest tests.unit.test_fireads tests.integration.test_fireads_postgres -v
+```
+
+As fronteiras HTTP continuam simuladas; não há POST para clientes ou CRM nesses
+testes. A fixture `fixtures/fireads.py` compartilha o DDL do deploy com os testes
+atuais de reserva e follow-up. Os testes de migrações históricas conservam seus
+catálogos históricos, sem inserir os atalhos FireAds na versão anterior.
+
+Validação da aplicação em 08/10/2026: **487 testes executados, zero falhas, zero
+erros e zero pulados**, usando PostgreSQL 16 local descartável e as sete DSNs de
+teste. Os binários locais de validação não são dependência do projeto ou da VM.

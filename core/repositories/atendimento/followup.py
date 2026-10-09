@@ -76,7 +76,7 @@ def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
                c.turno, cl.idade, u.numero_comercial, e.encerra_automaticamente
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
         JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
         LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s AND c.id_unidade = %s AND c.status_ativa IS TRUE;
@@ -200,7 +200,7 @@ CONSULTA_ELEGIVEIS = """
            c.status_dependente, d.nome_dependente
     FROM chatbot.conversa c
     JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-    JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
     JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
     LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
     JOIN LATERAL (

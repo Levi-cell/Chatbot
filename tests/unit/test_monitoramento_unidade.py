@@ -222,7 +222,7 @@ class CadastroMonitoramentoTests(unittest.TestCase):
     def test_modelo_valida_conta_comum_e_rejeita_contas_administrativas(self):
         User = get_user_model()
         cadastro = Unidade(
-            id_unidade=10, nome_unidade='Unidade A', link_agendamento='https://example.com',
+            id_unidade=10, nome_unidade='Unidade A',
             id_usuario_monitoramento=User(id=1, username='unidade_a'),
         )
         cadastro.clean()
@@ -233,7 +233,7 @@ class CadastroMonitoramentoTests(unittest.TestCase):
                 cadastro.clean()
 
     def test_unidade_sem_conta_e_permitida(self):
-        unidade = Unidade(id_unidade=10, nome_unidade='Unidade A', link_agendamento='https://example.com')
+        unidade = Unidade(id_unidade=10, nome_unidade='Unidade A')
         unidade.clean()
         self.assertIsNone(unidade.id_usuario_monitoramento_id)
 

@@ -8,7 +8,7 @@ def buscar_contexto_etapa18(id_conversa, id_unidade, cursor):
                u.nome_agente, u.genero, cl.nome, cl.idade,
                d.nome_dependente, d.idade, c.status_dependente, c.turno
         FROM chatbot.conversa c
-        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s AND c.id_unidade = %s;

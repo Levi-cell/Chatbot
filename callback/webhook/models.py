@@ -52,6 +52,11 @@ class Dependente(models.Model):
 
 
 class Conversa(models.Model):
+    id_chat = models.ForeignKey('Chat', models.DO_NOTHING, db_column='id_chat')
+    origem_fireads = models.CharField(max_length=10, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico','Orgânico')])
+    contexto_fireads = models.JSONField(null=True, blank=True)
+    lead_no_dash = models.BooleanField(null=True, blank=True, default=None)
+
     turno = models.CharField(
         "turno de preferência", max_length=5, blank=True, null=True,
         choices=list(ROTULOS_TURNO.items()),
@@ -265,39 +270,9 @@ class Unidade(models.Model):
         unique=True,
         max_length=300,
     )
-    nome_agente = models.CharField("nome do agente", max_length=100)
-    genero = models.CharField(
-        "gênero do agente",
-        max_length=9,
-        choices=Genero.choices,
-    )
     cnpj = models.CharField(unique=True, max_length=50)
     email_responsavel = models.CharField(unique=True, max_length=255)
     telefone = models.CharField(unique=True, max_length=20)
-    numero_comercial = models.CharField(
-        max_length=30,
-        help_text="Contato comercial obrigatório para toda unidade.",
-    )
-    idade_minima_suporte = models.IntegerField(
-        "encaminhar titular ao comercial a partir de",
-        blank=True,
-        null=True,
-        default=None,
-        choices=[(None, "Desativado")] + [
-            (idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE
-        ],
-        help_text=(
-            "Na etapa de idade, encaminha somente o titular a partir do limite "
-            "até 89 anos e encerra sem bloqueio; 90+ é universal. Não altera a regra de e-mail."
-        ),
-    )
-    email_obrigatorio = models.BooleanField(
-        "e-mail obrigatório",
-        default=True,
-        help_text=(
-            "Exige um e-mail válido, exceto do titular com 60 anos ou mais."
-        ),
-    )
     waba_id = models.CharField(
         unique=True,
         max_length=100,
@@ -306,16 +281,6 @@ class Unidade(models.Model):
     id_fuso = models.IntegerField(blank=True, null=True, editable=False)
     nome_fuso = models.TextField(blank=True, null=True, editable=False)
     fuso_verificado_em = models.DateTimeField(blank=True, null=True, editable=False)
-    link_agendamento = models.CharField(
-        unique=True, max_length=400, blank=True, null=True,
-        help_text="Vazio: coleta o turno e entrega ao comercial após a triagem.",
-    )
-    link_instagram = models.CharField(
-        max_length=400,
-        blank=True,
-        null=True,
-    )
-    bpa_ativo = models.BooleanField(default=False)
     status_pagamento = models.BooleanField(blank=True, null=True, default=True)
     id_usuario_monitoramento = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -333,11 +298,40 @@ class Unidade(models.Model):
         ),
     )
 
+    @property
+    def nome_agente(self):
+        return self.atendimento_customizado.nome_agente
+
+    @property
+    def genero(self):
+        return self.atendimento_customizado.genero
+
+    @property
+    def numero_comercial(self):
+        return self.atendimento_customizado.numero_comercial
+
+    @property
+    def idade_minima_suporte(self):
+        return self.atendimento_customizado.idade_minima_suporte
+
+    @property
+    def email_obrigatorio(self):
+        return self.atendimento_customizado.email_obrigatorio
+
+    @property
+    def link_agendamento(self):
+        return self.atendimento_customizado.link_agendamento
+
+    @property
+    def link_instagram(self):
+        return self.atendimento_customizado.link_instagram
+
+    @property
+    def bpa_ativo(self):
+        return self.atendimento_customizado.bpa_ativo
+
     def clean(self):
         super().clean()
-        self.link_agendamento = (self.link_agendamento or "").strip() or None
-        if self.link_agendamento is None and not numero_comercial_whatsapp_valido(self.numero_comercial):
-            raise ValidationError({"numero_comercial": "Informe um número comercial válido para atender sem link."})
         if self.id_usuario_monitoramento_id and (
             self.id_usuario_monitoramento.is_staff
             or self.id_usuario_monitoramento.is_superuser
@@ -531,3 +525,205 @@ class ConsumoMetaColeta(models.Model):
     class Meta:
         managed = False
         db_table = 'consumo_meta_coletas'
+
+
+class AtendimentoCustomizado(models.Model):
+    Genero = Unidade.Genero
+    id_customizacao = models.AutoField(primary_key=True)
+    id_unidade = models.OneToOneField(
+        Unidade,
+        models.CASCADE,
+        db_column="id_unidade",
+        related_name="atendimento_customizado",
+    )
+    nome_agente = models.CharField("nome do agente", max_length=100)
+    genero = models.CharField(
+        "gênero do agente",
+        max_length=9,
+        choices=Genero.choices,
+    )
+    numero_comercial = models.CharField(
+        max_length=30,
+        help_text="Contato comercial obrigatório para toda unidade.",
+    )
+    idade_minima_suporte = models.IntegerField(
+        "encaminhar titular ao comercial a partir de",
+        blank=True,
+        null=True,
+        default=None,
+        choices=[(None, "Desativado")]
+        + [(idade, f"{idade}+") for idade in IDADES_MINIMAS_SUPORTE],
+        help_text=(
+            "Na etapa de idade, encaminha somente o titular a partir do limite "
+            "até 89 anos e encerra sem bloqueio; 90+ é universal. Não altera a regra de e-mail."
+        ),
+    )
+    email_obrigatorio = models.BooleanField(
+        "e-mail obrigatório",
+        default=True,
+        help_text=("Exige um e-mail válido, exceto do titular com 60 anos ou mais."),
+    )
+    link_agendamento = models.CharField(
+        unique=True,
+        max_length=400,
+        blank=True,
+        null=True,
+        help_text="Vazio: coleta o turno e entrega ao comercial após a triagem.",
+    )
+    link_instagram = models.CharField(
+        max_length=400,
+        blank=True,
+        null=True,
+    )
+    bpa_ativo = models.BooleanField(default=False)
+
+    def clean(self):
+        super().clean()
+        self.link_agendamento = (self.link_agendamento or "").strip() or None
+        if not numero_comercial_whatsapp_valido(self.numero_comercial):
+            raise ValidationError(
+                {"numero_comercial": "Informe um número comercial brasileiro válido."}
+            )
+
+    def __str__(self):
+        return str(self.id_unidade)
+
+    class Meta:
+        managed = False
+        db_table = "atendimento_customizado"
+        verbose_name = "Atendimento customizado"
+        verbose_name_plural = "Atendimentos customizados"
+
+
+class IntegracaoFireAds(models.Model):
+    id_integracao_fireads = models.AutoField(primary_key=True)
+    id_unidade = models.OneToOneField(
+        Unidade,
+        models.CASCADE,
+        db_column="id_unidade",
+        related_name="integracao_fireads",
+    )
+    integracao_ativa = models.BooleanField(default=False)
+    url_dashbord = models.URLField(max_length=1000)
+    url_operation = models.URLField(
+        max_length=1000,
+        blank=True,
+        null=True,
+        help_text="Referência do editor. Nunca usada para requisições.",
+    )
+    aba_google = models.CharField(
+        max_length=200, default="Leads Google Ads (NÃO EDITAR)"
+    )
+    aba_meta = models.CharField(max_length=200, default="[FIRE] Leads Ads Geral - 7.2")
+    aba_destino = models.CharField(max_length=200, default="LEADS GERAL - Feedback")
+    fuso_formularios = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="Somente interpretação de datas sem offset. Preencher após confirmação na planilha; não altera o fuso externo.",
+    )
+    contrato_validado = models.BooleanField(
+        default=False,
+        help_text="Confirmar nomes de abas, campos e valores recebidos do formulário atualizado antes de ativar.",
+    )
+    ativada_em = models.DateTimeField(null=True, blank=True, editable=False)
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        super().clean()
+        from core.integrations.fireads.cliente import validar_url
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            validar_url(self.url_dashbord)
+        except ValueError as exc:
+            raise ValidationError({"url_dashbord": str(exc)})
+        self.fuso_formularios = (self.fuso_formularios or "").strip() or None
+        if self.fuso_formularios:
+            try:
+                ZoneInfo(self.fuso_formularios)
+            except ZoneInfoNotFoundError:
+                raise ValidationError({"fuso_formularios": "Fuso IANA inválido."})
+        if self.integracao_ativa and not self.contrato_validado:
+            raise ValidationError(
+                {"contrato_validado": "Confira o contrato de leitura antes de ativar."}
+            )
+        abas = [self.aba_google, self.aba_meta, self.aba_destino]
+        if any(not a.strip() for a in abas) or len(set(abas)) != 3:
+            raise ValidationError("Informe três abas distintas e não vazias.")
+
+    def __str__(self):
+        return str(self.id_unidade)
+
+    class Meta:
+        managed = False
+        db_table = "integracao_fireads"
+        verbose_name = "Integração FireAds"
+        verbose_name_plural = "Integrações FireAds"
+
+
+class Chat(models.Model):
+    id_chat = models.BigAutoField(primary_key=True)
+    id_cliente = models.ForeignKey(Cliente, models.CASCADE, db_column="id_cliente")
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
+    criado_em = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.id_cliente} / {self.id_unidade}"
+
+    class Meta:
+        managed = False
+        db_table = "chat"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["id_cliente", "id_unidade"], name="uq_chat_cliente_unidade"
+            )
+        ]
+
+
+class ConsultaFireAds(models.Model):
+    id_consulta = models.BigAutoField(primary_key=True)
+    id_chat = models.OneToOneField(Chat, models.CASCADE, db_column="id_chat")
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
+    id_integracao_fireads = models.ForeignKey(
+        IntegracaoFireAds, models.PROTECT, db_column="id_integracao_fireads"
+    )
+    id_conversa_referencia = models.ForeignKey(
+        Conversa, models.CASCADE, db_column="id_conversa_referencia"
+    )
+    consulta_concluida = models.BooleanField(default=False)
+    resultado = models.CharField(max_length=30)
+    dados = models.JSONField(null=True, blank=True)
+    consultado_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        managed = False
+        db_table = "consulta_fireads"
+        verbose_name_plural = "Consultas FireAds"
+
+
+class EnvioDash(models.Model):
+    id_envio_dash = models.BigAutoField(primary_key=True)
+    id_conversa = models.OneToOneField(
+        Conversa, models.CASCADE, db_column="id_conversa"
+    )
+    id_integracao_fireads = models.ForeignKey(
+        IntegracaoFireAds, models.PROTECT, db_column="id_integracao_fireads"
+    )
+    id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
+    status = models.CharField(max_length=20, default="pending")
+    attempt_count = models.IntegerField(default=0)
+    next_attempt_at = models.DateTimeField()
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    enviado_em = models.DateTimeField(null=True, blank=True)
+    ultimo_erro = models.TextField(null=True, blank=True)
+    recibo = models.JSONField(null=True, blank=True)
+    snapshot = models.JSONField()
+    criado_em = models.DateTimeField()
+    atualizado_em = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = "envios_dash"
+        verbose_name_plural = "Envios ao dashboard"

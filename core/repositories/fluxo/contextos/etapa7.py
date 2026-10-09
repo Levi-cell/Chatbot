@@ -14,7 +14,7 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade u
+        JOIN chatbot.unidade_atendimento u
           ON u.id_unidade = c.id_unidade
         LEFT JOIN chatbot.dependente d
           ON d.id_conversa = c.id_conversa

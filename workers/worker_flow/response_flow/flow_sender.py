@@ -1,4 +1,6 @@
 import logging
+from workers.worker_flow.fireads import email_importado, classificar_tratamento_abertura
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import enviar_abertura_fireads
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     montar_texto_com_cabecalho,
@@ -165,6 +167,12 @@ def flow_sender(contexto_historico):
             cliente_atual_id_mensagem_fila,
             cliente_atual_id_hash_msg,
             retry_count,
+        )
+
+    if id_etapa_atual is None and email_importado(contexto_historico):
+        return enviar_abertura_fireads(
+            contexto_historico,
+            tratamento=classificar_tratamento_abertura(contexto_historico),
         )
 
     if id_etapa_atual is None or id_etapa_atual == 1:

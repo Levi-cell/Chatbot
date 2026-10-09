@@ -13,15 +13,22 @@ MOTIVOS_ENCERRAMENTO_VALIDOS = MOTIVOS_IDADE | {'foi_agendado', 'followup_sem_re
 
 def inserindo_em_conversa_caso_seja_nova(id_cliente, id_unidade, cursor):
     cursor.execute("""
+        INSERT INTO chatbot.chat (id_cliente, id_unidade) VALUES (%s, %s)
+        ON CONFLICT (id_cliente, id_unidade) DO UPDATE SET id_cliente=EXCLUDED.id_cliente
+        RETURNING id_chat;
+    """, (id_cliente, id_unidade))
+    id_chat = cursor.fetchone()[0]
+    cursor.execute("""
         INSERT INTO chatbot.conversa (
+            id_chat,
             id_cliente,
             id_unidade,
             last_interaction_at,
             last_message_from
         )
-        VALUES (%s, %s, NOW(), 'cliente')
+        VALUES (%s, %s, %s, NOW(), 'cliente')
         RETURNING id_conversa;
-    """, (id_cliente, id_unidade))
+    """, (id_chat, id_cliente, id_unidade))
 
     resultado = cursor.fetchone()
 
@@ -215,9 +222,9 @@ def inicializar_conversa_resposta_bot(
     data_interacao,
     cursor,
 ):
-    if id_etapa_resultante != ETAPA_INICIAL:
+    if id_etapa_resultante not in {ETAPA_INICIAL, 4}:
         raise ValueError(
-            "Inicializacao da conversa so pode persistir a etapa 1"
+            "Inicializacao exige etapa 1 ou importacao FireAds na etapa 4"
         )
 
     _validar_data_interacao_bot(data_interacao)
@@ -229,11 +236,15 @@ def inicializar_conversa_resposta_bot(
             last_message_from = 'bot',
             last_interaction_at = %s
         WHERE id_conversa = %s
-          AND id_etapa_atual IS NULL;
+          AND id_etapa_atual IS NULL
+          AND (%s = 1 OR (contexto_fireads->>'resultado' = 'importado'
+               AND contexto_fireads->>'concluida' = 'true'
+               AND contexto_fireads->>'id_conversa' = id_conversa::text));
     """, (
         id_etapa_resultante,
         data_interacao,
         id_conversa,
+        id_etapa_resultante,
     ))
 
     logger.debug(
@@ -245,7 +256,7 @@ def inicializar_conversa_resposta_bot(
 
     if cursor.rowcount != 1:
         raise ValueError(
-            "Conversa nao foi inicializada na etapa 1 "
+            "Conversa nao foi inicializada na etapa autorizada "
             f"(id_conversa={id_conversa}, linhas={cursor.rowcount})"
         )
 

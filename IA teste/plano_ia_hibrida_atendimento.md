@@ -1,6 +1,6 @@
 # Plano de IA integrada ao atendimento determinístico
 
-Revisão: **07/10/2026**. Status: **desenho funcional aprovado; IA ainda sem implementação**.
+Revisão: **08/10/2026**. Status: **desenho funcional aprovado; IA ainda sem implementação**.
 
 Base já examinada: **V1.9.2**, com reserva com/sem link já aplicada,
 **24 etapas e 28 transições determinísticas antes da FireAds**. A aplicação IA
@@ -11,9 +11,11 @@ rotas e os pontos de corte descritos na [seção 1.1](#rotas-e-corte-ia).
 
 Complemento de 07/10: o [plano FireAds](../docs/integracao_fireads.md) passa a
 incluir a criação de `chat`/`conversa.id_chat` e `consulta_fireads` por chat,
-além de customização/integração e entregas ao dashboard. Esses recursos ainda
-estão planejados, não implantados. A IA reutilizará o vínculo chat já migrado
-se a FireAds tiver sido aplicada antes; não criará um segundo vínculo.
+além de customização/integração e entregas ao dashboard. Em **08/10**, o código
+FireAds foi aplicado localmente e validado; o deploy e a migração de produção
+continuam pendentes. O catálogo após essa migração possui **24 etapas e 30
+transições**. A IA reutilizará `chat` e `conversa.id_chat` dessa entrega, conferindo
+a migração no ambiente de destino; não criará um segundo vínculo.
 A [seção 19.17](#base-fireads-ia) define essa dependência e a proveniência dos
 dados. Modelo, cotas e demais decisões de IA permanecem para a aplicação futura.
 

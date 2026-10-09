@@ -19,8 +19,8 @@ from monitoramento import services
 from monitoramento.apresentacao import classificar_faixa
 from monitoramento.encerramentos import montar_tabela_encerramentos
 from monitoramento.periodos import PERIODOS, resolver_periodo
-from webhook.admin import UnidadeAdmin
-from webhook.models import Unidade
+from webhook.admin import UnidadeAdmin, AtendimentoCustomizadoAdmin
+from webhook.models import Unidade, AtendimentoCustomizado
 from tests.helpers import FakeCursor
 from tests.unit.test_suporte_idoso_email_obrigatorio import contexto_etapa6, contexto_envio
 from workers.worker_flow.response_flow.etapas import resolver_etapa6
@@ -49,11 +49,11 @@ MENSAGEM_ANAMNESE_100_MAIS = (
 
 class SuportePorIdadeTests(unittest.TestCase):
     def test_dominio_contexto_e_formulario_modelo(self):
-        campo = Unidade._meta.get_field('idade_minima_suporte')
+        campo = AtendimentoCustomizado._meta.get_field('idade_minima_suporte')
         for limite in LIMITES:
             with self.subTest(limite=limite):
                 self.assertEqual(validar_idade_minima_suporte(limite), limite)
-                self.assertEqual(campo.clean(limite, Unidade()), limite)
+                self.assertEqual(campo.clean(limite, AtendimentoCustomizado()), limite)
                 contexto = buscar_contexto_etapa6(10, 1, FakeCursor(
                     fetchone_result=('5571999999999', False, limite, 'Maria', None, 'Suh', 'feminino', 'Supera Centro')
                 ))
@@ -73,31 +73,26 @@ class SuportePorIdadeTests(unittest.TestCase):
             ))
 
     def test_admin_exige_contato_ao_ativar_e_ao_remover_numero(self):
-        admin = UnidadeAdmin(Unidade, AdminSite())
+        admin = AtendimentoCustomizadoAdmin(AtendimentoCustomizado, AdminSite())
         request = RequestFactory().get('/admin/')
         request.user = SimpleNamespace(has_perm=lambda *_: True)
-        instance = Unidade(id_unidade=1, link_agendamento="https://example.com")
-        with patch.object(admin, '_validar_cache_unidades_form'), patch.object(
-            admin, '_preparar_meta_antes_de_salvar'
-        ) as meta:
-            form_class = admin.get_form(request, instance, change=True,
-                                        fields=['idade_minima_suporte', 'numero_comercial'])
-            for limite in LIMITES:
-                for telefone in ('', '123', '(71) 99999-9999'):
-                    with self.subTest(limite=limite, telefone=telefone):
-                        form = form_class(data={
-                            'idade_minima_suporte': '' if limite is None else str(limite),
-                            'numero_comercial': telefone,
-                        }, instance=instance)
-                        esperado = telefone == '(71) 99999-9999'
-                        self.assertEqual(form.is_valid(), esperado, form.errors)
-                        if not esperado:
-                            self.assertIn('numero_comercial', form.errors)
-            for invalido in ('55', '100', 'True'):
-                form = form_class(data={'idade_minima_suporte': invalido,
-                                        'numero_comercial': '(71) 99999-9999'}, instance=instance)
-                self.assertFalse(form.is_valid())
-            meta.assert_not_called()
+        instance = AtendimentoCustomizado(id_customizacao=1, link_agendamento='https://example.com')
+        form_class = admin.get_form(request, instance, change=True,
+                                    fields=['idade_minima_suporte', 'numero_comercial'])
+        for limite in LIMITES:
+            for telefone in ('', '123', '(71) 99999-9999'):
+                with self.subTest(limite=limite, telefone=telefone):
+                    form = form_class(data={
+                        'idade_minima_suporte': '' if limite is None else str(limite),
+                        'numero_comercial': telefone,
+                    }, instance=instance)
+                    self.assertEqual(form.is_valid(), telefone == '(71) 99999-9999', form.errors)
+                    if telefone != '(71) 99999-9999':
+                        self.assertIn('numero_comercial', form.errors)
+        for invalido in ('55', '100', 'True'):
+            form = form_class(data={'idade_minima_suporte': invalido,
+                                    'numero_comercial': '(71) 99999-9999'}, instance=instance)
+            self.assertFalse(form.is_valid())
 
     def test_matriz_titulares_dependentes_e_100_mais(self):
         caminhos = {

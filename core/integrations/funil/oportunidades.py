@@ -1,6 +1,8 @@
 """Monta o payload de oportunidade sem conhecer banco ou transações."""
 
 import re
+from core.integrations.fireads.contrato import CANAIS
+from core.validacoes.email import ResultadoColetaEmail
 
 from core.validacoes.turno import ROTULOS_TURNO, validar_turno
 
@@ -73,7 +75,7 @@ def montar_payload_oportunidade(dados_lead):
                     },
                     {
                         "titulo": "Origem do lead",
-                        "valor": ORIGEM_LEAD_CHATBOT,
+                        "valor": CANAIS[dados_lead["origem_fireads"]][0] if dados_lead.get("origem_fireads") else ORIGEM_LEAD_CHATBOT,
                     },
                 ],
                 "empresa": {
@@ -133,8 +135,10 @@ def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     if turno is not None:
         validar_turno(turno)
     preferencia = f"- Turno de preferência: {ROTULOS_TURNO[turno]}\n" if turno else ""
+    canal = f"Canal de venda: {CANAIS[dados_lead['origem_fireads']][0]}\n\n" if dados_lead.get("origem_fireads") else ""
     cabecalho = (
         "------NOVO LEAD-------\n\n"
+        f"{canal}"
         "Cliente concluiu a triagem cognitiva pelo chatbot. "
         f"{orientacao} A disponibilidade e a efetivação de sua reserva devem ser conferidas pela equipe.\n\n"
         f"{preferencia}"
@@ -257,6 +261,12 @@ def _validar_dados_lead(dados_lead):
 
 
 def _resolver_resultado_email_conversa(dados_lead):
+    if dados_lead.get('origem_fireads'):
+        classificacao = dados_lead['resultado_email_fireads']
+        if classificacao not in {CLASSIFICACAO_EMAIL_VALIDO, CLASSIFICACAO_EMAIL_AUSENTE, CLASSIFICACAO_EMAIL_NAO_INFORMADO}:
+            raise ValueError('Resultado histórico de email inválido')
+        return ResultadoColetaEmail(aceita=True, classificacao=classificacao, email=dados_lead.get('email_cliente'))
+
     resposta_historica = dados_lead.get("resposta_email_conversa")
 
     if resposta_historica is not None:

@@ -1,3 +1,4 @@
+from workers.worker_flow.fireads import email_importado
 from core.repositories.atendimento.conversas import (
     atualizar_conversa_por_transicao,
     atualizar_conversa_resposta_bot_sem_avancar,
@@ -74,9 +75,11 @@ def resolver_movimento_conversa(
 
     # Primeiro contato: apenas apresenta a etapa 1, sem transição.
     if etapa_atual is None:
-        if etapa_destino != ETAPA_1_NOME_CLIENTE:
+        if etapa_destino != ETAPA_1_NOME_CLIENTE and not (
+            etapa_destino == 4 and email_importado(contexto_historico)
+        ):
             raise ValueError(
-                "Conversa sem etapa so pode ser inicializada na etapa 1"
+                "Inicializacao exige etapa 1 ou importacao FireAds completa na etapa 4"
             )
 
         if evento_transicao:

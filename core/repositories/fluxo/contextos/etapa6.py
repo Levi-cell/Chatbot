@@ -18,7 +18,7 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
             u.nome_agente,
             u.genero,
             u.nome_unidade
-        FROM chatbot.unidade u
+        FROM chatbot.unidade_atendimento u
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
          AND c.id_unidade = u.id_unidade

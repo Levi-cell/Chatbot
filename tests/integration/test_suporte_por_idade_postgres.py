@@ -227,6 +227,8 @@ class SuporteIdadePostgresTests(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
         ).fetchall(), conversas_antes)
+        # Adapta apenas a leitura do runtime à base histórica deste teste.
+        self.conn.execute('CREATE VIEW chatbot.unidade_atendimento AS SELECT * FROM chatbot.unidade')
         inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
         fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
         with self.conn.cursor() as cursor:

@@ -1,4 +1,5 @@
 import logging
+from workers.worker_flow.fireads import email_importado
 
 from core.repositories.atendimento.turnos import salvar_turno_conversa
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import validar_etapa18
@@ -148,6 +149,13 @@ def atualizar_banco_conforme_transicao_de_etapa(
             contexto_envio,
             cursor,
         )
+
+    if (etapa_origem, evento) in {
+        (7, 'oferta_aceita_email_fireads'), (9, 'retorno_confirmado_email_fireads')
+    }:
+        if etapa_destino != 11 or not email_importado(contexto_historico):
+            raise ValueError('Salto de email FireAds sem coleta completa nesta conversa')
+        return {'email_fireads_reaproveitado': True}
 
     # Sem evento não existe transição nem efeito específico de etapa.
     if not evento:

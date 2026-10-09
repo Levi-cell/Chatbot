@@ -21,25 +21,27 @@ from core.integrations.whatsapp.tools.usuarios import (
 from core.integrations.whatsapp.tools.validando_phone_waba import (
     validar_phone_number_id_da_waba,
 )
-from core.integrations.whatsapp.numero_comercial import (
-    numero_comercial_whatsapp_valido,
-)
 from core.logging_config import short_value
 from core.repositories.unidades.cache_control import (
     incrementar_versao_cache_unidades,
 )
 
 from .models import (
+    AtendimentoCustomizado,
     CacheControle,
+    Chat,
     Cliente,
     ClienteBloqueadoMeta,
     Conversa,
+    ConsultaFireAds,
     Dependente,
     Etapa,
+    EnvioDash,
     FilaMensagens,
     FunilEnvio,
     HistoricoMensagens,
     IntegracaoFunilUnidade,
+    IntegracaoFireAds,
     PesquisaSatisfacao,
     RespostasDesafios,
     Unidade,
@@ -130,8 +132,22 @@ class FunilEnvioAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     empty_value_display = "-"
 
 
+class AtendimentoCustomizadoInline(admin.StackedInline):
+    model = AtendimentoCustomizado
+    extra = 1
+    min_num = 1
+    max_num = 1
+    can_delete = False
+    validate_min = True
+
+    def get_formset(self, request, obj=None, **kwargs):
+        kwargs.update(validate_min=True, validate_max=True)
+        return super().get_formset(request, obj, **kwargs)
+
+
 @admin.register(Unidade)
 class UnidadeAdmin(admin.ModelAdmin):
+    inlines = (AtendimentoCustomizadoInline,)
 
     list_display = (
         "id_unidade",
@@ -156,26 +172,26 @@ class UnidadeAdmin(admin.ModelAdmin):
     search_fields = (
         "nome_unidade",
         "id_usuario_monitoramento__username",
-        "nome_agente",
+        "atendimento_customizado__nome_agente",
         "cnpj",
         "telefone",
-        "numero_comercial",
+        "atendimento_customizado__numero_comercial",
         "email_responsavel",
         "waba_id",
         "phone_number_id",
-        "link_agendamento",
-        "link_instagram",
+        "atendimento_customizado__link_agendamento",
+        "atendimento_customizado__link_instagram",
     )
 
     list_filter = (
-        "genero",
-        "bpa_ativo",
-        "idade_minima_suporte",
-        "email_obrigatorio",
+        "atendimento_customizado__genero",
+        "atendimento_customizado__bpa_ativo",
+        "atendimento_customizado__idade_minima_suporte",
+        "atendimento_customizado__email_obrigatorio",
         "status_pagamento",
     )
     ordering = ("nome_unidade",)
-    list_select_related = ("id_usuario_monitoramento",)
+    list_select_related = ("id_usuario_monitoramento", "atendimento_customizado")
 
     list_per_page = 50
     empty_value_display = "-"
@@ -185,6 +201,13 @@ class UnidadeAdmin(admin.ModelAdmin):
             return ("waba_id", "phone_number_id")
 
         return ()
+
+    def _create_formsets(self, request, obj, change):
+        formsets, inlines = super()._create_formsets(request, obj, change)
+        # O Django cria os inlines antes de validar o formulário principal.
+        # A chamada à Meta só pode acontecer com a personalização válida também.
+        request._unidade_formsets = formsets
+        return formsets, inlines
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         try:
@@ -231,17 +254,6 @@ class UnidadeAdmin(admin.ModelAdmin):
             def _post_clean(self):
                 super()._post_clean()
 
-                if (
-                    not numero_comercial_whatsapp_valido(
-                        self.cleaned_data.get("numero_comercial")
-                    )
-                ):
-                    self.add_error(
-                        "numero_comercial",
-                        "Informe um número comercial brasileiro válido "
-                        "para o contato da unidade, inclusive com suporte desativado.",
-                    )
-
                 if change or self.errors:
                     if change and not self.errors:
                         model_admin._validar_cache_unidades_form(
@@ -249,6 +261,13 @@ class UnidadeAdmin(admin.ModelAdmin):
                             request,
                             meta_validada=False,
                         )
+                    return
+
+                if any(
+                    not formset.is_valid()
+                    for formset in getattr(request, "_unidade_formsets", ())
+                ):
+                    self.add_error(None, "Confira os dados do atendimento customizado.")
                     return
 
                 waba_id = self.cleaned_data.get("waba_id")
@@ -1403,3 +1422,53 @@ class ClienteBloqueadoMetaAdmin(admin.ModelAdmin):
                 level=messages.ERROR,
             )
             return False
+
+
+@admin.register(AtendimentoCustomizado)
+class AtendimentoCustomizadoAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_customizacao",
+        "id_unidade",
+        "nome_agente",
+        "email_obrigatorio",
+        "link_agendamento",
+    )
+    list_select_related = ("id_unidade",)
+    search_fields = ("id_unidade__nome_unidade", "nome_agente")
+
+    def get_readonly_fields(self, request, obj=None):
+        return ("id_unidade",) if obj else ()
+
+    def has_add_permission(self, request):
+        return False  # A criação é feita junto da unidade, pelo inline obrigatório.
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(IntegracaoFireAds)
+class IntegracaoFireAdsAdmin(admin.ModelAdmin):
+    list_display = (
+        "id_integracao_fireads",
+        "id_unidade",
+        "integracao_ativa",
+        "contrato_validado",
+        "ativada_em",
+    )
+    list_select_related = ("id_unidade",)
+    search_fields = ("id_unidade__nome_unidade",)
+    readonly_fields = ("ativada_em", "criado_em", "atualizado_em")
+
+    def get_readonly_fields(self, request, obj=None):
+        return self.readonly_fields + (("id_unidade",) if obj else ())
+
+    def has_delete_permission(self, request, obj=None):
+        return False  # Desativar preserva vínculos e snapshots históricos.
+
+
+class FireAdsConsultaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+    pass
+
+
+for modelo in (Chat, ConsultaFireAds, EnvioDash):
+    admin.site.register(modelo, FireAdsConsultaAdmin)

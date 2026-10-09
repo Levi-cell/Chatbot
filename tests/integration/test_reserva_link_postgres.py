@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import psycopg
+from tests.fixtures.fireads import aplicar_fireads
 from psycopg.conninfo import conninfo_to_dict
 from core.database.deploy_database import (
     bank_script,
@@ -83,6 +84,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
             INSERT INTO chatbot.integracao_funil_unidade(id_unidade,nome_widget,codigo_widget,link_api_carrossel,codigo_canal_venda)
                 VALUES (1,'Widget','cod','https://example.com/api','canal');
         """)
+        aplicar_fireads(cls.cursor)
         cls.conn.commit()
 
     @classmethod
@@ -97,7 +99,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
 
     def configurar(self, link, etapa):
         self.cursor.execute(
-            "UPDATE chatbot.unidade SET link_agendamento=%s WHERE id_unidade=1", (link,)
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento=%s WHERE id_unidade=1", (link,)
         )
         self.cursor.execute(
             "UPDATE chatbot.conversa SET id_etapa_atual=%s,lead_no_funil=FALSE WHERE id_conversa=1",
@@ -133,7 +135,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
         self.configurar(None, 19)
         self.assertEqual(envios.sincronizar_envios_elegiveis(self.cursor), 1)
         self.conn.execute(
-            "UPDATE chatbot.unidade SET link_agendamento='https://example.com' WHERE id_unidade=1"
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
         )
         self.assertIsNone(envios.reivindicar_proximo_envio(self.cursor))
         self.assertIsNone(leads.buscar_dados_lead_funil(1, self.cursor))
@@ -149,7 +151,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
         self.assertIsNotNone(leads.buscar_dados_lead_funil(1, self.cursor))
         # Simula a alteração após o despacho que o CRM confirmou com sucesso.
         self.conn.execute(
-            "UPDATE chatbot.unidade SET link_agendamento='https://example.com' WHERE id_unidade=1"
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
         )
         self.assertTrue(
             envios.marcar_envio_como_concluido(
@@ -192,7 +194,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
         self.configurar(None, 18)
         self.assertIsNotNone(followup.reler_elegivel(1, self.cursor))
         self.conn.execute(
-            "UPDATE chatbot.unidade SET link_agendamento='https://example.com' WHERE id_unidade=1"
+            "UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com' WHERE id_unidade=1"
         )
         self.assertIsNone(followup.reler_elegivel(1, self.cursor))
 
