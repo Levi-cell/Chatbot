@@ -123,6 +123,19 @@ class FollowupPostgresTests(unittest.TestCase):
     def tearDown(self):
         self.conn.rollback()
 
+    def test_status_pagamento_suspende_followup_sem_apagar_historico(self):
+        self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+        anterior = self.cursor.fetchone()
+        for status in (False, None):
+            self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=%s", (status,))
+            self.assertEqual(repo.listar_elegiveis(self.cursor), [])
+            self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
+        self.assertEqual(self.cursor.fetchone(), anterior)
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE")
+        self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+
     def test_sete_horas_um_envio_e_reinicio_nao_duplica(self):
         dados = repo.reler_elegivel(1, self.cursor)
         self.assertIsNotNone(dados)

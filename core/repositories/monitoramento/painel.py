@@ -24,15 +24,16 @@ def _periodo(coluna, inicio, fim, parametros):
 
 def buscar_unidade(id_unidade, cursor):
     cursor.execute("""
-        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.idade_minima_suporte,
-               u.email_obrigatorio, u.bpa_ativo,
+        SELECT u.id_unidade, u.nome_unidade, ac.nome_agente, ac.idade_minima_suporte,
+               ac.email_obrigatorio, ac.bpa_ativo,
                MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
-          FROM chatbot.unidade_atendimento u
+          FROM chatbot.unidade u
+          JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
           LEFT JOIN chatbot.conversa c ON c.id_unidade = u.id_unidade
           LEFT JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
          WHERE u.id_unidade = %s
-         GROUP BY u.id_unidade, u.nome_unidade, u.nome_agente,
-                  u.idade_minima_suporte, u.email_obrigatorio, u.bpa_ativo
+         GROUP BY u.id_unidade, u.nome_unidade, ac.nome_agente,
+                  ac.idade_minima_suporte, ac.email_obrigatorio, ac.bpa_ativo
     """, (id_unidade,))
     return _linha(cursor)
 

@@ -219,6 +219,34 @@ class IsolamentoMonitoramentoTests(unittest.TestCase):
 
 
 class CadastroMonitoramentoTests(unittest.TestCase):
+    def test_admin_separa_edicao_sem_perder_cadastro_obrigatorio(self):
+        from webhook.models import AtendimentoCustomizado
+
+        request = SimpleNamespace(user=get_user_model()(
+            is_active=True, is_staff=True, is_superuser=True,
+        ))
+        unidade = Unidade(id_unidade=10)
+        customizacao = AtendimentoCustomizado(id_customizacao=20, id_unidade=unidade)
+        unidade_admin = admin.site._registry[Unidade]
+        customizacao_admin = admin.site._registry[AtendimentoCustomizado]
+        self.assertEqual(unidade_admin.get_inline_instances(request, unidade), [])
+        novos = unidade_admin.get_inline_instances(request)
+        self.assertEqual(len(novos), 1)
+        self.assertIs(novos[0].model, AtendimentoCustomizado)
+        self.assertEqual(novos[0].min_num, 1)
+        unidade_form = unidade_admin.get_form(request, obj=unidade, change=True)
+        customizacao_form = customizacao_admin.get_form(request, obj=customizacao, change=True)
+        for campo in ('nome_agente', 'genero', 'bpa_ativo', 'link_agendamento'):
+            self.assertNotIn(campo, unidade_form.base_fields)
+            self.assertNotIn(campo, unidade_admin.list_display)
+            self.assertIn(campo, customizacao_form.base_fields)
+            self.assertIn(campo, customizacao_admin.list_display)
+        self.assertIn('status_pagamento', unidade_form.base_fields)
+        self.assertNotIn('status_pagamento', customizacao_form.base_fields)
+        with patch('webhook.admin.reverse', return_value='/personalizacao/20/') as url:
+            self.assertIn('/personalizacao/20/', unidade_admin.abrir_atendimento_customizado(unidade))
+        url.assert_called_once_with('admin:webhook_atendimentocustomizado_change', args=[20])
+
     def test_modelo_valida_conta_comum_e_rejeita_contas_administrativas(self):
         User = get_user_model()
         cadastro = Unidade(

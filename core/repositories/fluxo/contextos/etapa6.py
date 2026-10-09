@@ -10,15 +10,16 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
-            u.numero_comercial,
-            u.bpa_ativo,
-            u.idade_minima_suporte,
+            ac.numero_comercial,
+            ac.bpa_ativo,
+            ac.idade_minima_suporte,
             cl.nome,
             d.nome_dependente,
-            u.nome_agente,
-            u.genero,
+            ac.nome_agente,
+            ac.genero,
             u.nome_unidade
-        FROM chatbot.unidade_atendimento u
+        FROM chatbot.unidade u
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
          AND c.id_unidade = u.id_unidade

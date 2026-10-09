@@ -17,16 +17,18 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
         FROM (
             SELECT c.id_conversa
             FROM chatbot.conversa c
-            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
               ON integracao.id_unidade = c.id_unidade
             WHERE e.elegivel_funil = TRUE
+              AND u.status_pagamento IS TRUE
               AND (
-                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
                  AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
                     AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
               )
               AND c.lead_no_funil IS NOT TRUE
@@ -60,7 +62,8 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
             FROM chatbot.funil_envios fe
             JOIN chatbot.conversa c
               ON c.id_conversa = fe.id_conversa
-            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
@@ -78,10 +81,11 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
                     )
                   )
               AND e.elegivel_funil = TRUE
+              AND u.status_pagamento IS TRUE
               AND (
-                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
                  AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
                     AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
               )
               AND c.lead_no_funil IS NOT TRUE

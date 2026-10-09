@@ -1,8 +1,21 @@
 # FireAds — aplicação e deploy
 
 Código aplicado localmente em **08/10/2026**, sobre o backup
-`37b0265` (V1.9.2). **O deploy e a migração no banco de produção ainda não foram
-executados.** Não iniciar os workers com o código novo sobre o schema antigo.
+`37b0265` (V1.9.2). **Deploy da V1.10.0 confirmado em 09/10/2026**, no commit
+`49af8d5`, com a migração executada e os cinco serviços ativos. A conferência da
+VM retornou 4 unidades, 4 personalizações, 4 linhas na view, nenhum vínculo de
+chat inválido, 30 transições e nenhuma integração FireAds ativa. Webhook e login
+responderam HTTP 200. O cadastro/ativação de Santo André no Admin continua sendo
+a etapa seguinte da integração.
+
+A [separação visual no Admin e suspensão por status_pagamento](status_pagamento_e_admin.md)
+é uma atualização local posterior, com SQL próprio e ainda sem deploy. Não está
+incluída no commit `49af8d5` já implantado.
+
+A [leitura direta de unidade e personalização](consultas_diretas_unidade.md)
+também está aplicada localmente para o próximo deploy. O código deixa de depender
+da view; sua remoção está incluída no SQL unificado de suspensão por pagamento.
+Os passos de implantação abaixo registram a entrega original da FireAds.
 
 ## Implementação
 

@@ -1,9 +1,10 @@
 def buscar_contexto_etapa1(id_unidade, cursor):
     cursor.execute(
         """
-        SELECT nome_unidade, nome_agente, genero
-        FROM chatbot.unidade_atendimento
-        WHERE id_unidade = %s;
+        SELECT u.nome_unidade, ac.nome_agente, ac.genero
+        FROM chatbot.unidade u
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
+        WHERE u.id_unidade = %s;
         """,
         (id_unidade,),
     )

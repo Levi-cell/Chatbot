@@ -102,7 +102,7 @@ def criar_funcao_dequeue_message():
             WITH next_job AS (
                 SELECT f.id_mensagem
                 FROM chatbot.fila_mensagens f
-                WHERE
+                WHERE (
                     (
                         f.status = 'pending'
                         AND f.next_attempt_at <= NOW()
@@ -113,6 +113,13 @@ def criar_funcao_dequeue_message():
                         AND f.processing_started_at
                             < NOW() - INTERVAL '2 minutes'
                     )
+                )
+                -- Inativas mantêm as mensagens pendentes, sem consumir retries.
+                AND NOT EXISTS (
+                    SELECT 1 FROM chatbot.unidade u
+                    WHERE u.phone_number_id = f.id_phone_unidade
+                      AND u.status_pagamento IS NOT TRUE
+                )
                 ORDER BY
                     CASE
                         WHEN f.status = 'pending' THEN f.next_attempt_at

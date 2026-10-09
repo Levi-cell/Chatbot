@@ -9,13 +9,14 @@ def buscar_contexto_etapa20(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
-            u.link_agendamento,
+            ac.link_agendamento,
             cl.nome,
             c.status_dependente,
             d.nome_dependente
         FROM chatbot.conversa c
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d

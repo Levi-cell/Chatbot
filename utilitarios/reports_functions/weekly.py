@@ -684,10 +684,11 @@ def coletar_snapshot(
             SELECT
                 u.id_unidade,
                 u.nome_unidade,
-                u.nome_agente,
-                u.idade_minima_suporte,
-                u.bpa_ativo
-              FROM chatbot.unidade_atendimento u
+                ac.nome_agente,
+                ac.idade_minima_suporte,
+                ac.bpa_ativo
+              FROM chatbot.unidade u
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
              WHERE TRUE {filtro}
              ORDER BY u.nome_unidade, u.id_unidade
             """,
@@ -727,7 +728,8 @@ def coletar_snapshot(
                 SELECT DISTINCT c.id_unidade, c.id_cliente
                   FROM chatbot.historico_mensagens h0
                   JOIN chatbot.conversa c ON c.id_conversa = h0.id_conversa
-                  JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+                  JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+                  JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
                  WHERE h0.quem_enviou = 'cliente'
                    AND h0.received_data_hora >= %s
                    AND h0.received_data_hora < %s
@@ -759,7 +761,8 @@ def coletar_snapshot(
               JOIN chatbot.conversa c
                 ON c.id_unidade = cj.id_unidade
                AND c.id_cliente = cj.id_cliente
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
               LEFT JOIN chatbot.dependente d
                 ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
@@ -804,7 +807,8 @@ def coletar_snapshot(
                 d.nome_dependente
               FROM chatbot.funil_envios f
               JOIN chatbot.conversa c ON c.id_conversa = f.id_conversa
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
               LEFT JOIN chatbot.dependente d
                 ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
@@ -833,7 +837,8 @@ def coletar_snapshot(
                 p.criado_em
               FROM chatbot.pesquisa_satisfacao p
               JOIN chatbot.conversa c ON c.id_conversa = p.id_conversa
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
                {lateral_profissao}
              WHERE p.criado_em >= %s

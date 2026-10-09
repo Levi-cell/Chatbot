@@ -1,5 +1,11 @@
 # Testes do projeto
 
+A atualização de 09/10/2026 tem cobertura para suspensão por `status_pagamento`
+nos testes de consumo Meta, FireAds/Funil, follow-up e runtime do worker principal.
+Inclui `FALSE`/`NULL`, preservação das pendências, reativação, reexecução da migração
+de dequeue e separação da edição de personalização no Admin. Consulte
+[`status_pagamento_e_admin.md`](../docs/status_pagamento_e_admin.md).
+
 Esta pasta reúne testes unitários, de contrato e de integração SQL. Além do núcleo
 transacional, ela cobre regras e utilitários já implementados:
 
@@ -256,7 +262,7 @@ python -m unittest tests.unit.test_fluxo_reserva_link tests.integration.test_res
 As demais suítes de integração precisam das próprias DSNs descritas acima.
 Sem as variáveis, os testes PostgreSQL são ignorados, não considerados aprovados.
 
-A configuração atual de `atendimento_customizado.link_agendamento`, lida pela view `unidade_atendimento`, decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. A FireAds pode importar as coletas iniciais e pular o e-mail apenas mediante consulta válida da própria conversa.
+A configuração atual de `atendimento_customizado.link_agendamento`, lida diretamente junto de `unidade` por `id_unidade`, decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. A FireAds pode importar as coletas iniciais e pular o e-mail apenas mediante consulta válida da própria conversa.
 
 `conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
@@ -293,3 +299,15 @@ catálogos históricos, sem inserir os atalhos FireAds na versão anterior.
 Validação da aplicação em 08/10/2026: **487 testes executados, zero falhas, zero
 erros e zero pulados**, usando PostgreSQL 16 local descartável e as sete DSNs de
 teste. Os binários locais de validação não são dependência do projeto ou da VM.
+
+
+### Consultas diretas da unidade (09/10/2026)
+
+O setup e as bases de teste não criam `unidade_atendimento`. As suítes FireAds,
+reserva/link, suporte por idade e follow-up executam o SQL real sobre as duas
+tabelas. Cobrem contexto de titular/dependente, alteração da personalização,
+isolamento entre unidades, elegibilidade com/sem link, preservação da suspensão
+por pagamento, painel e relatórios semanal/total (incluindo unidades sem histórico).
+A migração de remoção pode ser reexecutada; a migração FireAds não recria a view.
+SQL dos serviços permanece em `core/repositories`; SQL dos relatórios utilitários
+permanece em `utilitarios/reports_functions`.

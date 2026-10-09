@@ -70,13 +70,14 @@ def reler_conversa(contexto_banco, lock_version, cursor):
 def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
-        SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, u.nome_agente,
-               u.genero, u.link_agendamento, u.link_instagram,
+        SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, ac.nome_agente,
+               ac.genero, ac.link_agendamento, ac.link_instagram,
                c.status_dependente,
-               c.turno, cl.idade, u.numero_comercial, e.encerra_automaticamente
+               c.turno, cl.idade, ac.numero_comercial, e.encerra_automaticamente
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
         LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s AND c.id_unidade = %s AND c.status_ativa IS TRUE;
@@ -196,11 +197,12 @@ CONSULTA_ELEGIVEIS = """
     SELECT c.id_conversa, c.id_cliente, c.id_unidade, c.id_etapa_atual,
            cl.waid_telefone, u.phone_number_id, u.telefone,
            b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em,
-           COALESCE(c.followup_stage, 0), cl.nome, u.nome_agente,
+           COALESCE(c.followup_stage, 0), cl.nome, ac.nome_agente,
            c.status_dependente, d.nome_dependente
     FROM chatbot.conversa c
     JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-    JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
     JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
     LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
     JOIN LATERAL (
@@ -211,7 +213,7 @@ CONSULTA_ELEGIVEIS = """
     ) b ON TRUE
     WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
       AND (c.id_etapa_atual BETWEEN 1 AND 17 OR
-           (c.id_etapa_atual = 18 AND NULLIF(TRIM(u.link_agendamento), '') IS NULL))
+           (c.id_etapa_atual = 18 AND NULLIF(TRIM(ac.link_agendamento), '') IS NULL))
       AND e.encerra_automaticamente IS FALSE
       AND COALESCE(c.followup_stage, 0) IN (0, 1) AND c.last_message_from = 'bot'
       AND c.last_interaction_at = b.received_data_hora

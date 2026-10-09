@@ -9,8 +9,10 @@ def buscar_abertura(id_conversa, cursor):
         SELECT c.id_chat,c.id_cliente,c.id_unidade,c.id_etapa_atual,
                c.contexto_fireads,c.origem_fireads,i.id_integracao_fireads,
                i.url_dashbord,i.aba_google,i.aba_meta,i.fuso_formularios,
-               (i.integracao_ativa AND c.iniciou_em >= i.ativada_em) AS aplicavel
-        FROM chatbot.conversa c LEFT JOIN chatbot.integracao_fireads i
+               (u.status_pagamento IS TRUE AND i.integracao_ativa
+                AND c.iniciou_em >= i.ativada_em) AS aplicavel
+        FROM chatbot.conversa c JOIN chatbot.unidade u ON u.id_unidade=c.id_unidade
+        LEFT JOIN chatbot.integracao_fireads i
           ON i.id_unidade=c.id_unidade WHERE c.id_conversa=%s;
     """,
         (id_conversa,),

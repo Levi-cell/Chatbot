@@ -1,6 +1,7 @@
 """FireAds em PostgreSQL local descartável; apenas HTTP é substituído."""
 
 from contextlib import contextmanager, ExitStack
+from datetime import timedelta
 import os
 import unittest
 from unittest.mock import Mock, patch
@@ -108,6 +109,82 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.conn.commit()
         return cid
 
+    def test_unidade_desativada_nao_consulta_fireads(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+        self.conn.commit()
+        with patch("workers.worker_flow.fireads.ClienteFireAds") as api:
+            self.assertEqual(preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor), contexto)
+        api.assert_not_called()
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM chatbot.consulta_fireads").fetchone()[0], 0)
+
+    def test_desativacao_suspende_funil_e_dash_preservando_pendencias(self):
+        from core.repositories.funil import envios as funil
+        envio = self.preparar_envio()
+        cid = envio["conversa"]
+        self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=FALSE WHERE id_conversa=%s", (cid,))
+        self.assertEqual(funil.sincronizar_envios_elegiveis(self.cursor), 1)
+        self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s", (cid,))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+        self.conn.commit()
+        with patch("workers.worker_funil.fireads.ClienteFireAds") as api:
+            self.assertFalse(processar(envio, self.conn, self.cursor))
+        api.assert_not_called()
+        for status in (False, None):
+            self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=%s", (status,))
+            self.cursor.execute("UPDATE chatbot.envios_dash SET next_attempt_at=clock_timestamp()")
+            self.assertIsNone(envios.reservar(self.cursor))
+            self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=FALSE WHERE id_conversa=%s", (cid,))
+            self.assertIsNone(funil.reivindicar_proximo_envio(self.cursor))
+            self.assertIsNone(buscar_dados_lead_funil(cid, self.cursor))
+            self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s", (cid,))
+        self.assertEqual(self.conn.execute("SELECT status,snapshot FROM chatbot.envios_dash").fetchone(), ("pending", envio["snapshot"]))
+        self.assertEqual(self.conn.execute("SELECT status FROM chatbot.funil_envios").fetchone(), ("pending",))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE")
+        self.assertIsNotNone(envios.reservar(self.cursor))
+
+    def test_migracao_dequeue_pula_inativas_sem_perder_ordem_ou_retry(self):
+        from pathlib import Path
+        migration = Path(__file__).resolve().parents[2] / 'deploy/migrations/20261009_status_pagamento_workers.sql'
+        self.conn.commit()
+        # Usa o mesmo arquivo que será aplicado no DBeaver e confirma reexecução.
+        self.conn.execute(migration.read_text(encoding='utf-8'), prepare=False)
+        self.conn.execute(migration.read_text(encoding='utf-8'), prepare=False)
+        cid, mensagem, _, _ = self.preparar_mensagem()
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='pending',retry_count=0,processing_started_at=NULL,next_attempt_at=clock_timestamp()-INTERVAL '1 minute'")
+        self.cursor.execute("""
+            INSERT INTO chatbot.unidade(nome_unidade,cnpj,email_responsavel,telefone,waba_id,phone_number_id)
+            VALUES('Unidade ativa','outro','outro@example.com','5511999990003','outro','phone-ativo');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial)
+            SELECT id_unidade,'Agente','masculino','5511999990004' FROM chatbot.unidade WHERE phone_number_id='phone-ativo';
+            INSERT INTO chatbot.fila_mensagens(cliente_telefone,conteudo_texto,tipo_mensagem,id_phone_unidade,unidade_telefone,
+                id_hash_msg,received_data_hora,status,next_attempt_at)
+            VALUES('5511999990005','Oi','text','phone-ativo','5511999990003','wamid.ativa',clock_timestamp(),'pending',clock_timestamp());
+            UPDATE chatbot.unidade SET status_pagamento=FALSE WHERE id_unidade=1;
+        """)
+        self.conn.commit()
+        row = self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone()
+        self.assertEqual(row[4], 'phone-ativo')
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='sent',processing_started_at=NULL WHERE id_mensagem=%s", (row[0],))
+        for status in (False, None):
+            self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=%s WHERE id_unidade=1", (status,))
+            self.assertIsNone(self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone())
+        self.assertEqual(self.conn.execute("SELECT status,retry_count FROM chatbot.fila_mensagens WHERE id_mensagem=%s", (mensagem['id_mensagem'],)).fetchone(), ('pending', 0))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE WHERE id_unidade=1")
+        retomada = self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone()
+        self.assertEqual(retomada[0], mensagem['id_mensagem'])
+        from core.repositories.atendimento.fila import reagendar_mensagem_sem_erro
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1] - 1,
+        ), 0)
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1],
+        ), 1)
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='sent' WHERE id_mensagem=%s", (retomada[0],))
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1],
+        ), 0)
+
     def preparar_mensagem(self):
         cid = self.nova_conversa()
         self.cursor.execute(
@@ -180,10 +257,20 @@ class FireAdsPostgresTests(unittest.TestCase):
         return envio
 
     def test_migracao_preserva_personalizacao_conversas_e_reexecuta(self):
+        remocao = MIGRACAO_FIREADS.with_name('20261009_remover_view_unidade_atendimento.sql')
+        for _ in range(2):
+            self.conn.execute(remocao.read_text(encoding='utf-8'), prepare=False)
         self.conn.execute(MIGRACAO_FIREADS.read_text(encoding="utf-8"), prepare=False)
+        self.assertIsNone(self.conn.execute(
+            "SELECT to_regclass('chatbot.unidade_atendimento')"
+        ).fetchone()[0])
+        self.assertEqual(self.conn.execute(
+            "SELECT versao FROM chatbot.migracoes_fireads"
+        ).fetchall(), [('20261007_fireads_v1',)])
         self.assertEqual(
             self.conn.execute(
-                "SELECT nome_agente FROM chatbot.unidade_atendimento"
+                "SELECT ac.nome_agente FROM chatbot.unidade u "
+                "JOIN chatbot.atendimento_customizado ac ON ac.id_unidade=u.id_unidade"
             ).fetchone(),
             ("Dora",),
         )
@@ -371,3 +458,40 @@ class FireAdsPostgresTests(unittest.TestCase):
             self.conn.execute(
                 "UPDATE chatbot.conversa SET id_chat=999 WHERE id_conversa=1"
             )
+
+    def test_relatorios_consultam_tabelas_sem_view_incluindo_unidades_vazias(self):
+        from utilitarios.reports_functions import total, weekly
+
+        self.conn.execute("""
+            INSERT INTO chatbot.unidade(id_unidade,nome_unidade,cnpj,email_responsavel,
+                telefone,waba_id,phone_number_id)
+            VALUES(2,'Sem histórico','outra','outra@example.com','5511999990010','waba-2','phone-2');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial)
+            VALUES(2,'Outro agente','masculino','5511999990011');
+            UPDATE chatbot.atendimento_customizado SET bpa_ativo=TRUE,idade_minima_suporte=70
+            WHERE id_unidade=1;
+            UPDATE chatbot.conversa SET status_dependente=FALSE,profissao='Professora'
+            WHERE id_conversa=1;
+            UPDATE chatbot.cliente SET idade=35 WHERE id_cliente=1;
+            INSERT INTO chatbot.historico_mensagens
+                (id_conversa,id_etapa,received_data_hora,cliente_telefone,conteudo_texto,
+                 tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou)
+            VALUES(1,1,clock_timestamp(),'5511999990002','Olá','text',
+                'wamid.relatorio','phone-teste','5511999990000','cliente');
+        """)
+        instante = self.conn.execute('SELECT clock_timestamp()').fetchone()[0]
+        self.conn.commit()
+        fim = instante + timedelta(minutes=1)
+        snapshot = weekly.coletar_snapshot(self.conn, instante - timedelta(days=1), fim)
+        unidades = {u['id_unidade']: u for u in snapshot['unidades']}
+        self.assertEqual(set(unidades), {1, 2})
+        self.assertEqual((unidades[1]['nome_agente'], unidades[1]['bpa_ativo'], unidades[1]['idade_minima_suporte']),
+                         ('Dora', True, 70))
+        self.assertEqual(len(unidades[1]['conversas']), 1)
+        self.assertEqual(unidades[2]['conversas'], [])
+        filtrado = weekly.coletar_snapshot(self.conn, instante - timedelta(days=1), fim, ids_unidade=[2])
+        self.assertEqual([u['id_unidade'] for u in filtrado['unidades']], [2])
+        primeiros = {u['id_unidade']: u for u in total.coletar_primeiros_registros(self.conn, fim)}
+        self.assertIsNotNone(primeiros[1]['primeiro_registro'])
+        self.assertIsNone(primeiros[2]['primeiro_registro'])
+        self.assertEqual([u['id_unidade'] for u in total.coletar_primeiros_registros(self.conn, fim, [2])], [2])

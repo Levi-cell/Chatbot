@@ -227,14 +227,25 @@ class SuporteIdadePostgresTests(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
         ).fetchall(), conversas_antes)
-        # Adapta apenas a leitura do runtime à base histórica deste teste.
-        self.conn.execute('CREATE VIEW chatbot.unidade_atendimento AS SELECT * FROM chatbot.unidade')
+        # Reproduz a separação posterior para consultar a política histórica
+        # com o runtime atual, sem mudar o domínio da migração sob teste.
+        self.conn.execute('''
+            CREATE TABLE chatbot.atendimento_customizado AS
+            SELECT id_unidade, nome_agente, genero, numero_comercial,
+                   idade_minima_suporte, email_obrigatorio, link_agendamento,
+                   link_instagram, bpa_ativo FROM chatbot.unidade;
+            ALTER TABLE chatbot.atendimento_customizado ADD PRIMARY KEY (id_unidade);
+            ALTER TABLE chatbot.unidade
+                DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+                DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+                DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+        ''')
         inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
         fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
         with self.conn.cursor() as cursor:
             for limite in (None, 50, 60, 70, 80, 90):
                 cursor.execute(
-                    'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
+                    'UPDATE chatbot.atendimento_customizado SET idade_minima_suporte=%s WHERE id_unidade=1',
                     (limite,),
                 )
                 if limite == 90:

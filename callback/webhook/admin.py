@@ -153,41 +153,25 @@ class UnidadeAdmin(admin.ModelAdmin):
         "id_unidade",
         "nome_unidade",
         "id_usuario_monitoramento",
-        "nome_agente",
-        "genero",
         "cnpj",
         "telefone",
-        "numero_comercial",
-        "idade_minima_suporte",
-        "email_obrigatorio",
         "email_responsavel",
         "waba_id",
         "phone_number_id",
-        "link_agendamento_clickable",
-        "link_instagram_clickable",
-        "bpa_ativo",
         "status_pagamento",
     )
 
     search_fields = (
         "nome_unidade",
         "id_usuario_monitoramento__username",
-        "atendimento_customizado__nome_agente",
         "cnpj",
         "telefone",
-        "atendimento_customizado__numero_comercial",
         "email_responsavel",
         "waba_id",
         "phone_number_id",
-        "atendimento_customizado__link_agendamento",
-        "atendimento_customizado__link_instagram",
     )
 
     list_filter = (
-        "atendimento_customizado__genero",
-        "atendimento_customizado__bpa_ativo",
-        "atendimento_customizado__idade_minima_suporte",
-        "atendimento_customizado__email_obrigatorio",
         "status_pagamento",
     )
     ordering = ("nome_unidade",)
@@ -196,11 +180,24 @@ class UnidadeAdmin(admin.ModelAdmin):
     list_per_page = 50
     empty_value_display = "-"
 
+    def get_inlines(self, request, obj=None):
+        # Uma unidade nova precisa da personalização na mesma transação.
+        # Depois do cadastro, a edição fica na tela própria da personalização.
+        return self.inlines if obj is None else ()
+
     def get_readonly_fields(self, request, obj=None):
         if obj is not None:
-            return ("waba_id", "phone_number_id")
+            return ("waba_id", "phone_number_id", "abrir_atendimento_customizado")
 
         return ()
+
+    @admin.display(description="Atendimento customizado")
+    def abrir_atendimento_customizado(self, obj):
+        url = reverse(
+            "admin:webhook_atendimentocustomizado_change",
+            args=[obj.atendimento_customizado.pk],
+        )
+        return format_html('<a href="{}">Editar personalização da unidade</a>', url)
 
     def _create_formsets(self, request, obj, change):
         formsets, inlines = super()._create_formsets(request, obj, change)
@@ -1430,9 +1427,15 @@ class AtendimentoCustomizadoAdmin(admin.ModelAdmin):
         "id_customizacao",
         "id_unidade",
         "nome_agente",
+        "genero",
+        "bpa_ativo",
+        "numero_comercial",
+        "idade_minima_suporte",
         "email_obrigatorio",
         "link_agendamento",
+        "link_instagram",
     )
+    list_filter = ("genero", "bpa_ativo", "email_obrigatorio", "idade_minima_suporte")
     list_select_related = ("id_unidade",)
     search_fields = ("id_unidade__nome_unidade", "nome_agente")
 

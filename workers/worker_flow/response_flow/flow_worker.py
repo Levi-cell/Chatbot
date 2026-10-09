@@ -3,6 +3,10 @@ from workers.worker_flow.fireads import preparar_abertura
 
 import psycopg
 from core.cache.cache_unidade import UnidadeNaoEncontrada
+from core.repositories.unidades.consultas import (
+    UnidadeDesativada,
+    exigir_unidade_habilitada_por_phone_id,
+)
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.logging_config import short_value
@@ -115,6 +119,7 @@ def worker_flow():
                 conn_ciclo.commit()
                 continue
 
+            exigir_unidade_habilitada_por_phone_id(mensagem["id_phone_unidade"], cursor_ciclo)
             contexto_banco = validar_banco_mensagem(
                 mensagem,
                 cursor_ciclo,
@@ -186,6 +191,7 @@ def worker_flow():
                 continue
 
             contexto_banco = reler_conversa(contexto_banco, lock_version, cursor_ciclo)
+            exigir_unidade_habilitada_por_phone_id(mensagem["id_phone_unidade"], cursor_ciclo)
             contexto_banco = preparar_abertura(
                 contexto_banco, mensagem, lock_version, conn_ciclo, cursor_ciclo
             )
@@ -210,6 +216,7 @@ def worker_flow():
             )
 
             proteger_conversa(id_conversa, lock_version, cursor_ciclo, renovar=True)
+            exigir_unidade_habilitada_por_phone_id(mensagem["id_phone_unidade"], cursor_ciclo)
             conn_ciclo.commit()
             if contexto_historico.get("retorno_followup"):
                 contexto_envio = enviar_retorno_followup(contexto_historico)
@@ -278,6 +285,16 @@ def worker_flow():
                 mensagem,
                 resultado_encerramento,
             )
+
+        except UnidadeDesativada:
+            conn_ciclo.rollback()
+            # Preserva pendência/histórico; a função dequeue não reserva inativas.
+            reagendar_mensagem_sem_erro(
+                mensagem["id_mensagem"], cursor_ciclo, delay_seconds=300,
+                retry_esperado=mensagem["retry_count"],
+            )
+            conn_ciclo.commit()
+            logger.info("unidade_desativada | acao=preservar_pendente id_mensagem=%s", mensagem["id_mensagem"])
 
         except LockConversaPerdido:
             if conn_ciclo:

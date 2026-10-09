@@ -281,7 +281,15 @@ class Unidade(models.Model):
     id_fuso = models.IntegerField(blank=True, null=True, editable=False)
     nome_fuso = models.TextField(blank=True, null=True, editable=False)
     fuso_verificado_em = models.DateTimeField(blank=True, null=True, editable=False)
-    status_pagamento = models.BooleanField(blank=True, null=True, default=True)
+    status_pagamento = models.BooleanField(
+        "status pagamento / unidade ativa",
+        blank=True, null=True, default=True,
+        help_text=(
+            "Sim: habilita o atendimento e os workers da unidade. Não ou desconhecido: "
+            "suspende atendimento, follow-up, Funil, FireAds e consumo Meta, preservando "
+            "o histórico e as pendências. Uma requisição externa já iniciada pode concluir."
+        ),
+    )
     id_usuario_monitoramento = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         models.SET_NULL,

@@ -181,11 +181,9 @@ BEGIN
 END;
 $migracao$;
 
--- View de leitura: consumidores mantêm o mesmo formato, sem duplicar colunas.
-CREATE OR REPLACE VIEW chatbot.unidade_atendimento AS
-SELECT u.*,a.nome_agente,a.genero,a.numero_comercial,a.idade_minima_suporte,
-       a.email_obrigatorio,a.link_agendamento,a.link_instagram,a.bpa_ativo
-FROM chatbot.unidade u JOIN chatbot.atendimento_customizado a USING (id_unidade);
+-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
 
 CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
 LANGUAGE plpgsql AS $fn$

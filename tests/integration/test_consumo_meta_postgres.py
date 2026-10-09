@@ -44,6 +44,7 @@ class ConsumoPostgresTests(unittest.TestCase):
             CREATE TABLE chatbot.unidade (id_unidade INTEGER PRIMARY KEY, nome_unidade TEXT,
                 waba_id VARCHAR(100), phone_number_id VARCHAR(100));
             INSERT INTO chatbot.unidade VALUES (10,'Unidade A','999','111'),(20,'Unidade B','888','222');
+            ALTER TABLE chatbot.unidade ADD COLUMN status_pagamento BOOLEAN DEFAULT TRUE;
             CREATE TABLE chatbot.conversa (id_conversa INTEGER, motivo_encerramento TEXT);
             INSERT INTO chatbot.conversa VALUES (1,'suporte_idoso_60');
             CREATE TABLE chatbot.fila_mensagens (id_mensagem INTEGER, status TEXT);
@@ -81,6 +82,44 @@ class ConsumoPostgresTests(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT status FROM chatbot.fila_mensagens").fetchone()[0], "processing")
         with self.assertRaises(psycopg.errors.CheckViolation):
             self.conn.execute("UPDATE chatbot.unidade SET id_fuso=25 WHERE id_unidade=10")
+
+    def test_desativada_nao_consulta_meta_e_preserva_consumo(self):
+        agora = instante("2026-10-09T13:00:00")
+        self.gravar(agora)
+        anteriores = self.ler()
+        for status in (False, None):
+            with self.subTest(status=status):
+                self.conn.execute("UPDATE chatbot.unidade SET status_pagamento=%s", (status,))
+                with patch("workers.worker_consumo_meta.consumo_worker.consultar_conta_consumo") as conta, patch(
+                    "workers.worker_consumo_meta.consumo_worker.consultar_metricas_conta"
+                ) as metricas:
+                    resumo = executar_ciclo_consumo(conectar=lambda: psycopg.connect(DSN), relogio=lambda: agora)
+                conta.assert_not_called()
+                metricas.assert_not_called()
+                self.assertEqual(resumo["falhas"], 0)
+                self.assertEqual(self.ler(), anteriores)
+
+    def test_desativacao_apos_listagem_e_antes_das_metricas(self):
+        agora = instante("2026-10-09T13:00:00")
+        listar = coletas.listar_unidades
+        def listar_e_desativar(cursor):
+            unidades = listar(cursor)
+            self.conn.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+            return unidades
+        with patch.object(coletas, "listar_unidades", side_effect=listar_e_desativar), patch(
+            "workers.worker_consumo_meta.consumo_worker.consultar_conta_consumo"
+        ) as conta:
+            executar_ciclo_consumo(conectar=lambda: psycopg.connect(DSN), relogio=lambda: agora)
+        conta.assert_not_called()
+        self.conn.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE WHERE id_unidade=10")
+        def conta_e_desativar(waba, **_):
+            self.conn.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+            return {"waba_id": waba, "timezone_id": "25", "fuso_horario": "America/Sao_Paulo"}
+        with patch("workers.worker_consumo_meta.consumo_worker.consultar_conta_consumo", side_effect=conta_e_desativar), patch(
+            "workers.worker_consumo_meta.consumo_worker.consultar_metricas_conta"
+        ) as metricas:
+            executar_ciclo_consumo(conectar=lambda: psycopg.connect(DSN), relogio=lambda: agora)
+        metricas.assert_not_called()
 
     def test_upsert_nao_duplica_e_leitura_antiga_nao_sobrescreve(self):
         agora = instante("2026-10-15T12:00:00")

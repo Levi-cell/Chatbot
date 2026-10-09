@@ -15,12 +15,13 @@ def buscar_contexto_etapa9(id_conversa, id_unidade, cursor):
         SELECT
             cl.nome,
             d.nome_dependente,
-            u.link_instagram
+            ac.link_instagram
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         LEFT JOIN chatbot.dependente d
           ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s

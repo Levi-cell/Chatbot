@@ -115,7 +115,8 @@ def coletar_primeiros_registros(
                     WHERE h.quem_enviou = 'cliente'
                       AND h.received_data_hora < %s
                 ) AS primeiro_registro
-              FROM chatbot.unidade_atendimento u
+              FROM chatbot.unidade u
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               LEFT JOIN chatbot.conversa c ON c.id_unidade = u.id_unidade
               LEFT JOIN chatbot.historico_mensagens h
                 ON h.id_conversa = c.id_conversa

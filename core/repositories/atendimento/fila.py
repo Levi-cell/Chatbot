@@ -134,7 +134,16 @@ def reagendar_mensagem_sem_erro(
     id_mensagem,
     cursor,
     delay_seconds=30,
+    *,
+    retry_esperado=None,
 ):
+    # A suspensão pode ser detectada após HTTP. Não devolver à fila uma
+    # mensagem já confirmada ou reservada por outro ciclo nesse intervalo.
+    filtro_posse = ""
+    parametros = (delay_seconds, id_mensagem)
+    if retry_esperado is not None:
+        filtro_posse = " AND status = 'processing' AND retry_count = %s"
+        parametros += (retry_esperado,)
     cursor.execute("""
         UPDATE chatbot.fila_mensagens
         SET
@@ -143,8 +152,8 @@ def reagendar_mensagem_sem_erro(
             processing_started_at = NULL,
             retry_count = GREATEST(COALESCE(retry_count, 0) - 1, 0),
             last_error = NULL
-        WHERE id_mensagem = %s;
-    """, (delay_seconds, id_mensagem))
+        WHERE id_mensagem = %s
+    """ + filtro_posse, parametros)
     logger.debug(
         "fila_update | acao=reagendar_sem_erro id_mensagem=%s delay=%s linhas=%s",
         id_mensagem,

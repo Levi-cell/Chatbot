@@ -11,6 +11,7 @@ from core.consumo_meta.periodos import (
 )
 from core.integrations.whatsapp.consumo import consultar_conta_consumo, consultar_metricas_conta
 from core.repositories.consumo_meta import coletas
+from core.repositories.unidades.consultas import unidade_habilitada
 from .config import (
     CONSUMO_META_HORA_CONFERENCIA, CONSUMO_META_INTERVALO_SEGUNDOS,
     CONSUMO_META_LIMITE_POR_CICLO,
@@ -56,6 +57,8 @@ def executar_ciclo_consumo(*, conectar=None, session=None, relogio=agora_utc, pa
                 break
             agora = relogio()
             with conn.cursor() as cursor:
+                if not unidade_habilitada(unidade["id_unidade"], cursor):
+                    continue
                 agenda = coletas.listar_agenda(cursor, unidade["id_unidade"])
                 registros = coletas.listar_registros(cursor, unidade["id_unidade"])
             atualizar_agenda_encerrados(conn, registros, agora)
@@ -111,6 +114,10 @@ def executar_ciclo_consumo(*, conectar=None, session=None, relogio=agora_utc, pa
         for _, mes, unidade, conta, registro in trabalhos[:CONSUMO_META_LIMITE_POR_CICLO]:
             if parar and parar.is_set():
                 break
+            # O lote pode ter sido montado antes da desativação no Admin.
+            with conn.cursor() as cursor:
+                if not unidade_habilitada(unidade["id_unidade"], cursor):
+                    continue
             referencia = relogio()
             inicio, fim = fronteiras_mes(mes, conta["fuso_horario"])
             fuso_agenda = registro["fuso_horario"] if registro else conta["fuso_horario"]

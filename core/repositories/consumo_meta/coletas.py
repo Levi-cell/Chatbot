@@ -15,7 +15,8 @@ def listar_unidades(cursor):
     cursor.execute("""
         SELECT id_unidade, nome_unidade, waba_id, phone_number_id, id_fuso, nome_fuso
           FROM chatbot.unidade
-         WHERE waba_id IS NOT NULL AND phone_number_id IS NOT NULL
+         WHERE status_pagamento IS TRUE
+           AND waba_id IS NOT NULL AND phone_number_id IS NOT NULL
          ORDER BY id_unidade
     """)
     return _linhas(cursor)

@@ -1,12 +1,14 @@
 # Plano prático — FireAds, chat e atendimento customizado
 
-**Revisão: 09/10/2026. Status: código aplicado localmente; deploy e migração de produção pendentes.**
+**Revisão: 09/10/2026. A V1.10.0 já foi implantada; os ajustes posteriores de Admin, suspensão e consultas diretas ainda exigem novo deploy.**
 
 Este documento contém o código integral de **53 arquivos**, um por passo.
-O último passo contém a migração SQL completa para executar no DBeaver no dia
-do deploy. O código foi aplicado no projeto local e validado com PostgreSQL
-descartável. A VM, o RDS e os serviços de produção não foram alterados.
-Não iniciar o código novo sobre o banco antigo.
+O último passo contém a migração estrutural da FireAds, já aplicada na produção.
+Os blocos que dependiam da antiga view foram atualizados para consultas diretas.
+Para o próximo deploy sobre a V1.10.0, seguir a [atualização de consultas](consultas_diretas_unidade.md)
+e a [suspensão por pagamento](status_pagamento_e_admin.md); não reaplicar os blocos
+históricos deste documento por cima do código atual. A implementação vigente
+está nos arquivos do projeto. Não iniciar o código novo sobre o banco antigo.
 
 Base de aplicação: **backup 37b0265, de 08/10/2026**, sobre a V1.9.2.
 Os blocos refletem os arquivos aplicados e os ajustes encontrados durante a
@@ -67,7 +69,7 @@ por anúncio/post ou IA nesta entrega.
 | --- | --- |
 | `unidade` | Identidade, CNPJ, contato administrativo, WABA, phone ID, pagamento, usuário de monitoramento e fuso Meta. Mantém seus IDs. |
 | `atendimento_customizado` | Um registro obrigatório por unidade: agente, gênero, comercial, limite de suporte por idade, obrigatoriedade do e-mail, link de reserva, Instagram e BPA. A migração copia e confere os valores antes de retirar as colunas antigas. |
-| `unidade_atendimento` | **View de leitura**, não outra tabela. Une unidade e personalização para manter o formato das consultas do fluxo, follow-up, painel, Funil e relatórios. |
+| Leitura da unidade e personalização | Consultas diretas a `unidade` e `atendimento_customizado`, unidas por `id_unidade`. A antiga view `unidade_atendimento` será removida no próximo deploy; novas views exigem autorização do usuário. |
 | `integracao_fireads` | Zero ou um registro por unidade. Ativação, URLs, abas, confirmação do contrato e fuso de interpretação de datas. Começa desativada; ausência equivale a não integrada. |
 | `chat` | `id_chat`, cliente, unidade e criação. Cliente/unidade únicos. A migração agrupa as conversas existentes sem apagar nenhuma. |
 | `conversa.id_chat` | Obrigatório. FK composta garante que chat, cliente e unidade correspondem; os IDs diretos continuam presentes nesta fase. |
@@ -1470,9 +1472,10 @@ def _validar_data_interacao_bot(data_interacao):
 def buscar_contexto_etapa1(id_unidade, cursor):
     cursor.execute(
         """
-        SELECT nome_unidade, nome_agente, genero
-        FROM chatbot.unidade_atendimento
-        WHERE id_unidade = %s;
+        SELECT u.nome_unidade, ac.nome_agente, ac.genero
+        FROM chatbot.unidade u
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
+        WHERE u.id_unidade = %s;
         """,
         (id_unidade,),
     )
@@ -1528,13 +1531,14 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
-            u.email_obrigatorio,
+            ac.email_obrigatorio,
             c.status_dependente,
             cl.idade,
             d.nome_dependente
         FROM chatbot.conversa c
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d
@@ -1618,11 +1622,12 @@ def buscar_contexto_etapa10(id_conversa, id_unidade, cursor):
 def buscar_contexto_etapa18(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
-        SELECT NULLIF(BTRIM(u.link_agendamento), ''), u.numero_comercial,
-               u.nome_agente, u.genero, cl.nome, cl.idade,
+        SELECT NULLIF(BTRIM(ac.link_agendamento), ''), ac.numero_comercial,
+               ac.nome_agente, ac.genero, cl.nome, cl.idade,
                d.nome_dependente, d.idade, c.status_dependente, c.turno
         FROM chatbot.conversa c
-        JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s AND c.id_unidade = %s;
@@ -1669,13 +1674,14 @@ def buscar_contexto_etapa20(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
-            u.link_agendamento,
+            ac.link_agendamento,
             cl.nome,
             c.status_dependente,
             d.nome_dependente
         FROM chatbot.conversa c
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
         LEFT JOIN chatbot.dependente d
@@ -1746,15 +1752,16 @@ def buscar_contexto_etapa6(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
         SELECT
-            u.numero_comercial,
-            u.bpa_ativo,
-            u.idade_minima_suporte,
+            ac.numero_comercial,
+            ac.bpa_ativo,
+            ac.idade_minima_suporte,
             cl.nome,
             d.nome_dependente,
-            u.nome_agente,
-            u.genero,
+            ac.nome_agente,
+            ac.genero,
             u.nome_unidade
-        FROM chatbot.unidade_atendimento u
+        FROM chatbot.unidade u
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.conversa c
           ON c.id_conversa = %s
          AND c.id_unidade = u.id_unidade
@@ -1829,12 +1836,13 @@ def buscar_contexto_etapa7(id_conversa, id_unidade, cursor):
         SELECT
             cl.nome,
             d.nome_dependente,
-            u.link_instagram
+            ac.link_instagram
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         LEFT JOIN chatbot.dependente d
           ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s
@@ -1892,12 +1900,13 @@ def buscar_contexto_etapa9(id_conversa, id_unidade, cursor):
         SELECT
             cl.nome,
             d.nome_dependente,
-            u.link_instagram
+            ac.link_instagram
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         LEFT JOIN chatbot.dependente d
           ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s
@@ -5767,16 +5776,18 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
         FROM (
             SELECT c.id_conversa
             FROM chatbot.conversa c
-            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
               ON integracao.id_unidade = c.id_unidade
             WHERE e.elegivel_funil = TRUE
+              AND u.status_pagamento IS TRUE
               AND (
-                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
                  AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
                     AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
               )
               AND c.lead_no_funil IS NOT TRUE
@@ -5810,7 +5821,8 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
             FROM chatbot.funil_envios fe
             JOIN chatbot.conversa c
               ON c.id_conversa = fe.id_conversa
-            JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+            JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
             JOIN chatbot.etapa e
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
@@ -5828,10 +5840,11 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
                     )
                   )
               AND e.elegivel_funil = TRUE
+              AND u.status_pagamento IS TRUE
               AND (
-                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
                  AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
                     AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
               )
               AND c.lead_no_funil IS NOT TRUE
@@ -5991,13 +6004,14 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             d.idade AS idade_dependente,
             triagem.respostas,
             coleta_email.conteudo_texto AS resposta_email_conversa,
-            NULLIF(BTRIM(u.link_agendamento), '') AS link_agendamento,
+            NULLIF(BTRIM(ac.link_agendamento), '') AS link_agendamento,
             c.turno, c.origem_fireads, c.contexto_fireads
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u
+        JOIN chatbot.unidade u
           ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.etapa etapa_atual
           ON etapa_atual.id_etapa = c.id_etapa_atual
         LEFT JOIN chatbot.dependente d
@@ -6039,11 +6053,12 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             LIMIT 1
         ) AS coleta_email ON TRUE
         WHERE c.id_conversa = %s
+          AND u.status_pagamento IS TRUE
           AND etapa_atual.elegivel_funil = TRUE
           AND (
-                (NULLIF(BTRIM(u.link_agendamento), '') IS NOT NULL
+                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
                  AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(u.link_agendamento), '') IS NULL
+                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
                     AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
               )
           AND c.lead_no_funil IS NOT TRUE
@@ -6934,13 +6949,14 @@ def reler_conversa(contexto_banco, lock_version, cursor):
 def buscar_contexto_repeticao(id_conversa, id_unidade, cursor):
     cursor.execute(
         """
-        SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, u.nome_agente,
-               u.genero, u.link_agendamento, u.link_instagram,
+        SELECT cl.nome, d.nome_dependente, d.idade, u.nome_unidade, ac.nome_agente,
+               ac.genero, ac.link_agendamento, ac.link_instagram,
                c.status_dependente,
-               c.turno, cl.idade, u.numero_comercial, e.encerra_automaticamente
+               c.turno, cl.idade, ac.numero_comercial, e.encerra_automaticamente
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-        JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+        JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
         JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
         LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
         WHERE c.id_conversa = %s AND c.id_unidade = %s AND c.status_ativa IS TRUE;
@@ -7060,11 +7076,12 @@ CONSULTA_ELEGIVEIS = """
     SELECT c.id_conversa, c.id_cliente, c.id_unidade, c.id_etapa_atual,
            cl.waid_telefone, u.phone_number_id, u.telefone,
            b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em,
-           COALESCE(c.followup_stage, 0), cl.nome, u.nome_agente,
+           COALESCE(c.followup_stage, 0), cl.nome, ac.nome_agente,
            c.status_dependente, d.nome_dependente
     FROM chatbot.conversa c
     JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
-    JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+    JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
     JOIN chatbot.etapa e ON e.id_etapa = c.id_etapa_atual
     LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
     JOIN LATERAL (
@@ -7075,7 +7092,7 @@ CONSULTA_ELEGIVEIS = """
     ) b ON TRUE
     WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
       AND (c.id_etapa_atual BETWEEN 1 AND 17 OR
-           (c.id_etapa_atual = 18 AND NULLIF(TRIM(u.link_agendamento), '') IS NULL))
+           (c.id_etapa_atual = 18 AND NULLIF(TRIM(ac.link_agendamento), '') IS NULL))
       AND e.encerra_automaticamente IS FALSE
       AND COALESCE(c.followup_stage, 0) IN (0, 1) AND c.last_message_from = 'bot'
       AND c.last_interaction_at = b.received_data_hora
@@ -7358,15 +7375,16 @@ def _periodo(coluna, inicio, fim, parametros):
 
 def buscar_unidade(id_unidade, cursor):
     cursor.execute("""
-        SELECT u.id_unidade, u.nome_unidade, u.nome_agente, u.idade_minima_suporte,
-               u.email_obrigatorio, u.bpa_ativo,
+        SELECT u.id_unidade, u.nome_unidade, ac.nome_agente, ac.idade_minima_suporte,
+               ac.email_obrigatorio, ac.bpa_ativo,
                MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
-          FROM chatbot.unidade_atendimento u
+          FROM chatbot.unidade u
+          JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
           LEFT JOIN chatbot.conversa c ON c.id_unidade = u.id_unidade
           LEFT JOIN chatbot.historico_mensagens h ON h.id_conversa = c.id_conversa
          WHERE u.id_unidade = %s
-         GROUP BY u.id_unidade, u.nome_unidade, u.nome_agente,
-                  u.idade_minima_suporte, u.email_obrigatorio, u.bpa_ativo
+         GROUP BY u.id_unidade, u.nome_unidade, ac.nome_agente,
+                  ac.idade_minima_suporte, ac.email_obrigatorio, ac.bpa_ativo
     """, (id_unidade,))
     return _linha(cursor)
 
@@ -7714,7 +7732,8 @@ def coletar_primeiros_registros(
                     WHERE h.quem_enviou = 'cliente'
                       AND h.received_data_hora < %s
                 ) AS primeiro_registro
-              FROM chatbot.unidade_atendimento u
+              FROM chatbot.unidade u
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               LEFT JOIN chatbot.conversa c ON c.id_unidade = u.id_unidade
               LEFT JOIN chatbot.historico_mensagens h
                 ON h.id_conversa = c.id_conversa
@@ -8515,10 +8534,11 @@ def coletar_snapshot(
             SELECT
                 u.id_unidade,
                 u.nome_unidade,
-                u.nome_agente,
-                u.idade_minima_suporte,
-                u.bpa_ativo
-              FROM chatbot.unidade_atendimento u
+                ac.nome_agente,
+                ac.idade_minima_suporte,
+                ac.bpa_ativo
+              FROM chatbot.unidade u
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
              WHERE TRUE {filtro}
              ORDER BY u.nome_unidade, u.id_unidade
             """,
@@ -8558,7 +8578,8 @@ def coletar_snapshot(
                 SELECT DISTINCT c.id_unidade, c.id_cliente
                   FROM chatbot.historico_mensagens h0
                   JOIN chatbot.conversa c ON c.id_conversa = h0.id_conversa
-                  JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+                  JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+                  JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
                  WHERE h0.quem_enviou = 'cliente'
                    AND h0.received_data_hora >= %s
                    AND h0.received_data_hora < %s
@@ -8590,7 +8611,8 @@ def coletar_snapshot(
               JOIN chatbot.conversa c
                 ON c.id_unidade = cj.id_unidade
                AND c.id_cliente = cj.id_cliente
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
               LEFT JOIN chatbot.dependente d
                 ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
@@ -8635,7 +8657,8 @@ def coletar_snapshot(
                 d.nome_dependente
               FROM chatbot.funil_envios f
               JOIN chatbot.conversa c ON c.id_conversa = f.id_conversa
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
               LEFT JOIN chatbot.dependente d
                 ON d.id_conversa = c.id_conversa AND d.id_cliente = c.id_cliente
@@ -8664,7 +8687,8 @@ def coletar_snapshot(
                 p.criado_em
               FROM chatbot.pesquisa_satisfacao p
               JOIN chatbot.conversa c ON c.id_conversa = p.id_conversa
-              JOIN chatbot.unidade_atendimento u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
+              JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
               JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
                {lateral_profissao}
              WHERE p.criado_em >= %s
@@ -16187,14 +16211,25 @@ class SuporteIdadePostgresTests(unittest.TestCase):
         self.assertEqual(self.conn.execute(
             'SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa'
         ).fetchall(), conversas_antes)
-        # Adapta apenas a leitura do runtime à base histórica deste teste.
-        self.conn.execute('CREATE VIEW chatbot.unidade_atendimento AS SELECT * FROM chatbot.unidade')
+        # Reproduz a separação posterior para consultar a política histórica
+        # com o runtime atual, sem mudar o domínio da migração sob teste.
+        self.conn.execute('''
+            CREATE TABLE chatbot.atendimento_customizado AS
+            SELECT id_unidade, nome_agente, genero, numero_comercial,
+                   idade_minima_suporte, email_obrigatorio, link_agendamento,
+                   link_instagram, bpa_ativo FROM chatbot.unidade;
+            ALTER TABLE chatbot.atendimento_customizado ADD PRIMARY KEY (id_unidade);
+            ALTER TABLE chatbot.unidade
+                DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+                DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+                DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+        ''')
         inicio = datetime(2026, 9, 1, tzinfo=timezone.utc)
         fim = datetime(2026, 10, 1, tzinfo=timezone.utc)
         with self.conn.cursor() as cursor:
             for limite in (None, 50, 60, 70, 80, 90):
                 cursor.execute(
-                    'UPDATE chatbot.unidade SET idade_minima_suporte=%s WHERE id_unidade=1',
+                    'UPDATE chatbot.atendimento_customizado SET idade_minima_suporte=%s WHERE id_unidade=1',
                     (limite,),
                 )
                 if limite == 90:
@@ -16229,6 +16264,7 @@ if __name__ == '__main__':
 """FireAds em PostgreSQL local descartável; apenas HTTP é substituído."""
 
 from contextlib import contextmanager, ExitStack
+from datetime import timedelta
 import os
 import unittest
 from unittest.mock import Mock, patch
@@ -16336,6 +16372,82 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.conn.commit()
         return cid
 
+    def test_unidade_desativada_nao_consulta_fireads(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+        self.conn.commit()
+        with patch("workers.worker_flow.fireads.ClienteFireAds") as api:
+            self.assertEqual(preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor), contexto)
+        api.assert_not_called()
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM chatbot.consulta_fireads").fetchone()[0], 0)
+
+    def test_desativacao_suspende_funil_e_dash_preservando_pendencias(self):
+        from core.repositories.funil import envios as funil
+        envio = self.preparar_envio()
+        cid = envio["conversa"]
+        self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=FALSE WHERE id_conversa=%s", (cid,))
+        self.assertEqual(funil.sincronizar_envios_elegiveis(self.cursor), 1)
+        self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s", (cid,))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=FALSE")
+        self.conn.commit()
+        with patch("workers.worker_funil.fireads.ClienteFireAds") as api:
+            self.assertFalse(processar(envio, self.conn, self.cursor))
+        api.assert_not_called()
+        for status in (False, None):
+            self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=%s", (status,))
+            self.cursor.execute("UPDATE chatbot.envios_dash SET next_attempt_at=clock_timestamp()")
+            self.assertIsNone(envios.reservar(self.cursor))
+            self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=FALSE WHERE id_conversa=%s", (cid,))
+            self.assertIsNone(funil.reivindicar_proximo_envio(self.cursor))
+            self.assertIsNone(buscar_dados_lead_funil(cid, self.cursor))
+            self.cursor.execute("UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s", (cid,))
+        self.assertEqual(self.conn.execute("SELECT status,snapshot FROM chatbot.envios_dash").fetchone(), ("pending", envio["snapshot"]))
+        self.assertEqual(self.conn.execute("SELECT status FROM chatbot.funil_envios").fetchone(), ("pending",))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE")
+        self.assertIsNotNone(envios.reservar(self.cursor))
+
+    def test_migracao_dequeue_pula_inativas_sem_perder_ordem_ou_retry(self):
+        from pathlib import Path
+        migration = Path(__file__).resolve().parents[2] / 'deploy/migrations/20261009_status_pagamento_workers.sql'
+        self.conn.commit()
+        # Usa o mesmo arquivo que será aplicado no DBeaver e confirma reexecução.
+        self.conn.execute(migration.read_text(encoding='utf-8'), prepare=False)
+        self.conn.execute(migration.read_text(encoding='utf-8'), prepare=False)
+        cid, mensagem, _, _ = self.preparar_mensagem()
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='pending',retry_count=0,processing_started_at=NULL,next_attempt_at=clock_timestamp()-INTERVAL '1 minute'")
+        self.cursor.execute("""
+            INSERT INTO chatbot.unidade(nome_unidade,cnpj,email_responsavel,telefone,waba_id,phone_number_id)
+            VALUES('Unidade ativa','outro','outro@example.com','5511999990003','outro','phone-ativo');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial)
+            SELECT id_unidade,'Agente','masculino','5511999990004' FROM chatbot.unidade WHERE phone_number_id='phone-ativo';
+            INSERT INTO chatbot.fila_mensagens(cliente_telefone,conteudo_texto,tipo_mensagem,id_phone_unidade,unidade_telefone,
+                id_hash_msg,received_data_hora,status,next_attempt_at)
+            VALUES('5511999990005','Oi','text','phone-ativo','5511999990003','wamid.ativa',clock_timestamp(),'pending',clock_timestamp());
+            UPDATE chatbot.unidade SET status_pagamento=FALSE WHERE id_unidade=1;
+        """)
+        self.conn.commit()
+        row = self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone()
+        self.assertEqual(row[4], 'phone-ativo')
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='sent',processing_started_at=NULL WHERE id_mensagem=%s", (row[0],))
+        for status in (False, None):
+            self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=%s WHERE id_unidade=1", (status,))
+            self.assertIsNone(self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone())
+        self.assertEqual(self.conn.execute("SELECT status,retry_count FROM chatbot.fila_mensagens WHERE id_mensagem=%s", (mensagem['id_mensagem'],)).fetchone(), ('pending', 0))
+        self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE WHERE id_unidade=1")
+        retomada = self.conn.execute("SELECT * FROM chatbot.dequeue_message()").fetchone()
+        self.assertEqual(retomada[0], mensagem['id_mensagem'])
+        from core.repositories.atendimento.fila import reagendar_mensagem_sem_erro
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1] - 1,
+        ), 0)
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1],
+        ), 1)
+        self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='sent' WHERE id_mensagem=%s", (retomada[0],))
+        self.assertEqual(reagendar_mensagem_sem_erro(
+            retomada[0], self.cursor, retry_esperado=retomada[-1],
+        ), 0)
+
     def preparar_mensagem(self):
         cid = self.nova_conversa()
         self.cursor.execute(
@@ -16408,10 +16520,20 @@ class FireAdsPostgresTests(unittest.TestCase):
         return envio
 
     def test_migracao_preserva_personalizacao_conversas_e_reexecuta(self):
+        remocao = MIGRACAO_FIREADS.with_name('20261009_remover_view_unidade_atendimento.sql')
+        for _ in range(2):
+            self.conn.execute(remocao.read_text(encoding='utf-8'), prepare=False)
         self.conn.execute(MIGRACAO_FIREADS.read_text(encoding="utf-8"), prepare=False)
+        self.assertIsNone(self.conn.execute(
+            "SELECT to_regclass('chatbot.unidade_atendimento')"
+        ).fetchone()[0])
+        self.assertEqual(self.conn.execute(
+            "SELECT versao FROM chatbot.migracoes_fireads"
+        ).fetchall(), [('20261007_fireads_v1',)])
         self.assertEqual(
             self.conn.execute(
-                "SELECT nome_agente FROM chatbot.unidade_atendimento"
+                "SELECT ac.nome_agente FROM chatbot.unidade u "
+                "JOIN chatbot.atendimento_customizado ac ON ac.id_unidade=u.id_unidade"
             ).fetchone(),
             ("Dora",),
         )
@@ -16599,11 +16721,48 @@ class FireAdsPostgresTests(unittest.TestCase):
             self.conn.execute(
                 "UPDATE chatbot.conversa SET id_chat=999 WHERE id_conversa=1"
             )
+
+    def test_relatorios_consultam_tabelas_sem_view_incluindo_unidades_vazias(self):
+        from utilitarios.reports_functions import total, weekly
+
+        self.conn.execute("""
+            INSERT INTO chatbot.unidade(id_unidade,nome_unidade,cnpj,email_responsavel,
+                telefone,waba_id,phone_number_id)
+            VALUES(2,'Sem histórico','outra','outra@example.com','5511999990010','waba-2','phone-2');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial)
+            VALUES(2,'Outro agente','masculino','5511999990011');
+            UPDATE chatbot.atendimento_customizado SET bpa_ativo=TRUE,idade_minima_suporte=70
+            WHERE id_unidade=1;
+            UPDATE chatbot.conversa SET status_dependente=FALSE,profissao='Professora'
+            WHERE id_conversa=1;
+            UPDATE chatbot.cliente SET idade=35 WHERE id_cliente=1;
+            INSERT INTO chatbot.historico_mensagens
+                (id_conversa,id_etapa,received_data_hora,cliente_telefone,conteudo_texto,
+                 tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou)
+            VALUES(1,1,clock_timestamp(),'5511999990002','Olá','text',
+                'wamid.relatorio','phone-teste','5511999990000','cliente');
+        """)
+        instante = self.conn.execute('SELECT clock_timestamp()').fetchone()[0]
+        self.conn.commit()
+        fim = instante + timedelta(minutes=1)
+        snapshot = weekly.coletar_snapshot(self.conn, instante - timedelta(days=1), fim)
+        unidades = {u['id_unidade']: u for u in snapshot['unidades']}
+        self.assertEqual(set(unidades), {1, 2})
+        self.assertEqual((unidades[1]['nome_agente'], unidades[1]['bpa_ativo'], unidades[1]['idade_minima_suporte']),
+                         ('Dora', True, 70))
+        self.assertEqual(len(unidades[1]['conversas']), 1)
+        self.assertEqual(unidades[2]['conversas'], [])
+        filtrado = weekly.coletar_snapshot(self.conn, instante - timedelta(days=1), fim, ids_unidade=[2])
+        self.assertEqual([u['id_unidade'] for u in filtrado['unidades']], [2])
+        primeiros = {u['id_unidade']: u for u in total.coletar_primeiros_registros(self.conn, fim)}
+        self.assertIsNotNone(primeiros[1]['primeiro_registro'])
+        self.assertIsNone(primeiros[2]['primeiro_registro'])
+        self.assertEqual([u['id_unidade'] for u in total.coletar_primeiros_registros(self.conn, fim, [2])], [2])
 ```
 
 ## Passo 53 — Criar `deploy/migrations/20261007_fireads_chat_customizacao.sql`
 
-**Último passo — migração SQL para o DBeaver.** Executar o bloco inteiro na janela de deploy descrita acima. Qualquer erro deve abortar a transação; não continuar apenas pelos comandos posteriores.
+**Último passo da implantação original — migração estrutural para o DBeaver.** Já aplicada na V1.10.0. A versão abaixo não cria a antiga view. Para uma base já migrada, usar os SQLs adicionais indicados em [consultas diretas](consultas_diretas_unidade.md). Qualquer erro deve abortar a transação; não continuar apenas pelos comandos posteriores.
 
 ```sql
 -- FireAds: executar inteiro no DBeaver, com workers/webhook parados.
@@ -16789,11 +16948,9 @@ BEGIN
 END;
 $migracao$;
 
--- View de leitura: consumidores mantêm o mesmo formato, sem duplicar colunas.
-CREATE OR REPLACE VIEW chatbot.unidade_atendimento AS
-SELECT u.*,a.nome_agente,a.genero,a.numero_comercial,a.idade_minima_suporte,
-       a.email_obrigatorio,a.link_agendamento,a.link_instagram,a.bpa_ativo
-FROM chatbot.unidade u JOIN chatbot.atendimento_customizado a USING (id_unidade);
+-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
 
 CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
 LANGUAGE plpgsql AS $fn$

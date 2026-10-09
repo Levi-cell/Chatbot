@@ -16,10 +16,15 @@ from core.database.deploy_database import (
 )
 from core.repositories.atendimento import followup
 from core.repositories.atendimento.turnos import salvar_turno_conversa
+from core.repositories.fluxo.contextos.etapa1 import buscar_contexto_etapa1
+from core.repositories.fluxo.contextos.etapa6 import buscar_contexto_etapa6
+from core.repositories.fluxo.contextos.etapa7 import buscar_contexto_etapa7
+from core.repositories.fluxo.contextos.etapa9 import buscar_contexto_etapa9
+from core.repositories.fluxo.contextos.etapa10 import buscar_contexto_etapa10
 from core.repositories.fluxo.contextos.etapa18 import buscar_contexto_etapa18
 from core.repositories.fluxo.contextos.etapa20 import buscar_contexto_etapa20
 from core.repositories.funil import envios, leads
-from core.repositories.monitoramento.painel import listar_conversas
+from core.repositories.monitoramento.painel import buscar_unidade, listar_conversas
 from workers.worker_flow.transacoes.efeitos_transicao import (
     atualizar_banco_conforme_transicao_de_etapa,
 )
@@ -275,3 +280,55 @@ class ReservaLinkPostgresTests(unittest.TestCase):
         dados = listar_conversas(1, None, fim, self.cursor)
         self.assertEqual(dados[0]["turno"], "noite")
         self.assertEqual(listar_conversas(2, None, fim, self.cursor), [])
+
+    def test_personalizacao_direta_preserva_contextos_e_isolamento(self):
+        self.assertIsNone(self.conn.execute(
+            "SELECT to_regclass('chatbot.unidade_atendimento')"
+        ).fetchone()[0])
+        self.conn.execute("""
+            INSERT INTO chatbot.unidade(id_unidade,nome_unidade,cnpj,email_responsavel,
+                telefone,waba_id,phone_number_id)
+            VALUES(2,'Outra unidade','outro-cnpj','outra@example.com',
+                '5571666666666','outro-waba','outro-phone');
+            INSERT INTO chatbot.atendimento_customizado
+                (id_unidade,nome_agente,genero,numero_comercial)
+            VALUES(2,'Outro agente','masculino','5571555555555');
+            UPDATE chatbot.atendimento_customizado
+            SET nome_agente='Dora',genero='feminino',bpa_ativo=TRUE,
+                idade_minima_suporte=70,email_obrigatorio=FALSE,
+                link_instagram='https://example.com/instagram',
+                link_agendamento='https://example.com/reserva'
+            WHERE id_unidade=1;
+            UPDATE chatbot.conversa SET id_etapa_atual=7,status_dependente=FALSE
+            WHERE id_conversa=1;
+            INSERT INTO chatbot.dependente(id_cliente,id_conversa,nome_dependente,idade)
+            VALUES(1,1,'Pedro',7);
+        """)
+        self.assertEqual(buscar_contexto_etapa1(1, self.cursor), {
+            'nome_unidade': 'Unidade', 'nome_agente': 'Dora', 'genero': 'feminino',
+        })
+        self.assertEqual(buscar_contexto_etapa1(2, self.cursor)['nome_agente'], 'Outro agente')
+        funcoes = (buscar_contexto_etapa6, buscar_contexto_etapa7, buscar_contexto_etapa9,
+                   buscar_contexto_etapa10, buscar_contexto_etapa18, buscar_contexto_etapa20)
+        for dependente in (False, True):
+            self.conn.execute('UPDATE chatbot.conversa SET status_dependente=%s WHERE id_conversa=1', (dependente,))
+            idade = buscar_contexto_etapa6(1, 1, self.cursor)
+            self.assertEqual((idade['nome_agente'], idade['bpa_ativo_unidade'], idade['idade_minima_suporte']),
+                             ('Dora', True, 70))
+            for consulta in (buscar_contexto_etapa7, buscar_contexto_etapa9):
+                self.assertEqual(consulta(1, 1, self.cursor)['link_instagram_unidade'], 'https://example.com/instagram')
+            email = buscar_contexto_etapa10(1, 1, self.cursor)
+            self.assertFalse(email['email_obrigatorio_unidade'])
+            self.assertEqual(email['nome_dependente'], 'Pedro' if dependente else None)
+            self.assertEqual(buscar_contexto_etapa18(1, 1, self.cursor)['nome_agente_unidade'], 'Dora')
+            self.assertEqual(buscar_contexto_etapa20(1, 1, self.cursor)['link_agendamento_unidade'], 'https://example.com/reserva')
+            self.assertEqual(followup.buscar_contexto_repeticao(1, 1, self.cursor)['nome_agente'], 'Dora')
+            for consulta in funcoes:
+                with self.subTest(consulta=consulta.__name__, dependente=dependente):
+                    with self.assertRaises(ValueError):
+                        consulta(1, 2, self.cursor)
+        self.conn.execute("UPDATE chatbot.atendimento_customizado SET nome_agente='Lia',email_obrigatorio=TRUE WHERE id_unidade=1")
+        self.assertEqual(buscar_contexto_etapa1(1, self.cursor)['nome_agente'], 'Lia')
+        self.assertTrue(buscar_contexto_etapa10(1, 1, self.cursor)['email_obrigatorio_unidade'])
+        self.assertEqual(buscar_unidade(1, self.cursor)['nome_agente'], 'Lia')
+        self.assertEqual(buscar_unidade(2, self.cursor)['nome_agente'], 'Outro agente')

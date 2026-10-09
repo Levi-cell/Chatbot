@@ -81,7 +81,9 @@ def reservar(cursor):
         JOIN chatbot.conversa c ON c.id_conversa=d.id_conversa
         JOIN chatbot.integracao_fireads i USING (id_integracao_fireads)
         JOIN chatbot.integracao_funil_unidade f ON f.id_unidade=d.id_unidade
+        JOIN chatbot.unidade u ON u.id_unidade=d.id_unidade
         WHERE c.lead_no_funil IS TRUE AND i.integracao_ativa AND f.integracao_ativa AND f.widget_ativo
+          AND u.status_pagamento IS TRUE
           AND ((d.status='pending' AND d.next_attempt_at <= clock_timestamp())
             OR (d.status='processing' AND d.processing_started_at < clock_timestamp()-INTERVAL '3 minutes'))
         ORDER BY d.attempt_count,d.id_envio_dash FOR UPDATE OF d SKIP LOCKED LIMIT 1
@@ -103,7 +105,9 @@ def conferir_posse(envio, cursor):
         """SELECT 1 FROM chatbot.envios_dash d
         JOIN chatbot.integracao_fireads i USING (id_integracao_fireads)
         JOIN chatbot.integracao_funil_unidade f ON f.id_unidade=d.id_unidade
+        JOIN chatbot.unidade u ON u.id_unidade=d.id_unidade
         WHERE d.id_envio_dash=%s AND d.status='processing' AND d.attempt_count=%s
+          AND u.status_pagamento IS TRUE
           AND d.processing_started_at > clock_timestamp()-INTERVAL '3 minutes'
           AND i.integracao_ativa AND f.integracao_ativa AND f.widget_ativo
           AND i.url_dashbord=d.snapshot->>'url' AND i.aba_destino=d.snapshot->>'aba'

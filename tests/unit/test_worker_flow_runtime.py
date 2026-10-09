@@ -79,6 +79,28 @@ def contexto_final():
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
 
+    def test_desativacao_preserva_fila_sem_enviar_ou_consumir_retry(self):
+        # A unidade pode ser desativada após o dequeue, durante a consulta ou
+        # depois de montar o histórico. Em nenhum caso inicia um envio Meta.
+        for momento in (0, 1, 2):
+            with self.subTest(momento=momento), ExitStack() as stack:
+                conn = FakeConn(FakeCursor())
+                self._patch_fluxo_base(stack, conn, [])
+                stack.enter_context(patch.object(
+                    flow_worker, "exigir_unidade_habilitada_por_phone_id",
+                    side_effect=[None] * momento + [flow_worker.UnidadeDesativada()],
+                ))
+                enviar = stack.enter_context(patch.object(flow_worker, "flow_sender"))
+                reagendar = stack.enter_context(patch.object(flow_worker, "reagendar_mensagem_sem_erro"))
+                erro = stack.enter_context(patch.object(flow_worker, "handle_erro_generico"))
+                with self.assertRaises(PararWorker):
+                    flow_worker.worker_flow()
+                enviar.assert_not_called()
+                erro.assert_not_called()
+                reagendar.assert_called_once_with(
+                    7, conn.cursor_obj, delay_seconds=300, retry_esperado=1,
+                )
+
     def test_followup_confirma_efeitos_encerramento_e_fila_no_mesmo_commit(self):
         conn = FakeConn(FakeCursor())
         commits = []
