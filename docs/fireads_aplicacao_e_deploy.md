@@ -17,6 +17,26 @@ também está aplicada localmente para o próximo deploy. O código deixa de dep
 da view; sua remoção está incluída no SQL unificado de suspensão por pagamento.
 Os passos de implantação abaixo registram a entrega original da FireAds.
 
+## Correção local de telefone — 09/10/2026
+
+A busca compartilha agora a mesma regra entre produção e o utilitário
+`utilitarios/fireAds/test_Dash.py`: normaliza DDI brasileiro, máscaras e prefixo
+`p:+`, procura o número exato em cada aba e, se ausente, tenta a variante móvel
+com/sem nono dígito. Preserva DDD e todos os demais dígitos. A variante segue a
+regra do utilitário para números móveis antigos iniciados em 6, 7, 8 ou 9;
+números fixos não ganham um nono dígito e DDI explícito estrangeiro é recusado.
+
+Google e Meta continuam concorrendo pela data mais recente. Na escrita, todos os
+formatos equivalentes são examinados para detectar linhas duplicadas: um único
+cadastro compatível recebe só as observações; duplicados ou conflito de e-mail
+permanecem pendentes. As variantes usam a mesma chave de lock por integração,
+sem modificar o telefone do cliente ou o número enviado ao dashboard.
+
+Esta correção requer deploy do código, sem migração SQL. Decisões de consultas
+já concluídas permanecem gravadas; o teste da nova abertura exige uma nova
+conversa. Os testes simulam chamadas externas, incluindo o caso de formulário
+com nono dígito e WhatsApp sem ele.
+
 ## Implementação
 
 - Adaptador HTTP e regras de importação em `core/integrations/fireads`.

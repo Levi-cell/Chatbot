@@ -29,7 +29,11 @@ def normalizar(texto):
 
 
 def telefone(valor):
-    numero = re.sub(r"\D", "", str(valor or ""))
+    texto = str(valor or "").strip()
+    numero = re.sub(r"\D", "", texto)
+    # Um DDI explícito estrangeiro não pode virar DDD brasileiro por ter 11 dígitos.
+    if "+" in texto and (len(numero) not in (12, 13) or not numero.startswith("55")):
+        return None
     if len(numero) in (10, 11):
         numero = "55" + numero
     if not re.fullmatch(r"55[1-9]\d\d{8,9}", numero):
@@ -37,12 +41,41 @@ def telefone(valor):
     return numero
 
 
-def localizar(rows, numero, coluna):
-    """Somente correspondência exata normalizada; não aproximar pessoas."""
-    esperado = telefone(numero)
-    if not esperado:
+def formatos_telefone(valor):
+    """Número exato primeiro, seguido da variante móvel do nono dígito.
+
+    Preserva DDI, DDD e os oito dígitos restantes. A alternativa segue a regra
+    já usada no utilitário: não transformar números fixos em celulares.
+    """
+    exato = telefone(valor)
+    if not exato:
+        return ()
+    nacional = exato[2:]
+    if len(nacional) == 10 and nacional[2] in "6789":
+        return exato, f"55{nacional[:2]}9{nacional[2:]}"
+    if len(nacional) == 11 and nacional[2] == "9" and nacional[3] in "6789":
+        return exato, f"55{nacional[:2]}{nacional[3:]}"
+    return (exato,)
+
+
+def identidade_telefone(valor):
+    """Unifica apenas a chave do lock; não altera o número salvo ou enviado."""
+    return max(formatos_telefone(valor), key=len, default=None)
+
+
+def localizar(rows, numero, coluna, *, incluir_equivalentes=False):
+    """Prefere o exato; a escrita examina também variantes para detectar duplicados."""
+    formatos = formatos_telefone(numero)
+    if not formatos:
         raise ErroFireAds("Telefone fora do contrato brasileiro")
-    return [r for r in rows if telefone(r.get(coluna)) == esperado]
+    por_formato = {formato: [] for formato in formatos}
+    for row in rows:
+        normalizado = telefone(row.get(coluna))
+        if normalizado in por_formato:
+            por_formato[normalizado].append(row)
+    if incluir_equivalentes:
+        return [row for formato in formatos for row in por_formato[formato]]
+    return next((por_formato[f] for f in formatos if por_formato[f]), [])
 
 
 def destino(valor):

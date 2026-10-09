@@ -8,6 +8,7 @@ from core.integrations.fireads.contrato import (
     CANAIS,
     ErroFireAds,
     telefone,
+    identidade_telefone,
     localizar,
     bloco_observacoes,
     acrescentar_observacoes,
@@ -24,7 +25,9 @@ logger = logging.getLogger("worker.funil.fireads")
 
 def preparar_escrita(rows, snapshot, bloco):
     acrescentar_observacoes(None, bloco)  # Mesmo limite no append e no update.
-    encontrados = localizar(rows, snapshot["telefone"], "WhatsApp")
+    encontrados = localizar(
+        rows, snapshot["telefone"], "WhatsApp", incluir_equivalentes=True
+    )
     if len(encontrados) > 1:
         # Nunca escolher arbitrariamente uma pessoa/linha duplicada preexistente.
         raise ErroFireAds("Mais de uma linha de destino para este telefone")
@@ -68,7 +71,7 @@ def processar(envio, conn, cursor):
     snapshot = envio["snapshot"]
     # Lock de sessão (não de transação): serializa nossos envios ao mesmo contato,
     # sem manter transação aberta durante HTTP. Outros sistemas não usam este lock.
-    identidade = f"fireads:{envio['integracao']}:{telefone(snapshot['telefone'])}"
+    identidade = f"fireads:{envio['integracao']}:{identidade_telefone(snapshot['telefone'])}"
     chave = int.from_bytes(
         hashlib.sha256(identidade.encode()).digest()[:8], "big", signed=True
     )

@@ -134,6 +134,10 @@ Commit: `395d1eb0321507cdc67d92e93b4ebe530bd57915`
 
 Commit: `49af8d51498f83ceeea62f5b53aab7091007bdde`
 
+### V1.10.1 — Suspensão, personalização e consultas diretas
+
+Commit: `8103df82efeb9c4881a83f7dec1c7e6f08acb076`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

@@ -7,8 +7,16 @@ Adaptado da consulta original em teste_Dash.py, preservada na raiz do projeto.
 import argparse
 import json
 import re
+import sys
+from pathlib import Path
 
 import requests
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from core.integrations.fireads.contrato import formatos_telefone, localizar
 
 if __package__:
     from .config_teste import (
@@ -51,14 +59,10 @@ def normalizar_numero_brasileiro(numero):
 
 def gerar_formatos_dashboard(numero):
     """Prioriza o número exato e admite a variante móvel antiga como alternativa."""
-    exato = normalizar_numero_brasileiro(numero)
-    nacional = exato[2:]
-    formatos = [exato]
-    if len(nacional) == 11 and nacional[2] == "9" and nacional[3] in "6789":
-        formatos.append(f"55{nacional[:2]}{nacional[3:]}")
-    elif len(nacional) == 10 and nacional[2] in "6789":
-        formatos.append(f"55{nacional[:2]}9{nacional[2:]}")
-    return formatos
+    formatos = formatos_telefone(numero)
+    if not formatos:
+        raise ValueError("Telefone brasileiro fora do contrato.")
+    return list(formatos)
 
 
 def extrair_registros(resposta_json):
@@ -78,19 +82,7 @@ def extrair_registros(resposta_json):
 
 def localizar_registros(registros, numero_whatsapp):
     """Retorna todos os registros exatos; só depois tenta variante de nono dígito."""
-    formatos = gerar_formatos_dashboard(numero_whatsapp)
-    por_formato = {formato: [] for formato in formatos}
-    for lead in registros:
-        try:
-            telefone = normalizar_numero_brasileiro(lead["WhatsApp"])
-        except ValueError:
-            continue
-        if telefone in por_formato:
-            por_formato[telefone].append(lead)
-    for formato in formatos:
-        if por_formato[formato]:
-            return por_formato[formato]
-    return []
+    return localizar(registros, numero_whatsapp, "WhatsApp")
 
 
 def buscar_lead_dashboard(url_acesso, numero_whatsapp):
