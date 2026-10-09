@@ -13,6 +13,9 @@ from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
     extrair_id_hash_msg_bot,
 )
+from core.integrations.whatsapp.pywa_functions.saudacao import (
+    obter_saudacao_por_horario,
+)
 from core.logging_config import short_value
 
 
@@ -152,6 +155,8 @@ def enviar_abertura_fireads(contexto, *, tratamento=None):
     mensagem = contexto['mensagem_cliente_atual']
     return _enviar_texto_etapa4(
         mensagem['cliente_telefone'], mensagem['id_phone_unidade'],
-        montar_abertura_fireads(contexto, tratamento=tratamento),
+        montar_abertura_fireads(
+            contexto, saudacao=obter_saudacao_por_horario(), tratamento=tratamento,
+        ),
         evento='fireads_abertura', tipo_tratamento=tratamento,
     )

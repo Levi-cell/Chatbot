@@ -1,6 +1,6 @@
 # Plano prático — FireAds, chat e atendimento customizado
 
-**Revisão: 08/10/2026. Status: código aplicado localmente; deploy e migração de produção pendentes.**
+**Revisão: 09/10/2026. Status: código aplicado localmente; deploy e migração de produção pendentes.**
 
 Este documento contém o código integral de **53 arquivos**, um por passo.
 O último passo contém a migração SQL completa para executar no DBeaver no dia
@@ -34,6 +34,9 @@ por anúncio/post ou IA nesta entrega.
   composto usa o validador existente. Faixa etária, objetivo e demais perguntas
   do formulário não preenchem coletas. Não há mais expiração de 30 dias.
 - Importação completa começa na **etapa 4, profissão**, com apresentação própria.
+  Somente essa abertura importada recebe saudação por horário + nome, usando
+  a mesma função da etapa 1 (horário de Brasília). A etapa 4 comum e suas
+  repetições não recebem essa apresentação.
   Essa primeira mensagem também é registrada na etapa 4, para que o retry não
   simule uma transição 1 → 4. Idade exata, dependente, oferta e triagem continuam
   sujeitos às regras atuais. Após aceitar a oferta nas etapas 7 ou 9, o e-mail
@@ -1997,7 +2000,7 @@ def montar_mensagem_contexto_profissao_invalida_etapa4():
     return ORIENTACAO_CONTEXTO_ETAPA4
 
 
-def montar_abertura_fireads(contexto, *, tratamento=None):
+def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
     """Primeira resposta após importação completa; pergunta continua na etapa 4."""
     dados = contexto['contexto_fireads']['dados_titular']
     genero = contexto.get('genero')
@@ -2005,7 +2008,7 @@ def montar_abertura_fireads(contexto, *, tratamento=None):
         raise ValueError('Apresentação da unidade incompleta')
     artigo = 'a' if genero == 'feminino' else 'o'
     abertura = (
-        f"Olá, {dados['nome']}! Seja muito bem-vindo(a)! Sou {artigo} "
+        f"{saudacao}, {dados['nome']}! Seja muito bem-vindo(a)! Sou {artigo} "
         f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
         "Vi que você já preencheu um dos nossos formulários. Para continuarmos "
         "com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok?"
@@ -2039,6 +2042,9 @@ from core.integrations.whatsapp.messages.etapa4_messages import (
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
 from core.integrations.whatsapp.pywa_functions.resposta_envio import (
     extrair_id_hash_msg_bot,
+)
+from core.integrations.whatsapp.pywa_functions.saudacao import (
+    obter_saudacao_por_horario,
 )
 from core.logging_config import short_value
 
@@ -2179,7 +2185,9 @@ def enviar_abertura_fireads(contexto, *, tratamento=None):
     mensagem = contexto['mensagem_cliente_atual']
     return _enviar_texto_etapa4(
         mensagem['cliente_telefone'], mensagem['id_phone_unidade'],
-        montar_abertura_fireads(contexto, tratamento=tratamento),
+        montar_abertura_fireads(
+            contexto, saudacao=obter_saudacao_por_horario(), tratamento=tratamento,
+        ),
         evento='fireads_abertura', tipo_tratamento=tratamento,
     )
 ```
@@ -12408,7 +12416,9 @@ class FireAdsTests(unittest.TestCase):
                 contexto.update(tipo_mensagem_atual=tipo, texto_cliente_atual=texto)
                 tratamento = classificar_tratamento_abertura(contexto)
                 self.assertEqual(tratamento, esperado)
-                mensagem = montar_abertura_fireads(contexto, tratamento=tratamento)
+                mensagem = montar_abertura_fireads(
+                    contexto, saudacao="Boa tarde", tratamento=tratamento,
+                )
                 self.assertIn("Ana Paula", mensagem)
                 self.assertIn("profiss", mensagem.lower())
                 self.assertNotIn("Como você se chama", mensagem)

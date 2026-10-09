@@ -130,6 +130,10 @@ Commit: `afa9c14ae030277210897e479a906f2b52c47a58`
 
 Commit: `395d1eb0321507cdc67d92e93b4ebe530bd57915`
 
+### V1.10.0 — Integração FireAds e organização do banco
+
+Commit: `1f578c5ae496ec002d82b09cd876e41d20447e39`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

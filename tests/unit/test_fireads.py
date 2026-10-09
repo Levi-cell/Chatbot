@@ -88,7 +88,9 @@ class FireAdsTests(unittest.TestCase):
                 contexto.update(tipo_mensagem_atual=tipo, texto_cliente_atual=texto)
                 tratamento = classificar_tratamento_abertura(contexto)
                 self.assertEqual(tratamento, esperado)
-                mensagem = montar_abertura_fireads(contexto, tratamento=tratamento)
+                mensagem = montar_abertura_fireads(
+                    contexto, saudacao="Boa tarde", tratamento=tratamento,
+                )
                 self.assertIn("Ana Paula", mensagem)
                 self.assertIn("profiss", mensagem.lower())
                 self.assertNotIn("Como você se chama", mensagem)

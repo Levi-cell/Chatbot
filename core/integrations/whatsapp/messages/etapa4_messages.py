@@ -60,7 +60,7 @@ def montar_mensagem_contexto_profissao_invalida_etapa4():
     return ORIENTACAO_CONTEXTO_ETAPA4
 
 
-def montar_abertura_fireads(contexto, *, tratamento=None):
+def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
     """Primeira resposta após importação completa; pergunta continua na etapa 4."""
     dados = contexto['contexto_fireads']['dados_titular']
     genero = contexto.get('genero')
@@ -68,7 +68,7 @@ def montar_abertura_fireads(contexto, *, tratamento=None):
         raise ValueError('Apresentação da unidade incompleta')
     artigo = 'a' if genero == 'feminino' else 'o'
     abertura = (
-        f"Olá, {dados['nome']}! Seja muito bem-vindo(a)! Sou {artigo} "
+        f"{saudacao}, {dados['nome']}! Seja muito bem-vindo(a)! Sou {artigo} "
         f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
         "Vi que você já preencheu um dos nossos formulários. Para continuarmos "
         "com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok?"
