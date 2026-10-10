@@ -254,3 +254,10 @@ Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 
 No corte de implantação, parar webhook, flow, Funil e follow-up antes da migração das etapas. Incluir Consumo Meta na parada controlada se houver indisponibilidade de banco; ao retomar, verificar os cinco serviços e preservar as variáveis existentes de Consumo. Não alterar tokens, versões de dependências ou o .env só para introduzir a rota sem link.
+
+
+## Worker de consulta FireAds
+
+O sexto serviço é `chatbot-worker-consulta-dash.service`. Aplicar com a migração
+`migrations/20261009_worker_consulta_dash.sql`, sem executar setup numa base existente.
+Seguir o [procedimento e recuperação](../docs/worker_consulta_dash_operacao.md).

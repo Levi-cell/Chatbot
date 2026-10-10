@@ -19,3 +19,11 @@ def criar_estrutura_fireads():
         "estrutura_fireads", logging.getLogger("db.fireads")
     ) as cursor:
         cursor.execute(ddl)
+        novo = caminho.with_name("20261009_worker_consulta_dash.sql").read_text(
+            encoding="utf-8"
+        )
+        cursor.execute(
+            novo.split("-- INICIO DDL CONSULTA DASH\n", 1)[1].split(
+                "-- FIM DDL CONSULTA DASH", 1
+            )[0]
+        )

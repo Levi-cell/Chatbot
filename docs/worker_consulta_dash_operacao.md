@@ -1,0 +1,165 @@
+# Consulta FireAds por conversa — operação
+
+Este documento acompanha o código do worker separado. Aplicar junto da migração
+`deploy/migrations/20261009_worker_consulta_dash.sql` e do novo serviço.
+
+Código aplicado localmente após o backup `b049a4d`. Validação da aplicação:
+443 testes unitários e 28 testes de integração FireAds aprovados, sem testes
+pulados, além de `manage.py check` sem problemas. O PostgreSQL usado foi local
+e descartável; HTTP externo foi simulado. Migração e instalação do serviço
+na VM permanecem pendentes, conforme o procedimento abaixo.
+
+## Contrato
+
+Consultar só uma vez logicamente por conversa nova, antes da primeira resposta.
+O `worker_flow` não executa HTTP FireAds, não cria threads auxiliares e não aguarda
+rede. Registra a pendência e devolve a mensagem à fila por 5 segundos, sem consumir
+retry. O worker de consulta verifica o banco a cada 2 segundos quando ocioso; havendo
+trabalho, processa uma consulta e segue para a próxima sem espera adicional.
+
+Google e Meta são lidos por inteiro no contrato atual do Apps Script. Ambas as
+leituras e a interpretação terminam antes de gravar `dados` em uma única transação.
+Armazenam-se somente as linhas correspondentes ao telefone consultado, não as de
+outros clientes. Não há checkpoints parciais por aba. Uma falha real de conexão,
+HTTP ou contrato conclui organicamente com diagnóstico, conforme a regra aprovada.
+
+O prazo total é de 300 segundos desde a solicitação, incluindo fila, ambas as abas,
+redirecionamentos e reexecuções. Não é renovado após queda. A decisão de timeout é
+persistida pelo primeiro ciclo que perceber o prazo vencido, inclusive pelo flow
+se o serviço de consulta estiver parado. Portanto, a resposta pode ocorrer alguns
+segundos depois do limite, conforme a agenda da fila. Uma chamada de rede ainda em
+andamento não pode importar nada depois desse encerramento. Um resultado confirmado
+no banco antes do prazo pode ser aplicado depois, sem ser descartado por demora do flow.
+
+## Banco e recuperação
+
+`consulta_fireads.id_conversa` é único. O chat é obtido por `conversa.id_chat`; não
+há coluna de chat duplicada nem view. `id_unidade` permanece para as FKs compostas
+que impedem vincular conversa e integração de unidades diferentes.
+
+- `entrada`: telefone, URL, abas e fuso congelados na solicitação.
+- `status`: pendente, processando ou concluida; `consulta_concluida` é mantida por
+  compatibilidade e uma constraint exige consistência com o status.
+- `dados`: envelope com `decisao` e `fontes`, gravado completo ou mantido NULL.
+- `resultado`: pendente/importado/ausente/incompleto/ambiguidade/erro.
+- `solicitado_em` e `prazo_final`: orçamento persistente da abertura.
+- `tentativas`, `versao_reserva`, `processing_started_at` e `reserva_ate`: reserva
+  operacional; tentativas adicionais apenas recuperam uma execução interrompida.
+- `consultado_em`: conclusão, inclusive ausência/erro/timeout.
+- `aplicacao` e `aplicado_em`: decisão efetivamente aplicada pelo flow. Pode divergir
+  do resultado externo se, por exemplo, houver conflito de e-mail na importação.
+- `ultimo_erro`: diagnóstico sem corpo HTTP, credenciais ou dados de outro cliente.
+- `atualizado_em`: última alteração, sem servir para reiniciar o prazo.
+
+A reserva combina advisory lock de sessão PostgreSQL e versão persistida. Não há
+transação nem row lock aberto durante HTTP: a conexão fica ociosa, mantendo só o
+advisory lock. Dois processos não consultam o mesmo registro simultaneamente com
+a sessão viva. A morte do processo libera o lock quando o banco encerra a conexão;
+o próximo worker pode recuperar a mesma consulta antes dos 300 segundos. Perda de
+rede pode retardar a detecção da sessão morta; o prazo orgânico continua valendo.
+
+A gravação exige versão e prazo válidos. Timeout, suspensão da unidade, alteração
+de configuração, conversa encerrada ou abertura já iniciada impedem confirmação
+indevida. Não usar pool com troca de sessão: o lock depende da mesma conexão.
+O próprio fechamento da conexão libera o lock, mesmo quando unlock falha.
+
+O flow mantém seu lock versionado de conversa, a ordem dos turnos e a identificação
+da mensagem. Solicitação e reagendamento são confirmados juntos no handler de
+espera. A conversa pode já ter sido criada em um checkpoint anterior: se houver
+queda nesse intervalo, a fila recria apenas a solicitação, reutilizando a conversa.
+Importação, snapshot, histórico do cliente e marcador de aplicação pertencem à
+transação do flow. O envio WhatsApp e a recuperação de seu recibo seguem o protocolo
+atual; a janela de envio aceito externamente antes do commit local continua existindo.
+
+Não alterar as regras existentes do webhook: no contrato atual, mensagens adicionais
+chegando antes da resposta da entrada aberta podem ser descartadas na admissão.
+As mensagens já admitidas na fila mantêm as guardas de ordem; não prometer juntar
+textos enviados durante os minutos de espera nesta mudança.
+
+## Cenários
+
+| Situação | Resultado |
+| --- | --- |
+| Sem integração / conversa já iniciada | Atendimento atual, sem nova consulta. |
+| Nova conversa elegível com integração | Uma solicitação persistida; nenhuma saudação prematura. |
+| Google ou Meta completo | Importa titular, e-mail e destinatário; abertura na profissão, etapa 4. |
+| Ambas as fontes | Registro mais recente comparável; ambiguidade segue orgânico. |
+| Ausente / incompleto / falha / timeout | Atendimento orgânico desde a etapa 1, motivo registrado. |
+| Resultado aplicado e retry | Reutiliza o contexto; nenhuma nova leitura ou regressão de etapa. |
+| Pessoa preenche formulário depois da abertura | Considerar somente na próxima conversa. |
+| Outra conversa do mesmo chat | Outro id_consulta; histórico anterior preservado. |
+| Unidade suspensa | Não reservar nem importar; conservar pendências e histórico. |
+| Configuração FireAds alterada durante a espera | Não aplicar a configuração antiga; concluir com motivo explícito. |
+
+Telefone com e sem nono dígito, nome composto, descarte de faixa etária/objetivo,
+saudação personalizada, salto da coleta do e-mail e canais Funil mantêm as regras
+existentes. A aba geral não classifica a abertura; o worker_funil mantém sua própria
+consulta antes da escrita e a preservação das observações existentes.
+
+## Implantação coordenada
+
+1. Salvar backup e subir a revisão contendo TODOS os arquivos do plano.
+2. Na VM, conferir a revisão e parar follow-up, webhook, flow, Funil e consumo Meta.
+   Se o serviço de consulta já existir de uma tentativa anterior, parar também.
+3. Atualizar o checkout com fast-forward. Manter serviços parados enquanto código
+   e esquema forem incompatíveis. Não executar setup ou seeds em produção.
+4. Executar inteiro o SQL final do plano no DBeaver. Exigir `migracao_ok=true` e
+   `vinculos_invalidos=0`. Em erro, realizar ROLLBACK e corrigir antes de continuar.
+5. Instalar o novo serviço com os comandos abaixo. Não iniciar ainda.
+6. Sob o usuário chatbot e o ambiente já existente, executar `manage.py check`
+   e `collectstatic --noinput`. Não precisa `makemigrations`/`migrate`: os models
+   do domínio são `managed=False` e a mudança é o SQL manual indicado.
+7. Iniciar consulta, webhook e flow; conferir status/logs. Depois iniciar Funil,
+   consumo Meta e follow-up. Usar os mesmos controles de saúde do deploy atual.
+8. Observar uma NOVA conversa autorizada de teste. Não resetar conversas antigas.
+
+Instalação do sexto serviço na VM (após conferir a revisão):
+
+```bash
+cd /opt/chatbot/app &&
+sudo install -m 0644 deploy/systemd/chatbot-worker-consulta-dash.service /etc/systemd/system/chatbot-worker-consulta-dash.service &&
+sudo systemctl daemon-reload &&
+sudo systemctl enable chatbot-worker-consulta-dash.service
+```
+
+Inicialização, depois da migração e verificações Django:
+
+```bash
+sudo systemctl start chatbot-worker-consulta-dash.service chatbot-webhook.service chatbot-worker-flow.service &&
+systemctl show chatbot-worker-consulta-dash.service chatbot-webhook.service chatbot-worker-flow.service -p Id -p ActiveState -p SubState -p NRestarts --no-pager
+```
+
+Depois da conferência anterior:
+
+```bash
+sudo systemctl start chatbot-worker-funil.service chatbot-worker-consumo-meta.service &&
+sudo systemctl start chatbot-worker-followup.service &&
+sudo journalctl -u chatbot-worker-consulta-dash.service -u chatbot-worker-flow.service --since "5 minutes ago" -n 100 --no-pager
+```
+
+Não executar `git reset` para a versão anterior mantendo o novo esquema. Em falha,
+manter os serviços afetados parados e corrigir para frente, ou restaurar conjuntamente
+backup de banco e código sob procedimento controlado. Não há reversão destrutiva
+automática que descarte o novo histórico de consultas.
+
+## Capacidade e limites
+
+Uma instância do novo serviço faz uma leitura por vez. Isso organiza a recuperação,
+mas não acelera a planilha. Picos podem consumir o orçamento enquanto uma consulta
+aguarda na fila e resultar em orgânico. Os locks permitem testar mais instâncias
+futuramente sem reservar a mesma consulta; esta entrega mantém uma instância.
+
+O deadline protege a decisão e a gravação, não promete terminar qualquer operação
+de rede no exato milissegundo do prazo. O atendimento continua independente dessa
+chamada. Quedas podem repetir GET, que não cria leads; nenhuma abertura usa POST
+no dashboard. A duplicação rara de envio WhatsApp antes de persistir recibo continua
+sendo uma fronteira externa já conhecida, não uma garantia de exatamente uma vez.
+
+## Migração do histórico
+
+Preservar os IDs e dados das consultas que existem hoje e seus vínculos com a
+conversa referenciada. A estrutura antiga guardava somente a última consulta do
+chat: não inventar registros anteriores. Contextos de conversas históricas ficam
+intactos; IDs antigos dentro de JSONs são referências históricas, não novas FKs.
+As novas conversas passam a ter registros independentes. Pendências antigas mantêm
+seu início registrado e não ganham outros 300 segundos durante o deploy.

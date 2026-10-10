@@ -279,23 +279,16 @@ e-mail validado da própria conversa, abertura na profissão, replay, tratamento
 preservação das observações, identidade ambígua e redirecionamento sem repetir POST.
 Também verifica que um inline inválido da personalização impede o cadastro na Meta.
 
-`unit/test_fireads_espera.py` cobre os 300 segundos compartilhados entre abas e
-redirects, rejeição de resposta tardia, reutilização da leitura pendente, capacidade
-limitada e decisão orgânica após o prazo. Também cobre formulários repetidos com
-dados iguais.
-`unit/test_worker_flow_runtime.py` confirma que a espera libera o ciclo para outro
-cliente, sem resposta prematura nem consumo de tentativas. A suíte PostgreSQL
-também verifica a fila pendente, a liberação da reserva e a importação com uma
-nova reserva após a consulta lenta. Verifica que retries e reinícios não renovam
-os cinco minutos e que uma nova conversa tem prazo novo. HTTP permanece simulado
-nesses testes.
+`unit/test_fireads_espera.py` cobre o orçamento HTTP de 300 segundos entre abas
+e redirecionamentos e a rejeição de resposta tardia. O runtime do flow verifica que
+uma consulta pendente libera o ciclo para outro cliente sem envio prematuro.
 
-`integration/test_fireads_postgres.py` exige `FIREADS_TEST_DSN`, host loopback e banco
-vazio `test_chatbot_fireads`. Executa a migração real, confirma a preservação da
-personalização e dos vínculos, a reutilização do chat e a atualização da consulta
-sem alterar o contexto de uma conversa anterior. Usa conexões separadas para perda
-de lock e disputa de reserva. Confere também o congelamento do conteúdo do Funil,
-o retry do Dash, reagendamento e reconciliação de um bloco já escrito.
+`integration/test_fireads_postgres.py` exige FIREADS_TEST_DSN em loopback e banco
+vazio test_chatbot_fireads. Executa ambas as migrações, valida preservação do legado,
+reserva simultânea, recuperação após desconexão, descarte de resultado de tentativa
+antiga, timeout, rollback da importação, aplicação única e todas as 24 etapas sem
+reconsulta. Preserva também os testes de Funil/Dash, configuração, unidade suspensa,
+relatórios e contexto histórico. Apenas fronteiras HTTP são simuladas.
 
 ```powershell
 $env:FIREADS_TEST_DSN = 'host=127.0.0.1 dbname=test_chatbot_fireads user=postgres'

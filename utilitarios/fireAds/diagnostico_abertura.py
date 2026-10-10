@@ -34,7 +34,7 @@ def main():
                            c.contexto_fireads->>'resultado' AS resultado_contexto,
                            c.contexto_fireads->>'motivo' AS motivo_contexto,
                            q.consulta_concluida, q.resultado, q.consultado_em,
-                           q.dados->>'motivo' AS motivo_consulta,
+                           q.dados->'decisao'->>'motivo' AS motivo_consulta,
                            i.integracao_ativa, i.contrato_validado, i.ativada_em,
                            i.aba_google, i.aba_meta, i.aba_destino, i.url_dashbord,
                            i.fuso_formularios
@@ -42,7 +42,7 @@ def main():
                     JOIN chatbot.conversa c ON c.id_cliente=cl.id_cliente
                     JOIN chatbot.unidade u ON u.id_unidade=c.id_unidade
                     LEFT JOIN chatbot.consulta_fireads q
-                        ON q.id_conversa_referencia=c.id_conversa
+                        ON q.id_conversa=c.id_conversa
                     LEFT JOIN chatbot.integracao_fireads i ON i.id_unidade=c.id_unidade
                     WHERE regexp_replace(cl.waid_telefone,'[^0-9]','','g')=ANY(%s)
                     ORDER BY c.id_conversa DESC LIMIT 5
@@ -95,7 +95,7 @@ def main():
             for resultado in pool.map(consultar, abas):
                 print(json.dumps(resultado, ensure_ascii=False, indent=2), flush=True)
         if registro['aba_google'] in fontes and registro['aba_meta'] in fontes:
-            from workers.worker_flow.fireads import interpretar
+            from workers.worker_consulta_dash.resultado import interpretar
 
             decisao = interpretar(fontes[registro['aba_google']]['rows'],
                                   fontes[registro['aba_meta']]['rows'],

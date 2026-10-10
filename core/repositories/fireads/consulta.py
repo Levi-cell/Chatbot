@@ -80,69 +80,8 @@ def buscar_abertura(id_conversa, cursor):
     )
 
 
-def reservar_consulta(abertura, id_conversa, cursor):
-    cursor.execute(
-        """
-        INSERT INTO chatbot.consulta_fireads
-          (id_chat,id_unidade,id_integracao_fireads,id_conversa_referencia)
-        VALUES (%s,%s,%s,%s)
-        ON CONFLICT (id_chat) DO UPDATE SET
-          id_integracao_fireads=EXCLUDED.id_integracao_fireads,
-          id_conversa_referencia=EXCLUDED.id_conversa_referencia,
-          consulta_concluida=FALSE,resultado='pendente',dados=NULL,
-          consultado_em=NULL,
-          atualizado_em=CASE
-            WHEN consulta_fireads.id_conversa_referencia=EXCLUDED.id_conversa_referencia
-                 AND NOT consulta_fireads.consulta_concluida
-            THEN consulta_fireads.atualizado_em
-            ELSE clock_timestamp()
-          END
-        RETURNING id_consulta;
-    """,
-        (
-            abertura["id_chat"],
-            abertura["id_unidade"],
-            abertura["id_integracao"],
-            id_conversa,
-        ),
-    )
-    return cursor.fetchone()[0]
-
-
-def segundos_restantes_consulta(id_consulta, id_conversa, limite, cursor):
-    """Enquanto pendente, atualizado_em preserva o início mesmo após retry/restart."""
-    cursor.execute(
-        """SELECT GREATEST(0, %s - EXTRACT(EPOCH FROM
-                   (clock_timestamp() - atualizado_em)))
-           FROM chatbot.consulta_fireads
-           WHERE id_consulta=%s AND id_conversa_referencia=%s
-             AND NOT consulta_concluida;""",
-        (limite, id_consulta, id_conversa),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        raise ValueError("Consulta pendente não pertence à conversa")
-    return float(row[0])
-
-
-def concluir_consulta(abertura, id_conversa, id_consulta, decisao, cursor):
-    cursor.execute(
-        """
-        UPDATE chatbot.consulta_fireads SET consulta_concluida=TRUE,
-          resultado=%s,dados=%s,consultado_em=clock_timestamp(),
-          atualizado_em=clock_timestamp()
-        WHERE id_consulta=%s AND id_chat=%s AND id_conversa_referencia=%s;
-    """,
-        (
-            decisao["resultado"],
-            Jsonb(decisao),
-            id_consulta,
-            abertura["id_chat"],
-            id_conversa,
-        ),
-    )
-    if cursor.rowcount != 1:
-        raise ValueError("Consulta pertence a outra conversa")
+def aplicar_decisao(abertura, id_conversa, id_consulta, decisao, cursor):
+    """Importação, snapshot da conversa e marcador são confirmados pelo fluxo."""
     decisao = dict(
         decisao,
         id_consulta=id_consulta,
@@ -152,11 +91,12 @@ def concluir_consulta(abertura, id_conversa, id_consulta, decisao, cursor):
     )
     cursor.execute(
         """UPDATE chatbot.conversa SET origem_fireads=%s,contexto_fireads=%s
-                      WHERE id_conversa=%s AND id_etapa_atual IS NULL;""",
+        WHERE id_conversa=%s AND id_etapa_atual IS NULL AND contexto_fireads IS NULL
+          AND status_ativa AND finalizou_em IS NULL""",
         (decisao["origem"], Jsonb(decisao), id_conversa),
     )
     if cursor.rowcount != 1:
-        raise ValueError("Conversa já iniciou antes da decisão FireAds")
+        raise LockConversaPerdido("A abertura já foi aplicada ou a conversa avançou")
     return decisao
 
 

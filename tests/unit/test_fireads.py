@@ -1,7 +1,6 @@
 """Contratos de importação/entrega: HTTP e Meta sempre simulados."""
 
 from copy import deepcopy
-from concurrent.futures import Future
 import unittest
 from unittest.mock import Mock, patch
 from core.integrations.fireads.cliente import ClienteFireAds, validar_url
@@ -90,7 +89,9 @@ class FireAdsTests(unittest.TestCase):
                 tratamento = classificar_tratamento_abertura(contexto)
                 self.assertEqual(tratamento, esperado)
                 mensagem = montar_abertura_fireads(
-                    contexto, saudacao="Boa tarde", tratamento=tratamento,
+                    contexto,
+                    saudacao="Boa tarde",
+                    tratamento=tratamento,
                 )
                 self.assertIn("Ana Paula", mensagem)
                 self.assertIn("profiss", mensagem.lower())
@@ -398,56 +399,34 @@ class FireAdsTests(unittest.TestCase):
         with patch(
             "workers.worker_flow.fireads.buscar_abertura",
             return_value={"contexto": estado()},
-        ), patch("workers.worker_flow.fireads.ClienteFireAds") as api:
-            retomado = preparar_abertura(cx, {}, 1, FakeConn(), FakeCursor())
+        ), patch("workers.worker_consulta_dash.consulta.ClienteFireAds") as api:
+            retomado = preparar_abertura(cx, {}, 1, FakeCursor())
             self.assertEqual(retomado["contexto_fireads"]["origem"], "google")
             api.assert_not_called()
 
     def test_segunda_fonte_falha_importa_nada(self):
-        import workers.worker_flow.fireads as servico
+        from workers.worker_consulta_dash.consulta import consultar
 
-        abertura = {
-            "id_integracao": 1,
-            "contexto": None,
-            "etapa": None,
-            "aplicavel": True,
-            "url": "https://script.google.com/macros/s/teste/exec",
-            "aba_google": "google",
-            "aba_meta": "meta",
-            "fuso": None,
-        }
         api = Mock()
         api.consultar.side_effect = [
             {"headers": list(GOOGLE), "rows": [GOOGLE]},
             RuntimeError("falha"),
         ]
-        conn = FakeConn()
-        cursor = FakeCursor(fetchone_result=(1,))
-
-        def consulta_imediata(chave, consultar, *args):
-            futuro = Future()
-            futuro.set_result(consultar(*args))
-            return futuro
-
-        with patch.object(
-            servico, "buscar_abertura", return_value=abertura
-        ), patch.object(servico, "reservar_consulta", return_value=1), patch.object(
-            servico, "segundos_restantes_consulta", return_value=300
-        ), patch.object(
-            servico, "proteger_conversa"
-        ), patch.object(
-            servico, "ClienteFireAds", return_value=api
-        ), patch.object(
-            servico, "concluir_consulta", side_effect=lambda a, c, i, d, cur: d
-        ), patch.object(
-            servico.consultas_em_andamento, "obter", side_effect=consulta_imediata
+        with patch(
+            "workers.worker_consulta_dash.consulta.ClienteFireAds", return_value=api
         ):
-            cx = preparar_abertura(
-                {"conversa": {"id_conversa": 2, "id_etapa_atual": None}},
-                {"id_mensagem": 1, "retry_count": 1, "cliente_telefone": NUMERO},
-                1,
-                conn,
-                cursor,
+            resultado = consultar(
+                {
+                    "id_consulta": 1,
+                    "restante": 300,
+                    "entrada": {
+                        "url": "https://script.google.com/macros/s/teste/exec",
+                        "aba_google": "google",
+                        "aba_meta": "meta",
+                        "numero": NUMERO,
+                        "fuso": None,
+                    },
+                }
             )
-        self.assertEqual(cx["contexto_fireads"]["origem"], "organico")
-        self.assertFalse(any("UPDATE chatbot.cliente" in q for q, _ in cursor.calls))
+        self.assertEqual(resultado["decisao"]["origem"], "organico")
+        self.assertEqual(resultado["fontes"], {})

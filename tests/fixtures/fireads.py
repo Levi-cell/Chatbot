@@ -13,3 +13,12 @@ def aplicar_fireads(cursor):
     texto = MIGRACAO_FIREADS.read_text(encoding="utf-8")
     ddl = texto.split("-- INICIO DDL FIREADS\n", 1)[1].split("-- FIM DDL FIREADS", 1)[0]
     cursor.execute(ddl)
+
+    novo = MIGRACAO_FIREADS.with_name("20261009_worker_consulta_dash.sql").read_text(
+        encoding="utf-8"
+    )
+    cursor.execute(
+        novo.split("-- INICIO DDL CONSULTA DASH\n", 1)[1].split(
+            "-- FIM DDL CONSULTA DASH", 1
+        )[0]
+    )

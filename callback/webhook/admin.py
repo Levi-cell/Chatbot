@@ -1473,5 +1473,18 @@ class FireAdsConsultaAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
     pass
 
 
-for modelo in (Chat, ConsultaFireAds, EnvioDash):
+@admin.register(ConsultaFireAds)
+class ConsultaFireAdsAdmin(SomenteVisualizacaoAdminMixin, admin.ModelAdmin):
+    list_display = ("id_consulta", "id_conversa", "chat", "id_unidade", "status",
+                    "resultado", "tentativas", "solicitado_em", "consultado_em", "aplicado_em")
+    list_filter = ("status", "resultado", "id_unidade")
+    list_select_related = ("id_conversa", "id_unidade")
+    search_fields = ("=id_consulta", "=id_conversa__id_conversa", "id_unidade__nome_unidade")
+
+    @admin.display(description="Chat", ordering="id_conversa__id_chat")
+    def chat(self, obj):
+        return obj.id_conversa.id_chat_id
+
+
+for modelo in (Chat, EnvioDash):
     admin.site.register(modelo, FireAdsConsultaAdmin)

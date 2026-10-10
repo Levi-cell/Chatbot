@@ -194,7 +194,7 @@ def worker_flow():
             contexto_banco = reler_conversa(contexto_banco, lock_version, cursor_ciclo)
             exigir_unidade_habilitada_por_phone_id(mensagem["id_phone_unidade"], cursor_ciclo)
             contexto_banco = preparar_abertura(
-                contexto_banco, mensagem, lock_version, conn_ciclo, cursor_ciclo
+                contexto_banco, mensagem, lock_version, cursor_ciclo
             )
             contexto_conversa = contexto_banco["conversa"]
             contexto_historico = preparar_retorno_followup(
@@ -288,7 +288,8 @@ def worker_flow():
             )
 
         except ConsultaFireAdsPendente as espera:
-            conn_ciclo.rollback()
+            # A espera é uma decisão válida, não uma falha SQL. Solicitação,
+            # vínculo da fila e reagendamento serão confirmados juntos abaixo.
             # Libera o ciclo para outras conversas. Esperar uma leitura não é erro
             # e não pode esgotar as três tentativas da mensagem original.
             reagendar_mensagem_sem_erro(

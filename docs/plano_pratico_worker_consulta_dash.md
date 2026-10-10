@@ -1,6 +1,13 @@
 # Plano prático — worker de consulta FireAds
 
-Data: 09/10/2026. **Proposta preparada e validada em cópia isolada; ainda não aplicada ao projeto nem à VM.**
+Data: 09/10/2026. **Plano aplicado ao projeto local após o backup `b049a4d`; implantação na VM e migração do banco de produção ainda pendentes.**
+
+Os 29 passos foram conferidos com a base do backup e aplicados. Na validação do
+código aplicado, passaram novamente 443 testes unitários e 28 testes de integração
+FireAds com PostgreSQL local descartável; `manage.py check` não apontou problemas.
+As chamadas externas foram simuladas. Não houve alteração no banco/cache de
+produção nem instalação de serviço na VM. O SQL para o DBeaver está no último
+passo e em `deploy/migrations/20261009_worker_consulta_dash.sql`.
 
 Este plano complementa a integração FireAds e substitui a proposta local de tarefa
 auxiliar em memória. A referência implantada informada é V1.10.2 (`404a7ab`). Foram

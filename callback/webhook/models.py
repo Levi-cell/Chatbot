@@ -692,18 +692,30 @@ class Chat(models.Model):
 
 class ConsultaFireAds(models.Model):
     id_consulta = models.BigAutoField(primary_key=True)
-    id_chat = models.OneToOneField(Chat, models.CASCADE, db_column="id_chat")
+    id_conversa = models.OneToOneField(Conversa, models.CASCADE, db_column="id_conversa")
     id_unidade = models.ForeignKey(Unidade, models.CASCADE, db_column="id_unidade")
     id_integracao_fireads = models.ForeignKey(
         IntegracaoFireAds, models.PROTECT, db_column="id_integracao_fireads"
     )
-    id_conversa_referencia = models.ForeignKey(
-        Conversa, models.CASCADE, db_column="id_conversa_referencia"
-    )
+    status = models.CharField(max_length=20)
     consulta_concluida = models.BooleanField(default=False)
     resultado = models.CharField(max_length=30)
+    entrada = models.JSONField()
     dados = models.JSONField(null=True, blank=True)
+    aplicacao = models.JSONField(null=True, blank=True)
+    solicitado_em = models.DateTimeField()
+    prazo_final = models.DateTimeField()
+    processing_started_at = models.DateTimeField(null=True, blank=True)
+    reserva_ate = models.DateTimeField(null=True, blank=True)
     consultado_em = models.DateTimeField(null=True, blank=True)
+    aplicado_em = models.DateTimeField(null=True, blank=True)
+    atualizado_em = models.DateTimeField()
+    tentativas = models.IntegerField(default=0)
+    versao_reserva = models.BigIntegerField(default=0)
+    ultimo_erro = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"Consulta {self.pk} / conversa {self.id_conversa_id} / {self.status}"
 
     class Meta:
         managed = False
