@@ -111,6 +111,40 @@ saudação personalizada, salto da coleta do e-mail e canais Funil mantêm as re
 existentes. A aba geral não classifica a abertura; o worker_funil mantém sua própria
 consulta antes da escrita e a preservação das observações existentes.
 
+## Seleção da linha para atualizar o dashboard
+
+A correção posterior à V1.11.1 está aplicada no código local e depende de deploy.
+Não requer migração SQL nem mudanças nas abas da FireAds. Os códigos de canal do
+Funil continuam Google `113336`, Meta `113340` e Orgânico `113481`.
+
+Na aba de destino, o worker busca todas as variantes válidas do telefone. Antes
+de escolher uma linha, procura o bloco da própria conversa: um bloco já gravado
+é reconciliado, sem novo POST, mesmo se outra linha mais recente tiver surgido.
+Marcador com conteúdo divergente continua pendente, sem sobrescrever ou copiar
+o atendimento para outra linha.
+
+Para uma entrega ainda não gravada, prefere o canal da origem e, dentro desse
+grupo, titular/dependente compatível. `Organico Site` corresponde à origem Google
+somente nesse cruzamento. As variantes `MKT DIGITAL - GOOGLE ADS` e
+`MKT DIGITAL - META ADS (FACEBOOK/INSTAGRAM)` também são reconhecidas.
+Faixa etária não define destinatário. Sem perfil compatível, mantém os candidatos
+do canal; o desempate usa a maior `_row`. Sem canal compatível, usa a maior linha
+do telefone. Na escrita, a data não prevalece sobre esse critério de linha.
+
+E-mail diferente no mesmo telefone não bloqueia o update. Somente `Observação`
+é alterada, preservando conteúdo anterior, e-mail, nome, canal e data da linha.
+Telefone ausente gera cadastro com os dados do atendimento, inclusive para
+orgânicos; e-mail encontrado em outro telefone continua exigindo conferência.
+A FireAds preenche a data dos cadastros novos. Cabeçalhos/linha inválidos, falhas
+HTTP e recusas da API continuam sujeitos ao reagendamento existente.
+
+O JSON do snapshot passa a guardar `status_dependente`; envios antigos continuam
+compatíveis pelo perfil textual já congelado. A linha confirmada no update fica
+no recibo da API; reconciliações guardam `linhas_reconciliadas` no mesmo campo JSON.
+A posição da linha é obtida na consulta anterior à escrita, não reutilizada como
+endereço permanente. Edição externa entre leitura e POST permanece possível;
+o contrato atual da FireAds não oferece atualização condicional por identidade.
+
 ## Implantação coordenada
 
 1. Salvar backup e subir a revisão contendo TODOS os arquivos do plano.

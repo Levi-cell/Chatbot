@@ -351,6 +351,8 @@ class FireAdsPostgresTests(unittest.TestCase):
         }
         original = envios.congelar(dados, payload, esperado, self.cursor)
         self.assertEqual(original[1], "113336")
+        snapshot = self.conn.execute("SELECT snapshot FROM chatbot.envios_dash").fetchone()[0]
+        self.assertIs(snapshot["status_dependente"], False)
         self.assertEqual(envios.congelar(dados, {}, esperado, self.cursor), original)
         self.assertIsNone(envios.reservar(self.cursor))  # Funil ainda não confirmou.
         self.cursor.execute(

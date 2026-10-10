@@ -276,8 +276,14 @@ Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tor
 
 `unit/test_fireads.py` cobre importação, valores Google/Meta, comparação de datas,
 e-mail validado da própria conversa, abertura na profissão, replay, tratamentos,
-preservação das observações, identidade ambígua e redirecionamento sem repetir POST.
+preservação das observações, e-mail de outro telefone e redirecionamento sem repetir POST.
 Também verifica que um inline inválido da personalização impede o cadastro na Meta.
+
+`unit/test_fireads_destino_dashboard.py` cobre a seleção da linha por telefone,
+canal, destinatário explícito e maior `_row`, compatibilidade de snapshots antigos,
+preservação dos demais campos, orgânicos e reconciliação antes de escolher outra
+linha. HTTP e persistência são simulados. `unit/test_fireads_telefones.py` preserva
+as máscaras e variantes do nono dígito também nessa seleção de destino.
 
 `unit/test_fireads_espera.py` cobre o orçamento HTTP de 300 segundos entre abas
 e redirecionamentos e a rejeição de resposta tardia. O runtime do flow verifica que

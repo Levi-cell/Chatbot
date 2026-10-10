@@ -101,18 +101,21 @@ class FireAdsTelefonesTests(unittest.TestCase):
                     row["Observação"] = operacao["observacoes"]
                     self.assertIsNone(preparar_escrita([row], snapshot(recebido), bloco))
 
-    def test_duas_linhas_com_variantes_nao_sao_escolhidas_arbitrariamente(self):
+    def test_duas_linhas_com_variantes_usam_maior_linha(self):
         rows = [{"_row": i, "WhatsApp": n, "Email": "ana@example.com", "Observação": "FR002"}
                 for i, n in ((44, SEM_NONO), (45, COM_NONO))]
         for numero in (SEM_NONO, COM_NONO):
-            with self.assertRaisesRegex(ErroFireAds, "Mais de uma linha"):
-                preparar_escrita(rows, snapshot(numero), bloco_observacoes(1, 2, "Texto"))
+            operacao = preparar_escrita(rows, snapshot(numero), bloco_observacoes(1, 2, "Texto"))
+            self.assertEqual(operacao["row"], 45)
 
-    def test_variacao_nao_ignora_conflito_de_email(self):
+    def test_variacao_com_email_diferente_preserva_cadastro_e_atualiza_observacao(self):
         row = {"_row": 44, "WhatsApp": COM_NONO,
                "Email": "outra@example.com", "Observação": "FR002"}
-        with self.assertRaisesRegex(ErroFireAds, "emails diferentes"):
-            preparar_escrita([row], snapshot(), bloco_observacoes(1, 2, "Texto"))
+        original = deepcopy(row)
+        operacao = preparar_escrita([row], snapshot(), bloco_observacoes(1, 2, "Texto"))
+        self.assertEqual(operacao["row"], 44)
+        self.assertEqual(set(operacao), {"row", "observacoes"})
+        self.assertEqual(row, original)
 
     def test_numero_diferente_ddd_fixo_e_invalido_nao_geram_correspondencia(self):
         for outro in ("5575994111866", "5571994111867", "55994111866", "", None):

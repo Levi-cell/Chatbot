@@ -1526,6 +1526,28 @@ consumir retry. A janela entre aceite
 externo e commit local continua sujeita à duplicidade rara já aceita na V1.
 
 
+## Entrega do atendimento ao dashboard FireAds
+
+Após a confirmação do Funil, a entrega ao dashboard usa fila independente e
+respeita unidade adimplente e integrações ativas. A abertura continua consultando
+os formulários Google e Meta; a aba geral é o destino das observações.
+
+Na aba geral, o telefone (com suas variantes válidas) identifica os candidatos.
+Bloco da mesma conversa já gravado tem prioridade sobre nova seleção, evitando
+repetição após queda. Para envio novo, preferir canal compatível e depois
+destinatário explícito (titular/dependente) compatível; desempatar pela maior linha.
+Faixa etária não define destinatário. Sem perfil compatível, manter o grupo do
+canal; sem canal compatível, usar a maior linha do telefone. `Organico Site`
+corresponde a Google nesse cruzamento, sem alterar o canal existente na planilha.
+
+Atualizar somente Observação, preservando seu conteúdo anterior e todos os demais
+campos. E-mail diferente no mesmo telefone não impede essa atualização. Telefone
+ausente permite cadastro novo, inclusive orgânico, salvo e-mail já vinculado a
+outro telefone, que continua pendente para conferência. Nunca alterar uma pessoa
+identificada apenas por e-mail. Não reenviar ao Funil por falha no dashboard.
+
+Operação e limites: [Consulta e entrega FireAds](docs/worker_consulta_dash_operacao.md).
+
 ## Consumo mensal de mensagens Meta
 
 A seção Consumo usa analytics coletado por worker independente e armazenado por

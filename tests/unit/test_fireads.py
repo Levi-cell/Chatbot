@@ -349,7 +349,7 @@ class FireAdsTests(unittest.TestCase):
             )
         )
 
-    def test_organico_novo_nao_envia_data_e_identidade_ambigua_nao_escreve(self):
+    def test_organico_novo_nao_envia_data_e_email_em_outro_telefone_nao_escreve(self):
         snap = {
             "telefone": NUMERO,
             "nome": "Ana",
@@ -359,13 +359,12 @@ class FireAdsTests(unittest.TestCase):
         }
         bloco = bloco_observacoes(1, 2, "novo")
         self.assertNotIn("Data/Hora", preparar_escrita([], snap, bloco)["dados"])
-        for linhas in (
-            [{"_row": 2, "WhatsApp": NUMERO, "Email": "outra@example.com"}],
-            [{"_row": 2, "WhatsApp": NUMERO}, {"_row": 3, "WhatsApp": NUMERO}],
-            [{"_row": 2, "WhatsApp": "5511999990003", "Email": snap["email"]}],
-        ):
-            with self.assertRaises(ErroFireAds):
-                preparar_escrita(linhas, snap, bloco)
+        with self.assertRaises(ErroFireAds):
+            preparar_escrita(
+                [{"_row": 2, "WhatsApp": "5511999990003", "Email": snap["email"]}],
+                snap,
+                bloco,
+            )
 
     def test_exec_e_redirect_sem_repetir_post(self):
         session = Mock()

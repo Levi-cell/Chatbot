@@ -18,6 +18,14 @@ from core.repositories.fireads.envios import (
     conferir_posse,
     concluir,
     reagendar,
+    bloquear_contato,
+    liberar_contato,
+)
+from core.integrations.fireads.destino_dashboard import (
+    destinatario_perfil,
+    linhas_com_bloco,
+    numero_linha,
+    selecionar_destino,
 )
 
 logger = logging.getLogger("worker.funil.fireads")
@@ -28,26 +36,22 @@ def preparar_escrita(rows, snapshot, bloco):
     encontrados = localizar(
         rows, snapshot["telefone"], "WhatsApp", incluir_equivalentes=True
     )
-    if len(encontrados) > 1:
-        # Nunca escolher arbitrariamente uma pessoa/linha duplicada preexistente.
-        raise ErroFireAds("Mais de uma linha de destino para este telefone")
+    if linhas_com_bloco(encontrados, bloco):
+        return None
     if encontrados:
-        row = encontrados[0]
+        dependente = snapshot.get("status_dependente")
+        if type(dependente) is not bool:
+            # Envios pendentes anteriores à correção já guardam o perfil textual.
+            dependente = destinatario_perfil(snapshot.get("perfil"))
+        row = selecionar_destino(encontrados, snapshot["origem"], dependente)
         if "Observação" not in row:
             raise ErroFireAds(
                 "Observação ausente na leitura do registro; não sobrescrever"
             )
-        email_existente = str(row.get("Email") or "").strip().casefold()
-        email_novo = str(snapshot.get("email") or "").strip().casefold()
-        if email_existente and email_novo and email_existente != email_novo:
-            raise ErroFireAds(
-                "Mesmo telefone com emails diferentes; conferir identidade"
-            )
-        numero_linha = row.get("_row")
-        if type(numero_linha) is not int or numero_linha < 2:
-            raise ErroFireAds("Linha de destino inválida")
+        linha = numero_linha(row)
+        # O telefone identifica o contato; e-mail e demais campos ficam intactos.
         observacoes, mudou = acrescentar_observacoes(row.get("Observação"), bloco)
-        return {"row": numero_linha, "observacoes": observacoes} if mudou else None
+        return {"row": linha, "observacoes": observacoes} if mudou else None
     # Um e-mail já presente com outro telefone não é identidade suficiente para
     # alterar outra pessoa nem para criar silenciosamente um possível duplicado.
     email = str(snapshot.get("email") or "").strip().casefold()
@@ -78,8 +82,7 @@ def processar(envio, conn, cursor):
     bloqueado = False
     cliente = None
     try:
-        cursor.execute("SELECT pg_try_advisory_lock(%s)", (chave,))
-        bloqueado = cursor.fetchone()[0]
+        bloqueado = bloquear_contato(chave, cursor)
         if not bloqueado:
             raise ErroFireAds("Outro envio deste contato está em andamento")
         conferir_posse(envio, cursor)
@@ -94,11 +97,18 @@ def processar(envio, conn, cursor):
         operacao = preparar_escrita(dados["rows"], snapshot, bloco)
         conferir_posse(envio, cursor)
         conn.commit()
-        recibo = (
-            {"success": True, "reconciliado": True}
-            if operacao is None
-            else cliente.enviar(snapshot["aba"], **operacao)
-        )
+        if operacao is None:
+            encontrados = localizar(
+                dados["rows"], snapshot["telefone"], "WhatsApp", incluir_equivalentes=True
+            )
+            recibo = {
+                "success": True,
+                "reconciliado": True,
+                "aba": snapshot["aba"],
+                "linhas_reconciliadas": linhas_com_bloco(encontrados, bloco),
+            }
+        else:
+            recibo = cliente.enviar(snapshot["aba"], **operacao)
         concluir(envio, recibo, cursor)
         conn.commit()
         logger.info(
@@ -126,7 +136,7 @@ def processar(envio, conn, cursor):
         if cliente:
             cliente.close()
         if bloqueado and not conn.closed:
-            cursor.execute("SELECT pg_advisory_unlock(%s)", (chave,))
+            liberar_contato(chave, cursor)
             conn.commit()
 
 

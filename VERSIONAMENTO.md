@@ -146,6 +146,10 @@ Commit: `404a7ab7554ddb14455c0c10e6339403e215d31d`
 
 Commit: `f0946c52f3dc538ee11cc578ddb2011727558626`
 
+### V1.11.1 — Correção da seleção FireAds
+
+Commit: `66b59ccf908206309d4d92e3b8e56cac1f07f666`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

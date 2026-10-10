@@ -49,6 +49,7 @@ def congelar(dados, payload, integracao_funil, cursor):
         "email": oportunidade["contato"]["email"],
         "nome": dados["nome_cliente"],
         "origem": origem,
+        "status_dependente": dados["status_dependente"],
         "perfil": (
             f"Dependente: {dados['nome_dependente']} ({dados['idade_dependente']} anos)"
             if dados["status_dependente"]
@@ -72,6 +73,16 @@ def congelar(dados, payload, integracao_funil, cursor):
     )
     salvo = cursor.fetchone()[0]
     return salvo["payload_funil"], salvo["canal"], salvo["url_funil"]
+
+
+def bloquear_contato(chave, cursor):
+    """Reserva de sessão: protege o contato inclusive durante chamadas HTTP."""
+    cursor.execute("SELECT pg_try_advisory_lock(%s)", (chave,))
+    return cursor.fetchone()[0]
+
+
+def liberar_contato(chave, cursor):
+    cursor.execute("SELECT pg_advisory_unlock(%s)", (chave,))
 
 
 def reservar(cursor):
