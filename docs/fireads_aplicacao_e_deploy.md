@@ -37,12 +37,84 @@ já concluídas permanecem gravadas; o teste da nova abertura exige uma nova
 conversa. Os testes simulam chamadas externas, incluindo o caso de formulário
 com nono dígito e WhatsApp sem ele.
 
+## Correção local da espera na abertura — 09/10/2026
+
+O erro `ReadTimeout` da conversa 285 foi provocado pelo limite local de leitura
+de 8 segundos por requisição. Havia ainda um orçamento de 25 segundos para as
+duas abas e seus redirecionamentos. Após a revisão solicitada pelo usuário,
+a abertura tem **300 segundos no total**, compartilhados por Google, Meta,
+redirecionamentos e espera por vaga. A leitura HTTP usa o tempo restante, sem o
+corte antigo de 8 segundos. O prazo não é 300 segundos para cada aba.
+
+A leitura roda em uma thread que só consulta e interpreta os formulários. Enquanto
+ela não termina, a mensagem volta à fila por 5 segundos, sem consumir tentativas,
+sem gravar uma decisão orgânica por demora antes do limite e sem enviar a
+primeira resposta. As demais
+conversas continuam sendo atendidas. A retomada reutiliza a leitura e adquire
+novas reservas da conversa/mensagem antes de importar; não mantém uma transação
+SQL aberta durante a espera. Todo SQL dessa abertura fica nos repositories.
+
+Há no máximo quatro leituras simultâneas por processo. Outras consultas aguardam
+na fila; esse limite não interrompe as já iniciadas. Resultados confirmados são
+retirados da memória, que também limita resultados abandonados. Um reinício
+pode refazer o GET pendente, mas nunca repete um POST de abertura, pois ela só lê.
+O início da espera fica preservado em `consulta_fireads.atualizado_em` enquanto
+a consulta está pendente. Retentativas e reinícios do worker não renovam os cinco
+minutos; uma nova conversa recebe um prazo novo. Ao atingir o limite, a próxima
+passagem do worker conclui como orgânico, com `resultado=erro` e
+`motivo=tempo_limite_300s`, e inicia o atendimento completo. Resultados HTTP tardios
+não alteram essa decisão nem importam parcialmente os formulários. Falhas efetivas
+de conexão, HTTP ou contrato conservam a regra anterior de erro.
+
+Continua sendo um único serviço `worker_flow`; as threads auxiliares só fazem
+GET/interpretação e não recebem conexão SQL nem enviam mensagens. A fila do banco
+mantém a ordem das mensagens. Não é necessário criar outro serviço na VM.
+
+No Apps Script fornecido pela FireAds, `doGet` devolve todos os registros da aba;
+não há filtro por telefone. O cliente já envia `sheet` e `abas=0`, consultando
+as duas abas configuradas e dispensando o inventário de abas. Uma otimização na
+FireAds seria uma consulta por telefone que retorne só os registros correspondentes
+das duas fontes, com dados recentes dos formulários. O código fornecido já tem
+cache e leitura em lote; sua presença não permite diagnosticar a execução lenta
+sem os tempos internos do Apps Script. Formato compacto reduz transferência, mas
+continua lendo a aba e não garante resolver a variação de tempo observada.
+
+O diagnóstico encontrou ainda dois formulários Google desse telefone, com nome,
+e-mail, destinatário e data idênticos. Duplicações equivalentes da mesma fonte e
+data agora contam como uma candidatura na importação. Dados distintos, fontes
+distintas e datas não comparáveis conservam a proteção contra ambiguidade.
+A proteção contra duplicados na escrita do dashboard permanece independente.
+
+**Esta correção exige deploy do código, sem migração SQL.** Conversas já iniciadas
+(inclusive a 285, que gravou o timeout) não são reiniciadas nem reclassificadas.
+Para validar a abertura corrigida em produção, é necessária uma nova conversa.
+
+Diagnóstico somente leitura, sem alterar banco, Redis ou dashboard:
+
+```powershell
+& 'C:\Chatbot\venv\.venv\Scripts\python.exe' -X utf8 utilitarios/fireAds/diagnostico_tempo_consulta.py 71994111866
+```
+
+Os logs `fireads_consulta_iniciada` e `fireads_consulta_concluida` incluem a conversa,
+o resultado e a duração, sem nome, telefone ou e-mail. A mensagem pendente aparece
+em nível DEBUG como `fireads_consulta_pendente`.
+
+Validação após a revisão de 300 segundos: **77 testes passaram** (63 unitários e
+14 em PostgreSQL 16 local descartável). Incluem o orçamento compartilhado,
+resposta tardia e preservação do prazo após retomadas e reinício. As sondas reais
+ao dashboard foram somente GET.
+Na última sonda, Google demorou 63,50 segundos e Meta 2,86 segundos. A simulação
+do telefone de teste retornou `resultado=importado`, `origem=google` e
+`status_dependente=true`, sem gravar a decisão no banco de produção.
+
 ## Implementação
 
 - Adaptador HTTP e regras de importação em `core/integrations/fireads`.
 - Consultas e entregas persistidas em `core/repositories/fireads`.
 - Consulta de abertura em `workers/worker_flow/fireads.py`, antes da primeira
-  resposta e sob a reserva da conversa. Falha ou ambiguidade inicia como orgânico.
+  resposta. Aguarda HTTP fora do ciclo e só persiste sob a reserva da conversa.
+  Falha efetiva, ambiguidade ou prazo de 300 segundos esgotado inicia como orgânico;
+  enquanto aguarda dentro do prazo, a mensagem permanece pendente.
 - Envio ao dashboard em `workers/worker_funil/fireads.py`, depois do sucesso no
   Funil e com fila própria. Não depende de haver novos leads para o Funil no ciclo.
 - Personalização separada da identidade da unidade, com inline obrigatório no

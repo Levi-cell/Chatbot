@@ -1,6 +1,7 @@
 """Contratos de importação/entrega: HTTP e Meta sempre simulados."""
 
 from copy import deepcopy
+from concurrent.futures import Future
 import unittest
 from unittest.mock import Mock, patch
 from core.integrations.fireads.cliente import ClienteFireAds, validar_url
@@ -406,6 +407,7 @@ class FireAdsTests(unittest.TestCase):
         import workers.worker_flow.fireads as servico
 
         abertura = {
+            "id_integracao": 1,
             "contexto": None,
             "etapa": None,
             "aplicavel": True,
@@ -421,14 +423,24 @@ class FireAdsTests(unittest.TestCase):
         ]
         conn = FakeConn()
         cursor = FakeCursor(fetchone_result=(1,))
+
+        def consulta_imediata(chave, consultar, *args):
+            futuro = Future()
+            futuro.set_result(consultar(*args))
+            return futuro
+
         with patch.object(
             servico, "buscar_abertura", return_value=abertura
         ), patch.object(servico, "reservar_consulta", return_value=1), patch.object(
+            servico, "segundos_restantes_consulta", return_value=300
+        ), patch.object(
             servico, "proteger_conversa"
         ), patch.object(
             servico, "ClienteFireAds", return_value=api
         ), patch.object(
             servico, "concluir_consulta", side_effect=lambda a, c, i, d, cur: d
+        ), patch.object(
+            servico.consultas_em_andamento, "obter", side_effect=consulta_imediata
         ):
             cx = preparar_abertura(
                 {"conversa": {"id_conversa": 2, "id_etapa_atual": None}},

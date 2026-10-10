@@ -6,6 +6,10 @@ import requests
 from .contrato import ErroFireAds
 
 
+class PrazoConsultaFireAdsEsgotado(ErroFireAds):
+    """O orçamento total da leitura terminou, inclusive seus redirecionamentos."""
+
+
 def validar_url(url, *, resposta=False):
     p = urlparse(str(url))
     host = "script.googleusercontent.com" if resposta else "script.google.com"
@@ -25,9 +29,11 @@ def validar_url(url, *, resposta=False):
 
 
 class ClienteFireAds:
-    def __init__(self, url, *, segundos=25, session=None):
+    def __init__(self, url, *, segundos=25, timeout_leitura=8, session=None):
+        """Leitura=None usa o prazo restante; padrões das escritas são preservados."""
         self.url = validar_url(url)
-        self.deadline = time.monotonic() + segundos
+        self.deadline = None if segundos is None else time.monotonic() + segundos
+        self.timeout_leitura = timeout_leitura
         self.session = session or requests.Session()
         self.session.headers.update({"Accept": "application/json"})
 
@@ -35,14 +41,22 @@ class ClienteFireAds:
         self.session.close()
 
     def _request(self, method, url, **kwargs):
-        restante = self.deadline - time.monotonic()
-        if restante <= 0:
-            raise ErroFireAds("Orçamento de consulta FireAds esgotado")
-        # Cada chamada/redirect compartilha o orçamento; retries não são automáticos.
+        timeout = None
+        if self.deadline is not None:
+            restante = self.deadline - time.monotonic()
+            if restante <= 0:
+                raise PrazoConsultaFireAdsEsgotado("Orçamento de consulta FireAds esgotado")
+            leitura = (
+                restante if self.timeout_leitura is None
+                else min(self.timeout_leitura, restante)
+            )
+            timeout = (min(4, restante), leitura)
+        # O prazo da abertura é compartilhado entre abas e redirects.
+        # Escritas e redirects continuam sem repetição automática de POST.
         response = self.session.request(
             method,
             url,
-            timeout=(min(4, restante), min(8, restante)),
+            timeout=timeout,
             allow_redirects=False,
             **kwargs
         )
@@ -51,8 +65,8 @@ class ClienteFireAds:
             validar_url(alvo, resposta=True)
             response = self._request("GET", alvo)
         response.raise_for_status()
-        if time.monotonic() > self.deadline:
-            raise ErroFireAds("Resposta FireAds após o prazo")
+        if self.deadline is not None and time.monotonic() > self.deadline:
+            raise PrazoConsultaFireAdsEsgotado("Resposta FireAds após o prazo")
         return response
 
     def _json(self, response):

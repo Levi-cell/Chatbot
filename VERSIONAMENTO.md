@@ -138,6 +138,10 @@ Commit: `49af8d51498f83ceeea62f5b53aab7091007bdde`
 
 Commit: `8103df82efeb9c4881a83f7dec1c7e6f08acb076`
 
+### V1.10.2 — Correção da busca telefônica FireAds
+
+Commit: `404a7ab7554ddb14455c0c10e6339403e215d31d`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

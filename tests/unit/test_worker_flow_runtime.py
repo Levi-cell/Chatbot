@@ -79,6 +79,38 @@ def contexto_final():
 
 class WorkerFlowRuntimeTests(unittest.TestCase):
 
+    def test_fireads_pendente_libera_ciclo_para_outro_cliente_sem_consumir_retry(self):
+        conn = FakeConn(FakeCursor())
+        outra_conn = FakeConn(FakeCursor())
+        outro_registro = list(registro_fila())
+        outro_registro[0] = 8
+        outro_registro[1] = "5511999990000"
+        outro_registro[4] = "outra-unidade"
+        outro_contexto = dict(contexto_banco(), id_unidade=3, conversa={"id_conversa": 11, "estado": "nova"})
+        with ExitStack() as stack:
+            self._patch_fluxo_base(stack, conn, [])
+            stack.enter_context(patch.object(flow_worker, "get_conn", side_effect=[conn, outra_conn, PararWorker()]))
+            stack.enter_context(patch.object(flow_worker, "pegar_mensagens_da_fila", side_effect=[registro_fila(), outro_registro]))
+            stack.enter_context(patch.object(flow_worker, "validar_banco_mensagem", side_effect=[contexto_banco(), outro_contexto]))
+            stack.enter_context(patch.object(flow_worker, "preparar_abertura", side_effect=[flow_worker.ConsultaFireAdsPendente("consultando"), outro_contexto]))
+            stack.enter_context(patch.object(flow_worker, "atualizar_banco_com_contexto_final", return_value=contexto_final()))
+            finalizar = stack.enter_context(patch.object(flow_worker, "finalizar_mensagem_processada", return_value={"atendimento_encerrado": False}))
+            historico = stack.enter_context(patch.object(flow_worker, "valida_historico", return_value=contexto_historico()))
+            enviar = stack.enter_context(patch.object(flow_worker, "flow_sender", return_value=contexto_envio()))
+            reagendar = stack.enter_context(patch.object(flow_worker, "reagendar_mensagem_sem_erro"))
+            erro = stack.enter_context(patch.object(flow_worker, "handle_erro_generico"))
+            liberar = stack.enter_context(patch.object(flow_worker, "liberar_lock_conversa_se_necessario", return_value=True))
+            with self.assertRaises(PararWorker):
+                flow_worker.worker_flow()
+        reagendar.assert_called_once_with(7, conn.cursor_obj, delay_seconds=5, retry_esperado=1)
+        historico.assert_called_once()
+        self.assertEqual(historico.call_args.args[0]["id_mensagem"], 8)
+        enviar.assert_called_once()
+        finalizar.assert_called_once()
+        erro.assert_not_called()
+        self.assertEqual(liberar.call_count, 2)
+        self.assertTrue(conn.closed and outra_conn.closed)
+
     def test_desativacao_preserva_fila_sem_enviar_ou_consumir_retry(self):
         # A unidade pode ser desativada após o dequeue, durante a consulta ou
         # depois de montar o histórico. Em nenhum caso inicia um envio Meta.

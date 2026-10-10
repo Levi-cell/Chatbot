@@ -126,6 +126,22 @@ def selecionar(google, meta, numero, fuso=None):
         ("meta", r, instante(r.get("created_time"), fuso))
         for r in localizar(meta, numero, "phone_number")
     ]
+    # Formulários repetidos da mesma origem/data não criam dúvida quando todos
+    # os dados usados na importação são iguais. Não vale para escrita no dash.
+    unicos = []
+    for origem, row, data in candidatos:
+        campos = (
+            ("Nome", "Email", "Perfil/Faixa", "Data/Hora")
+            if origem == "google"
+            else ("full_name", "email", "para_quem", "created_time")
+        )
+        if not any(
+            origem == anterior_origem
+            and all(row.get(c) == anterior.get(c) for c in campos)
+            for anterior_origem, anterior, _ in unicos
+        ):
+            unicos.append((origem, row, data))
+    candidatos = unicos
     if not candidatos:
         return None
     if len(candidatos) == 1:

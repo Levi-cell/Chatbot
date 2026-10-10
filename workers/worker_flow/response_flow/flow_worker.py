@@ -1,5 +1,6 @@
 import logging
 from workers.worker_flow.fireads import preparar_abertura
+from workers.worker_flow.suporte.consultas_fireads import ConsultaFireAdsPendente
 
 import psycopg
 from core.cache.cache_unidade import UnidadeNaoEncontrada
@@ -284,6 +285,20 @@ def worker_flow():
             registrar_cache_bloqueio_apos_commit(
                 mensagem,
                 resultado_encerramento,
+            )
+
+        except ConsultaFireAdsPendente as espera:
+            conn_ciclo.rollback()
+            # Libera o ciclo para outras conversas. Esperar uma leitura não é erro
+            # e não pode esgotar as três tentativas da mensagem original.
+            reagendar_mensagem_sem_erro(
+                mensagem["id_mensagem"], cursor_ciclo, delay_seconds=5,
+                retry_esperado=mensagem["retry_count"],
+            )
+            conn_ciclo.commit()
+            logger.debug(
+                "fireads_consulta_pendente | conversa=%s motivo=%s acao=aguardar_sem_responder",
+                estado_ciclo["id_conversa"], espera,
             )
 
         except UnidadeDesativada:

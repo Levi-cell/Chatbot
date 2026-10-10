@@ -3,6 +3,7 @@
 from contextlib import contextmanager, ExitStack
 from datetime import timedelta
 import os
+from threading import Event
 import unittest
 from unittest.mock import Mock, patch
 
@@ -24,6 +25,10 @@ from core.repositories.funil.leads import buscar_dados_lead_funil
 from core.integrations.funil.oportunidades import montar_payload_oportunidade
 from core.integrations.fireads.contrato import bloco_observacoes
 from workers.worker_flow.fireads import preparar_abertura, interpretar
+from workers.worker_flow.suporte.consultas_fireads import (
+    ConsultaFireAdsPendente,
+    ConsultasFireAdsEmAndamento,
+)
 from workers.worker_funil.fireads import processar
 from tests.fixtures.fireads import MIGRACAO_FIREADS, aplicar_fireads
 
@@ -98,6 +103,22 @@ class FireAdsPostgresTests(unittest.TestCase):
             VALUES(1,'Teste','TESTE','https://example.com/api','113340');
         """)
         self.conn.commit()
+        self.consultas = ConsultasFireAdsEmAndamento()
+        substituicao = patch("workers.worker_flow.fireads.consultas_em_andamento", self.consultas)
+        substituicao.start()
+        self.addCleanup(substituicao.stop)
+
+    def preparar_apos_http(self, contexto, mensagem, versao):
+        # Nestes casos o teste mede a transação, com HTTP simulado e já concluído.
+        obter = self.consultas.obter
+
+        def aguardar(*args):
+            futuro = obter(*args)
+            futuro.result(timeout=3)
+            return futuro
+
+        with patch.object(self.consultas, "obter", side_effect=aguardar):
+            return preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor)
 
     def limpar(self):
         self.conn.rollback()
@@ -305,9 +326,7 @@ class FireAdsPostgresTests(unittest.TestCase):
             },
         ]
         with patch("workers.worker_flow.fireads.ClienteFireAds", return_value=api):
-            obtido = preparar_abertura(
-                contexto, mensagem, versao, self.conn, self.cursor
-            )
+            obtido = self.preparar_apos_http(contexto, mensagem, versao)
         self.assertTrue(obtido["conversa"]["status_dependente"])
         self.assertEqual(
             self.conn.execute("SELECT nome,email FROM chatbot.cliente").fetchone(),
@@ -346,7 +365,7 @@ class FireAdsPostgresTests(unittest.TestCase):
         api.consultar.side_effect = resposta
         with patch("workers.worker_flow.fireads.ClienteFireAds", return_value=api):
             with self.assertRaises(LockConversaPerdido):
-                preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor)
+                self.preparar_apos_http(contexto, mensagem, versao)
         self.conn.rollback()
         self.assertEqual(
             self.conn.execute("SELECT nome FROM chatbot.cliente").fetchone()[0],
@@ -358,6 +377,58 @@ class FireAdsPostgresTests(unittest.TestCase):
                 (cid,),
             ).fetchone()[0]
         )
+
+    def test_espera_preserva_fila_e_importa_com_reserva_nova_apos_http_lento(self):
+        from core.repositories.atendimento.conversas import unlock_conversa
+        from core.repositories.atendimento.fila import reagendar_mensagem_sem_erro
+
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        liberar = Event()
+        futuros = []
+        obter = self.consultas.obter
+
+        def acompanhar(*args):
+            futuro = obter(*args)
+            futuros.append(futuro)
+            return futuro
+
+        def resposta(aba):
+            liberar.wait(5)
+            if "Google" in aba:
+                return {"headers": list(GOOGLE), "rows": [GOOGLE]}
+            return {"headers": ["full_name", "email", "phone_number", "para_quem"], "rows": []}
+
+        api = Mock()
+        api.consultar.side_effect = resposta
+        with patch("workers.worker_flow.fireads.ClienteFireAds", return_value=api), patch.object(self.consultas, "obter", side_effect=acompanhar):
+            try:
+                with self.assertRaises(ConsultaFireAdsPendente):
+                    preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor)
+                self.conn.rollback()
+                reagendar_mensagem_sem_erro(mensagem["id_mensagem"], self.cursor, retry_esperado=1)
+                unlock_conversa(cid, versao, self.cursor)
+                self.conn.commit()
+                self.assertEqual(self.conn.execute("SELECT resultado,consulta_concluida FROM chatbot.consulta_fireads").fetchone(), ("pendente", False))
+                self.assertEqual(self.conn.execute("SELECT status,retry_count FROM chatbot.fila_mensagens").fetchone(), ("pending", 0))
+                self.assertEqual(self.conn.execute("SELECT nome FROM chatbot.cliente").fetchone()[0], "Antigo")
+                self.assertIsNone(self.conn.execute("SELECT contexto_fireads FROM chatbot.conversa WHERE id_conversa=%s", (cid,)).fetchone()[0])
+                # Simula passagem de mais tempo que os antigos leases, sem sleep.
+                self.cursor.execute("UPDATE chatbot.conversa SET processing_started_at=clock_timestamp()-INTERVAL '5 minutes' WHERE id_conversa=%s", (cid,))
+                self.conn.commit()
+            finally:
+                liberar.set()
+                for futuro in futuros:
+                    futuro.result(timeout=3)
+            self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='processing',retry_count=1,processing_started_at=clock_timestamp() WHERE id_mensagem=%s", (mensagem["id_mensagem"],))
+            ok, nova_versao = tentar_lock_conversa(cid, self.cursor)
+            self.assertTrue(ok)
+            self.assertGreater(nova_versao, versao)
+            self.conn.commit()
+            resultado = preparar_abertura(contexto, mensagem, nova_versao, self.conn, self.cursor)
+        self.assertEqual(resultado["contexto_fireads"]["resultado"], "importado")
+        self.assertIs(futuros[0], futuros[1])
+        self.assertEqual(api.consultar.call_count, 2)
+        self.assertEqual(self.conn.execute("SELECT nome,email FROM chatbot.cliente").fetchone(), ("Ana Paula", "ana@example.com"))
 
     def test_nova_conversa_atualiza_consulta_sem_apagar_contexto_anterior(self):
         cid = self.nova_conversa()
@@ -382,6 +453,38 @@ class FireAdsPostgresTests(unittest.TestCase):
             ).fetchone()[0],
             novo,
         )
+
+    def test_retomadas_preservam_prazo_total_e_restart_expirado_segue_organico(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        abertura = consulta.buscar_abertura(cid, self.cursor)
+        ident = consulta.reservar_consulta(abertura, cid, self.cursor)
+        self.cursor.execute(
+            "UPDATE chatbot.consulta_fireads SET atualizado_em=clock_timestamp()-INTERVAL '250 seconds' WHERE id_consulta=%s RETURNING atualizado_em",
+            (ident,),
+        )
+        inicio = self.cursor.fetchone()[0]
+        self.conn.commit()
+        for _ in range(3):
+            self.assertEqual(consulta.reservar_consulta(abertura, cid, self.cursor), ident)
+            restante = consulta.segundos_restantes_consulta(ident, cid, 300, self.cursor)
+            self.assertGreater(restante, 40)
+            self.assertLessEqual(restante, 50)
+            self.assertEqual(self.conn.execute("SELECT atualizado_em FROM chatbot.consulta_fireads WHERE id_consulta=%s", (ident,)).fetchone()[0], inicio)
+        self.cursor.execute("UPDATE chatbot.consulta_fireads SET atualizado_em=clock_timestamp()-INTERVAL '301 seconds' WHERE id_consulta=%s", (ident,))
+        self.conn.commit()
+        # Processo novo, sem Future em memória: o prazo continua vindo do banco.
+        with patch("workers.worker_flow.fireads.ClienteFireAds") as api:
+            resultado = preparar_abertura(contexto, mensagem, versao, self.conn, self.cursor)
+        api.assert_not_called()
+        self.assertEqual(resultado["contexto_fireads"]["origem"], "organico")
+        self.assertEqual(resultado["contexto_fireads"]["motivo"], "tempo_limite_300s")
+        self.assertEqual(self.conn.execute("SELECT nome FROM chatbot.cliente").fetchone()[0], "Antigo")
+        # Uma nova conversa tem orçamento novo, sem alterar a decisão anterior.
+        self.cursor.execute("UPDATE chatbot.conversa SET status_ativa=FALSE WHERE id_conversa=%s", (cid,))
+        novo = self.nova_conversa()
+        nova_abertura = consulta.buscar_abertura(novo, self.cursor)
+        consulta.reservar_consulta(nova_abertura, novo, self.cursor)
+        self.assertGreater(consulta.segundos_restantes_consulta(ident, novo, 300, self.cursor), 290)
 
     def test_retry_dash_reconcilia_bloco_sem_segundo_post(self):
         envio = self.preparar_envio()

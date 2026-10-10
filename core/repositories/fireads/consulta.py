@@ -1,6 +1,45 @@
 """SQL FireAds; o orquestrador controla commits e as chamadas externas."""
 
+from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
+
+from core.repositories.atendimento.dependentes import inserir_dependente_para_conversa
+from core.repositories.atendimento.followup import LockConversaPerdido
+
+
+def proteger_mensagem_abertura(mensagem, cursor):
+    """Só o dono atual da mensagem pode confirmar os dados obtidos na FireAds."""
+    cursor.execute(
+        """SELECT id_mensagem FROM chatbot.fila_mensagens
+        WHERE id_mensagem=%s AND status='processing' AND retry_count=%s
+          AND processing_started_at>clock_timestamp()-INTERVAL '120 seconds' FOR UPDATE""",
+        (mensagem["id_mensagem"], mensagem["retry_count"]),
+    )
+    if cursor.fetchone() is None:
+        raise LockConversaPerdido("Mensagem perdeu a reserva durante consulta FireAds")
+
+
+def importar_dados_abertura(id_cliente, id_conversa, decisao, cursor):
+    """Importa titular e destino juntos; conflito de e-mail não deixa dados parciais."""
+    cursor.execute("SAVEPOINT fireads_importacao")
+    try:
+        dados = decisao["dados_titular"]
+        cursor.execute(
+            "UPDATE chatbot.cliente SET nome=%s,email=%s WHERE id_cliente=%s",
+            (dados["nome"], dados["email"], id_cliente),
+        )
+        cursor.execute(
+            "UPDATE chatbot.conversa SET status_dependente=%s WHERE id_conversa=%s",
+            (decisao["status_dependente"], id_conversa),
+        )
+        if decisao["status_dependente"]:
+            inserir_dependente_para_conversa(id_conversa, cursor)
+    except UniqueViolation:
+        cursor.execute("ROLLBACK TO SAVEPOINT fireads_importacao")
+        return False
+    finally:
+        cursor.execute("RELEASE SAVEPOINT fireads_importacao")
+    return True
 
 
 def buscar_abertura(id_conversa, cursor):
@@ -51,7 +90,13 @@ def reservar_consulta(abertura, id_conversa, cursor):
           id_integracao_fireads=EXCLUDED.id_integracao_fireads,
           id_conversa_referencia=EXCLUDED.id_conversa_referencia,
           consulta_concluida=FALSE,resultado='pendente',dados=NULL,
-          consultado_em=NULL,atualizado_em=clock_timestamp()
+          consultado_em=NULL,
+          atualizado_em=CASE
+            WHEN consulta_fireads.id_conversa_referencia=EXCLUDED.id_conversa_referencia
+                 AND NOT consulta_fireads.consulta_concluida
+            THEN consulta_fireads.atualizado_em
+            ELSE clock_timestamp()
+          END
         RETURNING id_consulta;
     """,
         (
@@ -62,6 +107,22 @@ def reservar_consulta(abertura, id_conversa, cursor):
         ),
     )
     return cursor.fetchone()[0]
+
+
+def segundos_restantes_consulta(id_consulta, id_conversa, limite, cursor):
+    """Enquanto pendente, atualizado_em preserva o início mesmo após retry/restart."""
+    cursor.execute(
+        """SELECT GREATEST(0, %s - EXTRACT(EPOCH FROM
+                   (clock_timestamp() - atualizado_em)))
+           FROM chatbot.consulta_fireads
+           WHERE id_consulta=%s AND id_conversa_referencia=%s
+             AND NOT consulta_concluida;""",
+        (limite, id_consulta, id_conversa),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        raise ValueError("Consulta pendente não pertence à conversa")
+    return float(row[0])
 
 
 def concluir_consulta(abertura, id_conversa, id_consulta, decisao, cursor):
