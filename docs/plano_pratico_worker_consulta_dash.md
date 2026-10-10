@@ -1,5 +1,10 @@
 # Plano prático — worker de consulta FireAds
 
+**Nota posterior à aplicação:** a seleção de formulários foi corrigida para usar
+o registro mais recente, sem resultado novo de ambiguidade. Os blocos abaixo
+registram a entrega V1.11.0; não reaplicá-los sobre a correção. A regra atual está
+em `docs/worker_consulta_dash_operacao.md` e em `core/integrations/fireads/contrato.py`.
+
 Data: 09/10/2026. **Plano aplicado ao projeto local após o backup `b049a4d`; implantação na VM e migração do banco de produção ainda pendentes.**
 
 Os 29 passos foram conferidos com a base do backup e aplicados. Na validação do

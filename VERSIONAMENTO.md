@@ -142,6 +142,10 @@ Commit: `8103df82efeb9c4881a83f7dec1c7e6f08acb076`
 
 Commit: `404a7ab7554ddb14455c0c10e6339403e215d31d`
 
+### V1.11.0 — Worker de consulta FireAds
+
+Commit: `f0946c52f3dc538ee11cc578ddb2011727558626`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

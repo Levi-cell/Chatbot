@@ -116,42 +116,45 @@ def instante(valor, fuso=None):
     return data.astimezone(timezone.utc)
 
 
+def _ordem_linha(row, posicao):
+    """Usa a linha para desempatar; IDs Meta não são cronológicos."""
+    try:
+        linha = int(row.get("_row"))
+    except (TypeError, ValueError):
+        return posicao
+    return linha if linha > 0 else posicao
+
+
 def selecionar(google, meta, numero, fuso=None):
-    """Escolhe um registro inteiro; sem combinar dados de diferentes formulários."""
-    candidatos = [
-        ("google", r, instante(r.get("Data/Hora"), fuso))
-        for r in localizar(google, numero, "WhatsApp")
-    ]
-    candidatos += [
-        ("meta", r, instante(r.get("created_time"), fuso))
-        for r in localizar(meta, numero, "phone_number")
-    ]
-    # Formulários repetidos da mesma origem/data não criam dúvida quando todos
-    # os dados usados na importação são iguais. Não vale para escrita no dash.
-    unicos = []
-    for origem, row, data in candidatos:
-        campos = (
-            ("Nome", "Email", "Perfil/Faixa", "Data/Hora")
-            if origem == "google"
-            else ("full_name", "email", "para_quem", "created_time")
-        )
-        if not any(
-            origem == anterior_origem
-            and all(row.get(c) == anterior.get(c) for c in campos)
-            for anterior_origem, anterior, _ in unicos
-        ):
-            unicos.append((origem, row, data))
-    candidatos = unicos
-    if not candidatos:
-        return None
-    if len(candidatos) == 1:
-        return candidatos[0]
-    if any(c[2] is None for c in candidatos):
-        raise ErroFireAds("Datas insuficientes para comparar formulários")
-    candidatos.sort(key=lambda c: c[2], reverse=True)
-    if candidatos[0][2] == candidatos[1][2]:
-        raise ErroFireAds("Formulários empatados; origem não inequívoca")
-    return candidatos[0]
+    """Usa o formulário mais recente inteiro, mesmo com respostas divergentes.
+
+    Datas sem offset usam o fuso configurado, ou Brasília quando ausente.
+    Empate usa a maior linha e depois a última posição da resposta, sem
+    prioridade por origem. Datas inválidas ficam depois das válidas. Estes
+    desempates não geram resultado de ambiguidade.
+    """
+    candidatos = []
+    fuso_leitura = fuso or "America/Sao_Paulo"
+    formatos = set(formatos_telefone(numero))
+    if not formatos:
+        raise ErroFireAds("Telefone fora do contrato brasileiro")
+    for origem, rows, coluna, campo_data in (
+        ("google", google, "WhatsApp", "Data/Hora"),
+        ("meta", meta, "phone_number", "created_time"),
+    ):
+        # O mais novo pode usar outra variante do nono dígito. Preservar a
+        # ordem original para o fallback quando a API não trouxer _row.
+        for posicao, row in enumerate(rows, start=1):
+            if telefone(row.get(coluna)) not in formatos:
+                continue
+            data = instante(row.get(campo_data), fuso_leitura)
+            ordem = (
+                data or datetime.min.replace(tzinfo=timezone.utc),
+                _ordem_linha(row, posicao),
+                posicao,
+            )
+            candidatos.append((ordem, (origem, row, data)))
+    return max(candidatos, key=lambda item: item[0])[1] if candidatos else None
 
 
 def bloco_observacoes(id_integracao, id_conversa, observacoes):

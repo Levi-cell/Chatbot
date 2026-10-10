@@ -232,8 +232,7 @@ class FireAdsTests(unittest.TestCase):
         self.assertEqual(
             selecionar([GOOGLE], [META], NUMERO, "America/Sao_Paulo")[0], "meta"
         )
-        with self.assertRaises(ErroFireAds):
-            selecionar([GOOGLE], [META], NUMERO, None)
+        self.assertEqual(selecionar([GOOGLE], [META], NUMERO, None)[0], "meta")
 
     def test_mais_recente_invalido_nao_resgata_antigo(self):
         decisao = interpretar(
@@ -242,15 +241,15 @@ class FireAdsTests(unittest.TestCase):
         self.assertEqual(decisao["origem"], "organico")
         self.assertEqual(decisao["dados_titular"], {})
 
-    def test_empate_conflitante_e_telefone_diferente(self):
+    def test_empate_entre_abas_usa_maior_linha_e_telefone_diferente_ausente(self):
         self.assertEqual(
             interpretar(
-                [GOOGLE],
-                [dict(META, created_time="2026-10-01T15:00:00Z")],
+                [dict(GOOGLE, _row=44)],
+                [dict(META, _row=46, created_time="2026-10-01T15:00:00Z")],
                 NUMERO,
                 "America/Sao_Paulo",
-            )["resultado"],
-            "ambiguidade",
+            )["origem"],
+            "meta",
         )
         self.assertEqual(
             interpretar([GOOGLE], [], "5511999990003", None)["resultado"], "ausente"

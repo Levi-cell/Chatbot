@@ -4,9 +4,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 from core.integrations.fireads.cliente import ClienteFireAds
-from core.integrations.fireads.contrato import ErroFireAds
+from core.integrations.fireads.contrato import ErroFireAds, selecionar
 from tests.helpers import FakeConn, FakeCursor
-from tests.unit.test_fireads import GOOGLE, NUMERO
+from tests.unit.test_fireads import GOOGLE, META, NUMERO
 from workers.worker_flow import fireads
 from workers.worker_flow.suporte.consultas_fireads import (
     ConsultaFireAdsPendente,
@@ -150,15 +150,77 @@ class DecisaoConsultaTests(unittest.TestCase):
                 self.assertEqual(resultado["resultado"], "importado")
                 self.assertEqual(resultado["origem"], origem)
 
-    def test_registros_com_dados_ou_datas_diferentes_continuam_exigindo_desempate(self):
+    def test_ultimo_formulario_substitui_dados_antigos_sem_ambiguidade(self):
         for diferenca in (
             {"Nome": "Maria Silva"},
             {"Email": "outro@example.com"},
             {"Perfil/Faixa": "Para meu pai/mãe"},
-            {"Data/Hora": "02/10/2026 12:00"},
         ):
             with self.subTest(diferenca=diferenca):
-                resultado = fireads.interpretar(
-                    [GOOGLE, dict(GOOGLE, **diferenca)], [], NUMERO, None
+                ultimo = dict(GOOGLE, _row=46, **diferenca)
+                self.assertIs(
+                    selecionar([ultimo, dict(GOOGLE, _row=44)], [], NUMERO)[1],
+                    ultimo,
                 )
-                self.assertEqual(resultado["resultado"], "ambiguidade")
+                resultado = fireads.interpretar(
+                    [dict(GOOGLE, _row=44), ultimo], [], NUMERO, None
+                )
+                self.assertEqual(resultado["resultado"], "importado")
+
+    def test_caso_tres_formularios_meia_noite_usa_linha_46_titular(self):
+        rows = [dict(GOOGLE, _row=n, **{
+            "Data/Hora": "09/10/2026 00:00",
+            "Perfil/Faixa": "Para mim" if n == 46 else "Para meu pai/mãe",
+        }) for n in (44, 45, 46)]
+        resultado = fireads.interpretar(rows, [], NUMERO, None)
+        self.assertEqual(resultado["resultado"], "importado")
+        self.assertFalse(resultado["status_dependente"])
+
+    def test_data_prevalece_sobre_linha_e_ordem_em_ambas_as_abas(self):
+        for origem, base, campo in (
+            ("google", GOOGLE, "Data/Hora"), ("meta", META, "created_time"),
+        ):
+            with self.subTest(origem=origem):
+                novo = dict(base, _row=2, **{campo: "2026-10-09T18:00:00Z"})
+                antigo = dict(base, _row=100, **{campo: "2026-10-08T18:00:00Z"})
+                rows = [novo, antigo]
+                google, meta = (rows, []) if origem == "google" else ([], rows)
+                self.assertIs(selecionar(google, meta, NUMERO)[1], novo)
+
+    def test_mais_recente_entre_abas_com_varias_inscricoes(self):
+        for vencedor in ("google", "meta"):
+            with self.subTest(vencedor=vencedor):
+                google = [dict(GOOGLE, **{"Data/Hora": f"0{dia}/10/2026 12:00"})
+                          for dia in (1, 2, 9 if vencedor == "google" else 3)]
+                meta = [dict(META, created_time=f"2026-10-0{dia}T15:00:00Z")
+                        for dia in (1, 2, 9 if vencedor == "meta" else 3)]
+                self.assertEqual(selecionar(google, meta, NUMERO)[0], vencedor)
+
+    def test_variante_sem_nono_digito_mais_nova_tambem_participa(self):
+        novo = dict(GOOGLE, WhatsApp=NUMERO[:4] + NUMERO[5:],
+                    **{"Data/Hora": "09/10/2026 12:00"})
+        self.assertIs(selecionar([GOOGLE, novo], [], NUMERO)[1], novo)
+
+    def test_empate_meta_usa_linha_sem_inferir_cronologia_do_id(self):
+        novo = dict(META, _row=46, id="1", para_quem="para_mim")
+        antigo = dict(META, _row=44, id="999999999")
+        resultado = fireads.interpretar([], [novo, antigo], NUMERO, None)
+        self.assertFalse(resultado["status_dependente"])
+
+    def test_datas_invalidas_e_linhas_ausentes_usam_ultima_posicao(self):
+        antigo = dict(GOOGLE, **{"Data/Hora": "invalida"})
+        novo = dict(antigo, Nome="Maria Silva")
+        self.assertIs(selecionar([antigo, novo], [], NUMERO)[1], novo)
+        self.assertIs(selecionar([GOOGLE, novo], [], NUMERO)[1], GOOGLE)
+
+    def test_empate_entre_abas_usa_maior_linha_sem_prioridade_por_origem(self):
+        for linha_google, linha_meta, origem in (
+            (46, 44, "google"),
+            (44, 46, "meta"),
+        ):
+            with self.subTest(origem=origem):
+                google = dict(GOOGLE, _row=linha_google)
+                meta = dict(META, _row=linha_meta, created_time="2026-10-01T15:00:00Z")
+                escolhido = selecionar([google], [meta], NUMERO)
+                self.assertEqual(escolhido[0], origem)
+                self.assertIs(escolhido[1], google if origem == "google" else meta)

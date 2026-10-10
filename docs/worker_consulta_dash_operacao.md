@@ -6,8 +6,23 @@ Este documento acompanha o código do worker separado. Aplicar junto da migraç�
 Código aplicado localmente após o backup `b049a4d`. Validação da aplicação:
 443 testes unitários e 28 testes de integração FireAds aprovados, sem testes
 pulados, além de `manage.py check` sem problemas. O PostgreSQL usado foi local
-e descartável; HTTP externo foi simulado. Migração e instalação do serviço
-na VM permanecem pendentes, conforme o procedimento abaixo.
+e descartável; HTTP externo foi simulado. Deploy V1.11.0 confirmado na VM em
+09/10/2026 às 23:36 (Brasília): migração aplicada e seis serviços ativos.
+
+Correção posterior, ainda a implantar: a abertura escolhe o registro mais recente
+do telefone entre Google e Meta, incluindo as variantes com/sem nono dígito.
+Respostas diferentes não geram mais ambiguidade. Datas sem offset usam o fuso
+configurado ou Brasília na ausência dele; isso não modifica a planilha.
+Datas iguais usam a maior `_row` (última posição recebida quando não há linha
+válida), inclusive entre abas, sem prioridade fixa por origem. Datas válidas
+precedem inválidas; sem datas válidas, vale esse mesmo desempate por linha/posição.
+Se todos esses critérios empatarem, mantém o primeiro candidato encontrado.
+O desempate por linha entre abas é uma convenção de seleção; não comprova
+cronologia que a fonte deixou de informar.
+O formulário escolhido é usado inteiro; se estiver incompleto, não se resgatam
+campos antigos. Não há migração SQL nova: `ambiguidade` continua permitido no
+banco apenas para preservar resultados históricos. Validação da correção:
+46 testes de FireAds, espera HTTP e runtime do flow aprovados, com HTTP simulado.
 
 ## Contrato
 
@@ -41,7 +56,7 @@ que impedem vincular conversa e integração de unidades diferentes.
 - `status`: pendente, processando ou concluida; `consulta_concluida` é mantida por
   compatibilidade e uma constraint exige consistência com o status.
 - `dados`: envelope com `decisao` e `fontes`, gravado completo ou mantido NULL.
-- `resultado`: pendente/importado/ausente/incompleto/ambiguidade/erro.
+- `resultado`: pendente/importado/ausente/incompleto/erro; ambiguidade somente no legado.
 - `solicitado_em` e `prazo_final`: orçamento persistente da abertura.
 - `tentativas`, `versao_reserva`, `processing_started_at` e `reserva_ate`: reserva
   operacional; tentativas adicionais apenas recuperam uma execução interrompida.
@@ -83,7 +98,7 @@ textos enviados durante os minutos de espera nesta mudança.
 | Sem integração / conversa já iniciada | Atendimento atual, sem nova consulta. |
 | Nova conversa elegível com integração | Uma solicitação persistida; nenhuma saudação prematura. |
 | Google ou Meta completo | Importa titular, e-mail e destinatário; abertura na profissão, etapa 4. |
-| Ambas as fontes | Registro mais recente comparável; ambiguidade segue orgânico. |
+| Ambas as fontes / várias inscrições | Registro mais recente, com os desempates documentados acima. |
 | Ausente / incompleto / falha / timeout | Atendimento orgânico desde a etapa 1, motivo registrado. |
 | Resultado aplicado e retry | Reutiliza o contexto; nenhuma nova leitura ou regressão de etapa. |
 | Pessoa preenche formulário depois da abertura | Considerar somente na próxima conversa. |

@@ -1,6 +1,6 @@
 """Interpretação da consulta inicial; não executa HTTP nem operações de banco."""
 
-from core.integrations.fireads.contrato import selecionar, destino, ErroFireAds
+from core.integrations.fireads.contrato import selecionar, destino
 from core.validacoes.email import validar_email_estrutural
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_nome import validar_nome_cliente
 
@@ -14,10 +14,7 @@ def decisao_organica(resultado, motivo=None):
 
 
 def interpretar(google, meta, numero, fuso):
-    try:
-        escolhido = selecionar(google, meta, numero, fuso)
-    except ErroFireAds:
-        return decisao_organica("ambiguidade", "data_ou_origem_ambigua")
+    escolhido = selecionar(google, meta, numero, fuso)
     if escolhido is None:
         return decisao_organica("ausente")
     origem, row, data = escolhido
