@@ -150,6 +150,10 @@ Commit: `f0946c52f3dc538ee11cc578ddb2011727558626`
 
 Commit: `66b59ccf908206309d4d92e3b8e56cac1f07f666`
 
+### V1.11.2 — Correção da atualização do dashboard FireAds
+
+Commit: `a4803d27d71224b20d583665df8f5680f3c37d64`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

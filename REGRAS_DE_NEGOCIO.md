@@ -1526,6 +1526,34 @@ consumir retry. A janela entre aceite
 externo e commit local continua sujeita à duplicidade rara já aceita na V1.
 
 
+## Extração dos campos de formulário FireAds
+
+A correspondência do telefone nas abas Google/Meta identifica o cadastro. Usar
+somente o registro mais recente selecionado pelas regras FireAds; não completar
+campos vazios com dados de outra inscrição ou de uma conversa anterior.
+
+Nome, e-mail e destinatário vêm de campos estruturados. Não aplicar as regras de
+validação de respostas livres do WhatsApp para rejeitar nomes de perfil ou o
+formato do e-mail. Extrair a primeira palavra do nome, ou as duas primeiras quando
+formarem um par conhecido de nome composto; ignorar sobrenomes e complementos
+posteriores. Exemplo: `Edcarlos Oliveira | Programador` torna-se `Edcarlos`.
+Nomes compostos desconhecidos usam a primeira palavra. Aparar espaços do e-mail e
+normalizar a caixa, preservando seu conteúdo sem testes de estrutura ou domínio.
+Interpretar o destinatário pelas opções explícitas do formulário, nunca por idade.
+
+Com os três campos extraídos e destinatário reconhecido, importar os dados juntos,
+manter a origem Google/Meta, abrir na profissão e dispensar a coleta posterior do
+e-mail. O marcador histórico `email_valido` significa coleta aceita do formulário
+nessa rota; o flow não reaplica a validação estrutural. As validações das respostas
+digitadas pelo cliente nas etapas comuns continuam iguais.
+
+Por enquanto, campo vazio mantém o atendimento comum desde a etapa 1, com motivo
+`campos_ausentes`; destinatário fora das opções conhecidas registra
+`destinatario_desconhecido` sem inventar um vínculo. Ausência de telefone, falha
+operacional, timeout e conflito de e-mail no banco conservam os tratamentos atuais.
+A coleta parcial com saudação de formulário está proposta em
+[valida_dados_parciais_fireads.md](docs/valida_dados_parciais_fireads.md) e ainda não foi implementada.
+
 ## Entrega do atendimento ao dashboard FireAds
 
 Após a confirmação do Funil, a entrega ao dashboard usa fila independente e
@@ -1546,7 +1574,7 @@ ausente permite cadastro novo, inclusive orgânico, salvo e-mail já vinculado a
 outro telefone, que continua pendente para conferência. Nunca alterar uma pessoa
 identificada apenas por e-mail. Não reenviar ao Funil por falha no dashboard.
 
-Operação e limites: [Consulta e entrega FireAds](docs/worker_consulta_dash_operacao.md).
+Operação e limites: [Consulta e entrega FireAds](docs/valida_dados_parciais_fireads.md).
 
 ## Consumo mensal de mensagens Meta
 

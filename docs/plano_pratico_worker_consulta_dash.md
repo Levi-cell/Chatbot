@@ -3,7 +3,7 @@
 **Nota posterior à aplicação:** a seleção de formulários foi corrigida para usar
 o registro mais recente, sem resultado novo de ambiguidade. Os blocos abaixo
 registram a entrega V1.11.0; não reaplicá-los sobre a correção. A regra atual está
-em `docs/worker_consulta_dash_operacao.md` e em `core/integrations/fireads/contrato.py`.
+em `docs/valida_dados_parciais_fireads.md` e em `core/integrations/fireads/contrato.py`.
 
 Data: 09/10/2026. **Plano aplicado ao projeto local após o backup `b049a4d`; implantação na VM e migração do banco de produção ainda pendentes.**
 
@@ -86,7 +86,7 @@ com o lock próprio da conversa e as guardas de fila. São responsabilidades dif
 ### Aplicação e validação
 
 As orientações operacionais completas, incluindo instalação e início do serviço, estão
-no passo `docs/worker_consulta_dash_operacao.md`. Parar webhook e workers antes de combinar
+no passo `docs/valida_dados_parciais_fireads.md`. Parar webhook e workers antes de combinar
 código novo e migração. Não reaplicar o setup em produção. Não reverter somente o código
 depois da migração: a estrutura nova não é compatível com o código antigo.
 
@@ -165,7 +165,7 @@ preexistente. Sem FIREADS_TEST_DSN, os testes serão pulados; isso não equivale
 20. `tests/integration/test_fireads_postgres.py`
 21. `utilitarios/fireAds/diagnostico_abertura.py`
 22. `deploy/systemd/chatbot-worker-consulta-dash.service`
-23. `docs/worker_consulta_dash_operacao.md`
+23. `docs/valida_dados_parciais_fireads.md`
 24. `workers/README.md`
 25. `PADROES_DE_ARQUITETURA.md`
 26. `tests/README.md`
@@ -6623,7 +6623,7 @@ UMask=0027
 WantedBy=multi-user.target
 ````
 
-## Passo 23: `docs/worker_consulta_dash_operacao.md`
+## Passo 23: `docs/valida_dados_parciais_fireads.md`
 
 Documentar esquema, cenários, recuperação, capacidade e implantação coordenada.
 
@@ -7287,7 +7287,7 @@ Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tor
 conversas. Não envia WhatsApp, não altera etapas e não escreve no dashboard.
 O flow confirma a pendência e o reagendamento sem consumo de retry; depois aplica
 o resultado completo uma única vez. HTTP ocorre no processo separado, com reserva
-PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/worker_consulta_dash_operacao.md).
+PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/valida_dados_parciais_fireads.md).
 ````
 
 ## Passo 25: `PADROES_DE_ARQUITETURA.md`
@@ -8844,7 +8844,7 @@ No corte de implantação, parar webhook, flow, Funil e follow-up antes da migra
 
 O sexto serviço é `chatbot-worker-consulta-dash.service`. Aplicar com a migração
 `migrations/20261009_worker_consulta_dash.sql`, sem executar setup numa base existente.
-Seguir o [procedimento e recuperação](../docs/worker_consulta_dash_operacao.md).
+Seguir o [procedimento e recuperação](../docs/valida_dados_parciais_fireads.md).
 ````
 
 ## Passo 28: `docs/fireads_aplicacao_e_deploy.md`
@@ -8897,7 +8897,7 @@ A proposta local de threads auxiliares no flow foi substituída pelo serviço
 `worker_consulta_dash`, com resultado completo persistido e uma consulta por
 conversa. Esta mudança REQUER a migração `20261009_worker_consulta_dash.sql` e a
 instalação de um sexto serviço. Os detalhes de implantação, recuperação e prazo de
-300 segundos estão no [guia do worker](worker_consulta_dash_operacao.md).
+300 segundos estão no [guia do worker](valida_dados_parciais_fireads.md).
 
 Os passos históricos abaixo descrevem a entrega inicial; não substituem o guia
 novo nem autorizam reaplicar o SQL inicial numa instalação já atualizada.

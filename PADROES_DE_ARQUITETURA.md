@@ -954,3 +954,12 @@ pelo orquestrador como checkpoint recuperável, nunca por commit no adaptador.
 SQL de consulta/reserva fica em `core/repositories/fireads`; integração HTTP continua
 em `core/integrations/fireads`; diagnóstico manual continua em `utilitarios`.
 Não há tarefas HTTP auxiliares dentro do flow nem novas views.
+
+Os campos estruturados do formulário são extraídos em
+`core/integrations/fireads/extratores.py`, sem usar validadores de respostas livres
+do atendimento. O catálogo puro de pares de nomes compostos fica em
+`core/validacoes/nomes_compostos.py`, compartilhado com o validador de nome do fluxo;
+essa reutilização não muda as regras do validador. A interpretação de titular ou
+dependente continua no contrato FireAds. Extratores não executam SQL ou HTTP e não
+decidem etapas. O worker de consulta interpreta o registro; o flow aplica a decisão
+persistida sob as mesmas guardas de conversa e transação.

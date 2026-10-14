@@ -1,6 +1,6 @@
 """Prepara somente a abertura, consumindo a consulta persistida pelo outro worker."""
 
-from core.validacoes.email import validar_email_estrutural
+from core.integrations.fireads.extratores import extrair_email
 from core.repositories.fireads import pendencias
 from core.repositories.fireads.consulta import (
     buscar_abertura,
@@ -99,13 +99,12 @@ def aplicar_contexto(contexto_banco, decisao):
 
 
 def email_importado(contexto):
+    """Confia na coleta FireAds desta conversa, sem revalidar como texto de chat."""
     estado = contexto.get("contexto_fireads") or {}
     return (
         estado.get("concluida") is True
         and estado.get("resultado") == "importado"
         and estado.get("id_conversa") == contexto.get("id_conversa")
         and estado.get("dados_titular", {}).get("resultado_email") == "email_valido"
-        and validar_email_estrutural(
-            estado.get("dados_titular", {}).get("email")
-        ).valido
+        and bool(extrair_email(estado.get("dados_titular", {}).get("email")))
     )

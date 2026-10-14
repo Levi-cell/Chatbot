@@ -82,6 +82,9 @@ def worker_flow():
 
         conn_ciclo = None
         cursor_ciclo = None
+        # Nenhum desvio pode reutilizar dados da mensagem do ciclo anterior.
+        mensagem = None
+        resultado_encerramento = None
         estado_ciclo = criar_estado_ciclo()
         contexto_envio = {}
 
@@ -282,12 +285,17 @@ def worker_flow():
                 )
                 conn_ciclo.commit()
 
+            if resultado_encerramento is None:
+                raise RuntimeError("Finalização da mensagem sem resultado de encerramento")
+
             registrar_cache_bloqueio_apos_commit(
                 mensagem,
                 resultado_encerramento,
             )
 
         except ConsultaFireAdsPendente as espera:
+            if mensagem is None:
+                raise
             # A espera é uma decisão válida, não uma falha SQL. Solicitação,
             # vínculo da fila e reagendamento serão confirmados juntos abaixo.
             # Libera o ciclo para outras conversas. Esperar uma leitura não é erro
@@ -303,6 +311,8 @@ def worker_flow():
             )
 
         except UnidadeDesativada:
+            if mensagem is None:
+                raise
             conn_ciclo.rollback()
             # Preserva pendência/histórico; a função dequeue não reserva inativas.
             reagendar_mensagem_sem_erro(

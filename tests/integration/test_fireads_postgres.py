@@ -440,6 +440,40 @@ class FireAdsPostgresTests(unittest.TestCase):
             )
             http.assert_not_called()
 
+    def test_meta_perfil_com_biografia_persiste_extracao_e_recupera_no_retry(self):
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        registro = {
+            "full_name": "Edcarlos Oliveira | Programador",
+            "email": " EDCARLOS@INTRANET ", "phone_number": NUMERO,
+            "para_quem": "pai_ou_mae", "_row": 24,
+            "created_time": "2026-10-14T04:26:03Z",
+        }
+        api = Mock()
+        api.consultar.side_effect = [
+            {"headers": list(GOOGLE), "rows": []},
+            {"headers": list(registro), "rows": [registro]},
+        ]
+        with patch("workers.worker_consulta_dash.consulta.ClienteFireAds", return_value=api):
+            obtido = self.preparar_apos_http(contexto, mensagem, versao)
+        self.assertEqual(
+            self.conn.execute("SELECT nome,email FROM chatbot.cliente").fetchone(),
+            ("Edcarlos", "edcarlos@intranet"),
+        )
+        self.assertTrue(obtido["conversa"]["status_dependente"])
+        self.assertEqual(obtido["contexto_fireads"]["origem"], "meta")
+        self.assertEqual(obtido["contexto_fireads"]["resultado"], "importado")
+        dados, aplicacao = self.conn.execute(
+            "SELECT dados,aplicacao FROM chatbot.consulta_fireads WHERE id_conversa=%s", (cid,),
+        ).fetchone()
+        self.assertEqual(dados["fontes"]["meta"], [registro])
+        self.assertEqual(aplicacao, obtido["contexto_fireads"])
+        with patch("workers.worker_consulta_dash.consulta.ClienteFireAds") as http:
+            self.assertEqual(preparar_abertura(contexto, mensagem, versao, self.cursor), obtido)
+            http.assert_not_called()
+        self.assertEqual(self.conn.execute(
+            "SELECT count(*) FROM chatbot.dependente WHERE id_conversa=%s", (cid,),
+        ).fetchone()[0], 1)
+
     def test_lock_perdido_durante_http_nao_importa_dados(self):
         cid, mensagem, versao, contexto = self.preparar_mensagem()
 

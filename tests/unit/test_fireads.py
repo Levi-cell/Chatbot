@@ -234,9 +234,9 @@ class FireAdsTests(unittest.TestCase):
         )
         self.assertEqual(selecionar([GOOGLE], [META], NUMERO, None)[0], "meta")
 
-    def test_mais_recente_invalido_nao_resgata_antigo(self):
+    def test_mais_recente_vazio_nao_resgata_antigo(self):
         decisao = interpretar(
-            [GOOGLE], [dict(META, email="inválido")], NUMERO, "America/Sao_Paulo"
+            [GOOGLE], [dict(META, email="")], NUMERO, "America/Sao_Paulo"
         )
         self.assertEqual(decisao["origem"], "organico")
         self.assertEqual(decisao["dados_titular"], {})
@@ -277,16 +277,20 @@ class FireAdsTests(unittest.TestCase):
             )
 
     def test_aceite_da_oferta_e_retorno_pulam_email_somente_quando_importado(self):
-        for etapa, mod, evento in [
-            (7, resolver_etapa7, "oferta_aceita"),
-            (9, resolver_etapa9, "retorno_confirmado"),
+        for etapa, mod, evento, email_formulario in [
+            (7, resolver_etapa7, "oferta_aceita", "ana@example.com"),
+            (9, resolver_etapa9, "retorno_confirmado", "ana@example.com"),
+            (7, resolver_etapa7, "oferta_aceita", "ana@intranet"),
+            (9, resolver_etapa9, "retorno_confirmado", "ana@intranet"),
         ]:
+            importacao = estado()
+            importacao["dados_titular"]["email"] = email_formulario
             cx = {
                 "id_conversa": 2,
                 "id_etapa_atual": etapa,
                 "id_etapa_origem_transicao": etapa,
                 "id_etapa_cliente": etapa,
-                "contexto_fireads": estado(),
+                "contexto_fireads": importacao,
                 "tipo_mensagem_atual": "text",
                 "texto_cliente_atual": "sim",
                 "transicoes_permitidas": {evento: 10, evento + "_email_fireads": 11},

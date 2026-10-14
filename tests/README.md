@@ -275,9 +275,14 @@ Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tor
 ## FireAds, chat e personalização da unidade
 
 `unit/test_fireads.py` cobre importação, valores Google/Meta, comparação de datas,
-e-mail validado da própria conversa, abertura na profissão, replay, tratamentos,
+e-mail importado da própria conversa, abertura na profissão, replay, tratamentos,
 preservação das observações, e-mail de outro telefone e redirecionamento sem repetir POST.
 Também verifica que um inline inválido da personalização impede o cadastro na Meta.
+
+`unit/test_fireads_extratores.py` cobre nomes de perfil com complementos, catálogo
+de compostos, fallback para a primeira palavra, e-mail sem revalidação estrutural,
+campos vazios e destinatário desconhecido. A integração PostgreSQL cobre o registro
+Meta, persistência da extração e retomada idempotente com o resultado salvo.
 
 `unit/test_fireads_destino_dashboard.py` cobre a seleção da linha por telefone,
 canal, destinatário explícito e maior `_row`, compatibilidade de snapshots antigos,

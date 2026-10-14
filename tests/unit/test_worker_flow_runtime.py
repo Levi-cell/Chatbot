@@ -111,6 +111,45 @@ class WorkerFlowRuntimeTests(unittest.TestCase):
         self.assertEqual(liberar.call_count, 2)
         self.assertTrue(conn.closed and outra_conn.closed)
 
+    def test_desvio_sem_mensagem_nao_reagenda_cliente_do_ciclo_anterior(self):
+        for erro in (
+            flow_worker.UnidadeDesativada(),
+            flow_worker.ConsultaFireAdsPendente("sem mensagem reservada"),
+        ):
+            with self.subTest(erro=type(erro).__name__), ExitStack() as stack:
+                conn = FakeConn(FakeCursor())
+                outra_conn = FakeConn(FakeCursor())
+                self._patch_fluxo_base(stack, conn, [])
+                stack.enter_context(patch.object(
+                    flow_worker, "get_conn",
+                    side_effect=[conn, outra_conn, PararWorker()],
+                ))
+                stack.enter_context(patch.object(
+                    flow_worker, "pegar_mensagens_da_fila",
+                    side_effect=[registro_fila(), erro],
+                ))
+                stack.enter_context(patch.object(
+                    flow_worker, "atualizar_banco_com_contexto_final",
+                    return_value=contexto_final(),
+                ))
+                stack.enter_context(patch.object(
+                    flow_worker, "finalizar_mensagem_processada",
+                    return_value={"atendimento_encerrado": False},
+                ))
+                cache = stack.enter_context(patch.object(
+                    flow_worker, "registrar_cache_bloqueio_apos_commit",
+                ))
+                reagendar = stack.enter_context(patch.object(
+                    flow_worker, "reagendar_mensagem_sem_erro",
+                ))
+                with self.assertRaises(type(erro)) as capturada:
+                    flow_worker.worker_flow()
+
+                self.assertIs(capturada.exception, erro)
+                reagendar.assert_not_called()
+                cache.assert_called_once()
+                self.assertTrue(conn.closed and outra_conn.closed)
+
     def test_desativacao_preserva_fila_sem_enviar_ou_consumir_retry(self):
         # A unidade pode ser desativada após o dequeue, durante a consulta ou
         # depois de montar o histórico. Em nenhum caso inicia um envio Meta.

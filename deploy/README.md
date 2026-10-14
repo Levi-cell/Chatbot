@@ -260,4 +260,4 @@ No corte de implantação, parar webhook, flow, Funil e follow-up antes da migra
 
 O sexto serviço é `chatbot-worker-consulta-dash.service`. Aplicar com a migração
 `migrations/20261009_worker_consulta_dash.sql`, sem executar setup numa base existente.
-Seguir o [procedimento e recuperação](../docs/worker_consulta_dash_operacao.md).
+Seguir o [procedimento e recuperação](../docs/valida_dados_parciais_fireads.md).

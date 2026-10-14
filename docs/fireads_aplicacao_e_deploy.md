@@ -43,7 +43,7 @@ A proposta local de threads auxiliares no flow foi substituída pelo serviço
 `worker_consulta_dash`, com resultado completo persistido e uma consulta por
 conversa. Esta mudança REQUER a migração `20261009_worker_consulta_dash.sql` e a
 instalação de um sexto serviço. Os detalhes de implantação, recuperação e prazo de
-300 segundos estão no [guia do worker](worker_consulta_dash_operacao.md).
+300 segundos estão no [guia do worker](valida_dados_parciais_fireads.md).
 
 Os passos históricos abaixo descrevem a entrega inicial; não substituem o guia
 novo nem autorizam reaplicar o SQL inicial numa instalação já atualizada.

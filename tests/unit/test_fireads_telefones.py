@@ -83,7 +83,7 @@ class FireAdsTelefonesTests(unittest.TestCase):
             self.assertEqual(interpretar([google], [meta], numero, None)["origem"], "meta")
 
     def test_nono_digito_nao_torna_dados_incompletos_validos(self):
-        google = {"Nome": "Ana Paula Silva", "Email": "invalido",
+        google = {"Nome": "Ana Paula Silva", "Email": "",
                   "WhatsApp": COM_NONO, "Perfil/Faixa": "Para mim"}
         self.assertEqual(interpretar([google], [], SEM_NONO, None)["resultado"], "incompleto")
 

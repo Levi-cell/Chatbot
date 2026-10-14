@@ -491,4 +491,4 @@ Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tor
 conversas. Não envia WhatsApp, não altera etapas e não escreve no dashboard.
 O flow confirma a pendência e o reagendamento sem consumo de retry; depois aplica
 o resultado completo uma única vez. HTTP ocorre no processo separado, com reserva
-PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/worker_consulta_dash_operacao.md).
+PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/valida_dados_parciais_fireads.md).

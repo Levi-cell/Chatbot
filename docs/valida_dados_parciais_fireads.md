@@ -111,6 +111,45 @@ saudação personalizada, salto da coleta do e-mail e canais Funil mantêm as re
 existentes. A aba geral não classifica a abertura; o worker_funil mantém sua própria
 consulta antes da escrita e a preservação das observações existentes.
 
+## Extração dos campos na abertura
+
+O adaptador em `core/integrations/fireads/extratores.py` usa os campos estruturados
+sem chamar os validadores de nome/e-mail do atendimento. `Edcarlos Oliveira |
+Programador` fornece `Edcarlos`; `João Pedro Silva` fornece `João Pedro` pelo catálogo
+de compostos conhecidos. Qualquer outro par usa somente a primeira palavra.
+O e-mail é aparado e convertido para minúsculas sem rejeição por formato/domínio.
+As opções de parentesco continuam mapeadas pelo contrato, sem inferir por faixa.
+
+O flow confia na coleta persistida da própria conversa também ao pular a etapa de
+e-mail. Campos vazios registram `campos_ausentes`; opção de destinatário não
+reconhecida registra `destinatario_desconhecido`. Esses casos ainda usam o fallback
+comum desde a etapa 1. Falhas operacionais e conflito de unicidade no banco conservam
+as guardas existentes. Nenhuma migração SQL é necessária para os extratores.
+Conversas já iniciadas não são reinterpretadas nem retrocedem após o deploy.
+
+## Coleta parcial — proposta de reserva, não implementada
+
+Vale separar, numa evolução, a origem do formulário da completude dos campos.
+Um telefone encontrado continuaria Google/Meta mesmo com campos apagados; somente
+os campos ausentes seriam perguntados. Preservar uma fotografia única da consulta
+com origem, dados extraídos, campos ausentes e opções não reconhecidas.
+
+| Campo ausente | Comportamento proposto |
+| --- | --- |
+| Nome | Saudação personalizada sem nome, pergunta da etapa 1; após a resposta, pular destino e confirmação se já conhecidos. |
+| Destinatário | Perguntar para quem é e confirmar nas etapas 2/3; seguir para profissão. |
+| E-mail | Não impedir a abertura; coletar na etapa 10, com a política de e-mail vigente. |
+| Vários ou todos | Combinar os comportamentos acima, mencionando o formulário somente na abertura. |
+
+Antes de aplicar: desacoplar abertura personalizada de `email_importado`, definir
+arestas explícitas para saltar somente campos conhecidos e persistir cada coleta
+com o contexto da conversa. Preservar profissão, idade, rota de dependente,
+personalização, `status_pagamento`, bloqueios e replay. Testar as oito combinações
+de presença/ausência, opção desconhecida, conflito de e-mail e quedas entre commits.
+Não reconsultar o formulário no meio do atendimento. A necessidade de migração das
+transições deverá ser avaliada com essa implementação; este texto não é um script
+de deploy nem um plano executável por arquivo.
+
 ## Seleção da linha para atualizar o dashboard
 
 A correção posterior à V1.11.1 está aplicada no código local e depende de deploy.
