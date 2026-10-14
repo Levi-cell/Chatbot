@@ -71,7 +71,7 @@ def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
         f"{saudacao}, {dados['nome']}! Sou {artigo} "
         f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
         "Vi que você já preencheu um dos nossos formulários. Para continuarmos "
-        "com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok?"
+        "com sua reserva por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA4
     if tratamento == 'tipo_mensagem_nao_suportado':
