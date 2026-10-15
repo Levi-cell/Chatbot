@@ -1,7 +1,7 @@
 """Monta o payload de oportunidade sem conhecer banco ou transações."""
 
 import re
-from core.integrations.fireads.contrato import CANAIS
+from core.integrations.fireads.contrato import CANAIS, bloco_observacoes
 from core.validacoes.email import ResultadoColetaEmail
 
 from core.validacoes.turno import ROTULOS_TURNO, validar_turno
@@ -135,9 +135,25 @@ def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     if turno is not None:
         validar_turno(turno)
     preferencia = f"- Turno de preferência: {ROTULOS_TURNO[turno]}\n" if turno else ""
-    canal = f"Canal de venda: {CANAIS[dados_lead['origem_fireads']][0]}\n\n" if dados_lead.get("origem_fireads") else ""
+    origem = dados_lead.get("origem_fireads")
+    descricoes = {
+        "google": "Lead veio de uma campanha do Google Ads.",
+        "meta": "Lead veio de uma campanha da Meta Ads.",
+        "organico_site": "O Lead chegou ao site de maneira orgânica e preencheu o formulário.",
+        "organico": "Lead entrou em contato com o chatbot de maneira orgânica, possivelmente por alguma rede social Meta da unidade.",
+    }
+    descricao = descricoes.get(origem, "")
+    estado = dados_lead.get("contexto_fireads") or {}
+    if origem == "organico" and estado.get("motivo") not in (None, "telefone_ausente"):
+        descricao = "Atendimento iniciado pelo fluxo orgânico, sem importar os dados do formulário."
+    canal = f"Canal de venda: {CANAIS[origem][0]}\n{descricao}\n\n" if origem else ""
+    primeiro = dados_lead.get("primeiro_atendimento")
+    classificacao = (
+        "Novo lead" if primeiro is True else
+        "Novo atendimento para Lead antigo" if primeiro is False else "Atendimento"
+    )
     cabecalho = (
-        "------NOVO LEAD-------\n\n"
+        f"{classificacao}\n\n"
         f"{canal}"
         "Cliente concluiu a triagem cognitiva pelo chatbot. "
         f"{orientacao} A disponibilidade e a efetivação de sua reserva devem ser conferidas pela equipe.\n\n"
@@ -162,13 +178,16 @@ def montar_observacoes_lead(dados_lead, *, resultado_email=None):
 
     dados_profissao = f"\n- Profissão: {profissao}\n"
 
-    return (
+    resumo = (
         cabecalho
+        + dados_profissao
         + dados_pessoa
         + aviso_telefone
-        + dados_profissao
         + triagem
     )
+    if origem:
+        return bloco_observacoes(estado['id_integracao'], dados_lead['id_conversa'], resumo, versao=2)
+    return f"Observações de atendimento\n\n{resumo}"
 
 
 def _montar_perguntas_e_respostas_triagem(dados_lead):

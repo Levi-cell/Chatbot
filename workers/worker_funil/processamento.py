@@ -2,6 +2,7 @@
 
 import json
 from core.repositories.fireads.envios import congelar
+from core.repositories.funil import snapshots
 import logging
 
 import psycopg
@@ -18,6 +19,7 @@ from core.repositories.funil.integracao import (
 from core.repositories.funil.leads import buscar_dados_lead_funil
 from workers.worker_funil.config import (
     FUNIL_HTTP_TIMEOUT,
+    FUNIL_LEASE_SEGUNDOS,
     FUNIL_RETRY_LEAD_SEGUNDOS,
 )
 from workers.worker_funil.exceptions import BancoFalhouAposEnvioFunil
@@ -33,26 +35,25 @@ def processar_envio_funil(envio, conn, cursor):
     sucesso_externo = False
 
     try:
-        dados_lead = buscar_dados_lead_funil(id_conversa, cursor)
-        if dados_lead is None:
-            raise ValueError("Conversa não está mais elegível ao Funil")
-
-        integracao = buscar_integracao_funil_por_unidade(
-            dados_lead["id_unidade"],
-            cursor,
-        )
-        _validar_integracao_ativa(integracao)
-
-        payload = montar_payload_oportunidade(dados_lead)
-        payload, canal, url_funil = congelar(dados_lead, payload, integracao, cursor)
+        snapshot = snapshots.buscar(id_conversa, cursor)
+        if snapshot is None:
+            dados_lead = buscar_dados_lead_funil(id_conversa, cursor)
+            if dados_lead is None:
+                raise ValueError("Conversa não está mais elegível ao Funil")
+            integracao = buscar_integracao_funil_por_unidade(dados_lead["id_unidade"], cursor)
+            _validar_integracao_ativa(integracao)
+            payload = montar_payload_oportunidade(dados_lead)
+            payload, canal, url_funil = congelar(dados_lead, payload, integracao, cursor)
+            snapshot = snapshots.salvar(id_conversa, payload, canal, url_funil, cursor)
+        snapshots.conferir(envio, snapshot, cursor, lease_segundos=FUNIL_LEASE_SEGUNDOS)
 
         # O SELECT não deve manter uma transação aberta durante a chamada HTTP.
         conn.commit()
 
         resultado = enviar_oportunidade(
-            link_api_carrossel=url_funil,
-            codigo_canal_venda=canal,
-            payload=payload,
+            link_api_carrossel=snapshot["url_funil"],
+            codigo_canal_venda=snapshot["canal"],
+            payload=snapshot["payload_funil"],
             timeout=FUNIL_HTTP_TIMEOUT,
         )
         sucesso_externo = True

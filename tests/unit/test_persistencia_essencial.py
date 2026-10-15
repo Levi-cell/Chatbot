@@ -628,6 +628,9 @@ class PersistenciaEssencialTests(unittest.TestCase):
             None,
             "https://example.com",
             None,
+            None,
+            None,
+            False,
         )
 
         dados = leads.buscar_dados_lead_funil(122, cursor)

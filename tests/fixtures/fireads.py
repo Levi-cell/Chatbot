@@ -8,7 +8,7 @@ MIGRACAO_FIREADS = (
 )
 
 
-def aplicar_fireads(cursor):
+def aplicar_fireads(cursor, *, aba_geral=True):
     """Usa o DDL do deploy, preservando a transação controlada pelo teste."""
     texto = MIGRACAO_FIREADS.read_text(encoding="utf-8")
     ddl = texto.split("-- INICIO DDL FIREADS\n", 1)[1].split("-- FIM DDL FIREADS", 1)[0]
@@ -22,3 +22,30 @@ def aplicar_fireads(cursor):
             "-- FIM DDL CONSULTA DASH", 1
         )[0]
     )
+    if aba_geral:
+        aplicar_aba_geral(cursor)
+
+
+def aplicar_aba_geral(cursor):
+    texto = MIGRACAO_FIREADS.with_name("20261014_fireads_aba_geral.sql").read_text(encoding="utf-8")
+    cursor.execute(texto.split("-- INICIO DDL FIREADS ABA GERAL\n", 1)[1].split(
+        "-- FIM DDL FIREADS ABA GERAL", 1
+    )[0])
+
+
+def como_aba_geral(google, meta):
+    """Representa na aba consolidada os formulários históricos usados pelas fixtures."""
+    rows = []
+    for row in google:
+        rows.append(dict(row, **{
+            "Canal": "Google Ads", "Para quem é": row.get("Perfil/Faixa"),
+            "_row": row.get("_row", len(rows) + 2),
+        }))
+    for row in meta:
+        rows.append({
+            "Nome": row.get("full_name"), "Email": row.get("email"),
+            "WhatsApp": row.get("phone_number"), "Para quem é": row.get("para_quem"),
+            "Data/Hora": row.get("created_time"), "Canal": "Meta Ads",
+            "_row": row.get("_row", len(rows) + 2),
+        })
+    return rows

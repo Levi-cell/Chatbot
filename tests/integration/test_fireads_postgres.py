@@ -4,6 +4,7 @@ from contextlib import contextmanager, ExitStack
 from datetime import timedelta
 import os
 from threading import Event
+from tests.fixtures.fireads import como_aba_geral
 import unittest
 from unittest.mock import Mock, patch
 
@@ -94,7 +95,9 @@ class FireAdsPostgresTests(unittest.TestCase):
             INSERT INTO chatbot.cliente(nome,waid_telefone,email) VALUES('Antigo','5511999990002','antigo@example.com');
             INSERT INTO chatbot.conversa(id_cliente,id_unidade,status_ativa) VALUES(1,1,FALSE);
         """)
-        aplicar_fireads(self.cursor)
+        legado = (self._testMethodName == "test_migracao_com_registro_legado_preserva_resultado_e_reexecucao"
+                  or self._testMethodName.startswith("test_migracao_aba_geral"))
+        aplicar_fireads(self.cursor, aba_geral=not legado)
         self.cursor.execute("""
             INSERT INTO chatbot.integracao_fireads(id_unidade,url_dashbord,contrato_validado,integracao_ativa)
             VALUES(1,'https://script.google.com/macros/s/teste/exec',TRUE,TRUE);
@@ -309,7 +312,7 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.conn.commit()
         reserva = pendencias.reservar(self.cursor)
         self.conn.commit()
-        decisao = interpretar([GOOGLE], [], NUMERO, None)
+        decisao = interpretar(como_aba_geral([GOOGLE], []), NUMERO, None)
         self.assertTrue(
             pendencias.concluir(
                 reserva, {"decisao": decisao, "fontes": {}}, self.cursor
@@ -379,7 +382,8 @@ class FireAdsPostgresTests(unittest.TestCase):
             self.conn.execute(
                 "SELECT versao FROM chatbot.migracoes_fireads ORDER BY versao"
             ).fetchall(),
-            [("20261007_fireads_v1",), ("20261009_consulta_dash_v1",)],
+            [("20261007_fireads_v1",), ("20261009_consulta_dash_v1",),
+             ("20261014_fireads_aba_geral_v1",)],
         )
         self.assertEqual(
             self.conn.execute(
@@ -408,16 +412,8 @@ class FireAdsPostgresTests(unittest.TestCase):
     def test_importacao_dependente_e_retry_recuperam_snapshot(self):
         cid, mensagem, versao, contexto = self.preparar_mensagem()
         api = Mock()
-        api.consultar.side_effect = [
-            {
-                "headers": list(GOOGLE),
-                "rows": [dict(GOOGLE, **{"Perfil/Faixa": "Para outra pessoa"})],
-            },
-            {
-                "headers": ["full_name", "email", "phone_number", "para_quem"],
-                "rows": [],
-            },
-        ]
+        rows = como_aba_geral([dict(GOOGLE, **{"Perfil/Faixa": "Para outra pessoa"})], [])
+        api.consultar.return_value = {"headers": list(rows[0]), "rows": rows}
         with patch(
             "workers.worker_consulta_dash.consulta.ClienteFireAds", return_value=api
         ):
@@ -449,10 +445,8 @@ class FireAdsPostgresTests(unittest.TestCase):
             "created_time": "2026-10-14T04:26:03Z",
         }
         api = Mock()
-        api.consultar.side_effect = [
-            {"headers": list(GOOGLE), "rows": []},
-            {"headers": list(registro), "rows": [registro]},
-        ]
+        rows = como_aba_geral([], [registro])
+        api.consultar.return_value = {"headers": list(rows[0]), "rows": rows}
         with patch("workers.worker_consulta_dash.consulta.ClienteFireAds", return_value=api):
             obtido = self.preparar_apos_http(contexto, mensagem, versao)
         self.assertEqual(
@@ -465,7 +459,7 @@ class FireAdsPostgresTests(unittest.TestCase):
         dados, aplicacao = self.conn.execute(
             "SELECT dados,aplicacao FROM chatbot.consulta_fireads WHERE id_conversa=%s", (cid,),
         ).fetchone()
-        self.assertEqual(dados["fontes"]["meta"], [registro])
+        self.assertEqual(dados["fontes"]["geral"], rows)
         self.assertEqual(aplicacao, obtido["contexto_fireads"])
         with patch("workers.worker_consulta_dash.consulta.ClienteFireAds") as http:
             self.assertEqual(preparar_abertura(contexto, mensagem, versao, self.cursor), obtido)
@@ -478,17 +472,12 @@ class FireAdsPostgresTests(unittest.TestCase):
         cid, mensagem, versao, contexto = self.preparar_mensagem()
 
         def resposta(aba):
-            if "Google" in aba:
-                with psycopg.connect(DSN) as outro:
-                    outro.execute(
-                        "UPDATE chatbot.conversa SET lock_version=lock_version+1 WHERE id_conversa=%s",
-                        (cid,),
-                    )
-                return {"headers": list(GOOGLE), "rows": [GOOGLE]}
-            return {
-                "headers": ["full_name", "email", "phone_number", "para_quem"],
-                "rows": [],
-            }
+            with psycopg.connect(DSN) as outro:
+                outro.execute(
+                    "UPDATE chatbot.conversa SET lock_version=lock_version+1 WHERE id_conversa=%s", (cid,),
+                )
+            rows = como_aba_geral([GOOGLE], [])
+            return {"headers": list(rows[0]), "rows": rows}
 
         api = Mock()
         api.consultar.side_effect = resposta
@@ -546,7 +535,7 @@ class FireAdsPostgresTests(unittest.TestCase):
         ), patch(
             "workers.worker_consulta_dash.consulta_worker.consultar",
             return_value={
-                "decisao": interpretar([GOOGLE], [], NUMERO, None),
+                "decisao": interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
                 "fontes": {"google": [GOOGLE], "meta": []},
             },
         ):
@@ -635,9 +624,7 @@ class FireAdsPostgresTests(unittest.TestCase):
     def test_retry_dash_reconcilia_bloco_sem_segundo_post(self):
         envio = self.preparar_envio()
         snap = envio["snapshot"]
-        bloco = bloco_observacoes(
-            envio["integracao"], envio["conversa"], snap["observacoes"]
-        )
+        bloco = snap["observacoes"]
         api = Mock()
         api.consultar.return_value = {
             "headers": ["Nome", "Email", "WhatsApp", "Observação"],
@@ -771,9 +758,181 @@ class FireAdsPostgresTests(unittest.TestCase):
 
     def resultado_google(self):
         return {
-            "decisao": interpretar([GOOGLE], [], NUMERO, None),
+            "decisao": interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
             "fontes": {"google": [GOOGLE], "meta": []},
         }
+
+    def test_migracao_aba_geral_preserva_resultados_prazos_e_envios(self):
+        from psycopg.types.json import Jsonb
+        from core.integrations.fireads.aba_geral import configuracao_compativel
+
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        entrada = self.conn.execute("""SELECT jsonb_build_object(
+            'url',url_dashbord,'aba_google',aba_google,'aba_meta',aba_meta,
+            'fuso',fuso_formularios,'numero',%s::text) FROM chatbot.integracao_fireads""",
+            (NUMERO,)).fetchone()[0]
+        decisao = self.resultado_google()
+        # O resultado antigo não possuía referência da aba consolidada.
+        decisao['decisao'].pop('referencia')
+        decisao['decisao'].pop('versao')
+        self.cursor.execute("""INSERT INTO chatbot.consulta_fireads
+            (id_unidade,id_integracao_fireads,id_conversa,entrada,status,
+             consulta_concluida,resultado,dados,consultado_em)
+            VALUES(1,1,%s,%s,'concluida',TRUE,'importado',%s,now())""",
+            (cid, Jsonb(entrada), Jsonb(decisao)))
+        self.cursor.execute("""INSERT INTO chatbot.consulta_fireads
+            (id_unidade,id_integracao_fireads,id_conversa,entrada,status,
+             solicitado_em,prazo_final,tentativas,versao_reserva,processing_started_at,reserva_ate)
+            VALUES(1,1,1,%s,'processando',now()-INTERVAL '100 seconds',
+                   now()+INTERVAL '200 seconds',2,3,now(),now()+INTERVAL '210 seconds')""",
+            (Jsonb(entrada),))
+        prazo = self.conn.execute("SELECT solicitado_em,prazo_final FROM chatbot.consulta_fireads WHERE id_conversa=1").fetchone()
+        legado = {'payload_funil': {'texto': 'NOVO LEAD antigo'}, 'canal': '113340',
+                  'url_funil': 'https://example.com/api', 'observacoes': 'Texto original'}
+        self.cursor.execute("INSERT INTO chatbot.funil_envios(id_conversa) VALUES(1)")
+        self.cursor.execute("""INSERT INTO chatbot.envios_dash
+            (id_conversa,id_unidade,id_integracao_fireads,snapshot) VALUES(1,1,1,%s)""", (Jsonb(legado),))
+        self.conn.commit()
+        sql = MIGRACAO_FIREADS.with_name('20261014_fireads_aba_geral.sql').read_text(encoding='utf-8')
+        for _ in range(2):
+            self.conn.execute(sql, prepare=False)
+        pendente = self.conn.execute("""SELECT status,entrada,tentativas,versao_reserva,
+            solicitado_em,prazo_final,processing_started_at,reserva_ate
+            FROM chatbot.consulta_fireads WHERE id_conversa=1""").fetchone()
+        self.assertEqual(pendente[0], 'pendente')
+        self.assertEqual(pendente[1]['versao'], 2)
+        self.assertEqual(pendente[1]['entrada_anterior']['aba_google'], entrada['aba_google'])
+        self.assertEqual(pendente[2:4], (2, 4))
+        self.assertEqual(pendente[4:6], prazo)
+        self.assertEqual(pendente[6:], (None, None))
+        salvo = self.conn.execute("SELECT entrada,dados,aplicado_em FROM chatbot.consulta_fireads WHERE id_conversa=%s", (cid,)).fetchone()
+        self.assertEqual(salvo[1:], (decisao, None))
+        self.assertTrue(configuracao_compativel(salvo[0], consulta.buscar_abertura(cid, self.cursor)))
+        with patch('workers.worker_consulta_dash.consulta.ClienteFireAds') as http:
+            aplicado = preparar_abertura(contexto, mensagem, versao, self.cursor)
+        http.assert_not_called()
+        self.assertEqual(aplicado['contexto_fireads']['origem'], 'google')
+        self.assertEqual(self.conn.execute('SELECT snapshot FROM chatbot.envios_dash').fetchone()[0], legado)
+        self.assertEqual(self.conn.execute('SELECT snapshot FROM chatbot.funil_envios').fetchone()[0]['payload_funil'], legado['payload_funil'])
+        self.assertEqual(self.conn.execute("SELECT count(*) FROM information_schema.columns WHERE table_schema='chatbot' AND table_name='integracao_fireads' AND column_name IN ('aba_google','aba_meta')").fetchone()[0], 0)
+        auditoria = self.conn.execute("SELECT dados FROM chatbot.migracoes_fireads WHERE versao='20261014_fireads_aba_geral_v1'").fetchone()[0]
+        self.assertEqual(auditoria['contagens']['consultas'], 2)
+        self.assertEqual(auditoria['configuracoes_anteriores'][0]['aba_google'], entrada['aba_google'])
+
+    def test_migracao_aba_geral_nao_apaga_alteracao_real_anterior(self):
+        from psycopg.types.json import Jsonb
+        from tests.fixtures.fireads import aplicar_aba_geral
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        entrada = {'url': 'https://script.google.com/macros/s/antigo/exec',
+                   'aba_google': 'Antiga', 'aba_meta': 'Antiga Meta', 'fuso': None, 'numero': NUMERO}
+        self.cursor.execute("""INSERT INTO chatbot.consulta_fireads
+            (id_conversa,id_unidade,id_integracao_fireads,entrada,status,consulta_concluida,resultado,dados,consultado_em)
+            VALUES(%s,1,1,%s,'concluida',TRUE,'importado',%s,now())""",
+            (cid, Jsonb(entrada), Jsonb(self.resultado_google())))
+        aplicar_aba_geral(self.cursor)
+        resultado = preparar_abertura(contexto, mensagem, versao, self.cursor)
+        self.assertEqual(resultado['contexto_fireads']['origem'], 'organico')
+        self.assertEqual(self.conn.execute('SELECT nome FROM chatbot.cliente').fetchone()[0], 'Antigo')
+
+    def test_funil_sem_fireads_recupera_payload_congelado_no_retry(self):
+        from core.repositories.funil import envios as fila_funil
+        from core.repositories.funil import snapshots
+        from workers.worker_funil.processamento import processar_envio_funil
+        cid = self.nova_conversa()
+        self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,profissao='Professora',turno='manha' WHERE id_conversa=%s", (cid,))
+        self.cursor.execute('UPDATE chatbot.cliente SET idade=35')
+        self.cursor.execute("""INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta)
+            SELECT %s,etapa,'Às vezes' FROM generate_series(12,17) etapa""", (cid,))
+        fila_funil.sincronizar_envios_elegiveis(self.cursor)
+        envio = fila_funil.reivindicar_proximo_envio(self.cursor)
+        self.conn.commit()
+        alvo = 'workers.worker_funil.processamento.enviar_oportunidade'
+        with patch(alvo, side_effect=RuntimeError('HTTP indisponível')) as http:
+            self.assertFalse(processar_envio_funil(envio, self.conn, self.cursor))
+        self.assertTrue(http.called, self.conn.execute('SELECT ultimo_erro FROM chatbot.funil_envios').fetchone())
+        primeira = http.call_args.kwargs
+        self.assertEqual(primeira['codigo_canal_venda'], '113340')
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.envios_dash').fetchone()[0], 0)
+        self.cursor.execute("UPDATE chatbot.cliente SET nome='Nome alterado depois'")
+        self.cursor.execute("UPDATE chatbot.integracao_funil_unidade SET codigo_canal_venda='113336'")
+        self.cursor.execute("UPDATE chatbot.funil_envios SET next_attempt_at=NOW()-INTERVAL '1 second'")
+        envio = fila_funil.reivindicar_proximo_envio(self.cursor)
+        snapshot = snapshots.buscar(cid, self.cursor)
+        self.cursor.execute("UPDATE chatbot.funil_envios SET processing_started_at=clock_timestamp()-INTERVAL '60 seconds'")
+        with self.assertRaises(ValueError):
+            snapshots.conferir(envio, snapshot, self.cursor, lease_segundos=30)
+        snapshots.conferir(envio, snapshot, self.cursor, lease_segundos=120)
+        self.conn.commit()
+        with patch(alvo, return_value={'resposta': {}, 'status_http': 200}) as http:
+            self.assertTrue(processar_envio_funil(envio, self.conn, self.cursor))
+        self.assertEqual(http.call_args.kwargs, primeira)
+        self.assertEqual(self.conn.execute('SELECT status FROM chatbot.funil_envios').fetchone()[0], 'sent')
+
+    def test_classificacao_historica_considera_apenas_conversas_anteriores_do_chat(self):
+        self.cursor.execute('UPDATE chatbot.conversa SET id_etapa_atual=19 WHERE id_conversa=1')
+        self.assertTrue(buscar_dados_lead_funil(1, self.cursor)['primeiro_atendimento'])
+        cid = self.nova_conversa()
+        self.cursor.execute('UPDATE chatbot.conversa SET id_etapa_atual=19 WHERE id_conversa=%s', (cid,))
+        self.assertFalse(buscar_dados_lead_funil(cid, self.cursor)['primeiro_atendimento'])
+        # Uma conversa posterior não muda a classificação da primeira.
+        self.assertTrue(buscar_dados_lead_funil(1, self.cursor)['primeiro_atendimento'])
+        self.cursor.execute("""INSERT INTO chatbot.unidade(nome_unidade,cnpj,email_responsavel,telefone,waba_id,phone_number_id)
+            VALUES('Outra unidade','outro','outro@example.com','5511999990003','outro','phone-outro');
+            INSERT INTO chatbot.atendimento_customizado(id_unidade,nome_agente,genero,numero_comercial)
+            VALUES(2,'Dora','feminino','5511999990004');""")
+        outro = inserindo_em_conversa_caso_seja_nova(1, 2, self.cursor)
+        self.cursor.execute('UPDATE chatbot.conversa SET id_etapa_atual=19 WHERE id_conversa=%s', (outro,))
+        self.assertTrue(buscar_dados_lead_funil(outro, self.cursor)['primeiro_atendimento'])
+
+    def test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios(self):
+        from core.repositories.funil import envios as fila_funil
+        from workers.worker_funil.processamento import processar_envio_funil
+        cid, mensagem, versao, contexto = self.solicitar_pendente()
+        reserva = pendencias.reservar(self.cursor)
+        row = dict(como_aba_geral([GOOGLE], [])[0], Canal='Organico Site')
+        decisao = interpretar([row], NUMERO)
+        self.assertTrue(pendencias.concluir(reserva, {'decisao': decisao, 'fontes': {'geral': [row]}}, self.cursor))
+        pendencias.liberar_reserva(reserva['id_consulta'], self.cursor)
+        resultado = preparar_abertura(contexto, mensagem, versao, self.cursor)
+        self.assertEqual(resultado['contexto_fireads']['origem'], 'organico_site')
+        self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,profissao='Professora',turno='manha' WHERE id_conversa=%s", (cid,))
+        self.cursor.execute('UPDATE chatbot.cliente SET idade=35')
+        self.cursor.execute("""INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta)
+            SELECT %s,etapa,'Às vezes' FROM generate_series(12,17) etapa""", (cid,))
+        consulta.guardar_coletas(
+            {'id_cliente': 1, 'id_conversa': cid, 'contexto_fireads': resultado['contexto_fireads']},
+            {'destino_dado': 'cliente'}, self.cursor,
+        )
+        fila_funil.sincronizar_envios_elegiveis(self.cursor)
+        envio = fila_funil.reivindicar_proximo_envio(self.cursor)
+        self.conn.commit()
+        with patch('workers.worker_funil.processamento.enviar_oportunidade', return_value={'resposta': {}, 'status_http': 200}) as http:
+            sucesso = processar_envio_funil(envio, self.conn, self.cursor)
+            self.assertTrue(sucesso, self.conn.execute('SELECT ultimo_erro FROM chatbot.funil_envios').fetchone())
+        self.assertEqual(http.call_args.kwargs['codigo_canal_venda'], '113481')
+        payload = http.call_args.kwargs['payload']
+        obs = next(c['valor'] for c in payload['oportunidades'][0]['personalizados'] if c['titulo'] == 'Observações')
+        snapshot = self.conn.execute('SELECT snapshot FROM chatbot.envios_dash').fetchone()[0]
+        self.assertEqual(snapshot['observacoes'], obs)
+        self.assertEqual(snapshot['referencia']['linha'], row['_row'])
+        self.assertIn('Orgânico Site', obs)
+        self.assertIn('Novo atendimento para Lead antigo', obs)
+
+    def test_conflito_email_preserva_referencia_sem_importacao_parcial(self):
+        cid, mensagem, versao, contexto = self.solicitar_pendente()
+        self.cursor.execute("""INSERT INTO chatbot.cliente(nome,waid_telefone,email)
+            VALUES('Outro','5511999990003','ana@example.com')""")
+        reserva = pendencias.reservar(self.cursor)
+        resultado = self.resultado_google()
+        self.assertTrue(pendencias.concluir(reserva, resultado, self.cursor))
+        pendencias.liberar_reserva(reserva['id_consulta'], self.cursor)
+        self.conn.commit()
+        aplicado = preparar_abertura(contexto, mensagem, versao, self.cursor)['contexto_fireads']
+        self.assertEqual(aplicado['motivo'], 'conflito_email')
+        self.assertEqual(aplicado['origem'], 'organico')
+        self.assertEqual(aplicado['dados_titular'], {})
+        self.assertEqual(aplicado['referencia'], resultado['decisao']['referencia'])
+        self.assertEqual(self.conn.execute('SELECT nome,email FROM chatbot.cliente WHERE id_cliente=1').fetchone(), ('Antigo', 'antigo@example.com'))
 
     def test_reserva_entre_processos_e_recuperacao_apos_queda(self):
         cid, mensagem, versao, contexto = self.solicitar_pendente()
@@ -955,7 +1114,7 @@ class FireAdsPostgresTests(unittest.TestCase):
     def test_configuracao_alterada_nao_importa_dados_da_anterior(self):
         cid, mensagem, versao, contexto = self.solicitar_pendente()
         self.cursor.execute(
-            "UPDATE chatbot.integracao_fireads SET aba_google='Outra aba'"
+            "UPDATE chatbot.integracao_fireads SET aba_destino='Outra aba'"
         )
         self.conn.commit()
         self.assertIsNone(pendencias.reservar(self.cursor))

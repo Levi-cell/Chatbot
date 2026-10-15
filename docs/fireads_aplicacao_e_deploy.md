@@ -1,5 +1,12 @@
 # FireAds — aplicação e deploy
 
+> Atualização local de 14/10/2026: o contrato vigente usa somente a aba geral,
+> `Para quem é` e `Canal`, com seleção dos canais elegíveis antes da recência.
+> Consulte [o plano aplicado e o procedimento de deploy](../atualizar_envio.md).
+> As descrições abaixo de duas/três abas e seus SQLs são históricas; não as
+> reaplique neste deploy. A proposta de coleta parcial continua sem implementação.
+
+
 Código aplicado localmente em **08/10/2026**, sobre o backup
 `37b0265` (V1.9.2). **Deploy da V1.10.0 confirmado em 09/10/2026**, no commit
 `49af8d5`, com a migração executada e os cinco serviços ativos. A conferência da

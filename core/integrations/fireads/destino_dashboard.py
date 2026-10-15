@@ -1,6 +1,7 @@
 """Identificação da linha de destino, sem HTTP ou persistência."""
 
-from .contrato import ErroFireAds, acrescentar_observacoes, destino, normalizar
+from .contrato import ErroFireAds, acrescentar_observacoes, destino, normalizar, marcador_observacoes
+from .aba_geral import numero_linha, mais_recente, relocalizar
 
 
 _ORIGENS_POR_CANAL = {
@@ -27,11 +28,11 @@ def destinatario_perfil(valor):
     return None
 
 
-def numero_linha(row):
-    linha = row.get("_row")
-    if type(linha) is not int or linha < 2:
-        raise ErroFireAds("Linha de destino inválida")
-    return linha
+def selecionar_destino_atual(encontrados, snapshot):
+    referencia = snapshot.get("referencia")
+    if referencia is not None:
+        return relocalizar(encontrados, referencia, snapshot["aba"])
+    return mais_recente(encontrados, snapshot.get("fuso"))
 
 
 def selecionar_destino(encontrados, origem, dependente):
@@ -58,7 +59,7 @@ def selecionar_destino(encontrados, origem, dependente):
 
 def linhas_com_bloco(encontrados, bloco):
     """Reconcilia uma entrega anterior antes de escolher outra linha do contato."""
-    marcador = bloco.split("\n", 1)[0]
+    marcador = marcador_observacoes(bloco)
     linhas = []
     for row in encontrados:
         observacoes = row.get("Observação")

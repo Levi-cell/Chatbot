@@ -1,6 +1,7 @@
 """Contratos de importação/entrega: HTTP e Meta sempre simulados."""
 
 from copy import deepcopy
+from tests.fixtures.fireads import como_aba_geral
 import unittest
 from unittest.mock import Mock, patch
 from core.integrations.fireads.cliente import ClienteFireAds, validar_url
@@ -39,7 +40,7 @@ META = {
 
 def estado():
     return dict(
-        interpretar([GOOGLE], [], NUMERO, None),
+        interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
         concluida=True,
         id_conversa=2,
         id_integracao=1,
@@ -214,7 +215,7 @@ class FireAdsTests(unittest.TestCase):
             self.assertIsNone(destino(valor), valor)
 
     def test_importa_nome_composto_e_nao_faixa_ou_objetivo(self):
-        valor = interpretar([dict(GOOGLE, Objetivo="Memória")], [], NUMERO, None)
+        valor = interpretar(como_aba_geral([dict(GOOGLE, Objetivo="Memória")], []), NUMERO, None)
         self.assertEqual(valor["resultado"], "importado")
         self.assertEqual(valor["dados_titular"]["nome"], "Ana Paula")
         self.assertNotIn("idade", valor["dados_titular"])
@@ -222,9 +223,7 @@ class FireAdsTests(unittest.TestCase):
 
     def test_registro_antigo_unico_nao_expira(self):
         self.assertEqual(
-            interpretar(
-                [dict(GOOGLE, **{"Data/Hora": "01/01/2020 12:00"})], [], NUMERO, None
-            )["origem"],
+            interpretar(como_aba_geral([dict(GOOGLE, **{"Data/Hora": "01/01/2020 12:00"})], []), NUMERO, None)["origem"],
             "google",
         )
 
@@ -235,24 +234,17 @@ class FireAdsTests(unittest.TestCase):
         self.assertEqual(selecionar([GOOGLE], [META], NUMERO, None)[0], "meta")
 
     def test_mais_recente_vazio_nao_resgata_antigo(self):
-        decisao = interpretar(
-            [GOOGLE], [dict(META, email="")], NUMERO, "America/Sao_Paulo"
-        )
+        decisao = interpretar(como_aba_geral([GOOGLE], [dict(META, email="")]), NUMERO, "America/Sao_Paulo")
         self.assertEqual(decisao["origem"], "organico")
         self.assertEqual(decisao["dados_titular"], {})
 
     def test_empate_entre_abas_usa_maior_linha_e_telefone_diferente_ausente(self):
         self.assertEqual(
-            interpretar(
-                [dict(GOOGLE, _row=44)],
-                [dict(META, _row=46, created_time="2026-10-01T15:00:00Z")],
-                NUMERO,
-                "America/Sao_Paulo",
-            )["origem"],
+            interpretar(como_aba_geral([dict(GOOGLE, _row=44)], [dict(META, _row=46, created_time="2026-10-01T15:00:00Z")]), NUMERO, "America/Sao_Paulo")["origem"],
             "meta",
         )
         self.assertEqual(
-            interpretar([GOOGLE], [], "5511999990003", None)["resultado"], "ausente"
+            interpretar(como_aba_geral([GOOGLE], []), "5511999990003", None)["resultado"], "ausente"
         )
 
     def test_email_do_cadastro_geral_nao_autoriza_salto(self):
@@ -406,14 +398,11 @@ class FireAdsTests(unittest.TestCase):
             self.assertEqual(retomado["contexto_fireads"]["origem"], "google")
             api.assert_not_called()
 
-    def test_segunda_fonte_falha_importa_nada(self):
+    def test_falha_http_nao_importa_nada(self):
         from workers.worker_consulta_dash.consulta import consultar
 
         api = Mock()
-        api.consultar.side_effect = [
-            {"headers": list(GOOGLE), "rows": [GOOGLE]},
-            RuntimeError("falha"),
-        ]
+        api.consultar.side_effect = RuntimeError("falha")
         with patch(
             "workers.worker_consulta_dash.consulta.ClienteFireAds", return_value=api
         ):
@@ -423,8 +412,8 @@ class FireAdsTests(unittest.TestCase):
                     "restante": 300,
                     "entrada": {
                         "url": "https://script.google.com/macros/s/teste/exec",
-                        "aba_google": "google",
-                        "aba_meta": "meta",
+                        "aba": "geral",
+                        "versao": 2,
                         "numero": NUMERO,
                         "fuso": None,
                     },

@@ -1,5 +1,6 @@
 """Latência simulada sem HTTP real: espera, retomada e limites de concorrência."""
 
+from tests.fixtures.fireads import como_aba_geral
 import unittest
 from unittest.mock import Mock, patch
 
@@ -146,7 +147,7 @@ class DecisaoConsultaTests(unittest.TestCase):
         ):
             with self.subTest(origem=origem):
                 google, meta = (rows, []) if origem == "google" else ([], rows)
-                resultado = fireads.interpretar(google, meta, NUMERO, None)
+                resultado = fireads.interpretar(como_aba_geral(google, meta), NUMERO, None)
                 self.assertEqual(resultado["resultado"], "importado")
                 self.assertEqual(resultado["origem"], origem)
 
@@ -162,9 +163,7 @@ class DecisaoConsultaTests(unittest.TestCase):
                     selecionar([ultimo, dict(GOOGLE, _row=44)], [], NUMERO)[1],
                     ultimo,
                 )
-                resultado = fireads.interpretar(
-                    [dict(GOOGLE, _row=44), ultimo], [], NUMERO, None
-                )
+                resultado = fireads.interpretar(como_aba_geral([dict(GOOGLE, _row=44), ultimo], []), NUMERO, None)
                 self.assertEqual(resultado["resultado"], "importado")
 
     def test_caso_tres_formularios_meia_noite_usa_linha_46_titular(self):
@@ -172,7 +171,7 @@ class DecisaoConsultaTests(unittest.TestCase):
             "Data/Hora": "09/10/2026 00:00",
             "Perfil/Faixa": "Para mim" if n == 46 else "Para meu pai/mãe",
         }) for n in (44, 45, 46)]
-        resultado = fireads.interpretar(rows, [], NUMERO, None)
+        resultado = fireads.interpretar(como_aba_geral(rows, []), NUMERO, None)
         self.assertEqual(resultado["resultado"], "importado")
         self.assertFalse(resultado["status_dependente"])
 
@@ -204,7 +203,7 @@ class DecisaoConsultaTests(unittest.TestCase):
     def test_empate_meta_usa_linha_sem_inferir_cronologia_do_id(self):
         novo = dict(META, _row=46, id="1", para_quem="para_mim")
         antigo = dict(META, _row=44, id="999999999")
-        resultado = fireads.interpretar([], [novo, antigo], NUMERO, None)
+        resultado = fireads.interpretar(como_aba_geral([], [novo, antigo]), NUMERO, None)
         self.assertFalse(resultado["status_dependente"])
 
     def test_datas_invalidas_e_linhas_ausentes_usam_ultima_posicao(self):

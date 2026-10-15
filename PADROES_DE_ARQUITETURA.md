@@ -963,3 +963,18 @@ essa reutilização não muda as regras do validador. A interpretação de titul
 dependente continua no contrato FireAds. Extratores não executam SQL ou HTTP e não
 decidem etapas. O worker de consulta interpreta o registro; o flow aplica a decisão
 persistida sob as mesmas guardas de conversa e transação.
+
+
+## Contrato FireAds de aba única
+
+`core/integrations/fireads/aba_geral.py` seleciona e relocaliza registros com
+funções puras. O worker de consulta coordena HTTP e interpretação; o flow aplica
+somente decisões persistidas. A referência do formulário fica no JSON da decisão
+e do snapshot, sem SQL dentro de extratores ou montadores de texto.
+
+`core/repositories/funil/snapshots.py` persiste o payload de todos os envios,
+inclusive sem FireAds. O orquestrador confirma o snapshot antes do POST e revalida
+reserva, pagamento, elegibilidade e URL nas tentativas seguintes. O dashboard
+reutiliza as mesmas observações congeladas. Formatos legados são consumidos sem
+reconstrução; configuração legada de consultas concluídas usa a ponte registrada
+pela migração, sem repetir HTTP nem mudar uma decisão já salva.

@@ -26,6 +26,7 @@ from core.integrations.fireads.destino_dashboard import (
     linhas_com_bloco,
     numero_linha,
     selecionar_destino,
+    selecionar_destino_atual,
 )
 
 logger = logging.getLogger("worker.funil.fireads")
@@ -38,6 +39,12 @@ def preparar_escrita(rows, snapshot, bloco):
     )
     if linhas_com_bloco(encontrados, bloco):
         return None
+    if snapshot.get("versao") == 2 and (encontrados or snapshot.get("referencia") is not None):
+        row = selecionar_destino_atual(encontrados, snapshot)
+        if "Observação" not in row:
+            raise ErroFireAds("Observação ausente na leitura do registro; não sobrescrever")
+        observacoes, mudou = acrescentar_observacoes(row.get("Observação"), bloco)
+        return {"row": numero_linha(row), "observacoes": observacoes} if mudou else None
     if encontrados:
         dependente = snapshot.get("status_dependente")
         if type(dependente) is not bool:
@@ -91,9 +98,14 @@ def processar(envio, conn, cursor):
         dados = cliente.consultar(snapshot["aba"])
         if not {"Nome", "Email", "WhatsApp", "Observação"} <= set(dados["headers"]):
             raise ErroFireAds("Cabeçalhos de destino incompletos")
-        bloco = bloco_observacoes(
-            envio["integracao"], envio["conversa"], snapshot["observacoes"]
-        )
+        if snapshot.get("versao") == 2:
+            bloco = snapshot["observacoes"]
+        elif "versao" not in snapshot:
+            bloco = bloco_observacoes(
+                envio["integracao"], envio["conversa"], snapshot["observacoes"]
+            )
+        else:
+            raise ErroFireAds("Versão de envio desconhecida")
         operacao = preparar_escrita(dados["rows"], snapshot, bloco)
         conferir_posse(envio, cursor)
         conn.commit()

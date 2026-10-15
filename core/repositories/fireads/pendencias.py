@@ -1,14 +1,15 @@
 """Fila durável de consultas; SQL sem HTTP e sem controle de transações."""
 
 from psycopg.types.json import Jsonb
+from core.integrations.fireads.aba_geral import VERSAO_CONSULTA
 
 
 def solicitar(abertura, id_conversa, numero, cursor):
     """Uma conversa recebe uma solicitação; retry não altera entrada nem prazo."""
     entrada = {
         "url": abertura["url"],
-        "aba_google": abertura["aba_google"],
-        "aba_meta": abertura["aba_meta"],
+        "aba": abertura["aba"],
+        "versao": VERSAO_CONSULTA,
         "fuso": abertura["fuso"],
         "numero": numero,
     }
@@ -147,7 +148,7 @@ def reservar(cursor):
               AND u.status_pagamento IS TRUE AND i.id_integracao_fireads=q.id_integracao_fireads
               AND i.integracao_ativa AND i.contrato_validado
               AND i.url_dashbord=q.entrada->>'url'
-              AND i.aba_google=q.entrada->>'aba_google' AND i.aba_meta=q.entrada->>'aba_meta'
+              AND i.aba_destino=q.entrada->>'aba' AND q.entrada->>'versao'='2'
               AND i.fuso_formularios IS NOT DISTINCT FROM q.entrada->>'fuso'
             RETURNING q.id_consulta,q.id_conversa,q.versao_reserva,q.entrada,
                       EXTRACT(EPOCH FROM q.prazo_final-clock_timestamp())""",
@@ -165,7 +166,7 @@ def reservar(cursor):
 
 
 def concluir(reserva, resultado, cursor):
-    """A gravação única inclui as duas fontes e a decisão, sem resultados parciais."""
+    """A gravação única inclui os registros e a decisão, sem resultados parciais."""
     decisao = resultado["decisao"]
     cursor.execute(
         """UPDATE chatbot.consulta_fireads q SET status='concluida',
@@ -180,7 +181,8 @@ def concluir(reserva, resultado, cursor):
           AND u.id_unidade=q.id_unidade AND u.status_pagamento IS TRUE
           AND i.id_integracao_fireads=q.id_integracao_fireads AND i.integracao_ativa
           AND i.url_dashbord=q.entrada->>'url'
-          AND i.aba_google=q.entrada->>'aba_google' AND i.aba_meta=q.entrada->>'aba_meta'
+          AND i.aba_destino=q.entrada->>'aba' AND q.entrada->>'versao'='2'
+          AND i.contrato_validado
           AND i.fuso_formularios IS NOT DISTINCT FROM q.entrada->>'fuso'""",
         (
             decisao["resultado"],

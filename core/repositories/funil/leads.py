@@ -23,7 +23,12 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             triagem.respostas,
             coleta_email.conteudo_texto AS resposta_email_conversa,
             NULLIF(BTRIM(ac.link_agendamento), '') AS link_agendamento,
-            c.turno, c.origem_fireads, c.contexto_fireads
+            c.turno, c.origem_fireads, c.contexto_fireads,
+            NOT EXISTS (
+                SELECT 1 FROM chatbot.conversa anterior
+                WHERE anterior.id_chat=c.id_chat
+                  AND (anterior.iniciou_em,anterior.id_conversa)<(c.iniciou_em,c.id_conversa)
+            ) AS primeiro_atendimento
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -117,4 +122,5 @@ def buscar_dados_lead_funil(id_conversa, cursor):
             raise ValueError('Coletas históricas FireAds incompletas para o Funil')
         dados.update(nome_cliente=retrato['nome'], email_cliente=retrato.get('email'),
                      idade_cliente=retrato.get('idade'), resultado_email_fireads=retrato['resultado_email'])
+    dados['primeiro_atendimento'] = resultado[17]
     return dados

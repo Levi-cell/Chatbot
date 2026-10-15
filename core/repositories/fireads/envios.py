@@ -25,7 +25,7 @@ def congelar(dados, payload, integracao_funil, cursor):
     canal = CANAIS[origem][1]
     estado = dados["contexto_fireads"]
     cursor.execute(
-        """SELECT id_integracao_fireads, url_dashbord, aba_destino
+        """SELECT id_integracao_fireads, url_dashbord, aba_destino, fuso_formularios
         FROM chatbot.integracao_fireads WHERE id_integracao_fireads=%s AND id_unidade=%s""",
         (estado["id_integracao"], dados["id_unidade"]),
     )
@@ -39,16 +39,20 @@ def congelar(dados, payload, integracao_funil, cursor):
         if c["titulo"] == "Observações"
     )
     snapshot = {
+        "versao": 2,
         "payload_funil": payload,
         "canal": canal,
         "url_funil": integracao_funil["link_api_carrossel"],
         "url": config[1],
         "aba": config[2],
+        "fuso": config[3],
         "observacoes": obs,
         "telefone": dados["telefone_cliente"],
         "email": oportunidade["contato"]["email"],
         "nome": dados["nome_cliente"],
         "origem": origem,
+        "referencia": estado.get("referencia"),
+        "primeiro_atendimento": dados["primeiro_atendimento"],
         "status_dependente": dados["status_dependente"],
         "perfil": (
             f"Dependente: {dados['nome_dependente']} ({dados['idade_dependente']} anos)"

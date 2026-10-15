@@ -11,6 +11,7 @@ ABA_DESTINO = "LEADS GERAL - Feedback"
 CANAIS = {
     "google": ("Google Ads", "113336"),
     "meta": ("Meta Ads", "113340"),
+    "organico_site": ("Orgânico Site", "113481"),
     "organico": ("Orgânico", "113481"),
 }
 
@@ -96,6 +97,7 @@ def destino(valor):
         "para meu filho filha",
         "para mim e outra pessoa",
         "mim e outra",
+        "para dependente",
     }
     return True if chave in dependentes else None
 
@@ -105,9 +107,15 @@ def instante(valor, fuso=None):
     try:
         data = datetime.fromisoformat(texto.replace("Z", "+00:00"))
     except ValueError:
-        try:
-            data = datetime.strptime(texto, "%d/%m/%Y %H:%M")
-        except ValueError:
+        data = None
+        for formato in ("%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y",
+                        "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d-%m-%Y"):
+            try:
+                data = datetime.strptime(texto, formato)
+                break
+            except ValueError:
+                continue
+        if data is None:
             return None
     if data.tzinfo is None:
         if not fuso:
@@ -157,12 +165,32 @@ def selecionar(google, meta, numero, fuso=None):
     return max(candidatos, key=lambda item: item[0])[1] if candidatos else None
 
 
-def bloco_observacoes(id_integracao, id_conversa, observacoes):
+def bloco_observacoes(id_integracao, id_conversa, observacoes, *, versao=1):
     chave = f"CHATBOT:{int(id_integracao)}:{int(id_conversa)}"
+    if versao == 2:
+        return (
+            "Observações de atendimento\n\n"
+            "Registro técnico da ESL Tech: esta referência é apena para manter o atendimento "
+            "sincronizado entre os sistemas e a evitar registros repetidos. "
+            "Não é relevante para o atendimento com o Lead\n"
+            f"[INICIO {chave}]\n\n{observacoes}\n[FIM {chave}]"
+        )
+    if versao != 1:
+        raise ErroFireAds("Versão de observações desconhecida")
     return (
         f"[INICIO {chave}]\nObservações do atendimento — conversa {id_conversa}\n"
         f"{observacoes}\n[FIM {chave}]"
     )
+
+
+def marcador_observacoes(bloco):
+    marcadores = re.findall(r"^\[INICIO CHATBOT:\d+:\d+\]$", bloco, re.MULTILINE)
+    if len(marcadores) != 1:
+        raise ErroFireAds("Bloco sem identificador técnico único")
+    fim = marcadores[0].replace("[INICIO ", "[FIM ", 1)
+    if bloco.count(fim) != 1 or not bloco.endswith(fim):
+        raise ErroFireAds("Bloco técnico incompleto")
+    return marcadores[0]
 
 
 def acrescentar_observacoes(anterior, bloco):
@@ -172,7 +200,7 @@ def acrescentar_observacoes(anterior, bloco):
     if not isinstance(anterior, (str, int, float)) or isinstance(anterior, bool):
         raise ErroFireAds("Observação tem tipo inesperado")
     texto = str(anterior)
-    marcador = bloco.split("\n", 1)[0]
+    marcador = marcador_observacoes(bloco)
     if marcador in texto:
         if texto.count(marcador) != 1 or bloco not in texto:
             raise ErroFireAds("Bloco da conversa existe com conteúdo divergente")

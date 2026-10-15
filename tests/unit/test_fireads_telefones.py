@@ -1,6 +1,7 @@
 """Regressões de identidade FireAds, sem acesso ao banco ou às APIs reais."""
 
 from copy import deepcopy
+from tests.fixtures.fireads import como_aba_geral
 import unittest
 from unittest.mock import Mock, patch
 
@@ -46,7 +47,7 @@ class FireAdsTelefonesTests(unittest.TestCase):
             "WhatsApp": "(71) 99411-1866", "Perfil/Faixa": "Para meu pai/mãe",
             "Canal": "Organico Site", "Data/Hora": "09/10/2026 00:00",
         }
-        decisao = interpretar([google], [], SEM_NONO, None)
+        decisao = interpretar(como_aba_geral([google], []), SEM_NONO, None)
         self.assertEqual(decisao["resultado"], "importado")
         self.assertEqual(decisao["origem"], "google")
         self.assertEqual(decisao["dados_titular"]["nome"], "Ana Paula")
@@ -61,7 +62,7 @@ class FireAdsTelefonesTests(unittest.TestCase):
                         "phone_number": cadastrado, "para_quem": "para_mim"}
                 for origem, g, m in (("google", [google], []), ("meta", [], [meta])):
                     with self.subTest(recebido=recebido, cadastrado=cadastrado, origem=origem):
-                        decisao = interpretar(g, m, recebido, None)
+                        decisao = interpretar(como_aba_geral(g, m), recebido, None)
                         self.assertEqual(decisao["resultado"], "importado")
                         self.assertEqual(decisao["origem"], origem)
 
@@ -80,12 +81,12 @@ class FireAdsTelefonesTests(unittest.TestCase):
                 "phone_number": COM_NONO, "para_quem": "para_mim",
                 "created_time": "2026-10-09T12:01:00-03:00"}
         for numero in (SEM_NONO, COM_NONO):
-            self.assertEqual(interpretar([google], [meta], numero, None)["origem"], "meta")
+            self.assertEqual(interpretar(como_aba_geral([google], [meta]), numero, None)["origem"], "meta")
 
     def test_nono_digito_nao_torna_dados_incompletos_validos(self):
         google = {"Nome": "Ana Paula Silva", "Email": "",
                   "WhatsApp": COM_NONO, "Perfil/Faixa": "Para mim"}
-        self.assertEqual(interpretar([google], [], SEM_NONO, None)["resultado"], "incompleto")
+        self.assertEqual(interpretar(como_aba_geral([google], []), SEM_NONO, None)["resultado"], "incompleto")
 
     def test_atualiza_so_observacao_e_retry_nao_duplica_bloco(self):
         bloco = bloco_observacoes(1, 2, "Texto do Funil")

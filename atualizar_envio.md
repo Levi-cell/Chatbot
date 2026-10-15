@@ -2,9 +2,9 @@
 
 Data: 14/10/2026.
 
-Status: decisões consolidadas para implementação. Este documento não altera o
-runtime, não aplica SQL e não representa um deploy. A implementação deverá
-entregar código, testes, documentação e uma migração SQL própria.
+Status: implementação local em 14/10/2026; deploy ainda não realizado.
+Migração: `deploy/migrations/20261014_fireads_aba_geral.sql`. Os critérios abaixo
+registram o contrato aplicado e as limitações aceitas.
 
 Revisão de viabilidade em 14/10/2026: há definição suficiente para iniciar a
 implementação. Liberação para produção depende das validações das seções 11 a
@@ -641,3 +641,67 @@ ser apresentados como resolvidos por esta simplificação.
 Esta revisão foi de código e planejamento: não executou testes da implementação
 futura, não fez POST externo, não alterou banco e não validou o endpoint publicado
 como se fosse necessariamente idêntico ao código anexado.
+
+
+## 14. Entrega local e procedimento desta atualização
+
+A implementação usa `core/integrations/fireads/aba_geral.py` para seleção e
+relocalização e `core/repositories/funil/snapshots.py` para recuperação dos envios.
+O único SQL incremental desta entrega é
+[20261014_fireads_aba_geral.sql](deploy/migrations/20261014_fireads_aba_geral.sql).
+
+Ordem do deploy sobre a instalação atual:
+
+1. Ter backup recuperável do banco, além do backup de código; parar o follow-up
+   e depois webhook, flow, consulta-dash, Funil e Consumo Meta. Confirmar os seis
+   serviços inativos e ausência de outra instância antiga usando o banco.
+2. Atualizar o código da VM para a revisão que inclui esta entrega.
+3. Executar o SQL completo no DBeaver, do `BEGIN` ao `COMMIT`. Confirmar
+   `migracao_ok=true`; pendências não precisam estar zeradas. Não executar setup,
+   seeds nem migrations históricas no lugar deste arquivo.
+4. Rodar `callback/manage.py check` e os testes unitários FireAds/flow/Funil.
+   No shell Django, consultar uma linha (mesmo com tabela vazia) de
+   `IntegracaoFireAds`, `ConsultaFireAds` e `FunilEnvio` para conferir as colunas.
+5. Conferir no Admin a Aba de leads e os cabeçalhos/valores que a FireAds fornece.
+   Ativação, contrato validado, URL e fuso existentes não são alterados pelo SQL.
+6. Iniciar os seis serviços e conferir estados, logs, webhook e monitoramento.
+   Homologar com conversa nova; conversa já iniciada não é reclassificada.
+
+A migração preserva as configurações de abas antigas em
+`migracoes_fireads.dados`, amplia o domínio de origem e acrescenta
+`funil_envios.snapshot`. Entradas pendentes compatíveis são convertidas,
+invalida-se a reserva antiga e mantém-se o prazo original. Consultas já concluídas
+não são refeitas; uma ponte de configuração distingue migração de alteração real.
+Envios antigos com snapshot de dashboard são copiados para a fila do Funil sem
+alterar seu payload. Envios sem FireAds anteriores a esta versão não tinham
+payload histórico: congelam no primeiro processamento novo, sem promessa de
+reconstruir o texto de uma tentativa antiga não registrada.
+
+Recuperação: erro antes do COMMIT desfaz toda a migração; executar ROLLBACK,
+resolver a causa e repetir o arquivo inteiro. Depois do COMMIT, código antigo
+não é compatível com as colunas removidas. Preferir correção coordenada de código;
+se for necessário restaurar backup, manter serviços parados e reconciliar antes
+os eventos externos/dados posteriores ao backup. Não apagar snapshots nem usar
+migração histórica para tentar desfazer esta mudança. O backup de Git sozinho
+não restaura o banco.
+
+A integração externa não foi alterada nem houve POST real nesta implementação.
+Permanece a janela de edição concorrente/cache da planilha e a possibilidade de
+repetir operação externa aceita antes do commit. Isso não permite retroceder
+etapas ou abrir outra consulta em cada mensagem da mesma conversa.
+
+
+### Validação da implementação local
+
+Foram verificados os 496 testes unitários e 72 testes de integração PostgreSQL.
+A descoberta unitária apontou uma fixture antiga do retorno SQL e a falta local
+de `svglib==1.5.1`, já previsto em requirements. A fixture foi atualizada, a
+dependência instalada no ambiente local e ambos os testes passaram na reexecução.
+A bateria focada de 110 testes FireAds/Funil/flow passou novamente após os ajustes.
+Os 72 testes PostgreSQL passaram juntos; a verificação adicional da duração de
+reserva configurável do Funil passou com o payload congelado no retry.
+
+Django models/Admin/URLs foram conferidos com configurações de teste e sem
+problemas. O SQL foi exercitado em PostgreSQL 16 local descartável, incluindo
+execução integral e repetição. HTTP foi simulado; nenhum dado de produção foi
+consultado ou alterado e nenhum POST externo foi feito nesta implementação.

@@ -326,3 +326,27 @@ por pagamento, painel e relatórios semanal/total (incluindo unidades sem histó
 A migração de remoção pode ser reexecutada; a migração FireAds não recria a view.
 SQL dos serviços permanece em `core/repositories`; SQL dos relatórios utilitários
 permanece em `utilitarios/reports_functions`.
+
+
+## FireAds: aba única, referência da linha e snapshots do Funil
+
+`unit/test_fireads_aba_geral.py` cobre filtro de canal antes da recência, empate
+por linha, variantes de telefone, campos incompletos, origem Orgânico Site,
+relocalização sem trocar o formulário, preservação das observações, marcadores
+antigos/novos e cabeçalho/classificação compartilhados.
+
+`integration/test_fireads_postgres.py` usa PostgreSQL local descartável e HTTP
+simulado. Inclui migração completa com pendências/resultados legados e reexecução,
+URLs anteriormente alteradas, prazo preservado, reservas concorrentes, rollback,
+pagamento, contexto por conversa, histórico por chat/unidade, conflito de e-mail
+com referência preservada e retry do payload do Funil com e sem FireAds.
+
+Verificação unitária focada (sem rede/produção):
+
+```sh
+python -m unittest tests.unit.test_fireads_aba_geral tests.unit.test_fireads tests.unit.test_fireads_espera tests.unit.test_fireads_extratores tests.unit.test_fireads_telefones tests.unit.test_fireads_destino_dashboard tests.unit.test_worker_flow_runtime tests.unit.test_sondas_funil -q
+```
+
+Para integração, fornecer `FIREADS_TEST_DSN` apontando exclusivamente para banco
+vazio `test_chatbot_fireads` em loopback. A suíte recusa schema `chatbot`
+preexistente. Não usar credenciais do banco da aplicação.

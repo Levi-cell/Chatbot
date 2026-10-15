@@ -1528,8 +1528,12 @@ externo e commit local continua sujeita à duplicidade rara já aceita na V1.
 
 ## Extração dos campos de formulário FireAds
 
-A correspondência do telefone nas abas Google/Meta identifica o cadastro. Usar
-somente o registro mais recente selecionado pelas regras FireAds; não completar
+A correspondência do telefone na aba `LEADS GERAL - Feedback` identifica o cadastro.
+Filtrar primeiro os canais Google Ads, Meta Ads e Organico Site; depois selecionar
+a data/hora mais recente e, no empate, a maior `_row`. Datas inválidas ficam atrás
+das válidas; sem data válida, usar a maior linha. Canais manuais não participam
+dessa seleção. O destinatário vem somente de `Para quem é`, nunca de `Perfil/Faixa`.
+Usar somente o registro selecionado pelas regras FireAds; não completar
 campos vazios com dados de outra inscrição ou de uma conversa anterior.
 
 Nome, e-mail e destinatário vêm de campos estruturados. Não aplicar as regras de
@@ -1542,7 +1546,7 @@ normalizar a caixa, preservando seu conteúdo sem testes de estrutura ou domíni
 Interpretar o destinatário pelas opções explícitas do formulário, nunca por idade.
 
 Com os três campos extraídos e destinatário reconhecido, importar os dados juntos,
-manter a origem Google/Meta, abrir na profissão e dispensar a coleta posterior do
+manter a origem Google/Meta/Orgânico Site, abrir na profissão e dispensar a coleta posterior do
 e-mail. O marcador histórico `email_valido` significa coleta aceita do formulário
 nessa rota; o flow não reaplica a validação estrutural. As validações das respostas
 digitadas pelo cliente nas etapas comuns continuam iguais.
@@ -1557,24 +1561,37 @@ A coleta parcial com saudação de formulário está proposta em
 ## Entrega do atendimento ao dashboard FireAds
 
 Após a confirmação do Funil, a entrega ao dashboard usa fila independente e
-respeita unidade adimplente e integrações ativas. A abertura continua consultando
-os formulários Google e Meta; a aba geral é o destino das observações.
+respeita unidade adimplente e integrações ativas. Consulta e entrega usam somente
+`aba_destino`, exibida como Aba de leads no Admin.
 
-Na aba geral, o telefone (com suas variantes válidas) identifica os candidatos.
-Bloco da mesma conversa já gravado tem prioridade sobre nova seleção, evitando
-repetição após queda. Para envio novo, preferir canal compatível e depois
-destinatário explícito (titular/dependente) compatível; desempatar pela maior linha.
-Faixa etária não define destinatário. Sem perfil compatível, manter o grupo do
-canal; sem canal compatível, usar a maior linha do telefone. `Organico Site`
-corresponde a Google nesse cruzamento, sem alterar o canal existente na planilha.
+A consulta guarda a identidade da linha selecionada, inclusive no fallback por
+formulário incompleto ou canal não elegível. A entrega confere essa identidade;
+se a linha mudou de posição, relocaliza o mesmo registro. Não troca o alvo por
+um formulário posterior. Registro desaparecido ou modificado fica pendente para
+conferência, sem escrever em outra pessoa nem recriar o cadastro automaticamente.
 
-Atualizar somente Observação, preservando seu conteúdo anterior e todos os demais
-campos. E-mail diferente no mesmo telefone não impede essa atualização. Telefone
-ausente permite cadastro novo, inclusive orgânico, salvo e-mail já vinculado a
-outro telefone, que continua pendente para conferência. Nunca alterar uma pessoa
-identificada apenas por e-mail. Não reenviar ao Funil por falha no dashboard.
+Bloco já gravado da mesma conversa tem prioridade e reconcilia o envio. Só
+atualizar `Observação`, preservando o conteúdo recebido da API e as demais colunas.
+Sem referência da consulta, conferir novamente o telefone e usar a data/linha mais
+recente antes de criar um cadastro orgânico. E-mail associado a outro telefone
+impede criação. Snapshot legado conserva sua seleção e seu texto originais.
 
-Operação e limites: [Consulta e entrega FireAds](docs/valida_dados_parciais_fireads.md).
+Google usa 113336; Meta usa 113340; Orgânico Site e orgânico usam 113481. Os dois
+últimos são origens distintas, descritas nas observações. Fallback por dado
+incompleto não afirma campanha nem ausência de cadastro. Sem integração FireAds,
+preservar o canal configurado na unidade.
+
+O texto compartilhado começa com `Observações de atendimento`. Classificar como
+`Novo lead` só quando não há conversa anterior no mesmo chat (cliente/unidade);
+caso contrário usar `Novo atendimento para Lead antigo`. Profissão do titular
+precede os dados do dependente. Manter a explicação técnica da ESL Tech e a chave
+única de reconciliação. Congelar payload, canal, classificação e texto antes do
+primeiro POST, também para unidades sem FireAds. Retry não reconstrói esses dados.
+
+A API externa não oferece escrita condicional; edição manual entre leitura e
+POST continua podendo conflitar. Funil aceito antes de uma queda no commit local
+pode ser reenviado. Não reenviar Funil por falha exclusiva no dashboard.
+Operação, migração e limites: [Plano aplicado](atualizar_envio.md).
 
 ## Consumo mensal de mensagens Meta
 

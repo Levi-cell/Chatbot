@@ -53,7 +53,7 @@ class Dependente(models.Model):
 
 class Conversa(models.Model):
     id_chat = models.ForeignKey('Chat', models.DO_NOTHING, db_column='id_chat')
-    origem_fireads = models.CharField(max_length=10, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico','Orgânico')])
+    origem_fireads = models.CharField(max_length=20, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico_site','Orgânico Site'),('organico','Orgânico')])
     contexto_fireads = models.JSONField(null=True, blank=True)
     lead_no_dash = models.BooleanField(null=True, blank=True, default=None)
 
@@ -410,6 +410,7 @@ class FunilEnvio(models.Model):
     enviado_em = models.DateTimeField(blank=True, null=True)
     ultimo_erro = models.TextField(blank=True, null=True)
     resposta_funil = models.TextField(blank=True, null=True)
+    snapshot = models.JSONField(blank=True, null=True)
     criado_em = models.DateTimeField()
     atualizado_em = models.DateTimeField()
 
@@ -619,11 +620,10 @@ class IntegracaoFireAds(models.Model):
         null=True,
         help_text="Referência do editor. Nunca usada para requisições.",
     )
-    aba_google = models.CharField(
-        max_length=200, default="Leads Google Ads (NÃO EDITAR)"
+    aba_destino = models.CharField(
+        "Aba de leads", max_length=200, default="LEADS GERAL - Feedback",
+        help_text="Aba única para consultar formulários e acrescentar observações.",
     )
-    aba_meta = models.CharField(max_length=200, default="[FIRE] Leads Ads Geral - 7.2")
-    aba_destino = models.CharField(max_length=200, default="LEADS GERAL - Feedback")
     fuso_formularios = models.CharField(
         max_length=100,
         null=True,
@@ -632,7 +632,7 @@ class IntegracaoFireAds(models.Model):
     )
     contrato_validado = models.BooleanField(
         default=False,
-        help_text="Confirmar nomes de abas, campos e valores recebidos do formulário atualizado antes de ativar.",
+        help_text="Confirmar a aba de leads, os cabeçalhos e os valores de Canal e Para quem é antes de ativar.",
     )
     ativada_em = models.DateTimeField(null=True, blank=True, editable=False)
     criado_em = models.DateTimeField(auto_now_add=True)
@@ -657,9 +657,9 @@ class IntegracaoFireAds(models.Model):
             raise ValidationError(
                 {"contrato_validado": "Confira o contrato de leitura antes de ativar."}
             )
-        abas = [self.aba_google, self.aba_meta, self.aba_destino]
-        if any(not a.strip() for a in abas) or len(set(abas)) != 3:
-            raise ValidationError("Informe três abas distintas e não vazias.")
+        self.aba_destino = self.aba_destino.strip()
+        if not self.aba_destino:
+            raise ValidationError({"aba_destino": "Informe a aba de leads."})
 
     def __str__(self):
         return str(self.id_unidade)

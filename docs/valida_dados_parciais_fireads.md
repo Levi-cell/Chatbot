@@ -1,5 +1,12 @@
 # Consulta FireAds por conversa — operação
 
+> Atualização local de 14/10/2026: o contrato vigente usa somente a aba geral,
+> `Para quem é` e `Canal`, com seleção dos canais elegíveis antes da recência.
+> Consulte [o plano aplicado e o procedimento de deploy](../atualizar_envio.md).
+> As descrições abaixo de duas/três abas e seus SQLs são históricas; não as
+> reaplique neste deploy. A proposta de coleta parcial continua sem implementação.
+
+
 Este documento acompanha o código do worker separado. Aplicar junto da migração
 `deploy/migrations/20261009_worker_consulta_dash.sql` e do novo serviço.
 
@@ -32,13 +39,13 @@ rede. Registra a pendência e devolve a mensagem à fila por 5 segundos, sem con
 retry. O worker de consulta verifica o banco a cada 2 segundos quando ocioso; havendo
 trabalho, processa uma consulta e segue para a próxima sem espera adicional.
 
-Google e Meta são lidos por inteiro no contrato atual do Apps Script. Ambas as
-leituras e a interpretação terminam antes de gravar `dados` em uma única transação.
+A aba configurada em `aba_destino` é lida por inteiro no contrato atual do Apps
+Script. A leitura e a interpretação terminam antes de gravar `dados` em uma única transação.
 Armazenam-se somente as linhas correspondentes ao telefone consultado, não as de
 outros clientes. Não há checkpoints parciais por aba. Uma falha real de conexão,
 HTTP ou contrato conclui organicamente com diagnóstico, conforme a regra aprovada.
 
-O prazo total é de 300 segundos desde a solicitação, incluindo fila, ambas as abas,
+O prazo total é de 300 segundos desde a solicitação, incluindo fila, leitura da aba geral,
 redirecionamentos e reexecuções. Não é renovado após queda. A decisão de timeout é
 persistida pelo primeiro ciclo que perceber o prazo vencido, inclusive pelo flow
 se o serviço de consulta estiver parado. Portanto, a resposta pode ocorrer alguns
@@ -52,7 +59,7 @@ no banco antes do prazo pode ser aplicado depois, sem ser descartado por demora 
 há coluna de chat duplicada nem view. `id_unidade` permanece para as FKs compostas
 que impedem vincular conversa e integração de unidades diferentes.
 
-- `entrada`: telefone, URL, abas e fuso congelados na solicitação.
+- `entrada`: versão 2, telefone, URL, aba única e fuso congelados na solicitação.
 - `status`: pendente, processando ou concluida; `consulta_concluida` é mantida por
   compatibilidade e uma constraint exige consistência com o status.
 - `dados`: envelope com `decisao` e `fontes`, gravado completo ou mantido NULL.

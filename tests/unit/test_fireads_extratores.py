@@ -1,5 +1,6 @@
 """Campos de formulário não passam pelas regras de respostas livres do chat."""
 
+from tests.fixtures.fireads import como_aba_geral
 import unittest
 
 from core.integrations.fireads.extratores import extrair_email, extrair_nome
@@ -77,7 +78,7 @@ class ImportacaoCamposFireAdsTests(unittest.TestCase):
                         campos[1]: " CONTATO@INTRANET ", alvo: valor,
                     })
                     google, meta = ([registro], []) if origem == "google" else ([], [registro])
-                    decisao = interpretar(google, meta, NUMERO, None)
+                    decisao = interpretar(como_aba_geral(google, meta), NUMERO, None)
                     self.assertEqual(decisao["resultado"], "importado")
                     self.assertEqual(decisao["origem"], origem)
                     self.assertIs(decisao["status_dependente"], dependente)
@@ -90,27 +91,27 @@ class ImportacaoCamposFireAdsTests(unittest.TestCase):
         for campo in ("full_name", "email", "para_quem"):
             for valor in (None, "", " \t "):
                 with self.subTest(campo=campo, valor=valor):
-                    decisao = interpretar([], [dict(META, **{campo: valor})], NUMERO, None)
+                    decisao = interpretar(como_aba_geral([], [dict(META, **{campo: valor})]), NUMERO, None)
                     self.assertEqual(decisao["resultado"], "incompleto")
                     self.assertEqual(decisao["motivo"], "campos_ausentes")
                     self.assertEqual(decisao["dados_titular"], {})
 
     def test_numero_diferente_nao_importa_dados_mesmo_com_campos_preenchidos(self):
-        decisao = interpretar([], [META], "5511999990003", None)
+        decisao = interpretar(como_aba_geral([], [META]), "5511999990003", None)
         self.assertEqual(decisao["resultado"], "ausente")
         self.assertEqual(decisao["dados_titular"], {})
 
     def test_destinatario_desconhecido_nao_e_inventado_por_faixa_etaria(self):
         for valor in ("Adulto", "61_a_75", "opcao_nova"):
             with self.subTest(valor=valor):
-                decisao = interpretar([], [dict(META, para_quem=valor)], NUMERO, None)
+                decisao = interpretar(como_aba_geral([], [dict(META, para_quem=valor)]), NUMERO, None)
                 self.assertEqual(decisao["resultado"], "incompleto")
                 self.assertEqual(decisao["motivo"], "destinatario_desconhecido")
 
     def test_abertura_usa_nome_extraido_e_email_nao_e_revalidado_pelo_flow(self):
-        decisao = dict(interpretar([], [dict(
+        decisao = dict(interpretar(como_aba_geral([], [dict(
             META, full_name="Edcarlos Oliveira | Programador", email="edcarlos@intranet",
-        )], NUMERO, None), concluida=True, id_conversa=290)
+        )]), NUMERO, None), concluida=True, id_conversa=290)
         contexto = {
             "id_conversa": 290, "id_etapa_atual": None, "contexto_fireads": decisao,
             "nome_agente": "Dora", "genero": "feminino", "nome_unidade": "Supera Teste",

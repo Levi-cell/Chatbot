@@ -1,6 +1,7 @@
 """Prepara somente a abertura, consumindo a consulta persistida pelo outro worker."""
 
 from core.integrations.fireads.extratores import extrair_email
+from core.integrations.fireads.aba_geral import configuracao_compativel
 from core.repositories.fireads import pendencias
 from core.repositories.fireads.consulta import (
     buscar_abertura,
@@ -32,9 +33,8 @@ def preparar_abertura(contexto_banco, mensagem, lock_version, cursor):
     motivo = None
     if not abertura["aplicavel"]:
         motivo = "integracao_desativada"
-    elif consulta["id_integracao"] != abertura["id_integracao"] or any(
-        consulta["entrada"].get(campo) != abertura[campo]
-        for campo in ("url", "aba_google", "aba_meta", "fuso")
+    elif consulta["id_integracao"] != abertura["id_integracao"] or not configuracao_compativel(
+        consulta["entrada"], abertura
     ):
         motivo = "configuracao_alterada"
     elif consulta["expirada"] and consulta["status"] != "concluida":
@@ -56,7 +56,9 @@ def preparar_abertura(contexto_banco, mensagem, lock_version, cursor):
     )
     if decisao["resultado"] == "importado":
         if not importar_dados_abertura(abertura["id_cliente"], cid, decisao, cursor):
-            decisao = decisao_organica("incompleto", "conflito_email")
+            decisao = decisao_organica(
+                "incompleto", "conflito_email", referencia=decisao.get("referencia")
+            )
     # Conservar a integração originalmente consultada, inclusive se desativada.
     abertura = dict(abertura, id_integracao=consulta["id_integracao"])
     decisao = aplicar_decisao(abertura, cid, consulta["id_consulta"], decisao, cursor)

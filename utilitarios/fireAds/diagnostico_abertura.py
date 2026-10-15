@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('numero')
     parser.add_argument('--dashboard', action='store_true',
-                        help='Confere o telefone nas abas configuradas, somente por GET.')
+                        help='Confere o telefone na aba de leads, somente por GET.')
     args = parser.parse_args()
     from utilitarios.bootstrap import configurar_ambiente_utilitario
     from utilitarios.maintenance.remover_contato import formatos
@@ -36,7 +36,7 @@ def main():
                            q.consulta_concluida, q.resultado, q.consultado_em,
                            q.dados->'decisao'->>'motivo' AS motivo_consulta,
                            i.integracao_ativa, i.contrato_validado, i.ativada_em,
-                           i.aba_google, i.aba_meta, i.aba_destino, i.url_dashbord,
+                           i.aba_destino, i.url_dashbord,
                            i.fuso_formularios
                     FROM chatbot.cliente cl
                     JOIN chatbot.conversa c ON c.id_cliente=cl.id_cliente
@@ -52,7 +52,6 @@ def main():
                                   for r in registros], ensure_ascii=False, default=str, indent=2), flush=True)
     if args.dashboard and registros:
         import requests
-        from concurrent.futures import ThreadPoolExecutor
         from core.integrations.fireads.contrato import telefone, localizar
         from utilitarios.fireAds.test_Dash import limpar_numero
 
@@ -79,7 +78,7 @@ def main():
                     if not any(limpar_numero(row.get(c)) in alvos for c in campos):
                         continue
                     resumo = {k: row.get(k) for k in ('_row', 'Nome', 'full_name',
-                              'Perfil/Faixa', 'para_quem', 'Canal', 'Data/Hora', 'created_time') if k in row}
+                              'Para quem é', 'Canal', 'Data/Hora') if k in row}
                     resumo.update({c: row.get(c) for c in campos})
                     resumo['corresponde_telefone_exato_worker'] = any(
                         telefone(row.get(c)) == telefone(registro['waid_telefone']) for c in campos)
@@ -90,16 +89,13 @@ def main():
             except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
                 return {'aba': aba, 'erro': type(exc).__name__}
 
-        abas = list(dict.fromkeys(registro[k] for k in ('aba_google', 'aba_meta', 'aba_destino')))
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            for resultado in pool.map(consultar, abas):
-                print(json.dumps(resultado, ensure_ascii=False, indent=2), flush=True)
-        if registro['aba_google'] in fontes and registro['aba_meta'] in fontes:
+        aba = registro['aba_destino']
+        print(json.dumps(consultar(aba), ensure_ascii=False, indent=2), flush=True)
+        if aba in fontes:
             from workers.worker_consulta_dash.resultado import interpretar
 
-            decisao = interpretar(fontes[registro['aba_google']]['rows'],
-                                  fontes[registro['aba_meta']]['rows'],
-                                  registro['waid_telefone'], registro['fuso_formularios'])
+            decisao = interpretar(fontes[aba]['rows'], registro['waid_telefone'],
+                                  registro['fuso_formularios'], aba=aba)
             print(json.dumps({'simulacao_local_sem_gravacao': {
                 k: decisao.get(k) for k in ('resultado', 'origem', 'motivo', 'status_dependente')
             }}, ensure_ascii=False, indent=2), flush=True)

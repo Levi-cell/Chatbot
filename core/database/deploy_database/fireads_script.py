@@ -27,3 +27,7 @@ def criar_estrutura_fireads():
                 "-- FIM DDL CONSULTA DASH", 1
             )[0]
         )
+        geral = caminho.with_name("20261014_fireads_aba_geral.sql").read_text(encoding="utf-8")
+        cursor.execute(geral.split("-- INICIO DDL FIREADS ABA GERAL\n", 1)[1].split(
+            "-- FIM DDL FIREADS ABA GERAL", 1
+        )[0])

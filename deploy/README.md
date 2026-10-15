@@ -261,3 +261,12 @@ No corte de implantação, parar webhook, flow, Funil e follow-up antes da migra
 O sexto serviço é `chatbot-worker-consulta-dash.service`. Aplicar com a migração
 `migrations/20261009_worker_consulta_dash.sql`, sem executar setup numa base existente.
 Seguir o [procedimento e recuperação](../docs/valida_dados_parciais_fireads.md).
+
+
+## FireAds: aba única e observações compartilhadas — 14/10/2026
+
+Para atualizar a instalação com worker_consulta_dash já implantado, executar
+[migrations/20261014_fireads_aba_geral.sql](migrations/20261014_fireads_aba_geral.sql)
+com os seis serviços parados, junto do código desta atualização. Conferir
+`migracao_ok=true` e `manage.py check` antes de retomá-los. Não reaplicar setup.
+[Procedimento, preservação de pendências e recuperação](../atualizar_envio.md#14-entrega-local-e-procedimento-desta-atualização).
