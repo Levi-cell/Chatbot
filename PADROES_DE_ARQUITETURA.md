@@ -689,6 +689,23 @@ Separação interna atual:
 `cliente.py` também mantém o escopo temporário do prefixo de retorno, restaurado
 mesmo sob exceção. O texto enviado e o texto persistido devem permanecer iguais.
 
+O `worker_flow` prepara `antes_do_primeiro_envio` depois das guardas finais e do
+commit. Esse escopo síncrono executa a ação apenas quando um sender chama
+`send_message` ou `request_contact_info`, uma vez no turno. Criar o cliente,
+reconciliar uma resposta persistida ou resolver um contexto sem envio não ativa
+o indicador. O escopo é restaurado mesmo sob exceção, sem tarefa auxiliar.
+`digitacao.py` encapsula `indicate_typing` com sessão HTTP exclusiva, timeouts
+curtos e sem retry; trata somente falhas da operação opcional. Não altera as
+guardas, o transporte das respostas, o histórico, a fila ou o follow-up proativo.
+
+Na abertura FireAds, também há sinalização após o commit da nova pendência no
+flow e antes do HTTP no worker de consulta. `solicitar` informa se inseriu a
+consulta; rechecagens não sinalizam. O repositório recupera a entrada aguardando
+pela reserva vigente, com guardas de unidade, conversa, integração e prazo.
+O worker encerra a transação antes do indicador, mantém a reserva compartilhada
+e desconta esse custo do orçamento restante. Não há renovação periódica nem
+novo estado persistido para os pontinhos. A consulta continua sem enviar respostas.
+
 ### `tools`
 
 Dentro de uma integração, contém operações administrativas que pertencem ao

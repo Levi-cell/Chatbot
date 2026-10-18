@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from workers.worker_flow.fireads import preparar_abertura
 from workers.worker_flow.suporte.consultas_fireads import ConsultaFireAdsPendente
 
@@ -10,6 +11,8 @@ from core.repositories.unidades.consultas import (
 )
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
+from core.integrations.whatsapp.pywa_functions.cliente import antes_do_primeiro_envio
+from core.integrations.whatsapp.pywa_functions.digitacao import indicar_digitacao
 from core.logging_config import short_value
 from core.repositories.atendimento.conversas import tentar_lock_conversa
 from core.repositories.atendimento.followup import (
@@ -222,10 +225,19 @@ def worker_flow():
             proteger_conversa(id_conversa, lock_version, cursor_ciclo, renovar=True)
             exigir_unidade_habilitada_por_phone_id(mensagem["id_phone_unidade"], cursor_ciclo)
             conn_ciclo.commit()
-            if contexto_historico.get("retorno_followup"):
-                contexto_envio = enviar_retorno_followup(contexto_historico)
-            else:
-                contexto_envio = flow_sender(contexto_historico)
+            # O escopo não chama a Meta: só um sender com resposta pronta o faz.
+            # Replays e resolvers sem envio não ativam o indicador.
+            with antes_do_primeiro_envio(partial(
+                indicar_digitacao,
+                mensagem["id_phone_unidade"],
+                mensagem.get("id_hash"),
+                id_mensagem=mensagem["id_mensagem"],
+                id_conversa=id_conversa,
+            )):
+                if contexto_historico.get("retorno_followup"):
+                    contexto_envio = enviar_retorno_followup(contexto_historico)
+                else:
+                    contexto_envio = flow_sender(contexto_historico)
 
             try:
                 proteger_conversa(id_conversa, lock_version, cursor_ciclo)
@@ -305,6 +317,14 @@ def worker_flow():
                 retry_esperado=mensagem["retry_count"],
             )
             conn_ciclo.commit()
+            # Apenas a criação confirmada sinaliza a espera. Rechecagens da mesma
+            # pendência não repetem HTTP, e nenhuma transação fica aberta aqui.
+            if espera.consulta_nova:
+                indicar_digitacao(
+                    mensagem["id_phone_unidade"], mensagem.get("id_hash"),
+                    id_mensagem=mensagem["id_mensagem"],
+                    id_conversa=estado_ciclo["id_conversa"],
+                )
             logger.debug(
                 "fireads_consulta_pendente | conversa=%s motivo=%s acao=aguardar_sem_responder",
                 estado_ciclo["id_conversa"], espera,

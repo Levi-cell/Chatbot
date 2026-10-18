@@ -49,6 +49,9 @@ GOOGLE = {
 )
 class FireAdsPostgresTests(unittest.TestCase):
     def setUp(self):
+        self.indicador = self.enterContext(patch(
+            "workers.worker_consulta_dash.consulta_worker.indicar_digitacao", return_value=True,
+        ))
         params = conninfo_to_dict(DSN)
         locais = {"127.0.0.1", "::1", "localhost"}
         if (
@@ -751,10 +754,79 @@ class FireAdsPostgresTests(unittest.TestCase):
 
     def solicitar_pendente(self):
         cid, mensagem, versao, contexto = self.preparar_mensagem()
-        with self.assertRaises(ConsultaFireAdsPendente):
+        with self.assertRaises(ConsultaFireAdsPendente) as espera:
             preparar_abertura(contexto, mensagem, versao, self.cursor)
+        self.assertTrue(espera.exception.consulta_nova)
         self.conn.commit()
         return cid, mensagem, versao, contexto
+
+    def test_rechecagem_nao_sinaliza_consulta_nova(self):
+        cid, mensagem, versao, contexto = self.solicitar_pendente()
+        with self.assertRaises(ConsultaFireAdsPendente) as espera:
+            preparar_abertura(contexto, mensagem, versao, self.cursor)
+        self.assertFalse(espera.exception.consulta_nova)
+        self.assertFalse(pendencias.solicitar(
+            consulta.buscar_abertura(cid, self.cursor), cid, NUMERO, self.cursor,
+        ))
+        self.assertEqual(self.conn.execute(
+            "SELECT count(*),max(tentativas) FROM chatbot.consulta_fireads",
+        ).fetchone(), (1, 0))
+
+    def test_mensagem_digitacao_da_reserva_confere_unidade_entrada_e_estado(self):
+        cid, mensagem, _, _ = self.solicitar_pendente()
+        reserva = pendencias.reservar(self.cursor)
+        self.conn.commit()
+        self.assertEqual(pendencias.buscar_mensagem_aguardando(reserva, self.cursor), {
+            "id_mensagem": mensagem["id_mensagem"], "id_phone_unidade": "phone-teste",
+            "id_hash": "wamid.fireads",
+        })
+        self.assertIsNone(pendencias.buscar_mensagem_aguardando(
+            dict(reserva, versao=reserva["versao"] - 1), self.cursor,
+        ))
+        alteracoes = (
+            "UPDATE chatbot.unidade SET status_pagamento=FALSE",
+            "UPDATE chatbot.conversa SET status_ativa=FALSE",
+            "UPDATE chatbot.conversa SET id_etapa_atual=1",
+            "UPDATE chatbot.fila_mensagens SET status='sent'",
+            "UPDATE chatbot.fila_mensagens SET id_phone_unidade='outra-unidade'",
+            "UPDATE chatbot.fila_mensagens SET cliente_telefone='5511999990003'",
+            "UPDATE chatbot.integracao_fireads SET integracao_ativa=FALSE",
+            "UPDATE chatbot.integracao_fireads SET aba_destino='Outra aba'",
+            "UPDATE chatbot.consulta_fireads SET solicitado_em=now()-INTERVAL '400 seconds',"
+            " prazo_final=now()-INTERVAL '1 second'",
+            "INSERT INTO chatbot.historico_mensagens"
+            " (id_conversa,id_etapa,received_data_hora,cliente_telefone,conteudo_texto,"
+            " tipo_mensagem,id_hash_msg,id_phone_unidade,unidade_telefone,quem_enviou,status_envio)"
+            f" VALUES({cid},1,now(),'{NUMERO}','Olá','text','wamid.bot',"
+            " 'phone-teste','5511999990000','bot','sent')",
+        )
+        for sql in alteracoes:
+            with self.subTest(alteracao=sql):
+                self.cursor.execute("SAVEPOINT estado_digitacao")
+                self.cursor.execute(sql)
+                self.assertIsNone(pendencias.buscar_mensagem_aguardando(reserva, self.cursor))
+                self.cursor.execute("ROLLBACK TO SAVEPOINT estado_digitacao")
+                self.cursor.execute("RELEASE SAVEPOINT estado_digitacao")
+
+    def test_worker_consulta_sinaliza_sem_transacao_aberta_e_mantem_reserva(self):
+        cid, mensagem, _, _ = self.solicitar_pendente()
+        conexao_worker = psycopg.connect(DSN)
+        self.addCleanup(conexao_worker.close)
+        def conferir_chamada(*args, **kwargs):
+            self.assertEqual(conexao_worker.info.transaction_status, psycopg.pq.TransactionStatus.IDLE)
+            self.assertEqual(args, ("phone-teste", "wamid.fireads"))
+            self.assertEqual(kwargs, {"id_mensagem": mensagem["id_mensagem"], "id_conversa": cid})
+            with psycopg.connect(DSN) as concorrente:
+                self.assertIsNone(pendencias.reservar(concorrente.cursor()))
+        self.indicador.side_effect = conferir_chamada
+        with patch("workers.worker_consulta_dash.consulta_worker.get_conn", return_value=conexao_worker), patch(
+            "workers.worker_consulta_dash.consulta_worker.consultar", return_value=self.resultado_google(),
+        ):
+            self.assertTrue(executar_ciclo())
+        self.indicador.assert_called_once()
+        self.assertEqual(self.conn.execute(
+            "SELECT status,resultado FROM chatbot.consulta_fireads",
+        ).fetchone(), ('concluida', 'importado'))
 
     def resultado_google(self):
         return {

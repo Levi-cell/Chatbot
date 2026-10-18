@@ -158,6 +158,10 @@ Commit: `a4803d27d71224b20d583665df8f5680f3c37d64`
 
 Commit: `916f69ca61777e811358a203df7687d859b6868e`
 
+### V1.12.0 — FireAds unificada e ajustes nos envios
+
+Commit: `9455765856575119aec9441cb3e56d02dfb957be`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

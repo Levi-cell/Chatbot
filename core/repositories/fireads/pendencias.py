@@ -5,7 +5,7 @@ from core.integrations.fireads.aba_geral import VERSAO_CONSULTA
 
 
 def solicitar(abertura, id_conversa, numero, cursor):
-    """Uma conversa recebe uma solicitação; retry não altera entrada nem prazo."""
+    """Retorna se criou a solicitação; retry não altera entrada nem prazo."""
     entrada = {
         "url": abertura["url"],
         "aba": abertura["aba"],
@@ -24,6 +24,7 @@ def solicitar(abertura, id_conversa, numero, cursor):
             Jsonb(entrada),
         ),
     )
+    return cursor.rowcount == 1
 
 
 def buscar(id_conversa, cursor):
@@ -163,6 +164,35 @@ def reservar(cursor):
             )
         liberar_reserva(ident, cursor)
     return None
+
+
+def buscar_mensagem_aguardando(reserva, cursor):
+    """Entrada da consulta reservada, para o indicador opcional, sem travar linhas."""
+    cursor.execute(
+        """SELECT f.id_mensagem,f.id_phone_unidade,f.id_hash_msg
+        FROM chatbot.consulta_fireads q
+        JOIN chatbot.conversa c ON c.id_conversa=q.id_conversa
+        JOIN chatbot.unidade u ON u.id_unidade=q.id_unidade AND u.id_unidade=c.id_unidade
+        JOIN chatbot.integracao_fireads i ON i.id_integracao_fireads=q.id_integracao_fireads
+        JOIN chatbot.fila_mensagens f ON f.id_conversa=c.id_conversa
+          AND f.id_phone_unidade=u.phone_number_id
+          AND f.cliente_telefone=q.entrada->>'numero'
+        WHERE q.id_consulta=%s AND q.versao_reserva=%s AND q.status='processando'
+          AND q.reserva_ate>clock_timestamp() AND q.prazo_final>clock_timestamp()
+          AND c.status_ativa AND c.finalizou_em IS NULL AND c.id_etapa_atual IS NULL
+          AND c.contexto_fireads IS NULL AND u.status_pagamento IS TRUE
+          AND i.integracao_ativa AND i.contrato_validado
+          AND i.url_dashbord=q.entrada->>'url'
+          AND i.aba_destino=q.entrada->>'aba' AND q.entrada->>'versao'='2'
+          AND i.fuso_formularios IS NOT DISTINCT FROM q.entrada->>'fuso'
+          AND f.status IN ('pending','processing')
+          AND NOT EXISTS (SELECT 1 FROM chatbot.historico_mensagens h
+                          WHERE h.id_conversa=c.id_conversa AND h.quem_enviou='bot')
+        ORDER BY f.received_data_hora,f.id_mensagem LIMIT 1""",
+        (reserva["id_consulta"], reserva["versao"]),
+    )
+    row = cursor.fetchone()
+    return dict(zip(("id_mensagem", "id_phone_unidade", "id_hash"), row)) if row else None
 
 
 def concluir(reserva, resultado, cursor):

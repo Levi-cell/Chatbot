@@ -220,6 +220,21 @@ envio, bloqueio/desbloqueio e paginação. Rejeições HTTP, ausência de ID e t
 precisam continuar chegando como falhas ao worker, sem reenvio automático HTTP.
 Validado na atualização de PyWa 3.8.0 para 4.5.0.
 
+`test_indicador_digitacao.py` exercita o indicador com PyWa 4.5.0 real e HTTP
+simulado: conta/entrada corretas, marcação de leitura, timeouts isolados, ausência
+de retry e falhas opcionais que preservam a resposta e sua persistência. Cobre
+abertura, continuação, retomada e replay de follow-up, três ativações na abertura
+FireAds e rechecagens sem indicador, guardas, contexto inválido e limpeza do
+escopo entre turnos/unidades. O indicador antes da consulta preserva seu orçamento
+e falhas de HTTP não impedem salvar o resultado. Não acessa Meta, banco ou Redis
+reais. A suíte de integração FireAds usa PostgreSQL local e indicador simulado
+para conferir vínculos, reserva vigente e ausência de transação durante a chamada.
+Verificação focada:
+
+```bash
+python -m unittest tests.unit.test_indicador_digitacao tests.unit.test_worker_flow_runtime tests.unit.test_pywa_compatibilidade tests.unit.test_followup tests.unit.test_fireads tests.unit.test_fireads_espera -q
+```
+
 ## Consumo mensal Meta
 
 `test_consumo_meta.py` cobre calendário (incluindo fevereiro bissexto), volumes,

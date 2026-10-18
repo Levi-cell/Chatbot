@@ -24,11 +24,12 @@ def preparar_abertura(contexto_banco, mensagem, lock_version, cursor):
         return contexto_banco  # Nunca reconsultar ou retroceder uma etapa iniciada.
     proteger_conversa(cid, lock_version, cursor)
     proteger_mensagem_abertura(mensagem, cursor)
+    consulta_nova = False
     consulta = pendencias.buscar(cid, cursor)
     if consulta is None:
         if not abertura["aplicavel"]:
             return contexto_banco
-        pendencias.solicitar(abertura, cid, mensagem["cliente_telefone"], cursor)
+        consulta_nova = pendencias.solicitar(abertura, cid, mensagem["cliente_telefone"], cursor)
         consulta = pendencias.buscar(cid, cursor)
     motivo = None
     if not abertura["aplicavel"]:
@@ -45,7 +46,7 @@ def preparar_abertura(contexto_banco, mensagem, lock_version, cursor):
         )
         consulta = pendencias.buscar(cid, cursor)
     if consulta["status"] != "concluida":
-        raise ConsultaFireAdsPendente("aguardando_resultado")
+        raise ConsultaFireAdsPendente("aguardando_resultado", consulta_nova=consulta_nova)
     if consulta["aplicacao"] is not None:
         raise ValueError(
             "Consulta aplicada sem contexto da conversa; verificar integridade"

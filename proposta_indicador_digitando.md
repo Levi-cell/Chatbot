@@ -2,8 +2,9 @@
 
 Data: 14/10/2026.
 
-Status: proposta teórica para implementação futura. Este documento não ativa o
-recurso e não contém código de implementação, comandos de deploy ou migrações.
+Status: implementado no projeto em 17/10/2026; publicação na VM e verificação
+visual no WhatsApp ainda pendentes. A proposta abaixo registra os critérios e
+a seção 14 descreve a implementação. Não há migração SQL.
 
 ## 1. Objetivo
 
@@ -16,9 +17,9 @@ mensagem pendente da fila, isoladamente, não autoriza a chamada: ainda existem
 verificações de unidade, bloqueios, ordenação, contexto, concorrência e
 idempotência que podem impedir ou adiar a resposta.
 
-O indicador acompanha uma resposta que o sistema está prestes a enviar. Ele não
-altera as regras que determinam quem pode receber atendimento, qual etapa será
-executada ou qual mensagem será enviada.
+O indicador acompanha o preparo da resposta, incluindo a consulta inicial à
+FireAds depois de autorizar o atendimento. Ele não altera quem pode receber
+atendimento, qual etapa será executada ou qual mensagem será enviada.
 
 ## 2. Comportamento oferecido pela API
 
@@ -43,7 +44,7 @@ Referência: [documentação oficial do PyWa — indicate_typing](https://pywa.r
 
 ## 3. Condições para ativar
 
-A chamada só será elegível depois que o fluxo existente confirmar:
+A primeira sinalização da espera FireAds exige que o fluxo existente confirme:
 
 1. A mensagem está reservada para processamento e pertence ao cliente e à
    unidade corretos.
@@ -54,6 +55,9 @@ A chamada só será elegível depois que o fluxo existente confirmar:
 5. A conversa foi criada ou recuperada conforme as regras atuais, e o worker
    possui sua reserva válida, com o `lock_version` correspondente.
 6. O vínculo entre fila, cliente, unidade e conversa está consistente.
+
+Para a sinalização imediatamente anterior à resposta, também são exigidos:
+
 7. Uma eventual espera pela FireAds foi resolvida e o atendimento pode prosseguir.
 8. O histórico e o contexto do turno foram reconstruídos, inclusive em retomadas.
 9. Não existe uma resposta do bot já persistida para a mensagem atual que faça o
@@ -62,8 +66,10 @@ A chamada só será elegível depois que o fluxo existente confirmar:
     necessários ao envio, e as verificações finais de autorização continuam
     satisfeitas.
 
-Essas condições descrevem a elegibilidade do envio. Elas não criam outro conjunto
-de regras de negócio nem dispensam as proteções já realizadas pelo fluxo.
+O worker de consulta usa sua reserva persistida e confere a entrada aguardando,
+unidade ativa, integração válida, prazo e conversa ainda sem abertura aplicada
+ou resposta salva. Essas condições não substituem as guardas do `worker_flow`,
+que serão executadas novamente na retomada.
 
 Uma resposta inválida do cliente pode legitimamente gerar uma orientação ou uma
 repetição da pergunta. Nesse caso, existe uma resposta elegível e o indicador
@@ -81,7 +87,9 @@ pode ser acompanhada do indicador, desde que o envio seja autorizado.
 2. Executa os controles de ordenação, unidade, cliente e conversa.
 3. Obtém o lock e reconstrói o contexto persistido do atendimento.
 4. Resolve a abertura FireAds, quando aplicável. Se ainda houver espera, reagenda
-   a mensagem pelo mecanismo existente e segue para outro atendimento.
+   a mensagem pelo mecanismo existente. Se acabou de criar a consulta, confirma
+   o checkpoint e sinaliza a espera uma vez, antes de seguir para outro cliente.
+   O worker de consulta faz outra sinalização antes da leitura externa (seção 7).
 5. Reconstrói o histórico e aplica a barreira contra reenvio de resposta já salva.
 6. Define a resposta elegível e passa pelas verificações finais de envio.
 7. Solicita o indicador uma vez para essa tentativa de resposta.
@@ -104,24 +112,25 @@ as guardas e a persistência. `flow_sender.py` possui uma barreira explícita de
 idempotência antes do despacho das etapas; a retomada de follow-up também possui
 um caminho de recuperação de resposta já persistida.
 
-Por isso, inserir uma chamada incondicional imediatamente antes de `flow_sender`
-no ciclo principal não basta: um replay pode entrar nessa função e terminar sem
-enviar nada. O desenho final deve respeitar as barreiras dos dois caminhos e
-acionar o indicador somente no caminho que vai produzir um novo envio.
+Para a ativação anterior à resposta, inserir uma chamada incondicional antes de
+`flow_sender` não basta: um replay pode terminar sem enviar nada. O escopo de envio
+respeita as barreiras dos dois caminhos. As duas sinalizações da espera FireAds
+têm gatilhos próprios: criação confirmada da pendência e início da consulta reservada.
 
 O ponto conceitual é depois das decisões que autorizam a resposta e antes do
 transporte à Meta. Se algum resolver ainda puder concluir que não deve enviar,
-a ativação precisa ficar depois dessa decisão. A implementação futura deve
-identificar esse ponto sem duplicar regras nem alterar a sequência dos resolvers.
+a ativação anterior à resposta fica depois dessa decisão, sem duplicar regras
+nem alterar a sequência dos resolvers.
 
 Distribuição de responsabilidades proposta:
 
 | Camada | Responsabilidade |
 | --- | --- |
-| `workers/worker_flow` | Decidir se há resposta elegível e coordenar uma única tentativa do indicador no turno. |
+| `workers/worker_flow` | Sinalizar a criação confirmada da consulta; na resposta, coordenar uma tentativa do indicador antes do primeiro envio. |
+| `workers/worker_consulta_dash` | Sinalizar uma vez antes de consultar a pendência reservada. Não enviar respostas nem mudar etapas. |
 | `core/integrations/whatsapp/pywa_functions` | Encapsular a chamada PyWa, usar a conta correta, limitar a espera e tratar falhas específicas dessa operação opcional. |
 | `core/integrations/whatsapp/pywa_functions/cliente.py` | Continuar fornecendo o cliente configurado da unidade, sem ativar o indicador automaticamente ao criar qualquer cliente. |
-| `core/repositories` | Manter as operações SQL existentes de produção; a integração do indicador não executa SQL. |
+| `core/repositories` | Informar se a solicitação foi inserida e recuperar a mensagem aguardando da consulta reservada. Não executar HTTP. |
 | `core/integrations/whatsapp/messages` | Continuar responsável pelos textos e componentes das respostas, sem conhecer o indicador. |
 
 A função de integração recebe os identificadores necessários. Ela não busca
@@ -145,6 +154,10 @@ correspondente à entrada que está sendo respondida nesse turno.
 A conta deve corresponder ao `id_phone_unidade` daquela entrada. Nunca usar uma
 unidade padrão para todos os atendimentos ou reaproveitar dados de outro ciclo.
 
+No worker de consulta, os identificadores vêm da primeira entrada ainda pendente
+ou em processamento vinculada à conversa, conferindo telefone e unidade. Os dados
+já existem na fila; não são duplicados no JSON da consulta nem em novas colunas.
+
 Se o ID necessário estiver ausente ou não for utilizável, omitir o indicador e
 registrar o motivo técnico. Isso não cria, por si só, um impedimento novo para
 uma resposta que o fluxo atual consiga enviar legitimamente.
@@ -155,24 +168,32 @@ Uma consulta à FireAds pode durar mais que os 25 segundos do indicador. A
 proposta mantém a separação entre `worker_flow` e `worker_consulta_dash`:
 
 1. O cliente A inicia uma conversa que exige consulta.
-2. O `worker_flow` registra ou recupera a pendência e libera seu ciclo para outros
-   atendimentos, sem ativar os pontinhos para A nessa fase.
+2. Após as guardas, o `worker_flow` cria a pendência, confirma vínculo e
+   reagendamento no banco e solicita o primeiro indicador para A. Depois libera
+   seu ciclo. Recuperar uma pendência já existente não solicita esse indicador.
 3. O cliente B pode ser atendido normalmente. Quando B estiver elegível para
    resposta, o indicador é solicitado para a mensagem de B.
-4. O `worker_consulta_dash` conclui a consulta de A e salva seu resultado.
+4. O `worker_consulta_dash` reserva a consulta de A, confirma a reserva e recupera
+   a entrada elegível. Depois de encerrar a transação, solicita o segundo
+   indicador, consulta a FireAds e salva o resultado completo.
 5. Na retomada de A, o `worker_flow` reconstrói o contexto, verifica as guardas e
-   a ausência de resposta anterior, decide a abertura e então ativa o indicador.
+   a ausência de resposta anterior, decide a abertura e solicita o terceiro
+   indicador imediatamente antes do primeiro envio efetivo.
 6. A abertura personalizada ou o atendimento orgânico é enviado pelas regras
    atuais, sem exigir outra mensagem do cliente para destravar a espera.
 
 Um resultado que leve ao fallback orgânico, incluindo timeout tratado pelas
-regras atuais, segue o mesmo princípio: primeiro resolver a espera e autorizar a
-resposta; depois solicitar o indicador.
+regras atuais, também recebe a sinalização anterior à resposta, após as guardas.
 
-Não renovar o indicador a cada rechecagem da pendência. Não mantê-lo artificialmente
-ativo durante os possíveis 300 segundos da consulta. O `worker_consulta_dash`
-continua responsável pela consulta e não passa a sinalizar digitação ou enviar
-mensagens de atendimento.
+São três tentativas no percurso normal completo, sem renovação periódica.
+Rechecagens da pendência pelo flow não chamam a Meta. O worker de consulta
+continua sem enviar mensagens de atendimento. As três chamadas não garantem
+animação contínua em consultas longas; a API controla sua duração.
+
+A retomada usa o reagendamento existente de 5 segundos, não um novo mecanismo
+de notificação entre workers. As primeiras duas chamadas podem ocorrer próximas
+entre si, pois a pendência fica visível após o commit. A ordem de aceite dessas
+duas requisições pela Meta não é uma condição para consultar ou responder.
 
 ## 8. Falhas, tempo de espera e impacto no ciclo
 
@@ -190,7 +211,8 @@ reais do envio da resposta continuam com seu tratamento próprio.
 
 A chamada será curta, síncrona e sem retry automático específico. Não haverá
 thread auxiliar, novo worker, tarefa em segundo plano ou rotina de renovação dos
-pontinhos. Haverá uma tentativa por tentativa elegível de resposta.
+pontinhos. Há uma tentativa em cada um dos três pontos definidos para a abertura
+FireAds; nos demais atendimentos, apenas a tentativa anterior à resposta.
 
 O transporte precisa de timeouts curtos e explícitos, próprios dessa operação.
 Como referência inicial, considerar limites da ordem de 1 a 2 segundos por fase
@@ -202,6 +224,9 @@ Essa requisição acrescenta latência ao ciclo e pode atrasar brevemente o pró
 cliente. O objetivo é limitar esse custo e não reproduzir a longa espera da
 FireAds dentro do `worker_flow`. Não alterar globalmente o timeout das mensagens
 de atendimento para configurar o indicador.
+
+No worker de consulta, o tempo gasto para recuperar a entrada e sinalizar é
+descontado do orçamento restante. A chamada não reinicia o prazo de 300 segundos.
 
 Se a resposta demorar mais que 25 segundos depois da ativação, os pontinhos
 expiram e o atendimento continua. Não reiniciar a consulta nem reenviar uma
@@ -232,6 +257,12 @@ A chamada não pode renovar, liberar ou assumir por conta própria o lock da
 conversa. Uma recuperação legítima continua sob controle do worker e da versão
 da reserva, sem reutilizar variáveis de outro cliente.
 
+Se o flow cair após confirmar a pendência, mas antes do primeiro indicador, essa
+sinalização pode ser omitida: a consulta já existe e não será marcada novamente
+como nova. A consulta e a resposta continuam recuperáveis. Se o worker de consulta
+cair, sua retomada pode sinalizar novamente antes de repetir a leitura. Por isso,
+três é o percurso normal, não uma garantia de contagem sob quedas ou rejeições.
+
 ## 10. Cobertura dos cenários
 
 | Cenário | Momento da ativação |
@@ -240,14 +271,16 @@ da reserva, sem reutilizar variáveis de outro cliente.
 | Cliente retornando, nova conversa permitida | Depois de confirmar que pode abrir a conversa, antes da resposta. |
 | Conversa ativa e continuação normal | Depois de reconstruir o contexto e autorizar a próxima resposta. |
 | Resposta de orientação, repetição ou encerramento prevista na etapa | Depois da escolha da resposta válida, antes do envio. |
-| Abertura aguardando FireAds | Não ativar enquanto a pendência impedir o atendimento. |
+| Nova pendência FireAds | Ativar após confirmar a criação e o reagendamento. |
+| Worker de consulta reservou a pendência | Ativar antes da consulta, com a entrada elegível e transação encerrada. |
+| Rechecagem de pendência FireAds já existente | Não ativar. |
 | Consulta FireAds resolvida | Depois de aplicar o resultado e autorizar a abertura correspondente. |
 | Reação do cliente a um follow-up | Aplicar as mesmas guardas e evitar ativação duplicada quando a retomada delegar ao sender normal. |
 | Mensagem posterior aguardando ordenação | Não ativar nesse ciclo. |
 | Conversa bloqueada, unidade inativa ou contexto sem envio autorizado | Não ativar. |
 | Retry apenas reconciliando resposta já salva | Não ativar. |
 | Lembrete proativo do `worker_followup` | Fora desta proposta, que trata respostas a entradas processadas pelo `worker_flow`. |
-| Operações dos workers de Funil, consulta ou Consumo Meta | Não ativar. |
+| Operações dos workers de Funil ou Consumo Meta | Não ativar. |
 
 ## 11. Observabilidade
 
@@ -262,7 +295,7 @@ do envio da resposta para não sugerir que o cliente ficou sem atendimento.
 Sucessos podem ficar em nível de diagnóstico para evitar poluir o log de cada
 ciclo. O retorno da API indica aceite da operação, não visualização comprovada.
 
-## 12. Critérios para a futura implementação
+## 12. Critérios de validação
 
 Validar com testes focados, usando integração Meta simulada:
 
@@ -270,7 +303,10 @@ Validar com testes focados, usando integração Meta simulada:
 - Conta da unidade e ID da mensagem recebida correspondem ao turno atual.
 - Bloqueios, unidade inativa, perda de lock, espera por ordenação e contexto sem
   resposta impedem a chamada.
-- Espera FireAds não ativa o indicador; retomada elegível ativa antes da abertura.
+- Abertura FireAds percorre as três ativações; rechecagens da pendência não repetem.
+- O worker de consulta usa a entrada correta e não segura transação durante HTTP.
+- Reserva vencida, unidade inativa, entrada já finalizada ou resposta persistida
+  impedem a sinalização do worker de consulta.
 - Replay com resposta persistida não chama indicador nem envia resposta novamente.
 - Retorno de follow-up não duplica a ativação ao delegar ao fluxo normal.
 - Falha ou timeout isolado do indicador mantém a resposta e sua persistência,
@@ -279,6 +315,7 @@ Validar com testes focados, usando integração Meta simulada:
 - Uma tentativa de resposta com múltiplos componentes não chama o indicador
   repetidamente por componente.
 - Configuração de timeout é isolada e não modifica outros clientes ou envios.
+- O custo do indicador não reinicia o prazo de consulta da FireAds.
 
 Depois da implementação, um teste manual controlado pode confirmar a percepção
 visual e a marcação de leitura. Os testes automatizados devem confirmar a ordem
@@ -292,6 +329,44 @@ serviço systemd ou alteração da lógica FireAds para esse recurso. Também n�
 mudança de mensagens, etapas, códigos de origem, critérios do Funil ou regras de
 atendimento.
 
-A implementação será uma alteração de código posterior a este documento, com
-validação dos caminhos de envio. Registrar a ideia aqui não significa que o
-indicador já esteja implementado, testado em produção ou incluído em uma versão.
+A implementação local não significa que o indicador esteja publicado na VM ou
+que sua exibição tenha sido verificada no WhatsApp do cliente.
+
+## 14. Implementação em 17/10/2026
+
+- `flow_worker.py` mantém suas guardas de unidade e lock e o commit anterior ao
+  envio. Em seguida abre o escopo `antes_do_primeiro_envio`, compartilhado pelo
+  sender normal e pelo retorno de follow-up.
+- Abrir o escopo não faz requisição. O cliente da integração executa a ação
+  somente quando o resolver chega a `send_message` ou `request_contact_info`,
+  depois de escolher e montar a resposta. Replays e erros de contexto anteriores
+  ao sender não ativam essa chamada.
+- Na criação de uma consulta, `solicitar` retorna se houve INSERT efetivo.
+  `ConsultaFireAdsPendente.consulta_nova` leva essa informação ao orquestrador,
+  que chama o indicador apenas após o commit da espera. Rechecagens não repetem.
+- `consulta_worker.py` confirma a reserva, lê a entrada pelo repositório e encerra
+  a transação antes de sinalizar. A reserva compartilhada da consulta é mantida
+  durante o HTTP; o prazo original inclui o custo da sinalização.
+- O escopo é uma chamada síncrona, sem thread, worker ou tarefa auxiliar.
+  Uma ação é consumida no máximo uma vez por tentativa de resposta, inclusive
+  se o indicador falhar. O contexto é restaurado no fim, também sob exceção.
+- `digitacao.py` usa `conta_wa` e `indicate_typing` com o `id_hash` da entrada e
+  o `id_phone_unidade` do turno. A operação marca essa entrada como lida.
+- A sessão exclusiva usa 1 segundo para conexão/pool e 2 segundos para
+  leitura/escrita, com zero retries de transporte. Esses limites são por fase;
+  não equivalem a uma garantia de dois segundos de duração total. Os timeouts
+  das mensagens de atendimento permanecem os anteriores.
+- ID ausente/inválido, timeout, rejeição e resposta sem confirmação geram aviso
+  em `whatsapp.digitacao` e permitem continuar o envio. O aviso inclui IDs
+  internos de fila/conversa e tipo de erro, sem texto da exceção ou dados do
+  contato. Aceite do indicador fica em DEBUG.
+- As guardas e os checkpoints de persistência continuam no worker. A integração
+  opcional não executa SQL, abre transação, modifica retry ou controla locks.
+  A janela já existente entre a última guarda e o aceite externo permanece;
+  indicador e resposta não são uma operação atômica com o banco.
+- `test_indicador_digitacao.py` valida os caminhos com o SDK real e transporte
+  simulado, incluindo três ativações e rechecagens. Os testes FireAds em PostgreSQL
+  local verificam os vínculos, guardas, reserva entre processos e commit antes do
+  indicador. Nenhum teste envia mensagens para a Meta.
+  A percepção visual depende do WhatsApp: a resposta pode sair tão rápido que
+  o indicador apareça por pouco tempo. Não foi adicionada espera artificial.

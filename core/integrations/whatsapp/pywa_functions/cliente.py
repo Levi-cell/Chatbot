@@ -15,6 +15,7 @@ _PREFIXO_MENSAGEM_BOT = ContextVar(
     "prefixo_mensagem_bot",
     default=None,
 )
+_ANTES_DO_PRIMEIRO_ENVIO = ContextVar("antes_do_primeiro_envio", default=None)
 
 
 def conta_wa(phone_id, token=TOKEN_USUARIO_META, *, session=None):
@@ -28,10 +29,29 @@ def conta_wa(phone_id, token=TOKEN_USUARIO_META, *, session=None):
         **opcoes,
     )
 
-    if _PREFIXO_MENSAGEM_BOT.get():
-        return _ClienteWhatsAppComPrefixo(cliente)
+    if _PREFIXO_MENSAGEM_BOT.get() or _ANTES_DO_PRIMEIRO_ENVIO.get():
+        return _ClienteWhatsAppDoTurno(cliente)
 
     return cliente
+
+
+@contextmanager
+def antes_do_primeiro_envio(acao):
+    """Adia uma ação até o envio efetivo, uma vez por escopo, sem criar tarefa."""
+    executada = False
+
+    def executar_uma_vez():
+        nonlocal executada
+        if not executada:
+            # Uma falha também consome a tentativa opcional deste turno.
+            executada = True
+            acao()
+
+    token = _ANTES_DO_PRIMEIRO_ENVIO.set(executar_uma_vez)
+    try:
+        yield
+    finally:
+        _ANTES_DO_PRIMEIRO_ENVIO.reset(token)
 
 
 @contextmanager
@@ -52,8 +72,8 @@ def aplicar_prefixo_mensagem_bot(texto, prefixo=None):
     return aplicar_prefixo_retorno(texto, prefixo)
 
 
-class _ClienteWhatsAppComPrefixo:
-    """Decora textos enviados no escopo corrente do flow sender."""
+class _ClienteWhatsAppDoTurno:
+    """Aplica prefixo e ação de envio apenas no escopo corrente do worker."""
 
     def __init__(self, cliente):
         self._cliente = cliente
@@ -77,6 +97,10 @@ class _ClienteWhatsAppComPrefixo:
         if "text" in kwargs:
             kwargs = dict(kwargs)
             kwargs["text"] = aplicar_prefixo_mensagem_bot(kwargs["text"])
+
+        antes_de_enviar = _ANTES_DO_PRIMEIRO_ENVIO.get()
+        if antes_de_enviar is not None:
+            antes_de_enviar()
 
         return metodo(*args, **kwargs)
 

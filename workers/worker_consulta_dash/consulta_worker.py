@@ -1,9 +1,10 @@
-"""Orquestra reservas duráveis. Não cria conversas, não muda etapas e não envia WhatsApp."""
+"""Orquestra reservas duráveis e sinaliza a espera; não envia respostas nem muda etapas."""
 
 import logging
 import time
 
 from core.database.connection_aws import get_conn
+from core.integrations.whatsapp.pywa_functions.digitacao import indicar_digitacao
 from core.repositories.fireads import pendencias
 from workers.worker_consulta_dash.consulta import consultar
 
@@ -21,11 +22,23 @@ def executar_ciclo():
         pendencias.expirar(cursor)
         conn.commit()
         reserva = pendencias.reservar(cursor)
+        inicio_reserva = time.monotonic()
         conn.commit()
         if reserva is None:
             return False
         logger.info("consulta_dash_iniciada | consulta=%s conversa=%s tentativa=%s",
                     reserva["id_consulta"], reserva["id_conversa"], reserva["versao"])
+        mensagem = pendencias.buscar_mensagem_aguardando(reserva, cursor)
+        conn.commit()
+        if mensagem is not None:
+            indicar_digitacao(
+                mensagem["id_phone_unidade"], mensagem["id_hash"],
+                id_mensagem=mensagem["id_mensagem"], id_conversa=reserva["id_conversa"],
+            )
+        # O indicador também consome o orçamento existente, sem reiniciar os 300s.
+        reserva["restante"] = max(
+            0.0, float(reserva["restante"]) - (time.monotonic() - inicio_reserva),
+        )
         resultado = consultar(reserva)
         gravado = pendencias.concluir(reserva, resultado, cursor)
         # Se o orçamento terminou durante a chamada, persistir o timeout também
