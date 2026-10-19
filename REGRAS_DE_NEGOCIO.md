@@ -810,6 +810,16 @@ ensino, aula, ajuda ou procura pelo serviço. A palavra isolada não é suficien
 pois respostas legítimas como `Sou professora de matemática` devem continuar
 pertencendo à etapa que coleta a profissão.
 
+A expressão `O investimento fica na faixa de um curso de inglês`, usada como
+comparação no formulário, não representa procura por aulas nem pergunta de preço.
+Os classificadores de reforço escolar e financeiro desconsideram esse trecho,
+aceitando variações de caixa, acentos e espaços. No financeiro, desconsiderar
+também o rótulo `Quem decide a matrícula?:` (com interrogação opcional) quando
+acompanha diretamente a comparação. Preservar a resposta a esse rótulo e o
+restante da mensagem: dúvidas reais sobre inglês, reforço ou preço conservam
+seus tratamentos. A mensagem original continua intacta no histórico. Essa
+exceção não identifica a origem do lead nem importa dados do formulário.
+
 Na etapa 4, declarações claras de profissão ou vínculo de trabalho com banca,
 cursinho, supletivo ou reforço também são respostas profissionais válidas. Por
 exemplo, `Trabalho em um cursinho`, `Sou diretora de um supletivo` e

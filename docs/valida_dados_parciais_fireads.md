@@ -6,6 +6,12 @@
 > As descrições abaixo de duas/três abas e seus SQLs são históricas; não as
 > reaplique neste deploy. A proposta de coleta parcial continua sem implementação.
 
+> Definições de negócio consolidadas em 19/10/2026 na seção de coleta parcial:
+> extração da primeira mensagem, unidades com/sem FireAds, resolução de campos
+> conflitantes e seleção/criação no dashboard. Sem FireAds, preservar o canal
+> padrão Meta Ads (`113340`) configurado no Funil da unidade. A implementação do
+> fluxo adaptável e a avaliação de migração continuam pendentes.
+
 
 Este documento acompanha o código do worker separado. Aplicar junto da migração
 `deploy/migrations/20261009_worker_consulta_dash.sql` e do novo serviço.
@@ -134,19 +140,20 @@ comum desde a etapa 1. Falhas operacionais e conflito de unicidade no banco cons
 as guardas existentes. Nenhuma migração SQL é necessária para os extratores.
 Conversas já iniciadas não são reinterpretadas nem retrocedem após o deploy.
 
-## Coleta parcial — proposta de reserva, não implementada
+## Coleta parcial — proposta consolidada, não implementada
 
 Vale separar, numa evolução, a origem do formulário da completude dos campos.
-Um telefone encontrado continuaria Google/Meta mesmo com campos apagados; somente
-os campos ausentes seriam perguntados. Preservar uma fotografia única da consulta
-com origem, dados extraídos, campos ausentes e opções não reconhecidas.
+Um telefone encontrado continuaria Google/Meta/Orgânico Site mesmo com campos
+apagados; somente os campos ausentes seriam perguntados. Preservar uma fotografia
+única da consulta com origem, dados extraídos, campos ausentes e opções não
+reconhecidas.
 
 | Campo ausente | Comportamento proposto |
 | --- | --- |
-| Nome | Saudação personalizada sem nome, pergunta da etapa 1; após a resposta, pular destino e confirmação se já conhecidos. |
+| Nome | Saudação sem nome, pergunta da etapa 1; após a resposta, pular destino e confirmação se já conhecidos. |
 | Destinatário | Perguntar para quem é e confirmar nas etapas 2/3; seguir para profissão. |
 | E-mail | Não impedir a abertura; coletar na etapa 10, com a política de e-mail vigente. |
-| Vários ou todos | Combinar os comportamentos acima, mencionando o formulário somente na abertura. |
+| Vários ou todos | Combinar os comportamentos acima. Mencionar formulário na abertura somente quando identificado na rota FireAds. |
 
 Antes de aplicar: desacoplar abertura personalizada de `email_importado`, definir
 arestas explícitas para saltar somente campos conhecidos e persistir cada coleta
@@ -156,6 +163,160 @@ de presença/ausência, opção desconhecida, conflito de e-mail e quedas entre 
 Não reconsultar o formulário no meio do atendimento. A necessidade de migração das
 transições deverá ser avaliada com essa implementação; este texto não é um script
 de deploy nem um plano executável por arquivo.
+
+### Complemento definido em 19/10/2026 — formulário recebido pelo WhatsApp
+
+Proposta ainda não implementada. As exceções pontuais de reforço escolar e
+financeiro descritas nas regras de negócio são uma alteração independente.
+
+Analisar a primeira mensagem que abriu cada conversa nova, depois das guardas
+de elegibilidade existentes. Procurar nome do titular, e-mail e destinatário
+explícitos e aproveitáveis, sem exigir a frase inteira do formulário, uma ordem
+fixa de perguntas ou os demais campos. Reconhecer rótulos equivalentes e não
+inventar valores quando houver mais de uma interpretação. O nome fornecido pelo
+formulário é sempre do titular; os dados do dependente continuam sendo coletados
+pela rota própria. Manter o telefone remetente do WhatsApp como identidade do
+cliente, com as equivalências de número já usadas pelo projeto.
+
+O uso dessa mensagem como formulário Meta corresponde ao funcionamento que o
+responsável pela integração informou para unidades com FireAds. Não deduzir nome
+pelo cumprimento inicial, parentesco por idade nem origem comercial pelo domínio
+do e-mail. A extração deve trabalhar sobre os campos identificados. Mensagem comum ou sem extração
+inequívoca continua elegível à consulta do dashboard quando a integração estiver
+ativa e aplicável. A leitura de dados no texto, por si só, não habilita uma
+integração ausente, suspensa ou desativada.
+
+1. Com os três campos aproveitáveis, persistir a abertura e responder pela
+   profissão, sem consulta inicial à FireAds.
+2. Com parte dos campos, ou com valores conflitantes para um campo, consultar uma
+   vez o dashboard e completar/resolver somente o que falta a partir de um único
+   registro compatível com os valores inequívocos conhecidos.
+   Escolher o mais recente entre os compatíveis por data/hora e depois linha.
+   Se houver somente registros incompatíveis, mesmo que seja apenas um,
+   perguntar os campos faltantes ao cliente. Não trocar silenciosamente os dados
+   extraídos da mensagem pelos de outra inscrição.
+3. Sem dados de formulário na primeira mensagem, manter a consulta inicial.
+   Se o registro encontrado estiver incompleto, aplicar a coleta parcial desta
+   proposta; se não houver formulário identificado, seguir a abertura orgânica.
+
+Guardar separadamente os dados originais do formulário, a fonte de cada valor,
+os dados complementados, campos pendentes e alterações aceitas durante o chat.
+Uma correção posterior não deve apagar a identidade usada para relacionar o
+atendimento à inscrição original. A decisão da abertura deve ser persistida
+antes da resposta e recuperável após queda, sem reconsultar em outras etapas
+ou reiniciar conversas já em andamento. Não materializar uma consulta HTTP
+pendente quando a abertura foi resolvida inteiramente pela mensagem.
+
+Na entrega de um atendimento originado pelo formulário no chat e ainda sem
+referência persistida de destino:
+
+- Procurar primeiro o marcador de reconciliação da própria conversa, inclusive
+  se uma tentativa anterior criou uma linha nova e caiu antes do commit local.
+- Procurar registros com telefone, e-mail e destinatário compatíveis. Se houver
+  vários, selecionar o mais recente por data/hora e, no empate, maior linha.
+- Para conduzir o fluxo, parentescos e outras pessoas viram dependente. Conservar
+  também a opção original e sua interpretação para distinguir inscrições quando
+  essa informação estiver disponível, sem confundir mãe e filho apenas porque
+  ambos seguem a rota de dependente.
+- Se o telefone não existir, criar um novo registro com os dados do atendimento.
+  Se existir, mas não houver registro compatível, também criar um novo registro,
+  preservando as linhas incompatíveis. Essa é a decisão explícita do usuário;
+  não deixar pendente somente por essa incompatibilidade.
+- Preservar o canal da origem, os dados da nova inscrição e o bloco técnico no
+  snapshot. Uma linha nova nessa rota não transforma o lead em orgânico nem
+  define, por si só, a classificação de primeiro atendimento no Funil.
+- Persistir a escolha do alvo antes da escrita e reutilizar essa escolha nos
+  retries. Depois de vinculado, conferir/relocalizar o mesmo registro. Não
+  ampliar automaticamente a regra de criação para uma referência já vinculada
+  que foi apagada ou alterada, nem para conflito de e-mail com outro telefone.
+
+As consultas, complementações e escritas continuam sujeitas aos locks,
+`status_pagamento`, integrações ativas, congelamento de payload, regras de idade,
+personalização e idempotência. Erro de API ou leitura incompleta não comprova
+ausência/incompatibilidade e não autoriza criar uma linha. Repetição de operação
+externa após queda ainda depende da reconciliação; a API da planilha não oferece
+uma garantia transacional conjunta com o banco do chatbot.
+
+Antes de implementar o conjunto, cobrir as oito combinações de campos presentes,
+as três rotas acima, conflitos entre mensagem e planilha, múltiplas inscrições,
+ausência/incompatibilidade na entrega, criação seguida de retry e retomada após
+queda. Os tratamentos devem ignorar os enunciados conhecidos do formulário e
+continuar reconhecendo dúvidas reais acrescentadas pelo cliente. Esta seção
+registra as definições; ainda exige detalhamento das transições e persistência.
+
+### Reutilização sem FireAds e campos conflitantes — complemento da proposta
+
+O extrator de nome do titular, e-mail e destinatário deverá ser compartilhável
+entre unidades. Ele apenas identifica candidatos na primeira mensagem e devolve,
+por campo, um valor aproveitável ou a classificação ausente, inválido ou conflitante.
+Não faz HTTP, não escolhe o canal de venda e não cria consultas no banco. A
+orquestração decide a consulta ou a pergunta ao cliente conforme a integração.
+
+| Situação na abertura | FireAds ativa e aplicável | Sem consulta FireAds disponível |
+| --- | --- | --- |
+| Três campos aproveitáveis | Persistir e iniciar pela profissão, sem consulta. | Persistir e iniciar pela profissão, sem consulta. |
+| Dados parciais | Consultar um registro compatível para completar; perguntar o que continuar faltando. | Aproveitar o conhecido e perguntar os campos faltantes no momento adequado. |
+| Campo com valores conflitantes | Consultar para resolver esse campo; sem resultado utilizável, perguntar ao cliente. | Perguntar ao cliente para resolver o campo. |
+| Nenhum dado aproveitável | Manter a consulta inicial e a coleta prevista conforme seu resultado. | Seguir a abertura comum desde o nome. |
+
+Essa proposta não modifica as guardas que impedem o atendimento de uma unidade
+ou de um cliente. Sem integração FireAds, preservar o canal padrão Meta Ads
+(`113340`) no Funil, conforme definido pelo usuário. O código atual obtém esse
+valor de `integracao_funil_unidade.codigo_canal_venda`; a extração dos campos não
+substitui a configuração nem muda o canal para orgânico por faltar algum dado.
+Esse padrão vale com dados completos, parciais, conflitantes ou ausentes.
+
+O canal Meta Ads dessas unidades decorre da configuração do Funil, não de uma
+consulta ou da identificação de formulário FireAds. Não preencher
+`origem_fireads` nem criar consulta/envio ao dashboard apenas para representar
+esse canal. Manter a integração do Funil e seus dados de unidade. A abertura
+pode reconhecer informações já enviadas pelo cliente, sem dizer que o bot
+consultou ou viu um formulário externo.
+
+Se o cliente apagar apenas parte do formulário antes de enviá-lo, preservar os
+campos ainda identificáveis e seguir a tabela. Se apagar o texto inteiro e enviar
+uma saudação, tratar como mensagem comum. Não tentar reconstruir o texto apagado
+nem usar dados de uma conversa antiga como se estivessem na mensagem atual.
+
+Regra explícita para múltiplos valores do mesmo campo:
+
+1. Identificar candidatos e distinguir repetições do mesmo valor de valores
+   diferentes. Dois e-mails iguais após aparar espaços e normalizar a caixa
+   representam um valor; não escolher primeiro ou último quando forem diferentes.
+2. Um campo conflitante não invalida os demais campos inequívocos. Não salvar
+   arbitrariamente um dos candidatos como valor confirmado.
+3. Com FireAds disponível, buscar pelo telefone remetente e pelos demais dados
+   conhecidos. O campo conflitante não pode ser exigido como filtro de igualdade.
+   Selecionar um único registro compatível, pela data/hora e depois maior linha,
+   e usar o valor aproveitável desse campo no registro escolhido. Não misturar
+   campos de inscrições diferentes nem exigir que o e-mail da planilha seja
+   exatamente um dos dois candidatos da mensagem.
+4. Se não houver registro compatível, se o campo do registro também não for
+   aproveitável, ou se a consulta falhar/expirar, manter o campo pendente e
+   perguntar ao cliente. A ausência de FireAds segue diretamente esse caminho.
+   Não reconsultar em ciclos indefinidos nem retornar a etapas já concluídas.
+5. Aplicar o mesmo princípio a nomes de titular ou destinatários conflitantes.
+   O nome de dependente não compete com o campo de nome do titular. Preservar
+   a origem de cada valor, os candidatos e a resolução no contexto persistido.
+
+O fluxo adaptável precisa desacoplar a aceitação do e-mail da importação FireAds
+completa, registrar a coleta por campo e autorizar as transições que pulam apenas
+perguntas já respondidas. Profissão, idade, confirmação do destinatário quando
+necessária e coleta do dependente continuam obedecendo às regras próprias.
+Avaliar migração do mapa de transições no plano de aplicação; não substituir
+essa autorização por atribuição direta de etapa. Testar as duas configurações
+de unidade, dados apagados, valores repetidos/conflitantes, falha da consulta e
+retomada após queda, além dos cenários já descritos. Esta extensão permanece
+documental; o runtime ainda não oferece a coleta parcial.
+
+### Estado das definições
+
+As regras de negócio discutidas estão consolidadas nesta proposta. Antes da
+aplicação, detalhar os contratos de coleta por campo, as transições autorizadas,
+a persistência e a recuperação, incluindo a eventual migração SQL. A validação
+deve cobrir o canal `113340` das unidades sem FireAds em todas as situações da
+tabela, sem criar efeitos de consulta ou entrega FireAds. Essa conclusão das
+definições não representa implementação nem validação executada do fluxo novo.
 
 ## Seleção da linha para atualizar o dashboard
 

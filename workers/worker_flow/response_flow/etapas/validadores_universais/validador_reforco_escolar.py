@@ -1,5 +1,7 @@
 import re
 
+from core.validacoes.formulario_meta import remover_enunciado_investimento
+
 from workers.worker_flow.response_flow.etapas.validadores_universais.validador_financeiro import (
     normalizar_texto,
 )
@@ -139,6 +141,9 @@ def validar_duvida_reforco_escolar(texto):
     evento, nao escolhe transicao e nao interpreta a resposta da etapa atual.
     """
     texto_normalizado = _normalizar_texto(texto)
+    texto_normalizado = " ".join(
+        remover_enunciado_investimento(texto_normalizado).split()
+    )
 
     if not texto_normalizado:
         return False

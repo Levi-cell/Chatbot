@@ -162,6 +162,10 @@ Commit: `916f69ca61777e811358a203df7687d859b6868e`
 
 Commit: `9455765856575119aec9441cb3e56d02dfb957be`
 
+### V1.13.0 — Indicador de digitação no atendimento
+
+Commit: `9468e23cbb0ead6cf09c7189a884704ed21b80ad`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

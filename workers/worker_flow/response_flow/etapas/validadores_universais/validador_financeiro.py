@@ -1,6 +1,8 @@
 import re
 import unicodedata
 
+from core.validacoes.formulario_meta import remover_enunciado_investimento
+
 
 TIPO_TRATAMENTO_FINANCEIRO = "pergunta_financeira"
 
@@ -87,6 +89,7 @@ def validar_duvida_gratuidade_experiencia(texto, *, referencia_experiencia=False
 
 def validar_pergunta_financeira(texto, *, referencia_experiencia=False):
     texto_normalizado = normalizar_texto(texto or "")
+    texto_normalizado = remover_enunciado_investimento(texto_normalizado)
     return bool(PADRAO_PERGUNTA_FINANCEIRA.search(texto_normalizado)) or (
         validar_duvida_gratuidade_experiencia(
             texto, referencia_experiencia=referencia_experiencia,
