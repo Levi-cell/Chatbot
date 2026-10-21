@@ -1,0 +1,122 @@
+======================================================================
+ERROR: test_migracao_aba_geral_preserva_resultados_prazos_e_envios (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_migracao_aba_geral_preserva_resultados_prazos_e_envios)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 885, in test_migracao_aba_geral_preserva_resultados_prazos_e_envios
+    self.assertEqual(pendente[1]['entrada_anterior']['aba_google'], entrada['aba_google'])
+                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\core\repositories\fireads\consulta.py", line 46, in buscar_abertura
+    cursor.execute(
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column c.contexto_coleta does not exist
+LINE 6: ...  AND c.iniciou_em >= i.ativada_em) AS aplicavel, c.contexto...
+                                                             ^
+
+======================================================================
+ERROR: test_migracao_com_registro_legado_preserva_resultado_e_reexecucao (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_migracao_com_registro_legado_preserva_resultado_e_reexecucao)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 1220, in test_migracao_com_registro_legado_preserva_resultado_e_reexecucao
+    self.assertIsNone(pendencias.reservar(self.cursor))
+              ^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 316, in importar
+    abertura = consulta.buscar_abertura(cid, self.cursor)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\core\repositories\fireads\consulta.py", line 46, in buscar_abertura
+    cursor.execute(
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column c.contexto_coleta does not exist
+LINE 6: ...  AND c.iniciou_em >= i.ativada_em) AS aplicavel, c.contexto...
+                                                             ^
+
+======================================================================
+FAIL: test_conflito_email_preserva_referencia_sem_importacao_parcial (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_conflito_email_preserva_referencia_sem_importacao_parcial)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 1006, in test_conflito_email_preserva_referencia_sem_importacao_parcial
+    self.assertEqual(aplicado['motivo'], 'conflito_email')
+AssertionError: 'campo_pendente_apos_importacao' != 'conflito_email'
+- campo_pendente_apos_importacao
++ conflito_email
+
+
+======================================================================
+FAIL: test_conversa_sem_integracao_nao_gera_pendencia (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_conversa_sem_integracao_nao_gera_pendencia)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 1268, in test_conversa_sem_integracao_nao_gera_pendencia
+    self.assertEqual(
+AssertionError: {'id_[79 chars]None}, 'contexto_coleta': {'versao': 1, 'id_co[749 chars]: 1}} != {'id_[79 chars]None}}
+Diff is 2280 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_espera_preserva_fila_e_importa_apos_worker_separado (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_espera_preserva_fila_e_importa_apos_worker_separado)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 562, in test_espera_preserva_fila_e_importa_apos_worker_separado
+    self.assertEqual(
+AssertionError: Tuples differ: ('Antigo', 'antigo@example.com') != ('Ana Paula', 'ana@example.com')
+
+First differing element 0:
+'Antigo'
+'Ana Paula'
+
+- ('Antigo', 'antigo@example.com')
+?     ^^^^      ^^^^
+
++ ('Ana Paula', 'ana@example.com')
+?     ^^^^^^^      ^
+
+
+======================================================================
+FAIL: test_meta_perfil_com_biografia_persiste_extracao_e_recupera_no_retry (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_meta_perfil_com_biografia_persiste_extracao_e_recupera_no_retry)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 458, in test_meta_perfil_com_biografia_persiste_extracao_e_recupera_no_retry
+    self.assertEqual(
+AssertionError: Tuples differ: ('Edcarlos', 'antigo@example.com') != ('Edcarlos', 'edcarlos@intranet')
+
+First differing element 1:
+'antigo@example.com'
+'edcarlos@intranet'
+
+- ('Edcarlos', 'antigo@example.com')
++ ('Edcarlos', 'edcarlos@intranet')
+
+======================================================================
+FAIL: test_migracao_preserva_personalizacao_conversas_e_reexecuta (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_migracao_preserva_personalizacao_conversas_e_reexecuta)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 387, in test_migracao_preserva_personalizacao_conversas_e_reexecuta
+    self.assertEqual(
+AssertionError: Lists differ: [('20[60 chars]1014_fireads_aba_geral_v1',), ('20261019_coleta_abertura_v1',)] != [('20[60 chars]1014_fireads_aba_geral_v1',)]
+
+First list contains 1 additional elements.
+First extra element 3:
+('20261019_coleta_abertura_v1',)
+
+  [('20261007_fireads_v1',),
+   ('20261009_consulta_dash_v1',),
+-  ('20261014_fireads_aba_geral_v1',),
+?                                    ^
+
++  ('20261014_fireads_aba_geral_v1',)]
+?                                    ^
+
+-  ('20261019_coleta_abertura_v1',)]
+
+======================================================================
+FAIL: test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios (tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_fireads_postgres.py", line 986, in test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios
+    )
+      
+AssertionError: False is not true : ('Coletas hist�ricas incompletas para o Funil',)
+
+----------------------------------------------------------------------
+Ran 39 tests in 262.922s
+
+FAILED (failures=6, errors=2)

@@ -1,0 +1,847 @@
+# Rotina de implementação de novas etapas
+
+## Objetivo
+
+Este documento define o padrão operacional para criar, alterar e conectar
+etapas do atendimento.
+
+Ele considera a arquitetura baseada em:
+
+```text
+chatbot.etapa
+-> catálogo dos estados existentes
+
+chatbot.etapa_transicao
+-> mapa dos movimentos permitidos
+
+response_flow
+-> valida a resposta e identifica o evento
+
+integração WhatsApp
+-> monta e envia a mensagem
+
+persistência final
+-> confirma a transição e grava seus efeitos
+```
+
+A ordem numérica das etapas existe para facilitar leitura, logs e manutenção.
+Ela não autoriza navegação. A próxima etapa nunca deve ser calculada com
+`id_etapa_atual + 1`.
+
+## Princípio central
+
+Cada interação válida produz uma aresta:
+
+```text
+origem + evento -> destino
+```
+
+Exemplo:
+
+```text
+2 + destino_atendimento_definido -> 3
+3 + destino_atendimento_confirmado -> 4
+4 + profissao_dependente_valida  -> 5
+4 + profissao_titular_valida     -> 6
+```
+
+Os tratamentos não produzem aresta:
+
+```text
+mídia
+pergunta financeira
+contexto inválido
+-> responder
+-> permanecer na etapa atual
+```
+
+## Ordem operacional
+
+Uma etapa nova deve ser construída nesta ordem.
+
+### 1. Definir a regra de negócio
+
+Antes do código, registrar:
+
+- o que o bot perguntou;
+- quais respostas são válidas;
+- quais tratamentos são necessários;
+- qual evento cada resposta válida produz;
+- para qual etapa cada evento aponta;
+- quais dados precisam ser persistidos;
+- se a etapa pertence ao fluxo titular, dependente ou aos dois;
+- se existe algum dado que não possa ser reconstruído pela mensagem original,
+  pelo histórico e pela conversa.
+
+A reconstrução comum já pertence à arquitetura. Em um retry, fila, histórico,
+conversa e mapa de transições recompõem o contexto. Quem descreve a nova etapa
+só precisa sinalizar dados externos, temporários ou ausentes da mensagem que
+exijam uma estratégia adicional.
+
+Exemplo:
+
+```text
+Origem: etapa 4
+Pergunta: qual sua profissão?
+Eventos válidos: profissao_dependente_valida ou profissao_titular_valida
+Destinos: etapa 5 ou etapa 6
+Efeito: salvar conversa.profissao e atualizar cliente.profissao
+Tratamento: respostas completas fora de contexto já auditadas repetem a etapa
+             sem evento nem persistência; não bloquear palavras isoladas
+```
+
+### 2. Cadastrar a etapa no deploy
+
+Adicionar a etapa a:
+
+```text
+core/database/deploy_database/povoar_etapas.py
+```
+
+O ID deve ser estável e o nome deve explicar o estado:
+
+```python
+(4, "Profissão do cliente")
+```
+
+Não reutilizar um ID antigo para outro significado.
+
+`povoar_etapas.py` e `etapa_transicao_script.py` devem sempre representar o
+catálogo e o mapa finais de uma instalação limpa. Quando já existir banco com
+referências às etapas, atualize primeiro esses arquivos canônicos e entregue o
+remapeamento incremental separadamente em `deploy/migrations/*.sql`, para
+execução manual no DBeaver. Não acumule `ALTER TABLE`, `UPDATE` de migração ou
+outro histórico de implantação nos scripts Python de criação e seed.
+
+### 3. Declarar o evento e a transição
+
+Declarar o evento em:
+
+```text
+workers/worker_flow/response_flow/transicoes/eventos.py
+```
+
+Exemplo:
+
+```python
+EVENTO_PROFISSAO_TITULAR_VALIDA = "profissao_titular_valida"
+```
+
+As constantes de etapa devem incluir número e significado:
+
+```python
+ETAPA_1_NOME_CLIENTE = 1
+ETAPA_2_DESTINO_ATENDIMENTO = 2
+ETAPA_3_CONFIRMACAO_DESTINO = 3
+ETAPA_4_PROFISSAO = 4
+ETAPA_5_NOME_DEPENDENTE = 5
+ETAPA_6_IDADE_ALUNO = 6
+```
+
+Para novas etapas, seguir obrigatoriamente:
+
+```text
+ETAPA_<NÚMERO>_<SIGNIFICADO>
+```
+
+Registrar a aresta em:
+
+```text
+core/database/deploy_database/etapa_transicao_script.py
+```
+
+Exemplo:
+
+```python
+(4, "profissao_titular_valida", 6)
+```
+
+Uma origem e um evento possuem somente um destino. Uma origem e um destino
+identificam somente um evento.
+
+### 4. Preparar mensagens
+
+Seguir o [contrato editorial de messages](core/integrations/whatsapp/messages/README.md):
+separar apresentação normal de tratamento com retomada, distinguir titular e
+dependente e revisar a fala completa com os prefixos de retorno. A etapa 1
+tem versões exclusivas de primeiro contato; as seis perguntas da triagem
+preservam seu contrato específico. Reorganizar texto não autoriza mudar
+validadores, transições ou elegibilidade de follow-up.
+
+Definir a mensagem padrão e a mensagem de repetição no arquivo da etapa.
+Importar os montadores de `messages/tratamentos/` e entregar a eles a repetição
+pura: tratamento primeiro, pergunta depois. Não copiar prefixos entre etapas.
+Usar `compor_mensagem_inicial` para apresentação + pergunta reutilizável e
+`compor_tratamento` somente para orientação + repetição. Não incluir a mensagem
+padrão completa em um tratamento, nem duplicar a pergunta dentro da apresentação.
+Quando houver variantes de participante, preservar ambas também nos tratamentos.
+**Exceção obrigatória para contexto inválido:** escrever uma mensagem própria
+que já explique como responder corretamente. Retorná-la sem `compor_tratamento`,
+sem apresentação e sem concatenar a pergunta de repetição. Preservar botões,
+opções e rodapés nativos; a saudação de inatividade de três horas pode antecedê-la
+quando elegível. A regra vale também para a triagem e a pesquisa de satisfação.
+O parâmetro `repeticao=True` seleciona a reapresentação neutra no follow-up;
+a etapa 8 avança diretamente para a 9 e não tem mensagem de repetição.
+Triagem e encerramento mantêm suas exceções. Inatividade de três horas continua
+compondo uma única saudação sobre o resultado da validação normal.
+
+Comentar os blocos seguindo a referência da etapa 7: apresentação, repetição,
+composição da inicial e tratamentos. Usar `###` nos títulos e comentários
+curtos para explicar reutilização, participante e exceções. Comentar apenas
+os blocos existentes, sem narrar cada linha. Os exemplos e critérios ficam
+na seção de comentários do contrato editorial de `messages`.
+
+Criar ou atualizar:
+
+```text
+core/integrations/whatsapp/messages/<etapa>_messages.py
+```
+
+Responsabilidades permitidas:
+
+- constantes de texto;
+- títulos e callbacks de botões;
+- funções puras de montagem;
+- interpolação de nome e outros valores;
+- formatação nativa do WhatsApp.
+
+Responsabilidades proibidas:
+
+- importar PyWa;
+- consultar banco ou Redis;
+- decidir etapa;
+- controlar retry;
+- executar envio.
+
+Quando várias etapas e integrações precisarem do mesmo catálogo de conteúdo,
+centralize-o em um módulo neutro de domínio. Na triagem, as etapas 12 a 17 e o
+Funil usam `core/triagem/perguntas.py`; mensagens e observações não devem
+duplicar as perguntas nem a regra `< 18`/`>= 18`.
+
+Ramificações apenas de mensagem não exigem novas etapas. Antes de criar ou
+renumerar uma etapa, confirme se evento, destino, efeito e persistência são os
+mesmos. Se somente o texto varia por um dado já persistido, releia esse dado no
+contexto, escolha a mensagem e preserve o mapa transacional existente.
+
+Exemplo:
+
+```python
+MENSAGEM_ETAPA4 = "Qual é a sua profissão?"
+
+
+def montar_mensagem_etapa4():
+    return MENSAGEM_ETAPA4
+```
+
+### 5. Criar o sender
+
+Criar ou atualizar:
+
+```text
+core/integrations/whatsapp/pywa_functions/pywa_senders/etapa4.py
+```
+
+O sender:
+
+- chama a função de `messages`;
+- escolhe texto, mídia e botões;
+- usa PyWa;
+- captura o ID retornado pela Meta;
+- devolve o contexto técnico do envio;
+- converte falhas da chamada externa em `ErroEnvioMeta`.
+
+O sender não:
+
+- escolhe a transição;
+- executa SQL;
+- altera conversa;
+- marca fila como `sent`;
+- conhece lock ou retry.
+
+Contrato esperado:
+
+```python
+{
+    "enviou": True,
+    "resposta_ja_existia": False,
+    "mensagem_bot": mensagem_bot,
+    "id_hash_msg_bot": id_hash_msg_bot,
+    "id_etapa_resultante": 4,
+    "tipo_mensagem": "text",
+    "canal": "meta_whatsapp",
+    "atualizar_conversa": True,
+    "atualizar_last_from_bot": True,
+}
+```
+
+O worker acrescenta depois:
+
+```python
+{
+    "id_etapa_origem_transicao": 3,
+    "evento_transicao": "destino_atendimento_confirmado",
+}
+```
+
+### 6. Criar o validador de contexto
+
+Se a resposta esperada for específica da etapa, criar:
+
+```text
+workers/worker_flow/response_flow/etapas/validadores_contexto/
+```
+
+Exemplos:
+
+```text
+valida_etapa2.py
+valida_etapa4.py
+valida_etapa7.py
+```
+
+O validador específico:
+
+- recebe dados simples;
+- não chama sender;
+- não consulta banco;
+- não altera contexto;
+- devolve evento ou resultado estruturado;
+- devolve `None` ou resultado inválido quando não reconhecer a resposta.
+
+Validadores reutilizados em diferentes etapas permanecem em:
+
+```text
+workers/worker_flow/response_flow/etapas/validadores_universais/
+```
+
+Exemplos:
+
+```text
+validador_midia.py
+validador_financeiro.py
+validador_nome.py
+```
+
+O validador de nome é universal porque valida tanto o nome do cliente quanto o
+nome do dependente.
+
+Uma validação pura compartilhada por outros domínios não precisa ficar dentro do
+worker. O contrato estrutural de e-mail, usado pelo fluxo e pela reconstrução do
+snapshot do Funil, pertence a `core/validacoes/email.py`. Esse módulo não acessa
+banco, não envia mensagens e não decide transições.
+
+#### Regra de classificação dos validadores
+
+Use um validador universal somente quando ele for reutilizado com o mesmo
+significado e não escolher entre destinos diferentes. Ele pode identificar um
+tratamento, manter a etapa ou liberar a continuação normal.
+
+Use um validador contextual quando a resposta gerar eventos próprios da etapa,
+principalmente se esses eventos pularem ou retrocederem no mapa. Validadores de
+etapas distintas podem ter gramática semelhante e ainda assim permanecer
+separados:
+
+```text
+etapa 7 + resposta positiva -> oferta_aceita
+etapa 9 + resposta positiva -> retorno_confirmado
+```
+
+Uma especialização local de um tratamento universal também permanece em
+`validadores_contexto/` quando o mesmo vocabulário puder ser uma resposta
+legítima apenas naquela etapa. Ela deve aplicar somente a desambiguação local e
+depois delegar ao validador universal, sem sender, banco ou alteração de
+contexto. Não duplique nem enfraqueça a regra compartilhada para acomodar uma
+única etapa.
+
+O resolver não deve traduzir uma decisão genérica para o evento. O próprio
+validador contextual devolve o evento:
+
+```python
+evento_transicao = validar_etapa7(texto_cliente)
+
+if evento_transicao is None:
+    return sender_de_tratamento(...)
+
+destinos_esperados = _destinos_esperados_por_evento(evento_transicao)
+etapa_destino = resolver_destino_transicao(
+    contexto_historico,
+    evento_transicao,
+    destinos_esperados=destinos_esperados,
+)
+```
+
+### 7. Criar o resolver da etapa
+
+Criar:
+
+```text
+workers/worker_flow/response_flow/etapas/resolver_etapa<n>.py
+```
+
+O arquivo representa a etapa à qual o cliente está respondendo. Ele possui duas
+responsabilidades:
+
+```text
+validar a etapa atual
+-> encaminhar para o sender do destino autorizado
+```
+
+Ordem recomendada:
+
+```text
+1. validar mídia
+2. validar dúvida sobre reforço escolar
+3. validar pergunta financeira
+4. validar contexto específico
+5. produzir evento
+6. marcar a fronteira VALIDANDO DESTINO(S)
+7. resolver destino pelo mapa
+8. chamar o sender correspondente
+9. anexar origem, evento e destino ao contexto de envio
+```
+
+O marcador obrigatório deve aparecer depois de todos os tratamentos:
+
+```python
+# VALIDANDO DESTINO(S)
+# A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+```
+
+Modelo:
+
+```python
+def resolve_etapa4(contexto_historico):
+    tipo_mensagem = contexto_historico["tipo_mensagem_atual"]
+    texto_cliente = contexto_historico["texto_cliente_atual"]
+
+    if validar_midia(tipo_mensagem):
+        return enviar_etapa4_midia(...)
+
+    if validar_duvida_reforco_escolar_etapa4(texto_cliente):
+        return enviar_etapa4_reforco_escolar(...)
+
+    if validar_pergunta_financeira(texto_cliente):
+        return enviar_etapa4_financeiro(...)
+
+    resultado = validar_profissao_etapa4(
+        texto_cliente,
+        tipo_mensagem,
+    )
+
+    if not resultado.valida:
+        return enviar_etapa4_contexto_profissao_invalida(...)
+
+    status_dependente = contexto_historico["status_dependente"]
+    if status_dependente:
+        evento = EVENTO_PROFISSAO_DEPENDENTE_VALIDA
+        destino_esperado = ETAPA_5_NOME_DEPENDENTE
+    else:
+        evento = EVENTO_PROFISSAO_TITULAR_VALIDA
+        destino_esperado = ETAPA_6_IDADE_ALUNO
+
+    # VALIDANDO DESTINO(S)
+    # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.
+    destino = resolver_destino_transicao(
+        contexto_historico,
+        evento,
+        destinos_esperados={destino_esperado},
+    )
+
+    contexto_envio = (
+        enviar_etapa5(...) if status_dependente else enviar_etapa6_cliente(...)
+    )
+    contexto_envio["profissao"] = resultado.profissao
+
+    return anexar_transicao_ao_contexto_envio(
+        contexto_historico,
+        contexto_envio,
+        evento,
+        destino,
+    )
+```
+
+Tratamentos retornam o sender da etapa atual sem `evento_transicao`.
+
+### 8. Registrar o resolver no flow_sender
+
+Atualizar:
+
+```text
+workers/worker_flow/response_flow/flow_sender.py
+```
+
+Exemplo:
+
+```python
+if id_etapa_atual == 4:
+    return _resolver_com_saudacao(resolve_etapa4, contexto_historico)
+```
+
+O `flow_sender`:
+
+- preserva `resposta_bot_atual` como primeira barreira;
+- seleciona o resolver pela etapa atual;
+- não decide destino;
+- não executa SQL;
+- não chama PyWa diretamente.
+
+A etapa 1 ainda não possui nome confirmado e é chamada diretamente. Nas etapas
+2 a 23, a rota atual usa `_resolver_com_saudacao` para aplicar, no mesmo envio e
+sem mudar validação ou destino, o prefixo de retorno quando a última mensagem do
+bot daquela conversa tem pelo menos três horas. A barreira de resposta já
+existente continua antes dessa lógica, para o retry não gerar novo envio.
+
+Uma etapa não implementada deve continuar levantando `NotImplementedError`.
+Não retornar sucesso fictício.
+
+Durante o desenvolvimento isolado de uma transição, uma simulação temporária
+do sender de destino pode existir somente quando estiver explicitamente
+marcada com `envio_simulado=True`, coberta por testes e sem ser classificada
+como confirmação da Meta. O bloco deve ser removido assim que o sender real do
+destino for implementado.
+
+### 9. Implementar os efeitos da transição
+
+Atualizar:
+
+```text
+workers/worker_flow/transacoes/efeitos_transicao.py
+```
+
+A navegação já foi escolhida pela tabela. Esse arquivo grava somente os efeitos
+específicos da aresta e deve deixar cada ponte visualmente explícita:
+
+```python
+# ETAPA 2
+if etapa_origem == ETAPA_2_DESTINO_ATENDIMENTO:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_DEFINIDO:
+        # 2 -> 3: persiste a escolha antes de pedir confirmação.
+
+# ETAPA 3
+if etapa_origem == ETAPA_3_CONFIRMACAO_DESTINO:
+    if evento == EVENTO_DESTINO_ATENDIMENTO_CONFIRMADO:
+        # 3 -> 4: aplica o status final absoluto e sempre pede a profissão.
+
+# ETAPA 4
+if etapa_origem == ETAPA_4_PROFISSAO:
+    if evento == EVENTO_PROFISSAO_DEPENDENTE_VALIDA:
+        # 4 -> 5
+
+    if evento == EVENTO_PROFISSAO_TITULAR_VALIDA:
+        # 4 -> 6
+```
+
+Exemplos:
+
+```text
+nome_cliente_valido
+-> salvar cliente.nome
+
+destino_atendimento_definido
+-> salvar status_dependente
+-> criar dependente quando o atendimento for para outra pessoa
+
+profissao_dependente_valida
+-> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
+-> seguir para o nome do dependente
+
+profissao_titular_valida
+-> salvar conversa.profissao
+-> atualizar cliente.profissao com o valor válido mais recente
+-> seguir diretamente para a idade
+
+nome_dependente_valido
+-> salvar dependente.nome_dependente
+
+idade_aluno_valida
+-> salvar cliente.idade ou dependente.idade conforme status_dependente
+```
+
+Os efeitos devem:
+
+- usar o mesmo cursor da transação final;
+- ser idempotentes;
+- validar evento, origem e destino esperados;
+- conseguir reconstruir dados a partir da mensagem original no retry;
+- levantar erro quando faltar um dado obrigatório;
+- nunca executar em tratamento.
+
+`atualizar_banco_conforme_transicao_de_etapa` não escolhe destino. Seu papel é:
+
+```text
+evento já autorizado
+-> persistir efeitos de negócio
+```
+
+`persistencia_resposta.py` permanece como orquestrador curto da transação final.
+`movimento_conversa.py` decide somente entre inicialização, transição e
+permanência na etapa atual.
+
+### 10. Ativar a aresta no conjunto final
+
+Em desenvolvimento, catálogo, transição e implementação podem ser construídos
+na mesma tarefa. Mesmo assim, a versão final só pode manter a aresta ativa
+quando estiverem prontos:
+
+```text
+etapa cadastrada
+evento declarado
+mensagens
+sender
+validador
+resolver
+rota no flow_sender
+efeitos transacionais
+testes
+```
+
+Uma aresta ativa apontando para resolver ou sender inexistente deixa a conversa
+em um estado sem atendimento.
+
+### 11. Conferir a reação após follow-up
+
+Além do resolver normal, uma etapa não terminal repetível precisa ter seu sender
+selecionado em `workers/worker_flow/response_flow/repeticao_followup.py`. Dados
+dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; não
+substituem a validação da resposta atual. O catálogo de repetição contempla 1–23,
+exceto a etapa 8, que retorna diretamente à 9.
+
+Antes do segundo envio, a reação passa pelos resolvers normais: resposta válida
+avança; tratamento específico mantém sua orientação; somente contexto inválido
+genérico repete a pergunta neutra. A saudação `Bom te ver novamente ☺️`, com nome
+quando autorizado, aparece uma vez. O flow persiste resposta, efeitos, reset do
+stage e conclusão da fila juntos. Sem avanço, a primeira reação não incrementa
+o contador; as respostas seguintes voltam às regras normais.
+Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
+
+Na exceção da 8, reutilizar `resolve_etapa8` e a transição `cliente_retornou → 9`.
+Qualquer reação processada apresenta a 9, sem aceitar antecipadamente sua oferta,
+repetir a 8 ou duplicar saudações. O cliente e o checkpoint ficam registrados na
+origem 8; o bot responde na 9. Usar a persistência normal da transição e concluir
+o follow-up validando o destino 9 no mesmo commit. Testar rollback dos dois
+efeitos e replay sem reenvio ou reset de ciclo posterior, nas duas rotas.
+
+Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
+atual é 1–17, antes do agendamento. Mudanças no mapa precisam revisar
+explicitamente esse limite, o catálogo de repetição, as regras e os testes.
+
+A segunda camada chega após mais 7h desde o primeiro envio real sem reação,
+mantendo as guardas de elegibilidade. Seu envio confirmado encerra a conversa em
+stage 2, sem bloqueio de 30 dias. Outra mensagem abre nova conversa e recebe a
+abertura da etapa 1 sem prefixo. Não reaproveitar a retomada do atendimento fechado.
+O comportamento normal com stage zero conserva a saudação de três horas.
+
+## Subfluxo da integração WhatsApp
+
+```text
+resolver da etapa
+-> sender específico
+-> função de montagem em messages
+-> cliente PyWa
+-> Meta
+-> contexto técnico do envio
+```
+
+Estrutura:
+
+```text
+core/integrations/whatsapp/
+├── messages/
+│   ├── etapa1_messages.py
+│   ├── ...
+│   └── etapa24_messages.py
+└── pywa_functions/
+    ├── cliente.py
+    ├── saudacao.py
+    └── pywa_senders/
+        ├── etapa1.py
+        ├── ...
+        └── etapa24.py
+```
+
+### Fronteiras
+
+| Local | Decide conteúdo | Chama PyWa | Decide transição | Executa SQL |
+|---|---:|---:|---:|---:|
+| `messages` | Sim | Não | Não | Não |
+| `pywa_senders` | Sim | Sim | Não | Não |
+| resolver da etapa | Não | Não | Sim | Não |
+| persistência final | Não | Não | Não | Sim |
+
+## Subfluxo do response_flow
+
+O diagrama abaixo é o caminho normal. Antes dele, `flow_worker.py` relê a
+conversa sob lock e consulta a retomada: stage positivo ou marcador da entrada
+pode passar por `retomada_followup.py` e `transacoes/retorno_followup.py`, reutilizando
+o fluxo normal. `repeticao_followup.py` é apenas a repetição neutra ou recuperação.
+
+```text
+valida_historico
+-> carrega somente as transições da origem
+-> flow_sender preserva idempotência
+-> resolver da etapa aplica prioridades
+-> validador produz evento
+-> resolver_transicao localiza destino
+-> sender envia
+-> contexto_envio recebe origem + evento + destino
+-> persistência final revalida no PostgreSQL
+-> efeitos da aresta são persistidos
+```
+
+O contexto histórico carrega somente a fotografia da origem:
+
+```python
+{
+    "id_etapa_origem_transicao": 4,
+    "transicoes_permitidas": {
+        "profissao_dependente_valida": 5,
+        "profissao_titular_valida": 6,
+    },
+}
+```
+
+O contexto de envio carrega a decisão exata:
+
+```python
+{
+    "id_etapa_origem_transicao": 4,
+    "evento_transicao": "profissao_titular_valida",
+    "id_etapa_resultante": 6,
+}
+```
+
+## Comentários estratégicos
+
+Comentários devem explicar invariantes ou decisões que não são óbvias:
+
+```python
+# A origem vem do histórico da mensagem, não da etapa atual da conversa.
+```
+
+```python
+# Tratamento responde, mas não produz evento de transição.
+```
+
+```python
+# A tabela precisa autorizar a aresta antes da chamada externa.
+```
+
+Evitar comentários que apenas repetem o código:
+
+```python
+# Chama a função.
+```
+
+## Testes obrigatórios
+
+### Messages e sender
+
+- texto montado corretamente;
+- parâmetros dinâmicos;
+- botões e callbacks;
+- ID da Meta retornado;
+- `ErroEnvioMeta` em falha externa;
+- `id_etapa_resultante` correto.
+
+### Validador e resolver
+
+- mídia tem prioridade;
+- financeiro tem prioridade sobre contexto;
+- resposta válida produz o evento correto;
+- resposta inválida chama tratamento;
+- tratamento não possui `evento_transicao`;
+- mapa ausente impede sender;
+- destino incompatível impede sender.
+
+### Persistência
+
+- PostgreSQL aceita somente origem, evento e destino cadastrados;
+- efeito específico é persistido;
+- tratamento não altera etapa;
+- retry reconstrói o dado;
+- resposta existente não chama Meta;
+- reaplicação não regride conversa;
+- falha provoca rollback e não marca fila como `sent`.
+
+### Regressão
+
+Executar os módulos diretamente afetados e, ao final, a suíte completa. Entre os
+contratos críticos atuais estão:
+
+```text
+test_fluxo_turno_abc
+test_retry_essencial
+test_persistencia_essencial
+test_worker_flow_runtime
+test_suporte_idoso_email_obrigatorio
+test_saudacao_retorno
+```
+
+## Definition of done
+
+Uma etapa está concluída somente quando:
+
+```text
+[ ] regra de negócio definida
+[ ] etapa cadastrada
+[ ] evento declarado
+[ ] aresta cadastrada
+[ ] messages criada
+[ ] sender criado
+[ ] validador criado ou reutilizado
+[ ] resolver criado
+[ ] flow_sender atualizado
+[ ] efeitos transacionais implementados
+[ ] tratamentos permanecem na origem
+[ ] retry reconstrói o contexto
+[ ] resposta existente não duplica envio
+[ ] testes específicos passam
+[ ] suíte completa passa
+[ ] Django check passa
+[ ] compileall passa
+[ ] documentação continua coerente
+[ ] reação ao primeiro follow-up valida, trata ou repete; 8 -> 9; segundo encerra e retorno abre nova conversa sem prefixo
+```
+
+## O que não fazer
+
+- não calcular destino com `id_etapa + 1`;
+- não cadastrar auto-salto para representar tratamento;
+- não decidir transição no sender;
+- não importar PyWa no worker;
+- não escrever mensagem do WhatsApp no resolver;
+- não executar SQL em `messages` ou `pywa_senders`;
+- não passar cursor para sender;
+- não abrir conexão dentro do resolver;
+- não atualizar etapa sem evento;
+- não ativar aresta para etapa incompleta;
+- não remover a barreira `resposta_bot_atual`;
+- não alterar lock, turno ou retry para implementar conteúdo de etapa.
+
+## Regra para futuras conversas de desenvolvimento
+
+Ao receber uma solicitação de nova etapa:
+
+1. conferir este documento;
+2. mapear origem, evento, destino e tratamentos;
+3. localizar as operações de banco específicas;
+4. apresentar dúvidas de regra antes de codificar;
+5. implementar seguindo a ordem operacional;
+6. revisar idempotência, retry e concorrência;
+7. testar a etapa e os fluxos críticos do sistema.
+
+Se uma nova regra não se encaixar neste padrão, ela deve ser discutida antes de
+introduzir exceção arquitetural.
+
+## Reserva com e sem plataforma
+
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+
+`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+
+O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
+
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+
+Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

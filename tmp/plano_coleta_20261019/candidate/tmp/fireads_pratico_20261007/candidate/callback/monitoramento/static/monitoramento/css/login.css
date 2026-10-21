@@ -1,0 +1,94 @@
+:root {
+  color-scheme: light;
+  --fundo: #f5f1ef;
+  --texto: #1c321d;
+  --secundario: #657064;
+  --verde: #274a2c;
+  --verde-claro: #d9ff6b;
+  --borda: #d9ddd3;
+  --erro: #a42d31;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+  font-synthesis: none;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 280px; background: var(--fundo); color: var(--texto); }
+button, input { font: inherit; }
+button { cursor: pointer; }
+svg { stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+[hidden] { display: none !important; }
+.skip-link { position: fixed; left: 24px; top: -70px; z-index: 5; background: #fff; padding: 14px; color: var(--verde); border-radius: 8px; }
+.skip-link:focus { top: 16px; }
+.portal { max-width: 1500px; min-height: 100svh; margin: auto; padding: 28px; display: grid; grid-template-columns: 1.08fr 1fr; }
+.apresentacao { position: relative; overflow: hidden; background: radial-gradient(ellipse at 85% 85%, #354e2a 0, transparent 60%), #1c321d; color: #f5f1ef; border-radius: 24px; padding: 44px 48px 34px; display: flex; flex-direction: column; justify-content: space-between; isolation: isolate; }
+.apresentacao::before { content: ""; position: absolute; width: 490px; height: 490px; border: 1px solid #a8d7bf10; border-radius: 50%; top: -265px; right: -250px; box-shadow: 0 0 0 64px #a8d7bf05, 0 0 0 128px #a8d7bf04; z-index: -1; }
+.marca img { display: block; width: 149px; height: auto; filter: brightness(0) invert(96%) sepia(5%) saturate(207%) hue-rotate(335deg); }
+.mensagem-marca { padding-top: 68px; }
+.sobretitulo { color: #c0d5ce; display: flex; gap: 10px; align-items: center; font-size: 10px; font-weight: 600; letter-spacing: 2px; margin: 0 0 24px; }
+.sobretitulo span { width: 6px; height: 6px; background: var(--verde-claro); border-radius: 50%; box-shadow: 0 0 0 4px #b6e5c913; }
+.mensagem-marca h2 { font-size: clamp(36px, 4.1vw, 61px); line-height: 1.12; letter-spacing: -2.3px; font-weight: 500; margin: 0 0 24px; }
+.mensagem-marca h2 span { color: var(--verde-claro); }
+.descricao { color: #b8cec8; font-size: 15px; line-height: 1.8; margin: 0; }
+.conexoes { position: relative; height: 214px; margin-top: 32px; }
+.orbita { position: absolute; left: 50%; top: 50%; border: 1px solid #aacfb123; border-radius: 50%; transform: translate(-50%, -50%) rotate(-22deg); }
+.orbita-externa { width: 390px; height: 155px; }
+.orbita-interna { width: 272px; height: 118px; transform: translate(-50%, -50%) rotate(26deg); }
+.conexao-central { position: absolute; width: 81px; height: 81px; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-7deg); border-radius: 24px; display: grid; place-items: center; background: linear-gradient(135deg, #d9ff6b, #a8d858); box-shadow: 0 15px 55px #101c1350; color: #1c321d; }
+.conexao-central svg { width: 42px; height: 42px; }
+.conexao-mini { position: absolute; width: 47px; height: 47px; border: 1px solid #adc38b38; border-radius: 14px; display: grid; place-items: center; color: #d9ff6b; background: #354d2e; }
+.conexao-mini svg { width: 25px; height: 25px; }
+.conexao-esquerda { top: 102px; left: 7%; transform: rotate(-11deg); }
+.conexao-direita { top: 32px; right: 7%; transform: rotate(9deg); }
+.ponto { position: absolute; border-radius: 50%; background: #85b69c; width: 5px; height: 5px; }
+.ponto-um { left: 24%; top: 47px; }.ponto-dois { right: 28%; bottom: 34px; }
+.assinatura { color: #a1bbb2; font-size: 11px; letter-spacing: .25px; margin: 30px 0 0; }
+.area-acesso { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; padding: 65px 48px 76px; }
+.acesso-conteudo { width: 100%; max-width: 385px; }
+.icone-acesso { width: 49px; height: 49px; border-radius: 15px; background: #e4ede6; color: var(--verde); display: grid; place-items: center; margin-bottom: 30px; }
+.icone-acesso svg { width: 23px; height: 23px; }
+.rotulo-acesso { color: var(--verde); font-size: 10px; font-weight: 700; letter-spacing: 1.7px; margin: 0 0 12px; }
+h1 { font-size: 31px; font-weight: 600; letter-spacing: -1.05px; line-height: 1.25; margin: 0 0 12px; }
+.introducao { color: var(--secundario); font-size: 14px; line-height: 1.6; margin: 0 0 33px; overflow-wrap: anywhere; }
+.introducao strong { color: var(--texto); font-weight: 600; }
+.campo { margin-bottom: 23px; }
+.campo label { display: block; margin-bottom: 9px; font-size: 13px; font-weight: 600; }
+.entrada { position: relative; }
+.entrada > svg { position: absolute; width: 18px; height: 18px; left: 17px; top: 19px; color: #748981; pointer-events: none; }
+.entrada input { display: block; width: 100%; min-height: 56px; padding: 15px 16px 15px 47px; border: 1px solid var(--borda); border-radius: 10px; background: #ffffffa8; color: var(--texto); font-size: 16px; outline: none; transition: border-color .18s, box-shadow .18s; }
+.entrada input::placeholder { color: #889893; font-size: 14px; opacity: 1; }
+.entrada input:hover { border-color: #8ba798; }
+.entrada input:focus { border-color: var(--verde); box-shadow: 0 0 0 3px #274a2c17; background: #fff; }
+.campo-invalido input { border-color: var(--erro); }
+.erro-campo { padding: 0; list-style: none; color: var(--erro); font-size: 12px; line-height: 1.5; margin: 7px 0 0; }
+.botao-entrar { width: 100%; min-height: 55px; border: 1px solid var(--verde); border-radius: 10px; background: var(--verde); color: #fff; display: flex; justify-content: center; align-items: center; gap: 15px; font-size: 14px; font-weight: 600; transition: background .18s, transform .18s; margin-top: 29px; }
+.botao-entrar svg { width: 19px; height: 19px; }
+.botao-entrar:hover { background: #1c321d; }
+.botao-entrar:active { transform: translateY(1px); }
+.botao-entrar:disabled { cursor: wait; opacity: .7; }
+.botao-entrar:focus-visible, .aviso:focus-visible { outline: 3px solid #658f76; outline-offset: 4px; }
+.nota-seguranca { display: flex; justify-content: center; align-items: center; gap: 7px; color: var(--secundario); font-size: 11px; margin: 17px 0 0; }
+.nota-seguranca svg { width: 14px; height: 14px; }
+.ajuda-acesso { border-top: 1px solid var(--borda); margin-top: 34px; padding-top: 23px; display: flex; align-items: flex-start; gap: 10px; }
+.icone-ajuda { width: 15px; height: 15px; flex: 0 0 15px; border: 1px solid #9bada5; border-radius: 50%; display: grid; place-items: center; font-size: 10px; margin-top: 3px; color: #6a7f73; font-family: Georgia, serif; font-weight: 700; }
+.ajuda-acesso p { margin: 0; color: #52655b; font-size: 11px; line-height: 1.8; }.ajuda-acesso p span { color: var(--secundario); }
+.rodape { position: absolute; bottom: 9px; color: #778980; font-size: 10px; letter-spacing: .2px; display: flex; gap: 8px; justify-content: center; }
+.aviso { padding: 13px 15px; border-radius: 10px; margin: 0 0 24px; font-size: 13px; line-height: 1.6; }
+.aviso p { margin: 0; }.aviso p + p { margin-top: 6px; }
+.erro { color: #932d32; background: #fff0ed; border: 1px solid #efd0c8; }.sucesso { color: #19553e; background: #e2f0e5; border: 1px solid #c8dfce; }
+.aviso-caps { margin: 8px 0 0; font-size: 12px; color: #865914; }
+@media (min-width: 1500px) { .portal { min-height: min(940px, 100svh); }.apresentacao { padding: 52px 65px; } }
+@media (max-width: 1100px) { .portal { padding: 18px; grid-template-columns: 1fr 1fr; }.apresentacao { padding: 36px 30px 28px; }.area-acesso { padding-left: 32px; padding-right: 24px; }.mensagem-marca h2 { letter-spacing: -1.8px; }.conexoes { height: 190px; }.orbita-externa { width: 300px; }.quebra-desktop { display: none; } }
+@media (max-width: 760px) {
+  .portal { display: flex; flex-direction: column; padding: 0; min-height: 100svh; }
+  .apresentacao { border-radius: 0 0 26px 26px; padding: 27px 27px 30px; flex: 0 0 auto; }
+  .marca img { width: 115px; }
+  .mensagem-marca { padding-top: 29px; }.sobretitulo { font-size: 8px; letter-spacing: 1.4px; margin-bottom: 13px; }.sobretitulo span { width: 5px; height: 5px; }
+  .mensagem-marca h2 { font-size: 33px; line-height: 1.1; letter-spacing: -1.2px; margin-bottom: 0; }
+  .descricao, .conexoes, .assinatura { display: none; }
+  .area-acesso { padding: 34px 27px 25px; flex: 1; justify-content: flex-start; }
+  .icone-acesso { display: none; }.rotulo-acesso { font-size: 9px; margin-bottom: 9px; }
+  h1 { font-size: 27px; letter-spacing: -.8px; }.introducao { margin-bottom: 26px; font-size: 13px; }
+  .campo { margin-bottom: 19px; }.botao-entrar { margin-top: 24px; }
+  .ajuda-acesso { margin-top: 27px; padding-top: 19px; }.rodape { position: static; padding-top: 29px; margin-top: auto; font-size: 9px; }
+}
+@media (max-width: 360px) { .apresentacao { padding: 24px 20px; }.area-acesso { padding: 28px 20px 23px; }.mensagem-marca h2 { font-size: 29px; }h1 { font-size: 24px; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; } }

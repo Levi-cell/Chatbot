@@ -1,0 +1,6 @@
+2026-10-19 20:42:19.537 -03 [13280] LOG:  starting PostgreSQL 16.15, compiled by Visual C++ build 1944, 64-bit
+2026-10-19 20:42:19.538 -03 [13280] LOG:  listening on IPv4 address "127.0.0.1", port 55434
+2026-10-19 20:42:19.754 -03 [10984] LOG:  database system was shut down at 2026-10-17 15:36:00 -03
+2026-10-19 20:42:19.972 -03 [13280] LOG:  database system is ready to accept connections
+2026-10-19 20:47:19.731 -03 [7696] LOG:  checkpoint starting: time
+2026-10-19 20:47:24.251 -03 [7696] LOG:  checkpoint complete: wrote 33 buffers (0.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=3.352 s, sync=0.683 s, total=4.520 s; sync files=8, longest=0.516 s, average=0.086 s; distance=147 kB, estimate=147 kB; lsn=0/1E019768, redo lsn=0/1E019730

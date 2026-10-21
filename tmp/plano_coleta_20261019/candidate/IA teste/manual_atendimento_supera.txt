@@ -1,0 +1,65 @@
+MANUAL DE ATENDIMENTO — SUPERA
+
+BASE COMUM ÀS DUAS TAREFAS
+As duas tarefas compartilham conhecimento do Supera, personalidade, formatação
+e restrições comerciais. Esses conteúdos serão detalhados neste manual e
+reutilizados pela aplicação, sem manter duas versões da mesma regra.
+Os materiais de referência serão reunidos em materiais_supera/; a aplicação
+ainda precisará selecionar e fornecer os trechos relevantes à IA.
+O sistema informa qual tarefa está em execução e limita suas permissões.
+
+SEÇÃO 1: DURANTE O ATENDIMENTO
+Aplicação: worker_flow. Os oito tópicos originais abaixo estão preservados
+para preenchimento e detalhamento conjunto.
+
+1. OBJETIVO E FLUXO
+...
+
+2. CONHECIMENTO DO NEGÓCIO
+...
+
+3. ORIENTAÇÕES DE ATENDIMENTO
+...
+
+4. PERSONALIDADE E FORMATAÇÃO
+...
+
+5. PERMISSÕES
+...
+
+6. RESTRIÇÕES
+...
+
+7. OBSERVAÇÕES IMPORTANTES
+...
+
+8. COMO INTERPRETAR O CONTEXTO RECEBIDO
+...
+
+-------------------------------------------------------------------------------
+
+SEÇÃO 2: DURANTE O PRIMEIRO FOLLOWUP
+Aplicação: primeiro lembrete do worker_followup. Usar a base comum deste manual.
+O segundo follow-up permanece determinístico e encerra o atendimento, sem IA.
+
+1. OBJETIVO DA RETOMADA
+Convidar o cliente a continuar a conversa ativa, preservando a finalidade
+da mensagem padrão. [Detalhar orientações e exemplos.]
+
+2. QUANDO MANTER OU PERSONALIZAR A MENSAGEM
+Manter o texto pronto quando adequado; adaptar somente quando o contexto
+ajudar a tornar o lembrete mais pertinente. [Detalhar critérios e exemplos.]
+
+3. COMO USAR O CONTEXTO RECEBIDO
+Considerar a pergunta pendente e os dados confirmados da conversa atual.
+Não recuperar um atendimento encerrado. [Detalhar seleção de contexto.]
+
+4. PERMISSÕES E RESTRIÇÕES DESTA TAREFA
+Propor somente o texto do primeiro lembrete. Não alterar cadastro, etapas,
+triagem, navegação, horários ou quantidade de follow-ups.
+Preservar as restrições comerciais; evitar expor condições de saúde no lembrete.
+
+5. FORMATO DA RESPOSTA
+[Detalhar como indicar manutenção do texto padrão ou devolver texto personalizado.]
+O sistema valida a saída, confere a elegibilidade antes do envio e contabiliza
+o consumo da chamada no uso mensal do chat, conforme o plano unificado.

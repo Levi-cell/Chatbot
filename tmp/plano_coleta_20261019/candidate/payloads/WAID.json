@@ -1,0 +1,39 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "833244752748897",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "557536310000",
+              "phone_number_id": "1217356894795355"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Carlos Souza"
+                },
+                "wa_id": "5575999999999"
+              }
+            ],
+            "messages": [
+              {
+                "from": "5575999999999",
+                "id": "wamid.EXEMPLO_WA_002",
+                "timestamp": "1785621660",
+                "type": "text",
+                "text": {
+                  "body": "Boa tarde"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

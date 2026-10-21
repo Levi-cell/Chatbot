@@ -1,0 +1,1465 @@
+[
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "PARA FLÁVIO E EQUIPE FIREADS"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "01"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 57,
+    "bottom": 121,
+    "text": "Do formulário ao atendimento.<br/>Tudo conectado."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 133,
+    "bottom": 165.60399999999998,
+    "text": "Como o chatbot, o Funil de Vendas e o dashboard da FireAds trabalharão juntos na unidade Santo André."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 201.60399999999998,
+    "bottom": 218.33499999999998,
+    "text": "Material de alinhamento - ainda não implantado"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 225.33499999999998,
+    "bottom": 257.08099999999996,
+    "text": "Este guia descreve o funcionamento combinado e planejado. Dois pontos ainda aguardam o Eduardo: as opções do formulário Google e as abas da Meta que serão consultadas."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 327.08099999999996,
+    "bottom": 343.955,
+    "text": "Formulário"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 349.955,
+    "bottom": 378.269,
+    "text": "A pessoa informa seus dados."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 327.08099999999996,
+    "bottom": 343.955,
+    "text": "Dashboard"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 349.955,
+    "bottom": 378.269,
+    "text": "A FireAds guarda o cadastro."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 327.08099999999996,
+    "bottom": 343.955,
+    "text": "Chatbot"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 349.955,
+    "bottom": 378.269,
+    "text": "A pessoa chama no WhatsApp."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 327.08099999999996,
+    "bottom": 343.955,
+    "text": "Funil"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 349.955,
+    "bottom": 378.269,
+    "text": "A equipe recebe o atendimento."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 432.08099999999996,
+    "bottom": 448.81199999999995,
+    "text": "O caminho de volta completa o cadastro"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 455.81199999999995,
+    "bottom": 503.4309999999999,
+    "text": "A FireAds receberá o atendimento do Funil e procurará o contato no dashboard: <b>se já existir, atualiza; se não existir, cadastra.</b> O chatbot consulta o dashboard e envia o lead somente ao Funil."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 546.4309999999999,
+    "bottom": 559.444,
+    "text": "PARA O CLIENTE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 568.4309999999999,
+    "bottom": 588.4509999999999,
+    "text": "Menos repetição"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 597.4509999999999,
+    "bottom": 645.0699999999999,
+    "text": "Dados válidos do formulário podem ser aproveitados, quando as condições deste guia forem atendidas."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 546.4309999999999,
+    "bottom": 559.444,
+    "text": "PARA A UNIDADE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 568.4309999999999,
+    "bottom": 588.4509999999999,
+    "text": "Mais informação"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 597.4509999999999,
+    "bottom": 645.0699999999999,
+    "text": "O cadastro reúne o contato inicial e os detalhes coletados no atendimento, sem criar uma cópia desnecessária."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 1,
+    "top": 677.0699999999999,
+    "bottom": 707.386,
+    "text": "Neste material, “lead” significa uma pessoa interessada. “Dashboard” é o painel em que a FireAds organiza os contatos."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "02"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 57,
+    "bottom": 89,
+    "text": "Três maneiras de chegar"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 101,
+    "bottom": 117.30199999999999,
+    "text": "O atendimento começa quando a pessoa envia uma mensagem no WhatsApp."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 140.302,
+    "bottom": 157.748,
+    "text": "Preenche o formulário e chama o chatbot"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 162.748,
+    "bottom": 194.77999999999997,
+    "text": "O formulário já cria um registro na FireAds. Na abertura elegível, o bot procura esse número e avalia se pode aproveitar os dados. Encontrar um formulário não dispensa as verificações."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 212.77999999999997,
+    "bottom": 230.22599999999997,
+    "text": "Preenche o formulário, mas não chama"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 235.22599999999997,
+    "bottom": 267.258,
+    "text": "O registro permanece no dashboard. Só preencher o formulário não inicia uma conversa com o bot e não faz o bot enviar uma oportunidade ao Funil."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 285.258,
+    "bottom": 302.70399999999995,
+    "text": "Chama por outra fonte"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 307.70399999999995,
+    "bottom": 355.75199999999995,
+    "text": "Pode ter visto a fachada, recebido uma indicação ou visitado o site da unidade. Sem formulário aproveitável, faz o atendimento completo. Quando chegar ao Funil, poderá ser incluído no dashboard pela FireAds."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 386.75199999999995,
+    "bottom": 403.48299999999995,
+    "text": "O telefone já vem do WhatsApp"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 410.48299999999995,
+    "bottom": 442.2289999999999,
+    "text": "O bot usa o número de quem enviou a mensagem para procurar o cadastro. Não pede ao cliente que digite o próprio telefone."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 485.2289999999999,
+    "bottom": 498.2419999999999,
+    "text": "IMPORTANTE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 507.2289999999999,
+    "bottom": 527.2489999999999,
+    "text": "Uma pessoa por atendimento"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 536.2489999999999,
+    "bottom": 599.7409999999999,
+    "text": "O bot conhece o perfil do titular ou de um dependente. “Para mim e outra pessoa”, no formulário Meta, será tratado como dependente."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 485.2289999999999,
+    "bottom": 498.2419999999999,
+    "text": "SEM INTEGRAÇÃO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 507.2289999999999,
+    "bottom": 527.2489999999999,
+    "text": "Atendimento atual preservado"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 2,
+    "top": 536.2489999999999,
+    "bottom": 599.7409999999999,
+    "text": "Unidades que não usam a FireAds seguem o funcionamento atual. Não consultam o dashboard e não recebem classificação FireAds."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "03"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 57,
+    "bottom": 89,
+    "text": "O que o bot aproveita"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "Apenas três informações do formulário entram no atendimento. O restante continua sendo perguntado quando necessário."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "01"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Nome do titular"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 219.624,
+    "bottom": 265.527,
+    "text": "Usa o primeiro nome, incluindo nomes compostos quando reconhecidos."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "02"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "E-mail do titular"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 219.624,
+    "bottom": 280.828,
+    "text": "Aproveita o endereço válido do contato, mesmo quando o treino é para um dependente."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "03"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Para quem é"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 219.624,
+    "bottom": 265.527,
+    "text": "Distingue atendimento para a própria pessoa ou para um dependente."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 312.828,
+    "bottom": 478.618,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 508.618,
+    "bottom": 525.349,
+    "text": "Idade por faixa não substitui a idade exata"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 532.3489999999999,
+    "bottom": 564.0949999999999,
+    "text": "O bot continua perguntando a idade e fazendo as perguntas de triagem. Objetivo principal, cidade, bairro e quem decide a matrícula não preenchem respostas do atendimento."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 608.095,
+    "bottom": 624.826,
+    "text": "Google: decisão ainda pendente"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 3,
+    "top": 631.826,
+    "bottom": 663.572,
+    "text": "“Adulto” ou “Pessoa com 60 anos ou mais” não esclarecem se é para o titular ou para um familiar. Eduardo confirmará como resolver isso. Não será feita uma suposição automática."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "04"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 57,
+    "bottom": 89,
+    "text": "Como fica a conversa"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "Quando os três dados estiverem válidos, completos e dentro das regras, a primeira pergunta será sobre a profissão."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 169.60399999999998,
+    "bottom": 186.33499999999998,
+    "text": "Exemplo ilustrativo - formulário Meta válido"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 193.33499999999998,
+    "bottom": 240.95399999999998,
+    "text": "“Olá, Ana! Seja muito bem-vinda! Sou a Dora, assistente do SUPERA Santo André. Vi que você já preencheu um dos nossos formulários. Para continuarmos com sua reserva por cortesia da unidade, precisamos fazer mais algumas perguntinhas, ok? Me diz, qual é a sua profissão hoje?”"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 271.95399999999995,
+    "bottom": 437.74399999999997,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 454.74399999999997,
+    "bottom": 487.34799999999996,
+    "text": "Se o cliente não responder à pergunta da profissão de forma válida, o bot repete a pergunta com o tratamento previsto; não reinicia toda a apresentação."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 496.34799999999996,
+    "bottom": 512.65,
+    "text": "Na rota completa, o bot começa perguntando o nome e coleta os dados normalmente."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 521.65,
+    "bottom": 554.254,
+    "text": "O formulário não confirma uma reserva e não substitui a triagem. As regras de idade continuam valendo."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 582.254,
+    "bottom": 598.985,
+    "text": "O atendimento segue seu ritmo normal"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 4,
+    "top": 605.985,
+    "bottom": 637.731,
+    "text": "Os lembretes de follow-up continuam seguindo a etapa em que a pessoa parou. As mensagens seguintes não provocam uma nova consulta ao dashboard."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "05"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 57,
+    "bottom": 89,
+    "text": "Quando haverá consulta?"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "O histórico é considerado para cada cliente com aquela unidade. Já ter falado com outra unidade não elimina a primeira consulta aqui."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 156.60399999999998,
+    "bottom": 352.71,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 381.71,
+    "bottom": 394.72299999999996,
+    "text": "REGRA DE TEMPO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 403.71,
+    "bottom": 423.72999999999996,
+    "text": "Até 30 dias"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 432.72999999999996,
+    "bottom": 480.34899999999993,
+    "text": "O formulário mais recente pode ser aproveitado se ainda tiver até 30 dias na abertura da conversa."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 381.71,
+    "bottom": 394.72299999999996,
+    "text": "FORA DO PRAZO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 403.71,
+    "bottom": 423.72999999999996,
+    "text": "Mais de 30 dias"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 432.72999999999996,
+    "bottom": 480.34899999999993,
+    "text": "Mesmo encontrado, não é aproveitado. O atendimento será completo, classificado como orgânico."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 525.3489999999999,
+    "bottom": 542.0799999999999,
+    "text": "Exemplo: dois formulários do mesmo número"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 549.0799999999999,
+    "bottom": 596.699,
+    "text": "Meta preenchido há 12 dias e Google há 3 dias: o mais recente é o Google. Essa será a fonte, se o cadastro for aproveitável e o mapeamento Google estiver definido. Não misturar dados dos dois registros."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 5,
+    "top": 627.699,
+    "bottom": 658.3009999999999,
+    "text": "O prazo é contado desde o formulário, não desde a atualização feita depois pelo Funil. Exatamente 30 dias ainda está dentro da regra. Restrições de abertura de conversa já existentes continuam sendo respeitadas."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "06"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 57,
+    "bottom": 89,
+    "text": "Quando o atendimento será completo"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 101,
+    "bottom": 117.30199999999999,
+    "text": "Para não interromper o contato, algumas situações recebem a classificação operacional “Orgânico”."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 140.302,
+    "bottom": 321.25,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 351.25,
+    "bottom": 367.981,
+    "text": "“Orgânico” não é prova de ausência de anúncio"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 374.981,
+    "bottom": 422.6,
+    "text": "Neste acordo, o rótulo também cobre erro de consulta, cadastro antigo ou retorno sem nova consulta. Por isso, a FireAds deve procurar o contato antes de cadastrar: <b>um lead classificado como orgânico também pode já existir no dashboard.</b>"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 453.6,
+    "bottom": 486.204,
+    "text": "Se o registro mais recente estiver incompleto, o bot não escolhe um registro mais antigo apenas porque ele está mais completo."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 495.204,
+    "bottom": 527.808,
+    "text": "Se uma fonte responder e outra falhar, a comparação entre Google e Meta não fica completa; o atendimento segue como orgânico."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 536.808,
+    "bottom": 569.412,
+    "text": "Depois de definida a rota inicial, uma resposta atrasada do dashboard não reinicia a conversa nem altera sua origem automaticamente."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 6,
+    "top": 584.412,
+    "bottom": 615.014,
+    "text": "O tratamento das opções ambíguas do Google continua pendente. A regra final para esse formulário será atualizada depois da resposta do Eduardo."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "07"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 57,
+    "bottom": 89,
+    "text": "Do atendimento para o Funil"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "O lead segue quando chega ao ponto de encaminhamento previsto no atendimento, não apenas por ter enviado “olá”."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "UNIDADE COM LINK"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Recebe o link de reserva"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 219.624,
+    "bottom": 267.243,
+    "text": "Após a triagem e ao chegar à entrega do link, a conversa pode seguir ao Funil conforme as regras existentes."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "UNIDADE SEM LINK"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Escolhe um turno"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 219.624,
+    "bottom": 267.243,
+    "text": "Depois da triagem, escolhe um único turno e recebe o contato do comercial. O turno acompanha as observações."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 299.243,
+    "bottom": 431.875,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 461.875,
+    "bottom": 478.606,
+    "text": "O Funil recebe o atendimento mais completo"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 485.606,
+    "bottom": 533.225,
+    "text": "As observações incluem contato, para quem é o atendimento, idade, profissão, perguntas e respostas da triagem e turno quando aplicável. A origem FireAds será acrescentada. A reserva deve ser conferida pela equipe; chegar ao Funil não prova que ela foi efetivada."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 564.225,
+    "bottom": 596.8290000000001,
+    "text": "O chatbot envia ao Funil. A transferência do Funil para o dashboard será responsabilidade da integração da FireAds."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 605.8290000000001,
+    "bottom": 638.4330000000001,
+    "text": "Se a pessoa abandonar antes do ponto de encaminhamento, não há garantia de que aquele atendimento chegue ao Funil ou, por esse caminho, ao dashboard."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 7,
+    "top": 653.4330000000001,
+    "bottom": 684.0350000000001,
+    "text": "Satisfação, encerramento, regras de idade e lembretes permanecem no fluxo atual. Unidades sem FireAds mantêm o canal comercial já configurado."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE FUNCIONAMENTO"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "08"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 57,
+    "bottom": 89,
+    "text": "Completar o cadastro sem duplicar"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "O dashboard reunirá quem veio de formulário e quem chegou por outras fontes, desde que o atendimento seja recebido do Funil."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "JÁ EXISTE NO DASHBOARD"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Atualizar o mesmo contato"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 219.624,
+    "bottom": 283.116,
+    "text": "Telefone e e-mail correspondem ao cadastro da mesma unidade: acrescentar as observações completas do Funil e o canal daquele atendimento."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 168.60399999999998,
+    "bottom": 181.617,
+    "text": "AINDA NÃO EXISTE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 190.60399999999998,
+    "bottom": 210.624,
+    "text": "Cadastrar um novo contato"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 219.624,
+    "bottom": 283.116,
+    "text": "Após verificar que não há correspondência nem conflito, criar o cadastro com os dados disponíveis, observações completas e canal recebido."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 328.116,
+    "bottom": 344.847,
+    "text": "Encontrar um contato não significa ignorá-lo"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 351.847,
+    "bottom": 399.466,
+    "text": "O formulário mostra o que a pessoa informou no início. O Funil traz o que foi conhecido durante o atendimento. A atualização deve enriquecer o cadastro existente, preservando a captação original e as anotações do comercial."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 430.466,
+    "bottom": 593.414,
+    "text": "TABLE"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 623.414,
+    "bottom": 640.145,
+    "text": "Antes de ativar: duas respostas do Eduardo"
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 647.145,
+    "bottom": 694.764,
+    "text": "<b>1.</b> Como o Google identificará titular ou dependente.<br/><b>2.</b> Quais abas Meta serão consultadas, incluindo versões anteriores.<br/>A sincronização Funil → dashboard também precisa ser configurada e validada pela FireAds."
+  },
+  {
+    "file": "guia_chatbot_fireads_flavio.pdf",
+    "page": 8,
+    "top": 725.764,
+    "bottom": 767.806,
+    "text": "Material complementar: “Funil para dashboard: guia de cadastro e atualização sem duplicação”. Base: plano FireAds revisado em 07/10/2026 e decisões deste alinhamento. O rastreio de anúncios/posts da Meta é uma entrega futura separada."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "01"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 57,
+    "bottom": 121,
+    "text": "Atualizar quem já existe.<br/>Cadastrar quem ainda não está."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 133,
+    "bottom": 165.60399999999998,
+    "text": "Lógica de apoio para a FireAds trazer os atendimentos do Funil ao dashboard de Santo André, preservando a história do contato."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 201.60399999999998,
+    "bottom": 218.33499999999998,
+    "text": "Regra de negócio combinada"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 225.33499999999998,
+    "bottom": 272.95399999999995,
+    "text": "Ao receber um atendimento do Funil, procurar o contato <b>no dashboard da mesma unidade</b>. Mesmo telefone e e-mail: atualizar o registro existente. Sem correspondência e sem conflito: criar um novo. Em ambos, guardar as observações completas e o canal de venda do Funil."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 342.95399999999995,
+    "bottom": 359.828,
+    "text": "Receber"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 365.828,
+    "bottom": 379.98499999999996,
+    "text": "Atendimento vindo do Funil."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 342.95399999999995,
+    "bottom": 359.828,
+    "text": "Procurar"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 365.828,
+    "bottom": 394.142,
+    "text": "Telefone e e-mail no dashboard."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 342.95399999999995,
+    "bottom": 359.828,
+    "text": "Decidir"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 365.828,
+    "bottom": 379.98499999999996,
+    "text": "Atualizar, cadastrar ou conferir."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 446.95399999999995,
+    "bottom": 459.9669999999999,
+    "text": "CONTATO EXISTENTE"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 468.95399999999995,
+    "bottom": 488.97399999999993,
+    "text": "Atualizar"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 497.97399999999993,
+    "bottom": 543.448,
+    "text": "Não ignorar o atendimento e não criar outra pessoa no painel."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 446.95399999999995,
+    "bottom": 459.9669999999999,
+    "text": "NÃO HÁ CORRESPONDÊNCIA"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 468.95399999999995,
+    "bottom": 488.97399999999993,
+    "text": "Cadastrar"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 497.97399999999993,
+    "bottom": 543.448,
+    "text": "Criar um contato com o conteúdo recebido, sem inventar dados ausentes."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 446.95399999999995,
+    "bottom": 459.9669999999999,
+    "text": "HÁ DIVERGÊNCIA"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 468.95399999999995,
+    "bottom": 488.97399999999993,
+    "text": "Conferir"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 497.97399999999993,
+    "bottom": 543.448,
+    "text": "Separar para revisão e guardar o atendimento recebido; não unir no escuro."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 1,
+    "top": 575.448,
+    "bottom": 621.78,
+    "text": "Este é um roteiro lógico para a equipe FireAds configurar sua integração. A regra de criar/atualizar foi definida pelo responsável; os cuidados de conferência e repetição apresentados aqui são recomendações para a implementação. O funcionamento do sistema da agência ainda não foi validado."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "02"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 57,
+    "bottom": 89,
+    "text": "Como reconhecer o mesmo contato"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "A comparação deve usar dados do responsável que fala no WhatsApp, não o nome ou o e-mail de um dependente."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 169.60399999999998,
+    "bottom": 186.33499999999998,
+    "text": "Primeiro, comparar no mesmo formato"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 193.33499999999998,
+    "bottom": 240.95399999999998,
+    "text": "Padronizar país e DDD do telefone, retirando apenas a máscara de apresentação. No e-mail, retirar espaços acidentais e aplicar uma regra consistente de comparação. Não apagar “+apelidos”, pontos ou inventar dígitos para forçar uma coincidência."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 271.95399999999995,
+    "bottom": 593.1489999999999,
+    "text": "TABLE"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 2,
+    "top": 610.1489999999999,
+    "bottom": 655.6229999999999,
+    "text": "Nome parecido sozinho não identifica uma pessoa. “Não informado”, “não tenho” e campo vazio não são e-mails para cruzamento. A normalização do nono dígito precisa de critério validado; não remover/adicionar em todo número indiscriminadamente."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "03"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 57,
+    "bottom": 89,
+    "text": "O que atualizar e o que preservar"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "Atualizar o atendimento não deve apagar o formulário, a campanha original ou o trabalho do comercial."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 156.60399999999998,
+    "bottom": 494.816,
+    "text": "TABLE"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 524.816,
+    "bottom": 541.547,
+    "text": "Uma atualização não cria um formulário novo"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 548.547,
+    "bottom": 580.293,
+    "text": "O bot usa a data original do formulário na regra de 30 dias. Se a FireAds substituir essa data pela data de atualização do Funil, um cadastro antigo parecerá recente indevidamente."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 3,
+    "top": 611.293,
+    "bottom": 641.609,
+    "text": "Se o painel tiver hoje apenas um campo “Canal”, combinar onde manter a captação original e onde mostrar o canal do atendimento. Os nomes finais dos campos pertencem à configuração da FireAds."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "04"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 57,
+    "bottom": 121,
+    "text": "Repetir uma entrega não é um novo cliente"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 133,
+    "bottom": 165.60399999999998,
+    "text": "A mesma oportunidade pode chegar mais de uma vez. E a mesma pessoa pode ter outros atendimentos ao longo do tempo."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 188.60399999999998,
+    "bottom": 206.04999999999998,
+    "text": "Identificar o contato e o atendimento"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 211.04999999999998,
+    "bottom": 243.082,
+    "text": "O contato é localizado na unidade pelo telefone/e-mail. O atendimento deve ter uma referência estável do Funil, como o número da oportunidade, quando esse dado estiver disponível."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 261.082,
+    "bottom": 278.528,
+    "text": "Se chegar a mesma oportunidade novamente"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 283.528,
+    "bottom": 315.56,
+    "text": "Atualizar o mesmo atendimento, sem criar outra linha de contato e sem colar as mesmas observações duas vezes. Se nada mudou, reconhecer a entrega e manter o conteúdo."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 333.56,
+    "bottom": 351.006,
+    "text": "Se for outro atendimento da mesma pessoa"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 356.006,
+    "bottom": 388.03799999999995,
+    "text": "Manter um contato e acrescentar o novo atendimento ao histórico. O painel pode mostrar o resumo mais recente, preservando os anteriores. Isso é diferente de duplicar o contato."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 406.03799999999995,
+    "bottom": 423.4839999999999,
+    "text": "Se duas entregas chegarem juntas"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 428.4839999999999,
+    "bottom": 460.5159999999999,
+    "text": "A FireAds precisa controlar a procura e a criação em conjunto. Duas buscas simultâneas que não encontram um contato não podem criar dois cadastros para ele."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 491.5159999999999,
+    "bottom": 508.2469999999999,
+    "text": "Separar formulários originais de retornos do Funil"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 515.247,
+    "bottom": 562.866,
+    "text": "Leads criados ou atualizados pelo Funil devem ir ao painel geral/área de atendimento. Não devem virar entradas nas abas de formulário consultadas pelo bot. Atualizar o dashboard também não deve disparar um novo envio ao Funil, criando um ciclo de cópias."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 4,
+    "top": 593.8659999999999,
+    "bottom": 639.3399999999999,
+    "text": "Após uma falha de gravação, registrar a entrega como pendente e conferir antes de repetir uma inclusão. Não marcar como concluída uma atualização que não foi gravada. A referência da oportunidade e os controles exatos precisam ser confirmados na integração FireAds."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "05"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 57,
+    "bottom": 89,
+    "text": "Exemplos para conferir a lógica"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 101,
+    "bottom": 117.30199999999999,
+    "text": "Nomes e situações abaixo são fictícios. Em todos os casos, a busca é feita na unidade correta."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 152.302,
+    "bottom": 165.315,
+    "text": "CASO A"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 174.302,
+    "bottom": 194.322,
+    "text": "Ana veio do formulário Meta"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 203.322,
+    "bottom": 266.814,
+    "text": "Já está no dashboard. Conclui a triagem e chega ao Funil. Telefone e e-mail coincidem: atualizar o cadastro com o atendimento e canal Meta. Não criar outra Ana."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 152.302,
+    "bottom": 165.315,
+    "text": "CASO B"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 174.302,
+    "bottom": 194.322,
+    "text": "Bruno veio da fachada"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 203.322,
+    "bottom": 266.814,
+    "text": "Não há correspondência no dashboard. O atendimento chega ao Funil como orgânico: cadastrar Bruno com as observações completas e canal Orgânico."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 310.81399999999996,
+    "bottom": 323.82699999999994,
+    "text": "CASO C"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 332.81399999999996,
+    "bottom": 372.854,
+    "text": "Carla já existe, mas está “Orgânico”"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 381.854,
+    "bottom": 445.346,
+    "text": "Seu formulário é antigo ou houve falha na consulta do bot. Ainda assim, a FireAds encontra telefone e e-mail no painel: atualizar Carla, sem duplicar."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 310.81399999999996,
+    "bottom": 323.82699999999994,
+    "text": "CASO D"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 332.81399999999996,
+    "bottom": 352.83399999999995,
+    "text": "Daniel mudou o e-mail"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 361.83399999999995,
+    "bottom": 425.32599999999996,
+    "text": "O número coincide, mas o e-mail não. Guardar o atendimento para conferência. Não criar outro Daniel nem trocar a identidade sem verificar."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 490.34599999999995,
+    "bottom": 507.07699999999994,
+    "text": "Caso E: o mesmo atendimento da Ana chega duas vezes"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 514.077,
+    "bottom": 561.696,
+    "text": "A referência da oportunidade é a mesma. A segunda entrega não cria outro contato nem outro atendimento. Se houver conteúdo atualizado, modifica aquela ocorrência, sem repetir o texto no histórico."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 605.6959999999999,
+    "bottom": 622.4269999999999,
+    "text": "Não usar o canal como prova de cadastro ausente"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 5,
+    "top": 629.4269999999999,
+    "bottom": 677.0459999999999,
+    "text": "“Orgânico” não significa automaticamente “novo no dashboard”. E não encontrar no dashboard não prova, sozinho, que a pessoa nunca veio de anúncio. Usar o canal enviado pelo Funil e verificar a existência de fato."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 28,
+    "bottom": 41.299,
+    "text": "GUIA DE APOIO À FIREADS"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 26,
+    "bottom": 43.16,
+    "text": "06"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 57,
+    "bottom": 89,
+    "text": "Roteiro de validação com a FireAds"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 101,
+    "bottom": 133.60399999999998,
+    "text": "Antes de ativar, testar os caminhos principais com contatos de teste identificados, sem depender apenas de “a requisição deu certo”."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 156.60399999999998,
+    "bottom": 556.556,
+    "text": "TABLE"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 586.556,
+    "bottom": 603.287,
+    "text": "Pontos de configuração a confirmar pela agência"
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 610.287,
+    "bottom": 657.9060000000001,
+    "text": "Quais registros entram na busca; qual é o cadastro principal quando já há duplicatas; qual referência identifica a oportunidade; onde guardar o histórico e as observações completas; como encaminhar divergências para revisão."
+  },
+  {
+    "file": "apoio_fireads_funil_dashboard_sem_duplicacao.pdf",
+    "page": 6,
+    "top": 688.9060000000001,
+    "bottom": 733.522,
+    "text": "Este guia orienta a sincronização feita pela FireAds. O chatbot continuará enviando apenas ao Funil. As pendências do formulário Google e das abas Meta seguem registradas no guia principal e no plano de integração. Base: decisões de 07/10/2026."
+  }
+]

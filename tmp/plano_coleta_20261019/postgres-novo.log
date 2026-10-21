@@ -1,0 +1,1884 @@
+2026-10-20 19:18:28.470 -03 [5680] LOG:  starting PostgreSQL 16.15, compiled by Visual C++ build 1944, 64-bit
+2026-10-20 19:18:28.475 -03 [5680] LOG:  listening on IPv4 address "127.0.0.1", port 55435
+2026-10-20 19:18:28.802 -03 [9708] LOG:  database system was shut down at 2026-10-20 19:17:30 -03
+2026-10-20 19:18:29.003 -03 [5680] LOG:  database system is ready to accept connections
+2026-10-20 19:19:05.656 -03 [14852] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:19:05.656 -03 [14852] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:19:05.656 -03 [14852] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:19:18.926 -03 [12412] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:19:18.926 -03 [12412] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:19:18.926 -03 [12412] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:19:35.619 -03 [9320] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:19:35.619 -03 [9320] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:19:35.619 -03 [9320] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:19:45.932 -03 [14140] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:19:45.932 -03 [14140] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:19:45.932 -03 [14140] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:19:56.856 -03 [14732] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:19:56.856 -03 [14732] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:19:56.856 -03 [14732] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:20:08.266 -03 [6876] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:20:08.266 -03 [6876] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:20:08.266 -03 [6876] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:20:21.490 -03 [15792] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:20:21.490 -03 [15792] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:20:21.490 -03 [15792] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:20:32.374 -03 [3752] ERROR:  Mapa divergente: esperado catálogo de 30 transições.
+2026-10-20 19:20:32.374 -03 [3752] CONTEXT:  PL/pgSQL function inline_code_block line 161 at RAISE
+2026-10-20 19:20:32.374 -03 [3752] STATEMENT:  CREATE TABLE IF NOT EXISTS chatbot.migracoes_fireads (
+	    versao TEXT PRIMARY KEY, aplicada_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+	);
+	
+	DO $migracao$
+	DECLARE
+	    quantidade_conversas BIGINT;
+	    quantidade_clientes BIGINT;
+	    quantidade_unidades BIGINT;
+	BEGIN
+	    IF EXISTS (SELECT 1 FROM chatbot.migracoes_fireads WHERE versao='20261007_fireads_v1') THEN
+	        RAISE NOTICE 'Migração FireAds já aplicada; nenhum dado reimportado.';
+	        RETURN;
+	    END IF;
+	
+	    LOCK TABLE chatbot.unidade, chatbot.cliente, chatbot.conversa,
+	               chatbot.etapa, chatbot.etapa_transicao IN ACCESS EXCLUSIVE MODE;
+	    SELECT COUNT(*) INTO quantidade_conversas FROM chatbot.conversa;
+	    SELECT COUNT(*) INTO quantidade_clientes FROM chatbot.cliente;
+	    SELECT COUNT(*) INTO quantidade_unidades FROM chatbot.unidade;
+	    IF (SELECT COUNT(*) FROM chatbot.etapa) <> 24
+	       OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+	          WHERE table_schema='chatbot' AND table_name='conversa' AND column_name='turno')
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao
+	          WHERE id_etapa_origem=17 AND evento='triagem_concluida_sem_link' AND id_etapa_destino=18)
+	    THEN
+	        RAISE EXCEPTION 'Base incompatível: exige catálogo de 24 etapas e rota sem link já aplicada.';
+	    END IF;
+	
+	    CREATE TABLE chatbot.atendimento_customizado (
+	        id_customizacao SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        nome_agente VARCHAR(100) NOT NULL CHECK (nome_agente ~ '[^[:space:]]'),
+	        genero VARCHAR(9) NOT NULL CHECK (genero IN ('masculino','feminino')),
+	        numero_comercial VARCHAR(30) NOT NULL CHECK (
+	            regexp_replace(numero_comercial,'[^0-9]','','g') ~ '^([0-9]{10,11}|55[0-9]{10,11})$'),
+	        idade_minima_suporte INTEGER CHECK (idade_minima_suporte IN (50,60,70,80)),
+	        email_obrigatorio BOOLEAN NOT NULL DEFAULT TRUE,
+	        link_agendamento VARCHAR(400) UNIQUE,
+	        link_instagram VARCHAR(400),
+	        bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE
+	    );
+	    INSERT INTO chatbot.atendimento_customizado
+	      (id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	       email_obrigatorio,link_agendamento,link_instagram,bpa_ativo)
+	    SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	           email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade;
+	    IF EXISTS (
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.unidade
+	        EXCEPT
+	        SELECT id_unidade,nome_agente,genero,numero_comercial,idade_minima_suporte,
+	               email_obrigatorio,link_agendamento,link_instagram,bpa_ativo FROM chatbot.atendimento_customizado
+	    ) OR (SELECT COUNT(*) FROM chatbot.atendimento_customizado) <> quantidade_unidades THEN
+	        RAISE EXCEPTION 'Cópia de personalização divergente; migração abortada.';
+	    END IF;
+	    ALTER TABLE chatbot.unidade
+	        DROP COLUMN nome_agente, DROP COLUMN genero, DROP COLUMN numero_comercial,
+	        DROP COLUMN idade_minima_suporte, DROP COLUMN email_obrigatorio,
+	        DROP COLUMN link_agendamento, DROP COLUMN link_instagram, DROP COLUMN bpa_ativo;
+	
+	    CREATE TABLE chatbot.chat (
+	        id_chat BIGSERIAL PRIMARY KEY,
+	        id_cliente INTEGER NOT NULL REFERENCES chatbot.cliente(id_cliente) ON DELETE CASCADE,
+	        id_unidade INTEGER NOT NULL REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_chat_cliente_unidade UNIQUE (id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_identidade UNIQUE (id_chat,id_cliente,id_unidade),
+	        CONSTRAINT uq_chat_unidade UNIQUE (id_chat,id_unidade)
+	    );
+	    INSERT INTO chatbot.chat (id_cliente,id_unidade,criado_em)
+	    SELECT id_cliente,id_unidade,MIN(iniciou_em) FROM chatbot.conversa GROUP BY id_cliente,id_unidade;
+	    ALTER TABLE chatbot.conversa ADD COLUMN id_chat BIGINT;
+	    UPDATE chatbot.conversa c SET id_chat=h.id_chat FROM chatbot.chat h
+	        WHERE h.id_cliente=c.id_cliente AND h.id_unidade=c.id_unidade;
+	    ALTER TABLE chatbot.conversa
+	        ALTER COLUMN id_chat SET NOT NULL,
+	        ADD CONSTRAINT fk_conversa_chat FOREIGN KEY (id_chat,id_cliente,id_unidade)
+	            REFERENCES chatbot.chat(id_chat,id_cliente,id_unidade) ON DELETE CASCADE,
+	        ADD CONSTRAINT uq_conversa_chat_unidade UNIQUE (id_conversa,id_chat,id_unidade),
+	        ADD CONSTRAINT uq_conversa_unidade UNIQUE (id_conversa,id_unidade),
+	        ADD COLUMN origem_fireads VARCHAR(10) CHECK (origem_fireads IN ('google','meta','organico')),
+	        ADD COLUMN contexto_fireads JSONB,
+	        ADD COLUMN lead_no_dash BOOLEAN DEFAULT NULL,
+	        ADD CONSTRAINT ck_conversa_fireads CHECK (
+	            (origem_fireads IS NULL AND contexto_fireads IS NULL)
+	            OR (origem_fireads IS NOT NULL AND contexto_fireads IS NOT NULL
+	                AND jsonb_typeof(contexto_fireads)='object'
+	                AND contexto_fireads->>'origem' IS NOT DISTINCT FROM origem_fireads
+	                AND contexto_fireads->>'id_conversa' IS NOT DISTINCT FROM id_conversa::text
+	                AND contexto_fireads->>'concluida' IS NOT DISTINCT FROM 'true'));
+	    CREATE INDEX idx_conversa_chat ON chatbot.conversa(id_chat,iniciou_em DESC);
+	
+	    CREATE TABLE chatbot.integracao_fireads (
+	        id_integracao_fireads SERIAL PRIMARY KEY,
+	        id_unidade INTEGER NOT NULL UNIQUE REFERENCES chatbot.unidade(id_unidade) ON DELETE CASCADE,
+	        integracao_ativa BOOLEAN NOT NULL DEFAULT FALSE,
+	        url_dashbord VARCHAR(1000) NOT NULL CHECK (url_dashbord ~ '^https://script[.]google[.]com/macros/s/[^/]+/exec$'),
+	        url_operation VARCHAR(1000),
+	        aba_google VARCHAR(200) NOT NULL DEFAULT 'Leads Google Ads (NÃO EDITAR)',
+	        aba_meta VARCHAR(200) NOT NULL DEFAULT '[FIRE] Leads Ads Geral - 7.2',
+	        aba_destino VARCHAR(200) NOT NULL DEFAULT 'LEADS GERAL - Feedback',
+	        fuso_formularios VARCHAR(100),
+	        contrato_validado BOOLEAN NOT NULL DEFAULT FALSE,
+	        ativada_em TIMESTAMPTZ,
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        CONSTRAINT uq_integracao_fireads_unidade UNIQUE (id_integracao_fireads,id_unidade),
+	        CHECK (NOT integracao_ativa OR (contrato_validado AND ativada_em IS NOT NULL)),
+	        CHECK (BTRIM(aba_google)<>'' AND BTRIM(aba_meta)<>'' AND BTRIM(aba_destino)<>''
+	            AND aba_google<>aba_meta AND aba_google<>aba_destino AND aba_meta<>aba_destino)
+	    );
+	    CREATE TABLE chatbot.consulta_fireads (
+	        id_consulta BIGSERIAL PRIMARY KEY,
+	        id_chat BIGINT NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        id_conversa_referencia INTEGER NOT NULL,
+	        consulta_concluida BOOLEAN NOT NULL DEFAULT FALSE,
+	        resultado VARCHAR(30) NOT NULL DEFAULT 'pendente'
+	            CHECK (resultado IN ('pendente','importado','ausente','incompleto','ambiguidade','erro')),
+	        dados JSONB,
+	        consultado_em TIMESTAMPTZ,
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_chat,id_unidade) REFERENCES chatbot.chat(id_chat,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        FOREIGN KEY (id_conversa_referencia,id_chat,id_unidade)
+	            REFERENCES chatbot.conversa(id_conversa,id_chat,id_unidade) ON DELETE CASCADE,
+	        CHECK ((NOT consulta_concluida AND resultado='pendente' AND dados IS NULL AND consultado_em IS NULL)
+	            OR (consulta_concluida AND resultado<>'pendente' AND dados IS NOT NULL AND consultado_em IS NOT NULL))
+	    );
+	    CREATE TABLE chatbot.envios_dash (
+	        id_envio_dash BIGSERIAL PRIMARY KEY,
+	        id_conversa INTEGER NOT NULL UNIQUE,
+	        id_unidade INTEGER NOT NULL,
+	        id_integracao_fireads INTEGER NOT NULL,
+	        status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','sent')),
+	        attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count>=0),
+	        next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        processing_started_at TIMESTAMPTZ,
+	        enviado_em TIMESTAMPTZ,
+	        ultimo_erro TEXT,
+	        recibo JSONB,
+	        snapshot JSONB NOT NULL CHECK (jsonb_typeof(snapshot)='object'),
+	        criado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        atualizado_em TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+	        FOREIGN KEY (id_conversa,id_unidade) REFERENCES chatbot.conversa(id_conversa,id_unidade) ON DELETE CASCADE,
+	        FOREIGN KEY (id_integracao_fireads,id_unidade)
+	            REFERENCES chatbot.integracao_fireads(id_integracao_fireads,id_unidade),
+	        CHECK ((status='processing')=(processing_started_at IS NOT NULL)),
+	        CHECK ((status='sent')=(enviado_em IS NOT NULL))
+	    );
+	    CREATE INDEX idx_envios_dash_pendentes ON chatbot.envios_dash(status,next_attempt_at,attempt_count)
+	        WHERE status<>'sent';
+	
+	    -- A configuração é cadastrada DESATIVADA pelo Admin após conferir a unidade.
+	    -- Não inferir qual ID é Santo André nem habilitar importação retroativa.
+	    INSERT INTO chatbot.etapa_transicao (id_etapa_origem,evento,id_etapa_destino)
+	    VALUES (7,'oferta_aceita_email_fireads',11),(9,'retorno_confirmado_email_fireads',11)
+	    ON CONFLICT (id_etapa_origem,evento) DO NOTHING;
+	    IF NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=7 AND evento='oferta_aceita_email_fireads' AND id_etapa_destino=11)
+	       OR NOT EXISTS (SELECT 1 FROM chatbot.etapa_transicao WHERE id_etapa_origem=9 AND evento='retorno_confirmado_email_fireads' AND id_etapa_destino=11)
+	       OR (SELECT COUNT(*) FROM chatbot.etapa_transicao)<>30 THEN
+	        RAISE EXCEPTION 'Mapa divergente: esperado catálogo de 30 transições.';
+	    END IF;
+	    IF (SELECT COUNT(*) FROM chatbot.conversa)<>quantidade_conversas
+	       OR (SELECT COUNT(*) FROM chatbot.cliente)<>quantidade_clientes
+	       OR (SELECT COUNT(*) FROM chatbot.unidade)<>quantidade_unidades
+	       OR EXISTS (SELECT 1 FROM chatbot.conversa WHERE id_chat IS NULL) THEN
+	        RAISE EXCEPTION 'Contagens ou vínculos divergentes; nenhuma alteração será confirmada.';
+	    END IF;
+	    INSERT INTO chatbot.migracoes_fireads(versao) VALUES ('20261007_fireads_v1');
+	END;
+	$migracao$;
+	
+	-- As leituras atuais unem unidade e atendimento_customizado diretamente.
+	-- Instalações/reexecuções não criam a antiga view. Para removê-la de uma base
+	-- já implantada, usar 20261009_remover_view_unidade_atendimento.sql no deploy.
+	
+	CREATE OR REPLACE FUNCTION chatbot.verificar_customizacao_unidade() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	DECLARE uid INTEGER;
+	BEGIN
+	    IF TG_TABLE_NAME='unidade' THEN uid=NEW.id_unidade; ELSE uid=OLD.id_unidade; END IF;
+	    IF EXISTS (SELECT 1 FROM chatbot.unidade WHERE id_unidade=uid)
+	       AND NOT EXISTS (SELECT 1 FROM chatbot.atendimento_customizado WHERE id_unidade=uid) THEN
+	        RAISE EXCEPTION 'Unidade % precisa de exatamente um atendimento_customizado.',uid;
+	    END IF;
+	    RETURN NULL;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS unidade_exige_customizacao ON chatbot.unidade;
+	CREATE CONSTRAINT TRIGGER unidade_exige_customizacao AFTER INSERT ON chatbot.unidade
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	DROP TRIGGER IF EXISTS customizacao_nao_orfa ON chatbot.atendimento_customizado;
+	CREATE CONSTRAINT TRIGGER customizacao_nao_orfa AFTER DELETE OR UPDATE ON chatbot.atendimento_customizado
+	    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION chatbot.verificar_customizacao_unidade();
+	
+	CREATE OR REPLACE FUNCTION chatbot.marcar_ativacao_fireads() RETURNS TRIGGER
+	LANGUAGE plpgsql AS $fn$
+	BEGIN
+	    IF NEW.fuso_formularios IS NOT NULL AND NOT EXISTS
+	        (SELECT 1 FROM pg_timezone_names WHERE name=NEW.fuso_formularios) THEN
+	        RAISE EXCEPTION 'Fuso de leitura FireAds desconhecido.';
+	    END IF;
+	    IF NEW.integracao_ativa THEN
+	        IF TG_OP='INSERT' THEN NEW.ativada_em=clock_timestamp();
+	        ELSIF NOT OLD.integracao_ativa THEN NEW.ativada_em=clock_timestamp();
+	        ELSE NEW.ativada_em=OLD.ativada_em;
+	        END IF;
+	    END IF;
+	    NEW.atualizado_em=clock_timestamp();
+	    RETURN NEW;
+	END;
+	$fn$;
+	DROP TRIGGER IF EXISTS integracao_fireads_ativacao ON chatbot.integracao_fireads;
+	CREATE TRIGGER integracao_fireads_ativacao BEFORE INSERT OR UPDATE ON chatbot.integracao_fireads
+	    FOR EACH ROW EXECUTE FUNCTION chatbot.marcar_ativacao_fireads();
+	
+2026-10-20 19:22:12.885 -03 [8960] WARNING:  there is already a transaction in progress
+2026-10-20 19:22:47.462 -03 [11412] ERROR:  new row for relation "consulta_fireads" violates check constraint "ck_consulta_prazo"
+2026-10-20 19:22:47.462 -03 [11412] DETAIL:  Failing row contains (1, 1, 1, 2, f, pendente, null, null, 2026-10-20 19:22:47.414603-03, pendente, {"aba": "LEADS GERAL - Feedback", "url": "https://script.google...., 2026-10-20 19:22:47.402437-03, 2026-10-20 19:22:46.421813-03, 0, 0, null, null, null, null, null).
+2026-10-20 19:22:47.462 -03 [11412] STATEMENT:  UPDATE chatbot.consulta_fireads SET prazo_final=clock_timestamp()-INTERVAL '1 second'
+2026-10-20 19:23:28.167 -03 [5992] LOG:  checkpoint starting: time
+2026-10-20 19:24:02.616 -03 [7128] ERROR:  duplicate key value violates unique constraint "uq_consulta_fireads_conversa"
+2026-10-20 19:24:02.616 -03 [7128] DETAIL:  Key (id_conversa)=(2) already exists.
+2026-10-20 19:24:02.616 -03 [7128] STATEMENT:  INSERT INTO chatbot.consulta_fireads
+	                (id_conversa,id_unidade,id_integracao_fireads,entrada)
+	                SELECT id_conversa,id_unidade,id_integracao_fireads,entrada
+	                FROM chatbot.consulta_fireads WHERE id_conversa=$1
+2026-10-20 19:27:38.312 -03 [5680] LOG:  received SIGHUP, reloading configuration files
+2026-10-20 19:27:38.384 -03 [5680] LOG:  parameter "fsync" changed to "off"
+2026-10-20 19:27:38.830 -03 [13564] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:38.862 -03 [13564] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:38.952 -03 [13564] ERROR:  column c.contexto_coleta does not exist at character 365
+2026-10-20 19:27:38.952 -03 [13564] STATEMENT:  
+	        SELECT c.id_chat,c.id_cliente,c.id_unidade,c.id_etapa_atual,
+	               c.contexto_fireads,c.origem_fireads,i.id_integracao_fireads,
+	               i.url_dashbord,i.aba_destino,i.fuso_formularios,
+	               (u.status_pagamento IS TRUE AND i.integracao_ativa AND i.contrato_validado
+	                AND c.iniciou_em >= i.ativada_em) AS aplicavel, c.contexto_coleta, u.status_pagamento
+	        FROM chatbot.conversa c JOIN chatbot.unidade u ON u.id_unidade=c.id_unidade
+	        LEFT JOIN chatbot.integracao_fireads i
+	          ON i.id_unidade=c.id_unidade WHERE c.id_conversa=$1;
+	    
+2026-10-20 19:27:40.072 -03 [9996] ERROR:  column c.contexto_coleta does not exist at character 365
+2026-10-20 19:27:40.072 -03 [9996] STATEMENT:  
+	        SELECT c.id_chat,c.id_cliente,c.id_unidade,c.id_etapa_atual,
+	               c.contexto_fireads,c.origem_fireads,i.id_integracao_fireads,
+	               i.url_dashbord,i.aba_destino,i.fuso_formularios,
+	               (u.status_pagamento IS TRUE AND i.integracao_ativa AND i.contrato_validado
+	                AND c.iniciou_em >= i.ativada_em) AS aplicavel, c.contexto_coleta, u.status_pagamento
+	        FROM chatbot.conversa c JOIN chatbot.unidade u ON u.id_unidade=c.id_unidade
+	        LEFT JOIN chatbot.integracao_fireads i
+	          ON i.id_unidade=c.id_unidade WHERE c.id_conversa=$1;
+	    
+2026-10-20 19:27:44.462 -03 [4860] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:44.504 -03 [4860] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:46.026 -03 [7508] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:46.028 -03 [7508] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:46.029 -03 [7508] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:50.133 -03 [15492] ERROR:  Unidade 1 precisa de exatamente um atendimento_customizado.
+2026-10-20 19:27:50.133 -03 [15492] CONTEXT:  PL/pgSQL function chatbot.verificar_customizacao_unidade() line 7 at RAISE
+2026-10-20 19:27:50.133 -03 [15492] STATEMENT:  COMMIT
+2026-10-20 19:27:50.135 -03 [15492] ERROR:  duplicate key value violates unique constraint "uq_chat_cliente_unidade"
+2026-10-20 19:27:50.135 -03 [15492] DETAIL:  Key (id_cliente, id_unidade)=(1, 1) already exists.
+2026-10-20 19:27:50.135 -03 [15492] STATEMENT:  INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(1,1)
+2026-10-20 19:27:50.147 -03 [15492] ERROR:  insert or update on table "conversa" violates foreign key constraint "fk_conversa_chat"
+2026-10-20 19:27:50.147 -03 [15492] DETAIL:  Key (id_chat, id_cliente, id_unidade)=(999, 1, 1) is not present in table "chat".
+2026-10-20 19:27:50.147 -03 [15492] STATEMENT:  UPDATE chatbot.conversa SET id_chat=999 WHERE id_conversa=1
+2026-10-20 19:27:52.952 -03 [11664] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:53.019 -03 [11664] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:53.068 -03 [11664] WARNING:  there is already a transaction in progress
+2026-10-20 19:27:53.071 -03 [11664] WARNING:  there is already a transaction in progress
+2026-10-20 19:28:23.408 -03 [5992] LOG:  checkpoint complete: wrote 1244 buffers (7.6%); 0 WAL file(s) added, 0 removed, 1 recycled; write=151.343 s, sync=142.005 s, total=295.242 s; sync files=4892, longest=0.841 s, average=0.030 s; distance=24891 kB, estimate=24891 kB; lsn=0/620BE20, redo lsn=0/2DBC568
+2026-10-20 19:33:28.477 -03 [5992] LOG:  checkpoint starting: time
+2026-10-20 19:34:50.253 -03 [5992] LOG:  checkpoint complete: wrote 734 buffers (4.5%); 0 WAL file(s) added, 0 removed, 4 recycled; write=79.500 s, sync=0.001 s, total=81.776 s; sync files=0, longest=0.000 s, average=0.000 s; distance=53928 kB, estimate=53928 kB; lsn=0/6266608, redo lsn=0/62665D0
+2026-10-20 20:10:18.742 -03 [16024] ERROR:  duplicate key value violates unique constraint "uq_consulta_fireads_conversa"
+2026-10-20 20:10:18.742 -03 [16024] DETAIL:  Key (id_conversa)=(2) already exists.
+2026-10-20 20:10:18.742 -03 [16024] STATEMENT:  INSERT INTO chatbot.consulta_fireads
+	                (id_conversa,id_unidade,id_integracao_fireads,entrada)
+	                SELECT id_conversa,id_unidade,id_integracao_fireads,entrada
+	                FROM chatbot.consulta_fireads WHERE id_conversa=$1
+2026-10-20 20:10:20.945 -03 [15800] ERROR:  duplicate key value violates unique constraint "cliente_email_key"
+2026-10-20 20:10:20.945 -03 [15800] DETAIL:  Key (email)=(ana@example.com) already exists.
+2026-10-20 20:10:20.945 -03 [15800] STATEMENT:  UPDATE chatbot.cliente SET nome=$1,email=$2 WHERE id_cliente=$3
+2026-10-20 20:10:40.990 -03 [2524] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:41.050 -03 [2524] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:41.053 -03 [2524] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:42.251 -03 [11888] ERROR:  new row for relation "conversa" violates check constraint "ck_conversa_fireads"
+2026-10-20 20:10:42.251 -03 [11888] DETAIL:  Failing row contains (2, 1, 1, null, t, null, f, null, 2026-10-20 20:10:42.184158-03, cliente, 0, null, f, f, null, 0, 0, 2026-10-20 20:10:42.184158-03, null, null, 1, null, {"origem": "google", "versao": 2, "concluida": true, "resultado"..., null).
+2026-10-20 20:10:42.251 -03 [11888] STATEMENT:  UPDATE chatbot.conversa SET contexto_fireads=$1 WHERE id_conversa=$2
+2026-10-20 20:10:43.988 -03 [5928] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:43.994 -03 [5928] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:45.449 -03 [11544] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:45.452 -03 [11544] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:45.453 -03 [11544] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:49.581 -03 [584] ERROR:  Unidade 1 precisa de exatamente um atendimento_customizado.
+2026-10-20 20:10:49.581 -03 [584] CONTEXT:  PL/pgSQL function chatbot.verificar_customizacao_unidade() line 7 at RAISE
+2026-10-20 20:10:49.581 -03 [584] STATEMENT:  COMMIT
+2026-10-20 20:10:49.583 -03 [584] ERROR:  duplicate key value violates unique constraint "uq_chat_cliente_unidade"
+2026-10-20 20:10:49.583 -03 [584] DETAIL:  Key (id_cliente, id_unidade)=(1, 1) already exists.
+2026-10-20 20:10:49.583 -03 [584] STATEMENT:  INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(1,1)
+2026-10-20 20:10:49.592 -03 [584] ERROR:  insert or update on table "conversa" violates foreign key constraint "fk_conversa_chat"
+2026-10-20 20:10:49.592 -03 [584] DETAIL:  Key (id_chat, id_cliente, id_unidade)=(999, 1, 1) is not present in table "chat".
+2026-10-20 20:10:49.592 -03 [584] STATEMENT:  UPDATE chatbot.conversa SET id_chat=999 WHERE id_conversa=1
+2026-10-20 20:10:52.848 -03 [10728] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:52.913 -03 [10728] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:52.960 -03 [10728] WARNING:  there is already a transaction in progress
+2026-10-20 20:10:52.963 -03 [10728] WARNING:  there is already a transaction in progress
+2026-10-20 20:11:06.343 -03 [7500] ERROR:  duplicate key value violates unique constraint "cliente_email_key"
+2026-10-20 20:11:06.343 -03 [7500] DETAIL:  Key (email)=(ana@example.com) already exists.
+2026-10-20 20:11:06.343 -03 [7500] STATEMENT:  UPDATE chatbot.cliente SET email=$1 WHERE id_cliente=$2
+2026-10-20 20:11:10.852 -03 [7480] WARNING:  there is already a transaction in progress
+2026-10-20 20:11:52.701 -03 [9640] WARNING:  there is already a transaction in progress
+2026-10-20 20:11:52.733 -03 [9640] WARNING:  there is already a transaction in progress
+2026-10-20 20:13:14.192 -03 [5680] LOG:  received fast shutdown request
+2026-10-20 20:13:14.193 -03 [5680] LOG:  aborting any active transactions
+2026-10-20 20:13:14.218 -03 [5680] LOG:  background worker "logical replication launcher" (PID 5472) exited with exit code 1
+2026-10-20 20:13:14.221 -03 [5992] LOG:  shutting down
+2026-10-20 20:13:14.221 -03 [5992] LOG:  checkpoint starting: shutdown immediate
+2026-10-20 20:13:18.139 -03 [5992] LOG:  checkpoint complete: wrote 1310 buffers (8.0%); 0 WAL file(s) added, 0 removed, 4 recycled; write=0.024 s, sync=0.001 s, total=3.919 s; sync files=0, longest=0.000 s, average=0.000 s; distance=67515 kB, estimate=67515 kB; lsn=0/A455590, redo lsn=0/A455590
+2026-10-20 20:13:18.270 -03 [5680] LOG:  database system is shut down

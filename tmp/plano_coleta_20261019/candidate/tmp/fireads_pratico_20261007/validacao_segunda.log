@@ -1,0 +1,106 @@
+sssssssssssssssssssssssssssssssssssssssssssssssssssssssss.......................................................................................................E..................................................................................................................................E....................................E.E.............................................................................................E..E.................................
+======================================================================
+ERROR: test_unidade_sem_link_exige_contato_e_normaliza_vazio (tests.unit.test_fluxo_reserva_link.TurnoTests.test_unidade_sem_link_exige_contato_e_normaliza_vazio)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_fluxo_reserva_link.py", line 114, in test_unidade_sem_link_exige_contato_e_normaliza_vazio
+    unidade = Unidade(link_agendamento=link, numero_comercial="(71) 99999-9999")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\base.py", line 579, in __init__
+    _setattr(self, prop, value)
+AttributeError: property 'link_agendamento' of 'Unidade' object has no setter
+
+======================================================================
+ERROR: test_download_pdf_da_unidade_tem_conteudo_e_headers_privados (tests.unit.test_monitoramento_consumo.EndpointsConsumoTests.test_download_pdf_da_unidade_tem_conteudo_e_headers_privados)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_monitoramento_consumo.py", line 150, in test_download_pdf_da_unidade_tem_conteudo_e_headers_privados
+    resposta = self.cliente.get(f"/consumo.pdf?escopo={escopo}&mes=2026-10&id_unidade=20")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\test\client.py", line 1124, in get
+    response = super().get(
+               ^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\test\client.py", line 475, in get
+    return self.generic(
+           ^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\test\client.py", line 671, in generic
+    return self.request(**r)
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\test\client.py", line 1087, in request
+    self.check_exception(response)
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\test\client.py", line 802, in check_exception
+    raise exc_value
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\core\handlers\exception.py", line 55, in inner
+    response = get_response(request)
+               ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\core\handlers\base.py", line 198, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\views\decorators\cache.py", line 80, in _view_wrapper
+    response = view_func(request, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\views\decorators\http.py", line 64, in inner
+    return func(request, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\callback\monitoramento\consumo_views.py", line 46, in consumo_pdf
+    from .consumo_pdf import gerar_pdf_consumo
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\callback\monitoramento\consumo_pdf.py", line 16, in <module>
+    from svglib.svglib import svg2rlg
+ModuleNotFoundError: No module named 'svglib'
+
+======================================================================
+ERROR: test_modelo_valida_conta_comum_e_rejeita_contas_administrativas (tests.unit.test_monitoramento_unidade.CadastroMonitoramentoTests.test_modelo_valida_conta_comum_e_rejeita_contas_administrativas)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_monitoramento_unidade.py", line 224, in test_modelo_valida_conta_comum_e_rejeita_contas_administrativas
+    cadastro = Unidade(
+               ^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\base.py", line 579, in __init__
+    _setattr(self, prop, value)
+AttributeError: property 'link_agendamento' of 'Unidade' object has no setter
+
+======================================================================
+ERROR: test_unidade_sem_conta_e_permitida (tests.unit.test_monitoramento_unidade.CadastroMonitoramentoTests.test_unidade_sem_conta_e_permitida)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_monitoramento_unidade.py", line 236, in test_unidade_sem_conta_e_permitida
+    unidade = Unidade(id_unidade=10, nome_unidade='Unidade A', link_agendamento='https://example.com')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\base.py", line 579, in __init__
+    _setattr(self, prop, value)
+AttributeError: property 'link_agendamento' of 'Unidade' object has no setter
+
+======================================================================
+ERROR: test_admin_exige_contato_ao_ativar_e_ao_remover_numero (tests.unit.test_suporte_por_idade.SuportePorIdadeTests.test_admin_exige_contato_ao_ativar_e_ao_remover_numero)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_suporte_por_idade.py", line 79, in test_admin_exige_contato_ao_ativar_e_ao_remover_numero
+    instance = Unidade(id_unidade=1, link_agendamento="https://example.com")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\base.py", line 579, in __init__
+    _setattr(self, prop, value)
+AttributeError: property 'link_agendamento' of 'Unidade' object has no setter
+
+======================================================================
+ERROR: test_dominio_contexto_e_formulario_modelo (tests.unit.test_suporte_por_idade.SuportePorIdadeTests.test_dominio_contexto_e_formulario_modelo)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\options.py", line 684, in get_field
+    return self.fields_map[field_name]
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^
+KeyError: 'idade_minima_suporte'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\fireads_pratico_20261007\candidate\tests\unit\test_suporte_por_idade.py", line 52, in test_dominio_contexto_e_formulario_modelo
+    campo = Unidade._meta.get_field('idade_minima_suporte')
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\django\db\models\options.py", line 686, in get_field
+    raise FieldDoesNotExist(
+django.core.exceptions.FieldDoesNotExist: Unidade has no field named 'idade_minima_suporte'
+
+----------------------------------------------------------------------
+Ran 461 tests in 202.853s
+
+FAILED (errors=6, skipped=57)

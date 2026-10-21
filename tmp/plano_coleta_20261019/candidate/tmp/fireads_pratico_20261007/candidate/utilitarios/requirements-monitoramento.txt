@@ -1,0 +1,2 @@
+# Dependência opcional do gerador de dashboards e relatórios por unidade.
+reportlab>=4.2,<5

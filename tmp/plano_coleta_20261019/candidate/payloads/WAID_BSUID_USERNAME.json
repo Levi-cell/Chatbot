@@ -1,0 +1,42 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "833244752748897",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "557536310000",
+              "phone_number_id": "1217356894795355"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Mariana Oliveira",
+                  "username": "mariana.oliveira"
+                },
+                "wa_id": "5571988887777",
+                "user_id": "BR.98765432101234567890"
+              }
+            ],
+            "messages": [
+              {
+                "from": "5571988887777",
+                "from_user_id": "BR.98765432101234567890",
+                "id": "wamid.EXEMPLO_COMPLETO_003",
+                "timestamp": "1785621720",
+                "type": "text",
+                "text": {
+                  "body": "Quero conhecer o Supera"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

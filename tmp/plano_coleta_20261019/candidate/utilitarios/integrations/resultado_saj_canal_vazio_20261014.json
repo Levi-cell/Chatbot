@@ -1,0 +1,12 @@
+{
+  "titulo": "TESTE SAJ CANAL VAZIO 20261014T215731Z - NAO CONTATAR",
+  "unidade": "SANTO ANTONIO DE JE",
+  "codigo_canal_venda": "",
+  "ForceCodeChannel": "",
+  "estado": "resposta_recebida",
+  "iniciado_em_utc": "2026-10-14T21:57:35.905695+00:00",
+  "status_http": 500,
+  "resposta_nao_json": true,
+  "aceito": false,
+  "finalizado_em_utc": "2026-10-14T21:57:39.375225+00:00"
+}

@@ -1,0 +1,37 @@
+[Unit]
+Description=Chatbot - worker principal do fluxo de atendimento
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=chatbot
+Group=chatbot
+WorkingDirectory=/opt/chatbot/app
+EnvironmentFile=/etc/chatbot/chatbot.env
+Environment=PYTHONPATH=/opt/chatbot/app
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/chatbot/venv/bin/python -m workers.worker_flow.iniciar_flow_worker
+Restart=always
+RestartSec=5s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=chatbot-worker-flow
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+RestrictSUIDSGID=true
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

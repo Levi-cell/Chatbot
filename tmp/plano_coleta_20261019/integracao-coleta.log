@@ -1,0 +1,15 @@
+======================================================================
+ERROR: test_timeout_nao_reconsulta_e_pergunta_so_o_que_falta (tests.integration.test_coleta_abertura_postgres.ColetaPostgresTests.test_timeout_nao_reconsulta_e_pergunta_so_o_que_falta)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Chatbot\Projeto\Chatbot\tmp\plano_coleta_20261019\candidate\tests\integration\test_coleta_abertura_postgres.py", line 93, in test_timeout_nao_reconsulta_e_pergunta_so_o_que_falta
+    self.cursor.execute("UPDATE chatbot.consulta_fireads SET prazo_final=clock_timestamp()-INTERVAL '1 second'")
+  File "C:\Chatbot\venv\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.CheckViolation: new row for relation "consulta_fireads" violates check constraint "ck_consulta_prazo"
+DETAIL:  Failing row contains (1, 1, 1, 2, f, pendente, null, null, 2026-10-20 19:22:47.414603-03, pendente, {"aba": "LEADS GERAL - Feedback", "url": "https://script.google...., 2026-10-20 19:22:47.402437-03, 2026-10-20 19:22:46.421813-03, 0, 0, null, null, null, null, null).
+
+----------------------------------------------------------------------
+Ran 9 tests in 81.863s
+
+FAILED (errors=1)

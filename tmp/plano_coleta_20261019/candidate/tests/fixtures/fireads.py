@@ -1,0 +1,54 @@
+"""Migração real nas bases PostgreSQL descartáveis da suíte."""
+
+from pathlib import Path
+
+MIGRACAO_FIREADS = (
+    Path(__file__).resolve().parents[2]
+    / "deploy/migrations/20261007_fireads_chat_customizacao.sql"
+)
+
+
+def aplicar_fireads(cursor, *, aba_geral=True):
+    """Usa o DDL do deploy, preservando a transação controlada pelo teste."""
+    texto = MIGRACAO_FIREADS.read_text(encoding="utf-8")
+    ddl = texto.split("-- INICIO DDL FIREADS\n", 1)[1].split("-- FIM DDL FIREADS", 1)[0]
+    cursor.execute(ddl)
+
+    novo = MIGRACAO_FIREADS.with_name("20261009_worker_consulta_dash.sql").read_text(
+        encoding="utf-8"
+    )
+    cursor.execute(
+        novo.split("-- INICIO DDL CONSULTA DASH\n", 1)[1].split(
+            "-- FIM DDL CONSULTA DASH", 1
+        )[0]
+    )
+    if aba_geral:
+        aplicar_aba_geral(cursor)
+
+
+def aplicar_aba_geral(cursor):
+    texto = MIGRACAO_FIREADS.with_name("20261014_fireads_aba_geral.sql").read_text(encoding="utf-8")
+    cursor.execute(texto.split("-- INICIO DDL FIREADS ABA GERAL\n", 1)[1].split(
+        "-- FIM DDL FIREADS ABA GERAL", 1
+    )[0])
+
+    coleta = MIGRACAO_FIREADS.with_name('20261019_coleta_abertura.sql').read_text(encoding='utf-8')
+    cursor.execute(coleta.split('-- INICIO DDL COLETA ABERTURA\n', 1)[1].split('-- FIM DDL COLETA ABERTURA', 1)[0])
+
+
+def como_aba_geral(google, meta):
+    """Representa na aba consolidada os formulários históricos usados pelas fixtures."""
+    rows = []
+    for row in google:
+        rows.append(dict(row, **{
+            "Canal": "Google Ads", "Para quem é": row.get("Perfil/Faixa"),
+            "_row": row.get("_row", len(rows) + 2),
+        }))
+    for row in meta:
+        rows.append({
+            "Nome": row.get("full_name"), "Email": row.get("email"),
+            "WhatsApp": row.get("phone_number"), "Para quem é": row.get("para_quem"),
+            "Data/Hora": row.get("created_time"), "Canal": "Meta Ads",
+            "_row": row.get("_row", len(rows) + 2),
+        })
+    return rows
