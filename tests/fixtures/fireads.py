@@ -32,6 +32,9 @@ def aplicar_aba_geral(cursor):
         "-- FIM DDL FIREADS ABA GERAL", 1
     )[0])
 
+    coleta = MIGRACAO_FIREADS.with_name('20261019_coleta_abertura.sql').read_text(encoding='utf-8')
+    cursor.execute(coleta.split('-- INICIO DDL COLETA ABERTURA\n', 1)[1].split('-- FIM DDL COLETA ABERTURA', 1)[0])
+
 
 def como_aba_geral(google, meta):
     """Representa na aba consolidada os formulários históricos usados pelas fixtures."""

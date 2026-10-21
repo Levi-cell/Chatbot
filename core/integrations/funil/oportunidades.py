@@ -280,8 +280,8 @@ def _validar_dados_lead(dados_lead):
 
 
 def _resolver_resultado_email_conversa(dados_lead):
-    if dados_lead.get('origem_fireads'):
-        classificacao = dados_lead['resultado_email_fireads']
+    if dados_lead.get('contexto_coleta') or dados_lead.get('origem_fireads'):
+        classificacao = dados_lead.get('resultado_email_coleta') or dados_lead.get('resultado_email_fireads')
         if classificacao not in {CLASSIFICACAO_EMAIL_VALIDO, CLASSIFICACAO_EMAIL_AUSENTE, CLASSIFICACAO_EMAIL_NAO_INFORMADO}:
             raise ValueError('Resultado histórico de email inválido')
         return ResultadoColetaEmail(aceita=True, classificacao=classificacao, email=dados_lead.get('email_cliente'))

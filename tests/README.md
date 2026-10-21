@@ -365,3 +365,13 @@ python -m unittest tests.unit.test_fireads_aba_geral tests.unit.test_fireads tes
 Para integração, fornecer `FIREADS_TEST_DSN` apontando exclusivamente para banco
 vazio `test_chatbot_fireads` em loopback. A suíte recusa schema `chatbot`
 preexistente. Não usar credenciais do banco da aplicação.
+
+
+## Coleta por campo na abertura
+
+`python -m unittest tests.unit.test_coleta_abertura -q` cobre as oito combinações
+de campos, conflitos, nomes compostos, fontes, recência e escolha de destino.
+`tests.integration.test_coleta_abertura_postgres` usa FIREADS_TEST_DSN exclusivamente
+em loopback, banco descartável test_chatbot_fireads sem schema chatbot preexistente.
+O teste recusa outros destinos; usa o SQL real e substitui serviços externos.
+Não fornecer credenciais de produção aos testes.

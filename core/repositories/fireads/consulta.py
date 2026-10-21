@@ -49,7 +49,7 @@ def buscar_abertura(id_conversa, cursor):
                c.contexto_fireads,c.origem_fireads,i.id_integracao_fireads,
                i.url_dashbord,i.aba_destino,i.fuso_formularios,
                (u.status_pagamento IS TRUE AND i.integracao_ativa AND i.contrato_validado
-                AND c.iniciou_em >= i.ativada_em) AS aplicavel
+                AND c.iniciou_em >= i.ativada_em) AS aplicavel, c.contexto_coleta, u.status_pagamento
         FROM chatbot.conversa c JOIN chatbot.unidade u ON u.id_unidade=c.id_unidade
         LEFT JOIN chatbot.integracao_fireads i
           ON i.id_unidade=c.id_unidade WHERE c.id_conversa=%s;
@@ -73,6 +73,8 @@ def buscar_abertura(id_conversa, cursor):
                 "aba",
                 "fuso",
                 "aplicavel",
+                "coleta",
+                "unidade_ativa",
             ),
             row,
         )

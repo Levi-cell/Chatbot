@@ -13,6 +13,8 @@ def solicitar(abertura, id_conversa, numero, cursor):
         "fuso": abertura["fuso"],
         "numero": numero,
     }
+    if abertura.get("coleta") is not None:
+        entrada["coleta"] = abertura["coleta"]
     cursor.execute(
         """INSERT INTO chatbot.consulta_fireads
         (id_unidade,id_integracao_fireads,id_conversa,entrada)

@@ -995,3 +995,24 @@ reserva, pagamento, elegibilidade e URL nas tentativas seguintes. O dashboard
 reutiliza as mesmas observações congeladas. Formatos legados são consumidos sem
 reconstrução; configuração legada de consultas concluídas usa a ponte registrada
 pela migração, sem repetir HTTP nem mudar uma decisão já salva.
+
+
+## Coleta da primeira mensagem e dados parciais
+
+`core/validacoes/coleta_abertura.py` extrai campos e mantém o contrato puro.
+`core/integrations/fireads/coleta_abertura.py` cruza uma única inscrição externa.
+`core/repositories/atendimento/coleta_abertura.py` persiste o JSON da conversa;
+`workers/worker_flow/coleta_abertura.py` orquestra a abertura sem HTTP/commit.
+O ciclo principal continua responsável pelas guardas, transações e envio.
+
+`contexto_coleta` é independente de FireAds. O contrato 1 registra o estado por
+campo e uma cópia imutável dos dados da primeira mensagem. Não usar cache ou
+cadastro de outra conversa como fonte desses campos. As consultas reais usam a
+fila existente; mensagem completa não cria consulta fictícia. Eventos históricos
+`oferta_aceita_email_fireads` e `retorno_confirmado_email_fireads` conservam seus
+nomes para replay, mas aceitam também e-mail previamente coletado nesta conversa.
+
+Snapshots de entrega versão 3 acrescentam identidade de coleta e destino
+persistido, sem mudar snapshots antigos. A escolha do alvo é feita na integração,
+salva pelo repositório sob a reserva atual e confirmada pelo worker antes do POST.
+As limitações da API externa entre leitura/escrita continuam as mesmas.

@@ -1,5 +1,6 @@
 import logging
 from workers.worker_flow.fireads import email_importado
+from core.validacoes.coleta_abertura import validar_contexto
 
 
 from core.logging_config import short_value
@@ -71,9 +72,13 @@ def valida_historico(mensagem, contexto_banco, cursor, *, retorno_followup=False
 
     last_message_from_entrada = contexto_conversa.get("last_message_from")
     id_etapa_para_insert = _resolver_etapa_cliente(contexto_conversa)
+    coleta = contexto_banco.get('contexto_coleta')
+    if coleta and contexto_conversa.get('id_etapa_atual') is None:
+        estado = validar_contexto({'id_conversa': id_conversa, 'contexto_coleta': coleta})
+        id_etapa_para_insert = estado['etapa_inicial']
     # A primeira interação importada pertence à pergunta de profissão.
     # Assim seu replay permanece na etapa 4 sem simular uma transição 1 -> 4.
-    if contexto_conversa.get("id_etapa_atual") is None and email_importado({
+    if not coleta and contexto_conversa.get("id_etapa_atual") is None and email_importado({
         "id_conversa": id_conversa,
         "contexto_fireads": contexto_banco.get("contexto_fireads"),
     }):
@@ -411,6 +416,7 @@ def valida_historico(mensagem, contexto_banco, cursor, *, retorno_followup=False
 
     contexto_historico = {
         "contexto_fireads": contexto_banco.get("contexto_fireads"),
+        "contexto_coleta": contexto_banco.get("contexto_coleta"),
         "id_conversa": id_conversa,
         "id_cliente": contexto_banco.get("id_cliente"),
         "id_unidade": contexto_banco.get("id_unidade"),

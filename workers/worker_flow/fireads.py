@@ -15,6 +15,25 @@ from workers.worker_flow.suporte.consultas_fireads import ConsultaFireAdsPendent
 
 
 def preparar_abertura(contexto_banco, mensagem, lock_version, cursor):
+    from workers.worker_flow.coleta_abertura import preparar, anexar
+    cid = contexto_banco['conversa']['id_conversa']
+    abertura = buscar_abertura(cid, cursor)
+    if 'unidade_ativa' in abertura and abertura['unidade_ativa'] is not True:
+        return contexto_banco
+    if abertura.get('coleta'):
+        if abertura['etapa'] is not None:
+            return anexar(contexto_banco, abertura['coleta'], abertura.get('contexto'))
+        return preparar(contexto_banco, mensagem, lock_version, cursor, abertura, pendencias.buscar(cid, cursor))
+    # Contextos e consultas anteriores ao deploy conservam o contrato original.
+    if 'coleta' not in abertura or abertura.get('contexto') or abertura['etapa'] is not None:
+        return _preparar_abertura_legada(contexto_banco, mensagem, lock_version, cursor)
+    consulta = pendencias.buscar(cid, cursor)
+    if consulta is not None:
+        return _preparar_abertura_legada(contexto_banco, mensagem, lock_version, cursor)
+    return preparar(contexto_banco, mensagem, lock_version, cursor, abertura, None)
+
+
+def _preparar_abertura_legada(contexto_banco, mensagem, lock_version, cursor):
     """Não executa HTTP nem commit. O orquestrador confirma também a espera."""
     cid = contexto_banco["conversa"]["id_conversa"]
     abertura = buscar_abertura(cid, cursor)
@@ -103,6 +122,10 @@ def aplicar_contexto(contexto_banco, decisao):
 
 def email_importado(contexto):
     """Confia na coleta FireAds desta conversa, sem revalidar como texto de chat."""
+    # Nome histórico da API mantido para replay dos eventos 7/9 -> 11.
+    if contexto.get('contexto_coleta'):
+        from core.validacoes.coleta_abertura import email_coletado
+        return email_coletado(contexto)
     estado = contexto.get("contexto_fireads") or {}
     return (
         estado.get("concluida") is True

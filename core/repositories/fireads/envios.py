@@ -60,6 +60,15 @@ def congelar(dados, payload, integracao_funil, cursor):
             else f"Titular ({dados['idade_cliente']} anos)"
         ),
     }
+    if dados.get('contexto_coleta'):
+        from core.integrations.fireads.destino_coleta import identidade_entrega
+        coleta = dados['contexto_coleta']
+        identidade = identidade_entrega(coleta)
+        alvo = identidade['destinatario']
+        snapshot.update(versao=3, rota_formulario_chat=coleta['rota_formulario_chat'],
+                        identidade_coleta=identidade, destino=None,
+                        para_quem=alvo['valor']['texto'] if alvo['status']=='aceito' else (
+                            'Para dependente' if dados['status_dependente'] else 'Para mim'))
     cursor.execute(
         """INSERT INTO chatbot.envios_dash
         (id_conversa,id_unidade,id_integracao_fireads,snapshot) VALUES (%s,%s,%s,%s)

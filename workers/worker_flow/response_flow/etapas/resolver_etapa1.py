@@ -1,4 +1,6 @@
 import logging
+from core.validacoes.coleta_abertura import destinatario_coletado, EVENTO_NOME_DESTINO_COLETADO
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa4 import enviar_etapa4
 
 from workers.worker_flow.response_flow.repeticao_followup import (
     enviar_repeticao_followup,
@@ -199,6 +201,12 @@ def resolve_etapa1(contexto_historico):
             cliente_telefone,
             phone_id_unidade,
         )
+
+    if destinatario_coletado(contexto_historico):
+        etapa = resolver_destino_transicao(contexto_historico, EVENTO_NOME_DESTINO_COLETADO, destinos_esperados={4})
+        envio = enviar_etapa4(cliente_telefone, phone_id_unidade, status_dependente=contexto_historico['status_dependente'])
+        envio['primeiro_nome_cliente'] = resultado_nome.primeiro_nome
+        return anexar_transicao_ao_contexto_envio(contexto_historico, envio, EVENTO_NOME_DESTINO_COLETADO, etapa)
 
     # VALIDANDO DESTINO(S)
     # A resposta já passou pelos tratamentos; agora o mapa autoriza a aresta.

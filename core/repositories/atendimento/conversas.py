@@ -222,7 +222,7 @@ def inicializar_conversa_resposta_bot(
     data_interacao,
     cursor,
 ):
-    if id_etapa_resultante not in {ETAPA_INICIAL, 4}:
+    if id_etapa_resultante not in {ETAPA_INICIAL, 2, 4}:
         raise ValueError(
             "Inicializacao exige etapa 1 ou importacao FireAds na etapa 4"
         )
@@ -237,13 +237,20 @@ def inicializar_conversa_resposta_bot(
             last_interaction_at = %s
         WHERE id_conversa = %s
           AND id_etapa_atual IS NULL
-          AND (%s = 1 OR (contexto_fireads->>'resultado' = 'importado'
-               AND contexto_fireads->>'concluida' = 'true'
-               AND contexto_fireads->>'id_conversa' = id_conversa::text));
+          AND ((contexto_coleta IS NOT NULL
+                AND contexto_coleta->>'status'='pronto'
+                AND contexto_coleta->>'id_conversa'=id_conversa::text
+                AND contexto_coleta->>'etapa_inicial'=%s::text)
+              OR (contexto_coleta IS NULL AND (%s=1 OR (%s=4
+                AND contexto_fireads->>'resultado'='importado'
+                AND contexto_fireads->>'concluida'='true'
+                AND contexto_fireads->>'id_conversa'=id_conversa::text))));
     """, (
         id_etapa_resultante,
         data_interacao,
         id_conversa,
+        id_etapa_resultante,
+        id_etapa_resultante,
         id_etapa_resultante,
     ))
 

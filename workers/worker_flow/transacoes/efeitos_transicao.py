@@ -1,4 +1,5 @@
 import logging
+from core.validacoes.coleta_abertura import destinatario_coletado, EVENTO_NOME_DESTINO_COLETADO
 from workers.worker_flow.fireads import email_importado
 
 from core.repositories.atendimento.turnos import salvar_turno_conversa
@@ -163,6 +164,11 @@ def atualizar_banco_conforme_transicao_de_etapa(
 
     # ETAPA 1
     if etapa_origem == ETAPA_1_NOME_CLIENTE:
+        if evento == EVENTO_NOME_DESTINO_COLETADO:
+            _exigir_destino(etapa_origem, evento, etapa_destino, 4)
+            if not destinatario_coletado(contexto_historico):
+                raise ValueError('Salto de destinatário sem dado aceito nesta conversa')
+            return _persistir_nome_cliente_capturado_na_etapa1(contexto_historico, contexto_envio, cursor)
         # 1 -> 2: o cliente informou o próprio nome.
         if evento == EVENTO_NOME_CLIENTE_VALIDO:
             _exigir_destino(

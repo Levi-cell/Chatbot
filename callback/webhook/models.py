@@ -55,6 +55,7 @@ class Conversa(models.Model):
     id_chat = models.ForeignKey('Chat', models.DO_NOTHING, db_column='id_chat')
     origem_fireads = models.CharField(max_length=20, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico_site','Orgânico Site'),('organico','Orgânico')])
     contexto_fireads = models.JSONField(null=True, blank=True)
+    contexto_coleta = models.JSONField(null=True, blank=True, editable=False)
     lead_no_dash = models.BooleanField(null=True, blank=True, default=None)
 
     turno = models.CharField(

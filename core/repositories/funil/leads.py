@@ -28,7 +28,7 @@ def buscar_dados_lead_funil(id_conversa, cursor):
                 SELECT 1 FROM chatbot.conversa anterior
                 WHERE anterior.id_chat=c.id_chat
                   AND (anterior.iniciou_em,anterior.id_conversa)<(c.iniciou_em,c.id_conversa)
-            ) AS primeiro_atendimento
+            ) AS primeiro_atendimento, c.contexto_coleta
         FROM chatbot.conversa c
         JOIN chatbot.cliente cl
           ON cl.id_cliente = c.id_cliente
@@ -118,9 +118,21 @@ def buscar_dados_lead_funil(id_conversa, cursor):
         dados['origem_fireads'] = resultado[15]
         dados['contexto_fireads'] = resultado[16]
         retrato = (resultado[16] or {}).get('dados_titular') or {}
-        if 'nome' not in retrato or 'resultado_email' not in retrato:
-            raise ValueError('Coletas históricas FireAds incompletas para o Funil')
-        dados.update(nome_cliente=retrato['nome'], email_cliente=retrato.get('email'),
-                     idade_cliente=retrato.get('idade'), resultado_email_fireads=retrato['resultado_email'])
+        if not (len(resultado) > 18 and resultado[18]):
+            if 'nome' not in retrato or 'resultado_email' not in retrato:
+                raise ValueError('Coletas históricas FireAds incompletas para o Funil')
+            dados.update(nome_cliente=retrato['nome'], email_cliente=retrato.get('email'),
+                         idade_cliente=retrato.get('idade'), resultado_email_fireads=retrato['resultado_email'])
+    coleta = resultado[18] if len(resultado) > 18 else None
+    if coleta:
+        from core.validacoes.coleta_abertura import validar_contexto, valor, aceito
+        validar_contexto({'id_conversa': id_conversa, 'contexto_coleta': coleta})
+        dados['contexto_coleta'] = coleta
+        dados['nome_cliente'] = valor(coleta, 'nome')
+        dados['email_cliente'] = valor(coleta, 'email')
+        dados['idade_cliente'] = coleta.get('idade_titular')
+        dados['resultado_email_coleta'] = 'email_valido' if aceito(coleta, 'email') else coleta.get('resultado_email')
+        if not dados['nome_cliente'] or not dados['resultado_email_coleta']:
+            raise ValueError('Coletas históricas incompletas para o Funil')
     dados['primeiro_atendimento'] = resultado[17]
     return dados

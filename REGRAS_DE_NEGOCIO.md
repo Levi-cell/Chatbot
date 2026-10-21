@@ -1649,3 +1649,34 @@ O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configura�
 Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
+
+
+## Coleta por campo na abertura (contrato 1)
+
+Esta regra substitui, para novas conversas, a exigência de importação completa
+FireAds. A primeira mensagem pode fornecer nome do titular, e-mail e destinatário
+explícitos. Valores diferentes no mesmo campo ficam conflitantes; repetições
+equivalentes são um único valor. O telefone é sempre o remetente WhatsApp.
+
+Com os três campos aceitos, iniciar na profissão (etapa 4) sem consulta. Com
+FireAds e coleta incompleta, consultar uma vez uma inscrição compatível; completar
+somente o desconhecido a partir dessa inscrição. Sem FireAds, perguntar o que
+falta. Nome pendente inicia na 1; destinatário pendente com nome conhecido inicia
+na 2; nome e destinatário conhecidos iniciam na 4. E-mail pendente mantém a etapa
+10 e sua política atual. Nome aceito na 1 com destinatário já coletado usa a nova
+aresta autorizada 1 -> 4. Não antecipar profissão, idade ou dados do dependente.
+
+Contexto próprio por conversa conserva candidatos, fonte de cada campo e dados
+originais. Conversas e consultas legadas conservam o contrato antigo. Não
+reinterpretar mensagens de conversas em andamento nem reconsultar por etapa.
+Unidades sem FireAds preservam codigo_canal_venda da integração Funil (padrão
+113340); a coleta não lhes atribui origem FireAds nem gera entrega ao dashboard.
+
+Para formulário recebido no chat sem referência já vinculada, a entrega procura
+telefone, e-mail e destinatário compatíveis e escolhe data/hora mais recente,
+depois maior linha. Parentesco conhecido distingue inscrições para dependentes
+diferentes. Ausência ou incompatibilidade gera nova linha preservando a origem.
+Erro de leitura não autoriza criar. Salvar o destino antes do POST; retry mantém
+esse destino e reconcilia primeiro o marcador técnico. Não substituir referência
+vinculada apagada/alterada por uma inscrição nova. Somente Observação muda em
+updates, preservando conteúdo anterior; append inclui Para quem é.

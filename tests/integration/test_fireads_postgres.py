@@ -298,6 +298,9 @@ class FireAdsPostgresTests(unittest.TestCase):
             "id_mensagem": self.cursor.fetchone()[0],
             "retry_count": 1,
             "cliente_telefone": NUMERO,
+            "id_hash": "wamid.fireads",
+            "tipo_mensagem": "text",
+            "conteudo_texto": "Oi",
         }
         ok, versao = tentar_lock_conversa(cid, self.cursor)
         self.assertTrue(ok)
@@ -386,7 +389,7 @@ class FireAdsPostgresTests(unittest.TestCase):
                 "SELECT versao FROM chatbot.migracoes_fireads ORDER BY versao"
             ).fetchall(),
             [("20261007_fireads_v1",), ("20261009_consulta_dash_v1",),
-             ("20261014_fireads_aba_geral_v1",)],
+             ("20261014_fireads_aba_geral_v1",), ("20261019_coleta_abertura_v1",)],
         )
         self.assertEqual(
             self.conn.execute(
@@ -409,7 +412,7 @@ class FireAdsPostgresTests(unittest.TestCase):
             self.conn.execute(
                 "SELECT count(*) FROM chatbot.etapa_transicao"
             ).fetchone()[0],
-            30,
+            31,
         )
 
     def test_importacao_dependente_e_retry_recuperam_snapshot(self):
@@ -537,10 +540,7 @@ class FireAdsPostgresTests(unittest.TestCase):
             side_effect=lambda **_: psycopg.connect(DSN),
         ), patch(
             "workers.worker_consulta_dash.consulta_worker.consultar",
-            return_value={
-                "decisao": interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
-                "fontes": {"google": [GOOGLE], "meta": []},
-            },
+            return_value=self.resultado_google(),
         ):
             self.assertTrue(executar_ciclo())
         self.assertEqual(
@@ -829,6 +829,12 @@ class FireAdsPostgresTests(unittest.TestCase):
         ).fetchone(), ('concluida', 'importado'))
 
     def resultado_google(self):
+        entrada = self.conn.execute('SELECT entrada FROM chatbot.consulta_fireads ORDER BY id_consulta DESC LIMIT 1').fetchone()
+        if entrada and entrada[0].get('coleta'):
+            from core.integrations.fireads.coleta_abertura import interpretar_parcial
+            e = entrada[0]
+            rows = como_aba_geral([GOOGLE], [])
+            return {'decisao': interpretar_parcial(rows, NUMERO, e['fuso'], e['aba'], e['coleta']), 'fontes': {'geral': rows}}
         return {
             "decisao": interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
             "fontes": {"google": [GOOGLE], "meta": []},
@@ -868,6 +874,8 @@ class FireAdsPostgresTests(unittest.TestCase):
         sql = MIGRACAO_FIREADS.with_name('20261014_fireads_aba_geral.sql').read_text(encoding='utf-8')
         for _ in range(2):
             self.conn.execute(sql, prepare=False)
+        # O runtime atual só entra depois de todas as migrações do deploy.
+        self.conn.execute(MIGRACAO_FIREADS.with_name('20261019_coleta_abertura.sql').read_text(encoding='utf-8'), prepare=False)
         pendente = self.conn.execute("""SELECT status,entrada,tentativas,versao_reserva,
             solicitado_em,prazo_final,processing_started_at,reserva_ate
             FROM chatbot.consulta_fireads WHERE id_conversa=1""").fetchone()
@@ -962,7 +970,8 @@ class FireAdsPostgresTests(unittest.TestCase):
         cid, mensagem, versao, contexto = self.solicitar_pendente()
         reserva = pendencias.reservar(self.cursor)
         row = dict(como_aba_geral([GOOGLE], [])[0], Canal='Organico Site')
-        decisao = interpretar([row], NUMERO)
+        from core.integrations.fireads.coleta_abertura import interpretar_parcial
+        decisao = interpretar_parcial([row], NUMERO, None, reserva['entrada']['aba'], reserva['entrada']['coleta'])
         self.assertTrue(pendencias.concluir(reserva, {'decisao': decisao, 'fontes': {'geral': [row]}}, self.cursor))
         pendencias.liberar_reserva(reserva['id_consulta'], self.cursor)
         resultado = preparar_abertura(contexto, mensagem, versao, self.cursor)
@@ -975,6 +984,10 @@ class FireAdsPostgresTests(unittest.TestCase):
             {'id_cliente': 1, 'id_conversa': cid, 'contexto_fireads': resultado['contexto_fireads']},
             {'destino_dado': 'cliente'}, self.cursor,
         )
+        from core.repositories.atendimento.coleta_abertura import guardar_coletas
+        guardar_coletas({'id_cliente': 1, 'id_conversa': cid,
+                         'contexto_coleta': resultado['contexto_coleta']},
+                        {'destino_dado': 'cliente'}, self.cursor)
         fila_funil.sincronizar_envios_elegiveis(self.cursor)
         envio = fila_funil.reivindicar_proximo_envio(self.cursor)
         self.conn.commit()
@@ -991,7 +1004,10 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.assertIn('Novo atendimento para Lead antigo', obs)
 
     def test_conflito_email_preserva_referencia_sem_importacao_parcial(self):
-        cid, mensagem, versao, contexto = self.solicitar_pendente()
+        # Consulta já existente antes do novo contrato mantém importação legada.
+        cid, mensagem, versao, contexto = self.preparar_mensagem()
+        pendencias.solicitar(consulta.buscar_abertura(cid, self.cursor), cid, NUMERO, self.cursor)
+        self.conn.commit()
         self.cursor.execute("""INSERT INTO chatbot.cliente(nome,waid_telefone,email)
             VALUES('Outro','5511999990003','ana@example.com')""")
         reserva = pendencias.reservar(self.cursor)
@@ -1213,8 +1229,13 @@ class FireAdsPostgresTests(unittest.TestCase):
         )
 
     def test_migracao_com_registro_legado_preserva_resultado_e_reexecucao(self):
+        from psycopg.types.json import Jsonb
         cid = self.nova_conversa()
-        decisao = self.importar(cid)
+        # Semeia o contrato histórico sem chamar o runtime novo no esquema antigo.
+        decisao = dict(interpretar(como_aba_geral([GOOGLE], []), NUMERO, None),
+                       id_conversa=cid, concluida=True)
+        self.cursor.execute('UPDATE chatbot.conversa SET origem_fireads=%s,contexto_fireads=%s WHERE id_conversa=%s',
+                            (decisao['origem'], Jsonb(decisao), cid))
         self.conn.commit()
         ddl_antigo = MIGRACAO_FIREADS.read_text(encoding="utf-8")
         ddl_antigo = ddl_antigo[
@@ -1262,9 +1283,10 @@ class FireAdsPostgresTests(unittest.TestCase):
         cid, mensagem, versao, contexto = self.preparar_mensagem()
         self.cursor.execute("DELETE FROM chatbot.integracao_fireads")
         self.conn.commit()
-        self.assertEqual(
-            preparar_abertura(contexto, mensagem, versao, self.cursor), contexto
-        )
+        preparado = preparar_abertura(contexto, mensagem, versao, self.cursor)
+        self.assertEqual(preparado['conversa'], contexto['conversa'])
+        self.assertEqual(preparado['contexto_coleta']['etapa_inicial'], 1)
+        self.assertNotIn('contexto_fireads', preparado)
         self.assertEqual(
             self.conn.execute(
                 "SELECT count(*) FROM chatbot.consulta_fireads"

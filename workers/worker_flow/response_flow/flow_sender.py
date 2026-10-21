@@ -169,7 +169,13 @@ def flow_sender(contexto_historico):
             retry_count,
         )
 
-    if id_etapa_atual is None and email_importado(contexto_historico):
+    if id_etapa_atual is None and contexto_historico.get('contexto_coleta'):
+        from core.validacoes.coleta_abertura import validar_contexto, aceito
+        from core.integrations.whatsapp.pywa_functions.pywa_senders.abertura_coleta import enviar_abertura_coleta
+        coleta = validar_contexto(contexto_historico)
+        if coleta['formulario_identificado'] or any(aceito(coleta, c) for c in ('nome', 'email', 'destinatario')):
+            return enviar_abertura_coleta(contexto_historico, tratamento=classificar_tratamento_abertura(contexto_historico))
+    if id_etapa_atual is None and not contexto_historico.get('contexto_coleta') and email_importado(contexto_historico):
         return enviar_abertura_fireads(
             contexto_historico,
             tratamento=classificar_tratamento_abertura(contexto_historico),

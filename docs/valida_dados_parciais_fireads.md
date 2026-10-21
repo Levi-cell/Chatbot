@@ -1,8 +1,10 @@
 # Plano prático — coleta de dados parciais na abertura
 
-Status: código proposto para aplicação coordenada. Este documento contém os
-arquivos completos; a aplicação no projeto e a migração de produção são tarefas
-posteriores. Revisão-base: `3d689f35ba0b67b93d6d2decb17d29b690227307`. Documento consolidado em 20/10/2026.
+Status: aplicado e validado localmente em 20/10/2026. A migração de produção
+permanece pendente para o deploy coordenado.
+Revisão-base do plano: `3d689f35ba0b67b93d6d2decb17d29b690227307`.
+Backup anterior à aplicação: `0c8824d` (20/10/2026 21:02).
+Os blocos abaixo contêm os arquivos completos, atualizados com os ajustes da aplicação.
 
 Este plano substitui a proposta teórica e os procedimentos históricos que
 compartilhavam este arquivo. Não reinstalar o worker de consulta: ele já existe.
@@ -143,9 +145,9 @@ externas são substituídas; não usar dados ou credenciais da produção.
 
 ## Evidências da preparação
 
-O código abaixo foi montado em uma cópia de trabalho isolada da revisão-base.
-Apenas este documento foi alterado no projeto principal; o código proposto não
-foi aplicado nele e nenhuma migração foi executada na produção.
+Antes da aplicação, o código abaixo foi montado e validado em uma cópia de
+trabalho isolada da revisão-base. As evidências desta seção correspondem àquela
+preparação; a migração de produção não foi executada.
 
 - **156 testes unitários passaram** na bateria indicada acima, incluindo os
   testes novos de extração, combinações de campos, conflitos, recência, mensagens
@@ -171,6 +173,27 @@ os testes simulam rollback/retomada, não perda física do disco ou crash do sis
 operacional. A homologação de uma conversa nova continua sendo uma etapa do
 deploy. Os limites de falha externa descritos anteriormente continuam valendo.
 
+
+## Validação da aplicação — 20/10/2026
+
+Os 33 arquivos foram aplicados após conferir os hashes da base e do conteúdo
+proposto. O guia `deploy/README.md` também recebeu a orientação desta migração.
+A implementação preserva a coleta do e-mail no momento da etapa 10 quando esse
+campo permanece ausente, inválido ou conflitante.
+
+- Suíte unitária completa: **551 testes aprovados**.
+- Suíte de coleta reexecutada após os dois casos adicionais: **24 testes aprovados**;
+  inclui o encaminhamento real dos resolvers 7/9 para a etapa de e-mail ou triagem
+  conforme a coleta e a compatibilidade de nome composto sem sobrenome.
+- PostgreSQL local descartável: **48 testes de integração aprovados juntos**,
+  incluindo migrações antigas, nova migração, rollback, locks e retomada.
+- Checagem Django com configuração de teste: **nenhum problema identificado**.
+- `git diff --check`: sem erros de espaço/formatação.
+
+O ajuste de compatibilidade aceita “Ana Paula” diante de “Ana Paula Silva”, mas
+continua recusando nomes compostos diferentes e sobrenomes explícitos divergentes.
+A validação do código não acessou AWS, Redis, Meta, Funil ou FireAds reais. O SQL
+foi executado apenas no PostgreSQL descartável. **Produção e VM aguardam deploy.**
 
 ## Índice dos arquivos
 
@@ -367,7 +390,7 @@ Ação: **criar**. Conteúdo completo abaixo.
 
 SHA-256 anterior: `arquivo novo`.
 
-SHA-256 proposto (UTF-8/LF): `d818432d58bfd4f6ab3fd40c9e35516672c44b1ae4f494d63fb0ef36a0b35ee0`.
+SHA-256 proposto (UTF-8/LF): `68f639033ff7d8f887609e265397de2c5f64b1424cf7cb6acd74ca21bc08eda8`.
 
 ```python
 """Completa campos a partir de uma única inscrição compatível da aba geral."""
@@ -404,7 +427,8 @@ def compativel(conhecidos, candidatos, *, campos=CAMPOS):
         if c == 'nome':
             # Mesmo nome extraído, mas sobrenomes explícitos divergentes bloqueiam.
             ca, cb = a['identidade'].split(), b['identidade'].split()
-            if ca != cb and not (len(ca) == 1 and ca[0] == cb[0]):
+            somente_nome = a['identidade'] == normalizar(a['valor'])
+            if ca != cb and not (somente_nome and cb[:len(ca)] == ca):
                 return False
         elif c == 'destinatario' and a['identidade'] == 'dependente' and b['valor']['dependente']:
             continue
@@ -7967,13 +7991,14 @@ Ação: **criar**. Conteúdo completo abaixo.
 
 SHA-256 anterior: `arquivo novo`.
 
-SHA-256 proposto (UTF-8/LF): `f7104cb09828693635792036c47240dada16fa70d545165e98e309b76a902813`.
+SHA-256 proposto (UTF-8/LF): `925bb6d5ddc3205b9458f211b7fd3ddb1946c2ddb762248b31b391b3af673c6d`.
 
 ```python
 """Extração, compatibilidade, etapas e entrega; nenhum serviço externo."""
 from copy import deepcopy
 from itertools import product
 import unittest
+from unittest.mock import patch
 
 from core.validacoes.coleta_abertura import (
     extrair, criar_contexto, etapa_inicial, completo, campo, valor, email_coletado, destinatario,
@@ -8059,6 +8084,48 @@ class ExtracaoTests(unittest.TestCase):
                 resolver_movimento_conversa(ctx, {'id_etapa_resultante': etapa})
 
 
+class MomentoEmailTests(unittest.TestCase):
+    def test_email_pendente_so_e_perguntado_na_etapa_de_email(self):
+        from workers.worker_flow.response_flow.etapas import resolver_etapa7, resolver_etapa9
+
+        for trecho, aceito in (
+            ('', False),
+            ('Email: invalido', False),
+            ('Email: ana@example.com\nEmail: outra@example.com', False),
+            ('Email: ana@example.com', True),
+        ):
+            coleta = estado('Full name: Ana Paula Silva\nPara quem é: Para mim\n' + trecho)
+            abertura = montar_abertura({
+                'id_conversa': 1, 'contexto_coleta': coleta, 'genero': 'feminino',
+                'nome_agente': 'Dora', 'nome_unidade': 'Teste',
+            }, 'Bom dia')
+            self.assertIn('profissão', abertura)
+            self.assertNotIn('e-mail', abertura.casefold())
+            for etapa, modulo, evento in (
+                (7, resolver_etapa7, 'oferta_aceita'),
+                (9, resolver_etapa9, 'retorno_confirmado'),
+            ):
+                with self.subTest(trecho=trecho, etapa=etapa):
+                    contexto = {
+                        'id_conversa': 1, 'id_etapa_atual': etapa,
+                        'id_etapa_origem_transicao': etapa, 'id_etapa_cliente': etapa,
+                        'contexto_coleta': coleta, 'tipo_mensagem_atual': 'text',
+                        'texto_cliente_atual': 'sim',
+                        'transicoes_permitidas': {evento: 10, evento + '_email_fireads': 11},
+                        'mensagem_cliente_atual': {
+                            'cliente_telefone': NUMERO, 'id_phone_unidade': 'teste',
+                            'id_mensagem_fila': 1,
+                        },
+                    }
+                    with patch.object(modulo, 'enviar_etapa10', return_value={'id_etapa_resultante': 10}) as email, patch.object(
+                        modulo, 'enviar_etapa11', return_value={'id_etapa_resultante': 11}
+                    ) as triagem:
+                        resposta = getattr(modulo, f'resolve_etapa{etapa}')(contexto)
+                    self.assertEqual(resposta['id_etapa_resultante'], 11 if aceito else 10)
+                    self.assertEqual(email.call_count, 0 if aceito else 1)
+                    self.assertEqual(triagem.call_count, 1 if aceito else 0)
+
+
 class ComplementacaoTests(unittest.TestCase):
     def consulta(self, texto, rows):
         return interpretar_parcial(rows, NUMERO, None, ABA_DESTINO, estado(texto))
@@ -8069,6 +8136,14 @@ class ComplementacaoTests(unittest.TestCase):
         self.assertEqual(valor(r['coleta'], 'email'), 'ana@intranet')
         self.assertEqual(r['resultado'], 'importado')
         self.assertEqual(extrair('Email: ANA@INTRANET')['email']['status'], 'invalido')
+
+    def test_nome_composto_sem_sobrenome_compativel_com_cadastro_completo(self):
+        texto = 'Full name: Ana Paula\nPara quem é: Para mim'
+        resultado = self.consulta(texto, [ROW])
+        self.assertEqual(resultado['resultado'], 'importado')
+        self.assertEqual(valor(resultado['coleta'], 'email'), 'ana@example.com')
+        diferente = dict(ROW, Nome='Ana Maria Silva')
+        self.assertEqual(self.consulta(texto, [diferente])['resultado'], 'ausente')
 
     def test_completa_so_campo_faltante_de_um_registro_compativel(self):
         r = self.consulta('Full name: Ana Paula Silva\nPara quem é: Para mim', [ROW])

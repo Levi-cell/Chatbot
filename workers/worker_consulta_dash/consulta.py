@@ -6,6 +6,7 @@ import time
 from core.integrations.fireads.cliente import ClienteFireAds, PrazoConsultaFireAdsEsgotado
 from core.integrations.fireads.contrato import ErroFireAds, localizar
 from core.integrations.fireads.aba_geral import VERSAO_CONSULTA
+from core.integrations.fireads.coleta_abertura import interpretar_parcial
 from workers.worker_consulta_dash.resultado import decisao_organica, interpretar
 
 logger = logging.getLogger("worker.consulta_dash.http")
@@ -24,7 +25,12 @@ def consultar(reserva):
         if not {"Nome", "Email", "WhatsApp", "Para quem é", "Canal", "Data/Hora"} <= set(geral["headers"]):
             return {"decisao": decisao_organica("erro", "cabecalhos_ausentes"), "fontes": {}}
         numero = entrada["numero"]
-        decisao = interpretar(geral["rows"], numero, entrada["fuso"], aba=entrada["aba"])
+        if entrada.get("coleta") is not None:
+            if entrada['coleta'].get('versao') != 1:
+                raise ErroFireAds('Versão de coleta desconhecida')
+            decisao = interpretar_parcial(geral['rows'], numero, entrada['fuso'], entrada['aba'], entrada['coleta'])
+        else:
+            decisao = interpretar(geral["rows"], numero, entrada["fuso"], aba=entrada["aba"])
         # O banco recebe apenas os registros deste contato e a decisão completa.
         fontes = {
             "geral": localizar(geral["rows"], numero, "WhatsApp", incluir_equivalentes=True),

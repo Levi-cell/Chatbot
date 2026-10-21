@@ -31,3 +31,6 @@ def criar_estrutura_fireads():
         cursor.execute(geral.split("-- INICIO DDL FIREADS ABA GERAL\n", 1)[1].split(
             "-- FIM DDL FIREADS ABA GERAL", 1
         )[0])
+        coleta = caminho.with_name('20261019_coleta_abertura.sql').read_text(encoding='utf-8')
+        cursor.execute(coleta.split('-- INICIO DDL COLETA ABERTURA\n', 1)[1].split(
+            '-- FIM DDL COLETA ABERTURA', 1)[0])

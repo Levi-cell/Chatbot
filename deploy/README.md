@@ -270,3 +270,18 @@ Para atualizar a instalação com worker_consulta_dash já implantado, executar
 com os seis serviços parados, junto do código desta atualização. Conferir
 `migracao_ok=true` e `manage.py check` antes de retomá-los. Não reaplicar setup.
 [Procedimento, preservação de pendências e recuperação](../atualizar_envio.md#14-entrega-local-e-procedimento-desta-atualização).
+
+## Coleta parcial na abertura — 20/10/2026
+
+Esta atualização exige [a migração de coleta por conversa](migrations/20261019_coleta_abertura.sql),
+após a migração da aba geral de 14/10. Parar webhook e todos os workers, atualizar
+o código e executar o SQL inteiro no DBeaver antes de reiniciar os serviços.
+Conferir `migracao_ok=true`, `transicao_ok=true`, leitura do model `Conversa` e
+`manage.py check`. Não executar setup/seeds numa base existente.
+
+A coluna `conversa.contexto_coleta` é independente de FireAds e preserva os campos
+da primeira mensagem e os dados completados durante o atendimento. Conversas
+antigas permanecem com contexto nulo. A nova transição 1 → 4 exige destinatário
+já coletado; e-mail ausente continua sendo perguntado somente na etapa 10.
+O [plano aplicado](../docs/valida_dados_parciais_fireads.md) detalha os cenários,
+as verificações e as restrições de reversão após iniciar conversas novas.
