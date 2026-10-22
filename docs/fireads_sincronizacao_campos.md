@@ -1,20 +1,19 @@
 # Plano prático — sincronização dos campos do chatbot com a FireAds
 
-**Status: reservado para aplicação futura; não está ativo no projeto.**
+**Status: aplicado ao código local em 22/10/2026; não implantado em produção nesta tarefa.**
 
-Isolado em 21/10/2026 a pedido do usuário. O código proposto foi preservado
-integralmente nos passos abaixo e retirado do caminho de execução. O projeto
-atual conserva a entrega anterior: atualiza somente Observação em registros
-existentes, preserva as outras colunas e mantém a seleção anterior de destino.
-Coleta parcial, Chat Fire, turno e interpretação de parentescos continuam ativos.
+Isolado em 21/10/2026 e aplicado em 22/10/2026 a pedido do usuário. Os seis
+arquivos completos abaixo correspondem à implementação local. Coleta parcial,
+Chat Fire, turno e interpretação de parentescos continuam ativos. Novos envios
+com coleta sincronizam os campos aceitos no chatbot; snapshots antigos mantêm
+a entrega anterior, sem conversão ou reprocessamento.
 
-**Não aplicar nem implantar este plano antes da liberação das colunas pela
-FireAds descrita no último passo.** O último passo está ao final por organização
-do documento, mas a confirmação externa é pré-requisito para ativar a mudança.
-Nenhuma alteração no Apps Script, banco de produção ou VM foi feita ao isolar o plano.
+**Antes do deploy, confirmar a liberação das colunas pela FireAds descrita no
+último passo.** Essa confirmação externa é pré-requisito para ativar em produção;
+os testes locais usam API simulada e não comprovam a atualização do Web App.
+Nenhuma alteração no Apps Script, banco de produção ou VM foi feita nesta aplicação.
 
-Base de referência: HEAD `1501367116e2f39a7425b9217866ccfe2342a21a` mais as melhorias locais de coleta parcial,
-Chat Fire, turno e prioridades de destinatário já presentes em 21/10/2026.
+Base de aplicação: V1.14.0, HEAD `5fc047e3a049e6aeb4b56e3e766cba2bcdeb664b`.
 Os arquivos abaixo são completos, não patches nem trechos. Se o projeto evoluir,
 comparar a base antes de substituí-los para preservar correções posteriores.
 A versão 4 citada é do JSON interno de entrega, não o número da release do chatbot.
@@ -22,16 +21,16 @@ A versão 4 citada é do JSON interno de entrega, não o número da release do c
 Atualização de apresentação em 21/10/2026: o projeto atual já monta observações
 compactas em `core/integrations/funil/oportunidades.py` e as delimita com
 `bloco_observacoes(..., versao=3)`. Esse formato de texto é independente da versão
-4 do JSON proposto aqui. Manter o cabeçalho em maiúsculas, dados consecutivos e
+4 do JSON de entrega. Manter o cabeçalho em maiúsculas, dados consecutivos e
 pergunta/resposta na mesma linha, sem restaurar os títulos ou parágrafos removidos.
 Os passos abaixo reutilizam o texto compartilhado já congelado, preservam as
 observações anteriores e não reformatam snapshots históricos. O teste do passo 5
 usa o bloco compacto. Os marcadores continuam exatamente `[INICIO CHATBOT:…]` e
 `[FIM CHATBOT:…]`, sem acento em INICIO, necessários à reconciliação.
-Essa alteração visual não libera a sincronização de campos nem exige ampliar as
-colunas editáveis; o último passo continua sendo condição para o plano futuro.
+Essa alteração visual é independente da sincronização de campos. O último passo
+continua sendo condição para publicar a sincronização em produção.
 
-## Escopo e contrato proposto
+## Escopo e contrato aplicado
 
 ## Atendimento e seleção
 
@@ -87,33 +86,36 @@ Não há atomicidade entre nosso GET e POST no Web App atual: evitar reordenar,
 excluir ou editar inscrições durante o envio. Nosso lock serializa os workers
 do chatbot, mas não os operadores da planilha.
 
-## Banco e critérios de validação da futura aplicação
+## Banco e validação da aplicação
 
 Esta sincronização não acrescenta migração SQL. Reutiliza os JSONs existentes.
 As migrações anteriores de coleta parcial, Chat Fire e turno continuam necessárias;
 para uma instalação ainda sem elas, usar `20261021_coleta_chat_fire_completa.sql`
 conforme o procedimento desse deploy, com os serviços parados.
 
-Os seis arquivos completos deste plano foram preservados da implementação que
-passou por 169 testes unitários e 17 testes de integração locais, com serviços
-externos simulados. Esse resultado histórico não valida a implantação publicada
-na FireAds nem substitui nova verificação quando o plano for aplicado.
+Na aplicação de 22/10/2026, passaram 173 testes unitários, incluindo os destinos
+legados e as observações compactas, e 22 testes de integração em PostgreSQL
+descartável local: 17 de coleta e cinco de entrega/retry, canais e texto compartilhado.
+Os serviços externos foram simulados e o PostgreSQL de teste foi encerrado ao final.
+O teste de bloco adulterado foi ajustado ao texto compacto e o teste de coluna
+não editável confere o erro orientando a atualização de EDITABLE_COLUMNS.
+Esses testes não validam a implantação publicada na FireAds.
 
 Após aplicar os arquivos em ambiente local, executar os testes abaixo. Integração
 exige `FIREADS_TEST_DSN` apontando para `test_chatbot_fireads` em loopback, sem
 schema chatbot preexistente; nunca apontar a suíte ao banco da aplicação.
 
 ```bash
-python -B -m unittest tests.unit.test_fireads_sincronizacao_coleta tests.unit.test_fireads tests.unit.test_coleta_abertura tests.unit.test_fireads_prioridade_destinatario tests.unit.test_chat_fire_turno tests.unit.test_destinatario_abertura tests.unit.test_fireads_aba_geral tests.unit.test_fireads_destino_dashboard tests.unit.test_fireads_telefones tests.unit.test_fireads_espera -q
-python -B -m unittest tests.integration.test_coleta_abertura_postgres -q
+python -B -m unittest tests.unit.test_fireads_sincronizacao_coleta tests.unit.test_fireads tests.unit.test_coleta_abertura tests.unit.test_fireads_prioridade_destinatario tests.unit.test_chat_fire_turno tests.unit.test_destinatario_abertura tests.unit.test_fireads_aba_geral tests.unit.test_fireads_destino_dashboard tests.unit.test_fireads_telefones tests.unit.test_fireads_espera tests.unit.test_observacoes_compactas -q
+python -B -m unittest tests.integration.test_coleta_abertura_postgres tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_retry_dash_reconcilia_bloco_sem_segundo_post tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_falha_dash_fica_pending_preserva_funil_e_nao_tenta_no_mesmo_ciclo tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_funil_sem_fireads_recupera_payload_congelado_no_retry tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios tests.integration.test_fireads_postgres.FireAdsPostgresTests.test_chat_fire_compartilha_sabado_e_codigo_organico_nos_dois_envios -q
 ```
 
 Somente depois da liberação externa, validar com um registro de teste autorizado
 na aba geral: atualizar os campos, preservar as outras colunas e observações,
 e confirmar o recibo de todas as colunas. Não disparar testes sobre leads reais.
 A limitação entre GET e POST continua: coordenar com a equipe para não mover ou
-excluir inscrições durante o envio. Antes de ativar, alinhar a documentação de
-regras/arquitetura e deploy a este contrato; hoje ela descreve a entrega anterior.
+excluir inscrições durante o envio. Regras de negócio, arquitetura, deploy,
+documentação de Chat Fire e catálogo de testes foram alinhados a este contrato.
 
 ## Arquivos deste plano
 
@@ -803,7 +805,7 @@ def processar_lote(conn, cursor, limite=100):
 
 Verifica prioridade dos dados, seleção, atualização, recibos e recuperação sem serviços externos.
 
-Conteúdo integral do arquivo (UTF-8; SHA-256 com finais LF: `3df790c8c4627f9f006aa9896c77dbf5135842a916a7810bf95252e44bdb1a13`):
+Conteúdo integral do arquivo (UTF-8; SHA-256 com finais LF: `f15347acdf8adcea1155e25ec07fb49186439787cfb9c823d013d608d17a6e89`):
 
 ```python
 """Autoridade do chat e retomada de escritas parciais, sem serviços externos."""
@@ -981,7 +983,7 @@ class RecuperacaoTests(unittest.TestCase):
         with self.assertRaises(ErroFireAds):
             preparar([marcado, dict(marcado, _row=75)], self.snap, BLOCO)
         with self.assertRaises(ErroFireAds):
-            preparar([dict(marcado, **{'Observação': BLOCO.replace('Resumo', 'Editado')})], self.snap, BLOCO)
+            preparar([dict(marcado, **{'Observação': BLOCO.replace('Ana Paula', 'Nome editado')})], self.snap, BLOCO)
 
     def test_append_aplicado_reconcilia_ou_repara_sem_novo_append(self):
         snap = planejar([])
@@ -1029,8 +1031,8 @@ class ClienteTests(unittest.TestCase):
     def test_script_recusa_coluna_mantem_erro(self):
         cliente = ClienteFireAds('https://script.google.com/macros/s/teste/exec')
         with patch.object(cliente, '_request', return_value=Mock(json=Mock(return_value={
-                'success': False, 'error': 'Coluna não editável'}))):
-            with self.assertRaises(ErroFireAds):
+                'success': False, 'error': 'Coluna não editável: Nome'}))):
+            with self.assertRaisesRegex(ErroFireAds, 'atualizar EDITABLE_COLUMNS'):
                 cliente.enviar(ABA_DESTINO, row=44, campos={'Nome': 'Ana'}, observacoes=BLOCO)
         cliente.close()
 

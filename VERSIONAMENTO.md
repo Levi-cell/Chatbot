@@ -166,6 +166,10 @@ Commit: `9455765856575119aec9441cb3e56d02dfb957be`
 
 Commit: `9468e23cbb0ead6cf09c7189a884704ed21b80ad`
 
+### V1.14.0 — Coleta parcial, Chat Fire e turno
+
+Commit: `5fc047e3a049e6aeb4b56e3e766cba2bcdeb664b`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

@@ -1577,14 +1577,18 @@ respeita unidade adimplente e integrações ativas. Consulta e entrega usam some
 A consulta guarda a identidade da linha selecionada, inclusive no fallback por
 formulário incompleto ou canal não elegível. A entrega confere essa identidade;
 se a linha mudou de posição, relocaliza o mesmo registro. Não troca o alvo por
-um formulário posterior. Registro desaparecido ou modificado fica pendente para
-conferência, sem escrever em outra pessoa nem recriar o cadastro automaticamente.
+um formulário posterior. Registro desaparecido ou sem identidade suficiente fica
+pendente para conferência, sem escrever em outra pessoa nem recriar o cadastro.
 
-Bloco já gravado da mesma conversa tem prioridade e reconcilia o envio. Só
-atualizar `Observação`, preservando o conteúdo recebido da API e as demais colunas.
-Sem referência da consulta, conferir novamente o telefone e usar a data/linha mais
-recente antes de criar um cadastro orgânico. E-mail associado a outro telefone
-impede criação. Snapshot legado conserva sua seleção e seu texto originais.
+Entregas novas com coleta usam snapshot 4: podem atualizar Nome, Email, Para quem é
+e Período preferido com valores aceitos da mensagem ou do atendimento, além de
+acrescentar Observação. Turno só participa para unidade sem link. Dados apenas
+importados da planilha não são regravados em updates; dados ausentes, inválidos
+ou conflitantes não apagam células. Preservar Canal, WhatsApp, Data/Hora,
+Perfil/Faixa e demais colunas. O bloco já gravado só reconcilia o envio quando
+todos os campos solicitados também conferem; caso contrário, reparar esses
+campos sem duplicar observações. E-mail associado a outro telefone impede
+criação. Snapshots legados conservam seleção, texto e updates só de Observação.
 
 Google usa 113336; Meta usa 113340; Orgânico Site, Chat Fire e orgânico usam
 113481. São origens distintas, descritas nas observações. Fallback por dado
@@ -1683,18 +1687,27 @@ reinterpretar mensagens de conversas em andamento nem reconsultar por etapa.
 Unidades sem FireAds preservam codigo_canal_venda da integração Funil (padrão
 113340); a coleta não lhes atribui origem FireAds nem gera entrega ao dashboard.
 
-Para formulário recebido no chat sem referência já vinculada, a entrega procura
-telefone, e-mail e destinatário compatíveis e escolhe data/hora mais recente,
-depois maior linha. Parentesco conhecido distingue inscrições para dependentes
-diferentes. Ausência ou incompatibilidade gera nova linha preservando a origem.
-Erro de leitura não autoriza criar. Salvar o destino antes do POST; retry mantém
-esse destino e reconcilia primeiro o marcador técnico. Não substituir referência
-vinculada apagada/alterada por uma inscrição nova. Somente Observação muda em
-updates, preservando conteúdo anterior; append inclui Para quem é.
+Na entrega com snapshot 4 e sem referência vinculada, selecionar pelo telefone
+do remetente entre Google Ads, Meta Ads, Orgânico Site e Chat Fire. Priorizar
+nome/e-mail compatíveis, destinatário exato, equivalência titular/dependente e
+demais compatíveis, incluindo turno no último recurso sem link. Dentro de cada
+prioridade, data/hora mais recente e depois maior linha. Se nenhum combinar,
+usar a inscrição elegível mais recente desse telefone e sincronizar os dados
+aceitos no chatbot; divergência não cria outra inscrição. Sem inscrição elegível,
+criar com a origem preservada e a proteção de e-mail em outro telefone.
 
-A proposta de sincronizar nome, e-mail, destinatário e turno está reservada em
-[um plano futuro](docs/fireads_sincronizacao_campos.md), sem ativação no projeto.
-Ela depende da FireAds liberar as colunas editáveis e não altera esta regra atual.
+Congelar campos e destino antes do POST. Retry mantém esses valores mesmo se
+o cadastro local mudar; relocaliza a inscrição pelos campos não escritos e
+reconhece gravação parcial feita pelo próprio chatbot. Não trocar uma referência
+apagada ou ambígua por outra inscrição. Preservar observações anteriores e o
+bloco compacto compartilhado com o Funil. Erro de leitura não autoriza criar.
+
+Implementação local aplicada em 22/10/2026 conforme
+[o plano de sincronização](docs/fireads_sincronizacao_campos.md). A publicação em
+produção requer a FireAds liberar as quatro colunas editáveis no Web App e
+confirmar todas as colunas gravadas no recibo. Não exige outra migração SQL nem
+converte envios antigos. Mensagem inicial é prioritária; correções explícitas
+aceitas durante o atendimento prevalecem. A consulta só completa o desconhecido.
 
 
 ## Chat Fire e turno antecipado (21/10/2026)
@@ -1729,8 +1742,8 @@ Preservar a relação na identidade para dar preferência à correspondência ex
 na consulta. Relações diferentes podem completar os dados pela equivalência
 titular/dependente, e o último recurso pode usar outro tipo sem substituir o
 destinatário informado. A consulta vincula uma única linha; a entrega posterior
-reutiliza essa referência e só acrescenta observações, preservando os campos
-da planilha. Entregas sem referência de consulta conservam sua seleção própria.
+reutiliza essa referência. Snapshots 4 sincronizam os campos conforme a regra
+acima; os anteriores conservam updates apenas de observações e sua seleção própria.
 
 Manhã, Tarde, Noite e Sábado são preferências válidas. Sábado digitado também é
 aceito na etapa 18. Os três botões permanecem e o texto explica essa alternativa.
@@ -1740,6 +1753,7 @@ abertura. Ao concluir a triagem sem link e com turno salvo, a aresta autorizada
 17 → 20; sem turno, 17 → 18 → 19. E-mail faltante continua na etapa 10.
 
 Observações de Funil e dashboard incluem Chat Fire e a preferência de turno,
-inclusive sábado. Atualizar a planilha continua alterando somente Observação,
-preservando conteúdo anterior e todas as demais colunas. Não reprocessar
-aberturas antigas. Detalhes: [Chat Fire e turno antecipado](docs/chat_fire_turno_antecipado.md).
+inclusive sábado. O conteúdo anterior de Observação é preservado; apenas os
+quatro campos autorizados podem ser sincronizados nos novos envios com coleta.
+Não reprocessar aberturas antigas. Detalhes:
+[Chat Fire e turno antecipado](docs/chat_fire_turno_antecipado.md).

@@ -61,12 +61,13 @@ def congelar(dados, payload, integracao_funil, cursor):
         ),
     }
     if dados.get('contexto_coleta'):
-        from core.integrations.fireads.destino_coleta import identidade_entrega
+        from core.integrations.fireads.sincronizacao_coleta import dados_sincronizacao
         coleta = dados['contexto_coleta']
-        identidade = identidade_entrega(coleta)
+        sincronizacao = dados_sincronizacao(coleta, com_link=bool(dados.get('link_agendamento')))
+        identidade = sincronizacao['identidade_coleta']
         alvo = identidade['destinatario']
-        snapshot.update(versao=3, rota_formulario_chat=coleta['rota_formulario_chat'],
-                        identidade_coleta=identidade, destino=None,
+        snapshot.update(versao=4, rota_formulario_chat=coleta['rota_formulario_chat'],
+                        **sincronizacao, destino=None,
                         para_quem=alvo['valor']['texto'] if alvo['status']=='aceito' else (
                             'Para dependente' if dados['status_dependente'] else 'Para mim'))
     cursor.execute(

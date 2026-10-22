@@ -281,7 +281,7 @@ class ColetaPostgresTests(unittest.TestCase):
         envio = envios.reservar(self.cursor)
         self.conn.commit()
         externo = Mock()
-        externo.consultar.return_value = {'headers': list(ROW), 'rows': []}
+        externo.consultar.return_value = {'headers': list(ROW) + ['Período preferido'], 'rows': []}
 
         def enviar(*args, **kwargs):
             with psycopg.connect(legado.DSN) as verificador:
@@ -293,7 +293,65 @@ class ColetaPostgresTests(unittest.TestCase):
         with patch('workers.worker_funil.fireads.ClienteFireAds', return_value=externo):
             self.assertTrue(processar(envio, self.conn, self.cursor))
         self.assertEqual(externo.enviar.call_args.kwargs['dados']['Canal'], 'Meta Ads')
+        self.assertEqual(externo.enviar.call_args.kwargs['dados']['Nome'], 'Ana Paula Silva')
+        self.assertEqual(externo.enviar.call_args.kwargs['dados']['Período preferido'], 'Tarde')
         self.assertEqual(self.conn.execute('SELECT status FROM chatbot.envios_dash').fetchone()[0], 'sent')
+
+    def test_sincronizacao_retomada_apos_escrita_parcial_e_resposta_perdida(self):
+        cid, msg, v, ctx = self.inicio()
+        ctx = preparar_abertura(ctx, msg, v, self.cursor)
+        self.cursor.execute('UPDATE chatbot.conversa SET id_etapa_atual=19,profissao=%s WHERE id_conversa=%s', ('Professora', cid))
+        self.cursor.execute('UPDATE chatbot.cliente SET idade=35 WHERE id_cliente=1')
+        guardar_coletas({'id_conversa': cid, 'id_cliente': 1, 'contexto_coleta': ctx['contexto_coleta']},
+                        {'destino_dado': 'cliente'}, self.cursor)
+        self.cursor.execute("INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta) SELECT %s,etapa,'Às vezes' FROM generate_series(12,17) etapa", (cid,))
+        dados = buscar_dados_lead_funil(cid, self.cursor)
+        payload = montar_payload_oportunidade(dados)
+        config = {'codigo_canal_venda': '113340', 'link_api_carrossel': 'https://example.com/api'}
+        envios.congelar(dados, payload, config, self.cursor)
+        self.cursor.execute('UPDATE chatbot.conversa SET lead_no_funil=TRUE WHERE id_conversa=%s', (cid,))
+        envio = envios.reservar(self.cursor)
+        self.conn.commit()
+        self.assertEqual(envio['snapshot']['versao'], 4)
+        externo = Mock()
+        planilha = dict(ROW, Nome='Nome antigo', Email='antigo@example.com', **{'Período preferido': 'Manhã'})
+        externo.consultar.side_effect = lambda *_: {'headers': list(planilha), 'rows': [deepcopy(planilha)]}
+        tentativas = []
+
+        def enviar(_aba, **op):
+            with psycopg.connect(legado.DSN) as verificador:
+                congelado = verificador.execute('SELECT snapshot FROM chatbot.envios_dash WHERE id_envio_dash=%s', (envio['id'],)).fetchone()[0]
+                self.assertEqual(congelado['destino']['referencia']['linha'], 44)
+                self.assertEqual(congelado['campos_dashboard'], op['campos'])
+            tentativas.append(deepcopy(op))
+            if len(tentativas) == 1:
+                planilha['Nome'] = op['campos']['Nome']
+                raise TimeoutError('Queda após gravar nome')
+            planilha.update(op['campos'])
+            planilha['Observação'] = op['observacoes']
+            raise TimeoutError('Resposta perdida após gravar tudo')
+
+        externo.enviar.side_effect = enviar
+        with patch('workers.worker_funil.fireads.ClienteFireAds', return_value=externo):
+            self.assertFalse(processar(envio, self.conn, self.cursor))
+            self.assertEqual(self.conn.execute('SELECT status FROM chatbot.envios_dash').fetchone()[0], 'pending')
+            # Uma alteração posterior no cadastro não muda o envio congelado.
+            dados['nome_cliente'] = 'Não reenviar este nome'
+            envios.congelar(dados, {}, config, self.cursor)
+            for sucesso in (False, True):
+                planilha['_row'] = 70  # Moveu; a identidade e o bloco permitem reencontrar.
+                self.cursor.execute("UPDATE chatbot.envios_dash SET next_attempt_at=clock_timestamp()-INTERVAL '1 second'")
+                envio = envios.reservar(self.cursor)
+                self.conn.commit()
+                self.assertEqual(processar(envio, self.conn, self.cursor), sucesso)
+        self.assertEqual(len(tentativas), 2)
+        self.assertEqual(tentativas[0]['campos'], tentativas[1]['campos'])
+        self.assertEqual(planilha['Nome'], 'Ana Paula Silva')
+        self.assertEqual(planilha['Período preferido'], 'Tarde')
+        self.assertEqual(planilha['Observação'].count('[INICIO CHATBOT:'), 1)
+        status, recibo = self.conn.execute('SELECT status,recibo FROM chatbot.envios_dash').fetchone()
+        self.assertEqual(status, 'sent')
+        self.assertTrue(recibo['reconciliado'])
 
 
 if __name__ == '__main__':

@@ -97,14 +97,16 @@ pergunta. Nenhum formulário antigo ou conversa já iniciada é reprocessado.
 
 Chat Fire é uma origem própria (`chat_fire`). As observações compactas o identificam
 no cabeçalho, por exemplo `NOVO LEAD : CHAT FIRE : TITULAR`. Os snapshots
-salvos continuam sendo a fonte de verdade dos retries. A entrega atualiza apenas
-Observação da linha vinculada; não altera Para quem é ou Período preferido da
-planilha. A preferência consta do resumo enviado aos dois sistemas.
+salvos continuam sendo a fonte de verdade dos retries. Na V1.14.0 publicada, a
+entrega altera apenas Observação da linha vinculada; a preferência consta do
+resumo enviado aos dois sistemas.
 
-A sincronização desses campos foi isolada no
-[plano prático futuro](fireads_sincronizacao_campos.md). Não está ativa e não é
-pré-requisito deste deploy de Chat Fire/turno; depende de liberação posterior
-das colunas editáveis pela FireAds.
+Em 22/10/2026, o [plano de sincronização](fireads_sincronizacao_campos.md) foi
+aplicado ao código local. Novos snapshots 4 também sincronizam Nome, Email,
+Para quem é e, sem link, Período preferido aceitos da mensagem ou do atendimento.
+Dados apenas importados do dashboard não são regravados em updates. Essa mudança
+não converte snapshots anteriores e só pode ser publicada depois de a FireAds
+liberar as colunas editáveis. Não acrescenta migração à atualização de Chat Fire/turno.
 
 ## Migração e validação
 

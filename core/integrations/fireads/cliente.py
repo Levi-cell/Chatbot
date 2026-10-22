@@ -75,6 +75,8 @@ class ClienteFireAds:
         except ValueError as exc:
             raise ErroFireAds("Resposta FireAds não é JSON") from exc
         if not isinstance(body, dict) or body.get("success") is not True:
+            if isinstance(body, dict) and str(body.get('error') or '').startswith('Coluna não editável:'):
+                raise ErroFireAds('Web App FireAds não autoriza as colunas; atualizar EDITABLE_COLUMNS')
             raise ErroFireAds("FireAds recusou a operação")
         return body
 
@@ -93,14 +95,20 @@ class ClienteFireAds:
             raise ErroFireAds("Consulta incompleta ou aba divergente")
         return data
 
-    def enviar(self, aba, *, dados=None, row=None, observacoes=None):
+    def enviar(self, aba, *, dados=None, row=None, observacoes=None, campos=None):
         if row is None:
+            if campos:
+                raise ErroFireAds("Campos de atualização sem linha de destino")
             payload = {"action": "append", "sheet": aba, "rows": [dados]}
         else:
+            campos = dict(campos or {})
+            if (not set(campos) <= {"Nome", "Email", "Para quem é", "Período preferido"}
+                    or any(not isinstance(v, str) or not v.strip() for v in campos.values())):
+                raise ErroFireAds("Campos de sincronização inválidos")
             payload = {
                 "sheet": aba,
                 "row": int(row),
-                "updates": {"Observação": observacoes},
+                "updates": {**campos, "Observação": observacoes},
             }
         result = self._json(self._request("POST", self.url, json=payload))
         if result.get("aba") != aba:
@@ -108,6 +116,7 @@ class ClienteFireAds:
         if row is None:
             if result.get("inserted") != 1:
                 raise ErroFireAds("Cadastro sem confirmação de uma linha")
-        elif result.get("row") != row or "Observação" not in result.get("updated", []):
+        elif (result.get("row") != row or not isinstance(result.get("updated"), list)
+              or not set(payload['updates']) <= set(result['updated'])):
             raise ErroFireAds("Update sem confirmação da linha/coluna")
         return result

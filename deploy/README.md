@@ -303,8 +303,22 @@ reexecução. Atualizar código e schema juntos; não executar setup em produç�
 Executar `collectstatic --noinput` para o rótulo de sábado no monitoramento.
 Contrato e validação: [Chat Fire e turno antecipado](../docs/chat_fire_turno_antecipado.md).
 
-A sincronização dos quatro campos está apenas no
-[plano prático futuro](../docs/fireads_sincronizacao_campos.md), fora do código ativo.
-O deploy atual continua atualizando somente Observação e não depende de ampliar
-`EDITABLE_COLUMNS`. A futura sincronização exige essa liberação e publicação no
-Web App pela FireAds, sem acrescentar DDL ao consolidado acima.
+A V1.14.0 publicada em `5fc047e` atualiza somente Observação e não exige ampliar
+`EDITABLE_COLUMNS` para os quatro campos.
+
+## Sincronização de campos FireAds — aplicação local em 22/10/2026
+
+O [plano prático](../docs/fireads_sincronizacao_campos.md) está aplicado no código
+local. Novos envios com coleta congelam snapshot 4 e sincronizam Nome, Email,
+Para quem é e Período preferido quando aceitos no chatbot; turno apenas sem link.
+Antes de publicar este código em produção, confirmar com a FireAds a liberação
+dessas colunas no Web App existente, a presença dos cabeçalhos no GET e o recibo
+de todas as colunas atualizadas no POST, conforme o último passo do plano.
+Não basta alterar o código-fonte do Apps Script: a implantação `/exec` precisa
+usar a versão liberada. Validar o contrato com um registro de teste autorizado.
+
+Não há nova migração SQL: reutiliza a estrutura da V1.14.0. Não converter snapshots
+antigos nem reprocessar envios concluídos. Se a API recusar uma coluna ou retornar
+recibo incompleto, o dashboard permanece pendente para retomada; isso não deve
+reenviar um lead já confirmado no Funil. Os testes locais simulam a API e não
+atestam que a implantação externa foi atualizada.

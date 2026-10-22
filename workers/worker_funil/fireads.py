@@ -33,6 +33,9 @@ logger = logging.getLogger("worker.funil.fireads")
 
 
 def preparar_escrita(rows, snapshot, bloco):
+    if snapshot.get('versao') == 4:
+        from core.integrations.fireads.sincronizacao_coleta import preparar
+        return preparar(rows, snapshot, bloco)
     if snapshot.get('versao') == 3:
         from core.integrations.fireads.destino_coleta import preparar
         return preparar(rows, snapshot, bloco)
@@ -101,9 +104,16 @@ def processar(envio, conn, cursor):
         dados = cliente.consultar(snapshot["aba"])
         if not {"Nome", "Email", "WhatsApp", "Observação"} <= set(dados["headers"]):
             raise ErroFireAds("Cabeçalhos de destino incompletos")
-        if snapshot.get('versao') == 3 and not {'Para quem é', 'Canal', 'Data/Hora'} <= set(dados['headers']):
+        if snapshot.get('versao') in {3, 4} and not {'Para quem é', 'Canal', 'Data/Hora'} <= set(dados['headers']):
             raise ErroFireAds('Cabeçalhos da coleta incompletos')
-        if snapshot.get("versao") in {2, 3}:
+        if snapshot.get('versao') == 4:
+            exigidos = set(snapshot['campos_dashboard'])
+            turno = snapshot['identidade_coleta'].get('turno') or {}
+            if turno.get('status') == 'aceito':
+                exigidos.add('Período preferido')
+            if not exigidos <= set(dados['headers']):
+                raise ErroFireAds('Cabeçalhos de sincronização incompletos')
+        if snapshot.get("versao") in {2, 3, 4}:
             bloco = snapshot["observacoes"]
         elif "versao" not in snapshot:
             bloco = bloco_observacoes(
@@ -111,7 +121,13 @@ def processar(envio, conn, cursor):
             )
         else:
             raise ErroFireAds("Versão de envio desconhecida")
-        if snapshot.get('versao') == 3 and not snapshot.get('destino'):
+        if snapshot.get('versao') == 4 and not snapshot.get('destino'):
+            from core.integrations.fireads.sincronizacao_coleta import escolher
+            from core.repositories.fireads.destino_coleta import salvar_destino
+            snapshot = salvar_destino(envio, escolher(dados['rows'], snapshot), cursor)
+            envio['snapshot'] = snapshot
+            conn.commit()
+        elif snapshot.get('versao') == 3 and not snapshot.get('destino'):
             encontrados = localizar(dados['rows'], snapshot['telefone'], 'WhatsApp', incluir_equivalentes=True)
             if not linhas_com_bloco(encontrados, bloco):
                 from core.integrations.fireads.destino_coleta import escolher

@@ -1020,15 +1020,24 @@ fila existente; mensagem completa não cria consulta fictícia. Eventos históri
 `oferta_aceita_email_fireads` e `retorno_confirmado_email_fireads` conservam seus
 nomes para replay, mas aceitam também e-mail previamente coletado nesta conversa.
 
-Snapshots de entrega versão 3 acrescentam identidade de coleta e destino
-persistido, sem mudar snapshots antigos. A escolha do alvo é feita na integração,
-salva pelo repositório sob a reserva atual e confirmada pelo worker antes do POST.
-As limitações da API externa entre leitura/escrita continuam as mesmas.
+Snapshots de entrega versão 3 conservam a identidade de coleta, o destino
+persistido e updates apenas de Observação. Novos snapshots com coleta usam
+versão 4: `core/integrations/fireads/sincronizacao_coleta.py` seleciona o destino
+e prepara os quatro campos aceitos no chatbot. O repositório congela os valores
+na criação do envio e salva o destino sob a reserva atual antes do primeiro POST.
+O worker confirma a transação antes do HTTP e mantém o lock de sessão por contato.
 
-A sincronização dos quatro campos está apenas no plano futuro
-`docs/fireads_sincronizacao_campos.md`. Não há contrato 4 ativo no runtime;
-updates continuam escrevendo somente Observação. A futura implementação depende
-da liberação das colunas editáveis no Web App FireAds.
+Retries usam os campos congelados, reconhecem escrita parcial pelos atributos
+que não alteramos e relocalizam a inscrição quando possível. Marcador técnico
+sem os campos corretos requer reparo; bloco e campos corretos dispensam novo
+POST. `ClienteFireAds` envia Observação por último e exige recibo de todas as
+colunas. Snapshots legados não são convertidos nem reformatados. O contrato 4 é
+interno ao JSON, não uma release nem uma alteração SQL.
+
+Aplicação local em 22/10/2026 documentada em
+`docs/fireads_sincronizacao_campos.md`. O deploy exige liberação das colunas
+editáveis no Web App FireAds. As limitações de concorrência entre GET e POST
+externos continuam: o lock do chatbot não protege edições manuais da planilha.
 
 
 ### Apresentação e preferência antecipada

@@ -398,9 +398,20 @@ na complementação e na entrega ao dashboard.
 prioridade de relação exata, equivalência titular/dependente e último recurso
 por demais dados conhecidos (incluindo turno aceito, quando aplicável). Verifica
 recência, filtros de telefone/canal/nome/e-mail, preservação da mensagem, seleção
-de uma única inscrição e uso da referência na entrega sem alterar outros campos.
+de uma única inscrição e uso da referência na entrega legada sem alterar outros campos.
 
-Os testes de sincronização dos quatro campos estão integralmente no
-[plano futuro](../docs/fireads_sincronizacao_campos.md), junto da implementação
-proposta. Não fazem parte da suíte ativa. A entrega vigente continua no contrato
-3 e atualiza somente Observação; a sincronização depende de liberação da FireAds.
+## Sincronização de campos FireAds
+
+`tests.unit.test_fireads_sincronizacao_coleta` cobre os valores aceitos da mensagem
+e do atendimento, a exclusão de campos ausentes/conflitantes/importados, o turno
+somente sem link, a seleção de inscrição e o fallback por recência. Verifica a
+preservação de outras colunas e observações, escrita parcial, linha deslocada,
+resposta perdida, marcador divergente e recibo HTTP incompleto. Executar junto
+das suítes de coleta, canais, destinos legados e observações compactas.
+
+`tests.integration.test_coleta_abertura_postgres` confirma que valores e destino
+estão persistidos antes do POST e que quedas antes/depois da escrita completa
+conservam o mesmo envio, sem duplicar o bloco. Usa PostgreSQL descartável local,
+com HTTP simulado; não confirma liberação de colunas no Apps Script publicado.
+Contrato, arquivos completos e pré-requisito externo estão no
+[plano aplicado](../docs/fireads_sincronizacao_campos.md).
