@@ -243,9 +243,9 @@ Seguir o [procedimento coordenado de implantação](reserva_com_sem_link.md).
 O SQL incremental está em `migrations/20261003_reserva_com_sem_link.sql`, com
 reversão restrita em `rollback/20261003_reserva_com_sem_link.sql`.
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial), ou 17 → 19 quando o turno já estiver salvo. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
@@ -285,3 +285,26 @@ antigas permanecem com contexto nulo. A nova transição 1 → 4 exige destinat�
 já coletado; e-mail ausente continua sendo perguntado somente na etapa 10.
 O [plano aplicado](../docs/valida_dados_parciais_fireads.md) detalha os cenários,
 as verificações e as restrições de reversão após iniciar conversas novas.
+
+## Chat Fire e turno antecipado — 21/10/2026
+
+Para o deploy que ainda não aplicou a coleta parcial, executar inteiro apenas
+[migrations/20261021_coleta_chat_fire_completa.sql](migrations/20261021_coleta_chat_fire_completa.sql).
+Esse consolidado contém os mesmos blocos de 19/10 e 21/10 em uma transação e
+substitui a execução separada abaixo. Conferir `coleta_ok`, `chat_fire_turno_ok`,
+`transicao_1_4_ok` e `transicao_17_19_ok` verdadeiros, e `tamanho_turno=6`.
+
+Como alternativa ao consolidado, após a migração de coleta de 19/10, executar
+[migrations/20261021_chat_fire_turno_coleta.sql](migrations/20261021_chat_fire_turno_coleta.sql)
+com webhook e todos os workers parados. Inclui a origem Chat Fire, o turno sábado
+e a transição 17 → 19 para preferência já coletada. Conferir `migracao_ok=true`,
+`transicao_ok=true` e `tamanho_turno=6`. O SQL preserva dados existentes e aceita
+reexecução. Atualizar código e schema juntos; não executar setup em produção.
+Executar `collectstatic --noinput` para o rótulo de sábado no monitoramento.
+Contrato e validação: [Chat Fire e turno antecipado](../docs/chat_fire_turno_antecipado.md).
+
+A sincronização dos quatro campos está apenas no
+[plano prático futuro](../docs/fireads_sincronizacao_campos.md), fora do código ativo.
+O deploy atual continua atualizando somente Observação e não depende de ampliar
+`EDITABLE_COLUMNS`. A futura sincronização exige essa liberação e publicação no
+Web App pela FireAds, sem acrescentar DDL ao consolidado acima.

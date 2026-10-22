@@ -1,5 +1,12 @@
 # Plano prático — coleta de dados parciais na abertura
 
+> Complemento de 21/10/2026: [Chat Fire e turno antecipado](chat_fire_turno_antecipado.md).
+> Proposta futura, ainda não ativa: [Sincronização dos campos do chatbot](fireads_sincronizacao_campos.md).
+> A entrega atual continua atualizando somente Observação em registros existentes.
+> Os blocos deste plano registram a aplicação de 20/10. O complemento descreve
+> as alterações posteriores e a migração adicional; não sobrescrever o código
+> atual com estes blocos históricos.
+
 Status: aplicado e validado localmente em 20/10/2026. A migração de produção
 permanece pendente para o deploy coordenado.
 Revisão-base do plano: `3d689f35ba0b67b93d6d2decb17d29b690227307`.

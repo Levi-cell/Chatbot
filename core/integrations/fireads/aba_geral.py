@@ -5,7 +5,8 @@ from datetime import datetime, timezone
 from .contrato import ErroFireAds, instante, localizar, normalizar, telefone
 
 VERSAO_CONSULTA = 2
-ORIGENS = {"google ads": "google", "meta ads": "meta", "organico site": "organico_site"}
+ORIGENS = {"google ads": "google", "meta ads": "meta", "organico site": "organico_site",
+           "chat fire": "chat_fire"}
 CAMPOS_IDENTIDADE = ("WhatsApp", "Data/Hora", "Canal", "Nome", "Email", "Para quem é")
 
 

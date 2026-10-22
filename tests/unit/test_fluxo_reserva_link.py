@@ -62,7 +62,7 @@ def contexto(etapa, texto, *, link=None, dependente=False):
         "genero_agente_unidade": "feminino",
         "numero_comercial_unidade": "5571999999999",
         "link_agendamento_unidade": link,
-        "turno": "manha",
+        "turno": "manha" if etapa >= 19 else None,
         "resposta_bot_para_mensagem_atual": None,
         "mensagem_cliente_atual": {
             "id_mensagem": 9,
@@ -397,15 +397,13 @@ class ContatoComercialTests(unittest.TestCase):
         self.assertIn("Maria, que tem 100 anos", texto)
         self.assertNotIn("turno", texto)
 
-    def test_funil_orienta_conforme_configuracao_vigente(self):
+    def test_funil_preserva_turno_sem_paragrafo_de_orientacao(self):
         for link in (None, "https://example.com"):
             lead = dados_lead(resposta_email="sem email")
             lead.update(link_agendamento=link, turno="tarde")
             texto = montar_observacoes_lead(lead)
-            self.assertIn("painel de monitoramento", texto)
             self.assertIn("Turno de preferência: tarde", texto)
-            if link:
-                self.assertIn("Calendly", texto)
-            else:
-                self.assertIn("número comercial", texto)
-                self.assertNotIn("Calendly", texto)
+            self.assertNotIn("painel de monitoramento", texto)
+            self.assertNotIn("Calendly", texto)
+            self.assertNotIn("número comercial", texto)
+            self.assertNotIn("Cliente concluiu a triagem", texto)

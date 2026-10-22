@@ -34,3 +34,6 @@ def criar_estrutura_fireads():
         coleta = caminho.with_name('20261019_coleta_abertura.sql').read_text(encoding='utf-8')
         cursor.execute(coleta.split('-- INICIO DDL COLETA ABERTURA\n', 1)[1].split(
             '-- FIM DDL COLETA ABERTURA', 1)[0])
+        turno = caminho.with_name('20261021_chat_fire_turno_coleta.sql').read_text(encoding='utf-8')
+        cursor.execute(turno.split('-- INICIO DDL CHAT FIRE TURNO\n', 1)[1].split(
+            '-- FIM DDL CHAT FIRE TURNO', 1)[0])

@@ -53,13 +53,13 @@ class Dependente(models.Model):
 
 class Conversa(models.Model):
     id_chat = models.ForeignKey('Chat', models.DO_NOTHING, db_column='id_chat')
-    origem_fireads = models.CharField(max_length=20, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico_site','Orgânico Site'),('organico','Orgânico')])
+    origem_fireads = models.CharField(max_length=20, null=True, blank=True, choices=[('google','Google Ads'),('meta','Meta Ads'),('organico_site','Orgânico Site'),('chat_fire','Chat Fire'),('organico','Orgânico')])
     contexto_fireads = models.JSONField(null=True, blank=True)
     contexto_coleta = models.JSONField(null=True, blank=True, editable=False)
     lead_no_dash = models.BooleanField(null=True, blank=True, default=None)
 
     turno = models.CharField(
-        "turno de preferência", max_length=5, blank=True, null=True,
+        "turno de preferência", max_length=6, blank=True, null=True,
         choices=list(ROTULOS_TURNO.items()),
         help_text="Preferência informada no atendimento; não confirma dia ou horário.",
     )

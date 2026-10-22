@@ -57,4 +57,5 @@ def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=
         )
     else:
         raise ValueError("Tratamento desconhecido para escolha de turno")
+    texto += '\n\nSe preferir sábado, escreva *Sábado*.'
     return montar_texto_com_rodape(texto, RODAPE_OPCAO_UNICA)

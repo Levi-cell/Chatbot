@@ -19,6 +19,9 @@ transacional, ela cobre regras e utilitários já implementados:
   respostas antigas e preservação do texto em replay e follow-up;
 - montagem dos relatórios semanais e totais;
 - payloads e sondas manuais do Funil;
+- observações compactas compartilhadas pelo Funil/dashboard, com marcadores
+  históricos, classificação de retorno, seis perguntas e preservação do conteúdo
+  anterior (`test_observacoes_compactas.py`, `test_fireads_aba_geral.py`);
 - vínculo 1:1 opcional de monitoramento e autorização de conversas/mensagens por unidade;
 - login nativo, par username/senha, sessão, CSRF e revogação do acesso ao portal;
 - painel somente leitura, períodos, consultas por unidade, botões históricos,
@@ -277,9 +280,9 @@ python -m unittest tests.unit.test_fluxo_reserva_link tests.integration.test_res
 As demais suítes de integração precisam das próprias DSNs descritas acima.
 Sem as variáveis, os testes PostgreSQL são ignorados, não considerados aprovados.
 
-A configuração atual de `atendimento_customizado.link_agendamento`, lida diretamente junto de `unidade` por `id_unidade`, decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. A FireAds pode importar as coletas iniciais e pular o e-mail apenas mediante consulta válida da própria conversa.
+A configuração atual de `atendimento_customizado.link_agendamento`, lida diretamente junto de `unidade` por `id_unidade`, decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial), ou 17 → 19 quando o turno já estiver salvo. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. A FireAds pode importar as coletas iniciais e pular o e-mail apenas mediante consulta válida da própria conversa.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
@@ -375,3 +378,29 @@ de campos, conflitos, nomes compostos, fontes, recência e escolha de destino.
 em loopback, banco descartável test_chatbot_fireads sem schema chatbot preexistente.
 O teste recusa outros destinos; usa o SQL real e substitui serviços externos.
 Não fornecer credenciais de produção aos testes.
+
+## Chat Fire e turno antecipado
+
+`tests.unit.test_chat_fire_turno` cobre apresentações naturais, recusa de profissão
+como nome, recusa de faixa etária em “Quem vai fazer”, quatro preferências,
+conflitos e fallback da planilha, canal Chat Fire e a saída 17 → 19 com turno salvo.
+O extrator compartilhado de turno conserva os casos negativos da etapa 18.
+`tests.integration.test_coleta_abertura_postgres` cobre a persistência de sábado,
+unidades com/sem link e FireAds, replay da sexta resposta e reexecução da migração
+adicional. Usa apenas `test_chatbot_fireads` em loopback, sem acesso à produção.
+
+`tests.unit.test_destinatario_abertura` cobre relações familiares/pessoais com e
+sem “para”, o rótulo “Quem vai fazer”, recusa de faixas etárias e menções soltas,
+equivalência/conflito de destinatários e a seleção de um registro compatível
+na complementação e na entrega ao dashboard.
+
+`tests.unit.test_fireads_prioridade_destinatario` cobre, na consulta inicial,
+prioridade de relação exata, equivalência titular/dependente e último recurso
+por demais dados conhecidos (incluindo turno aceito, quando aplicável). Verifica
+recência, filtros de telefone/canal/nome/e-mail, preservação da mensagem, seleção
+de uma única inscrição e uso da referência na entrega sem alterar outros campos.
+
+Os testes de sincronização dos quatro campos estão integralmente no
+[plano futuro](../docs/fireads_sincronizacao_campos.md), junto da implementação
+proposta. Não fazem parte da suíte ativa. A entrega vigente continua no contrato
+3 e atualiza somente Observação; a sincronização depende de liberação da FireAds.

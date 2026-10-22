@@ -32,7 +32,7 @@ class ColetaPostgresTests(unittest.TestCase):
     nova_conversa = legado.FireAdsPostgresTests.nova_conversa
     preparar_mensagem = legado.FireAdsPostgresTests.preparar_mensagem
 
-    def inicio(self, texto=FORM, fireads=True):
+    def inicio(self, texto=FORM + '\nTurno: Tarde', fireads=True):
         cid, msg, versao, ctx = self.preparar_mensagem()
         msg.update(conteudo_texto=texto, tipo_mensagem='text', id_hash='wamid.fireads',
                    data_recebimento=datetime.now(timezone.utc), id_phone_unidade='phone-teste',
@@ -63,6 +63,99 @@ class ColetaPostgresTests(unittest.TestCase):
             retomado = preparar_abertura(ctx, dict(msg, conteudo_texto='Texto posterior'), v, self.cursor)
         self.assertEqual(retomado['contexto_coleta'], novo['contexto_coleta'])
         self.assertEqual(retomado['contexto_fireads']['origem'], 'meta')
+
+    def test_tres_campos_sem_turno_consulta_e_persiste_preferencia_do_dashboard(self):
+        cid, msg, v, ctx = self.inicio(FORM)
+        with self.assertRaises(ConsultaFireAdsPendente):
+            preparar_abertura(ctx, msg, v, self.cursor)
+        self.conn.commit()
+        self.concluir([dict(ROW, Canal='Chat Fire', **{'Período preferido': 'Sábado'})])
+        novo = preparar_abertura(ctx, msg, v, self.cursor)
+        self.conn.commit()
+        self.assertEqual(novo['contexto_fireads']['origem'], 'chat_fire')
+        self.assertEqual(novo['contexto_coleta']['campos']['turno']['fonte'], 'dashboard')
+        self.assertEqual(self.conn.execute('SELECT turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone()[0], 'sabado')
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.consulta_fireads').fetchone()[0], 1)
+
+    def test_chat_fire_parcial_nome_turno_da_mensagem_email_do_dashboard(self):
+        texto = 'Olá! Sou Ana Paula. Vim pelo site.\nQuem vai fazer: Criança\nMelhor período: Sábado'
+        cid, msg, v, ctx = self.inicio(texto)
+        with self.assertRaises(ConsultaFireAdsPendente):
+            preparar_abertura(ctx, msg, v, self.cursor)
+        self.conn.commit()
+        self.concluir([dict(ROW, Canal='Chat Fire', **{'Para quem é': '', 'Perfil/Faixa': 'Criança'})])
+        novo = preparar_abertura(ctx, msg, v, self.cursor)
+        self.assertEqual(novo['contexto_coleta']['etapa_inicial'], 2)
+        self.assertEqual(novo['contexto_coleta']['campos']['email']['valor'], 'ana@example.com')
+        self.assertEqual(novo['contexto_coleta']['campos']['turno']['valor'], 'sabado')
+        self.assertEqual(novo['contexto_coleta']['campos']['destinatario']['status'], 'invalido')
+        self.conn.rollback()
+        retomado = preparar_abertura(ctx, msg, v, self.cursor)
+        self.assertEqual(novo['contexto_coleta'], retomado['contexto_coleta'])
+        self.conn.commit()
+        self.assertEqual(self.conn.execute('SELECT origem_fireads,turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone(), ('chat_fire', 'sabado'))
+
+    def test_unidade_com_link_ignora_turno_na_abertura(self):
+        cid, msg, v, ctx = self.inicio(FORM + '\nTurno: Sábado')
+        self.cursor.execute("UPDATE chatbot.atendimento_customizado SET link_agendamento='https://example.com/agendar'")
+        novo = preparar_abertura(ctx, msg, v, self.cursor)
+        self.assertNotIn('turno', novo['contexto_coleta']['campos'])
+        self.assertIsNone(self.conn.execute('SELECT turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone()[0])
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.consulta_fireads').fetchone()[0], 0)
+
+    def test_unidade_sem_fireads_persiste_turno_sem_consulta(self):
+        cid, msg, v, ctx = self.inicio('Eu me chamo Ana\nMelhor período: Sábado', fireads=False)
+        novo = preparar_abertura(ctx, msg, v, self.cursor)
+        self.assertEqual(novo['contexto_coleta']['etapa_inicial'], 2)
+        self.assertEqual(self.conn.execute('SELECT turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone()[0], 'sabado')
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.consulta_fireads').fetchone()[0], 0)
+
+    def test_turno_coletado_preserva_sexta_resposta_e_replay_sem_novo_envio(self):
+        cid, msg, v, ctx = self.inicio(FORM + '\nTurno: Sábado', fireads=False)
+        ctx = preparar_abertura(ctx, msg, v, self.cursor)
+        self.cursor.execute('UPDATE chatbot.cliente SET idade=40 WHERE id_cliente=1')
+        self.cursor.execute('UPDATE chatbot.conversa SET id_etapa_atual=17 WHERE id_conversa=%s', (cid,))
+        self.cursor.execute("INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta) SELECT %s,etapa,'Nunca' FROM generate_series(12,16) etapa", (cid,))
+        msg['conteudo_texto'] = 'Nunca'
+        self.cursor.execute('UPDATE chatbot.fila_mensagens SET conteudo_texto=%s WHERE id_mensagem=%s', ('Nunca', msg['id_mensagem']))
+        ctx['conversa']['id_etapa_atual'] = 17
+        hist = valida_historico(msg, ctx, self.cursor)
+        with patch('workers.worker_flow.response_flow.etapas.resolver_etapa17.enviar_etapa19', return_value={
+            'enviou': True, 'resposta_ja_existia': False, 'mensagem_bot': 'Fale com o comercial',
+            'id_hash_msg_bot': 'wamid.comercial', 'id_etapa_resultante': 19, 'tipo_mensagem': 'text',
+            'canal': 'meta_whatsapp', 'atualizar_conversa': True, 'atualizar_last_from_bot': True,
+        }) as sender:
+            resposta = flow_sender(hist)
+        sender.assert_called_once()
+        self.assertEqual(resposta['evento_transicao'], 'triagem_concluida_turno_coletado')
+        atualizar_banco_com_contexto_final(hist, resposta, self.cursor)
+        self.conn.commit()
+        self.assertEqual(self.conn.execute('SELECT id_etapa_atual,turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone(), (19, 'sabado'))
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.respostas_desafios WHERE id_conversa=%s', (cid,)).fetchone()[0], 6)
+        # O replay parte da etapa do cliente registrada no histórico.
+        ctx['conversa']['id_etapa_atual'] = 19
+        replay = valida_historico(msg, ctx, self.cursor)
+        with patch('workers.worker_flow.response_flow.etapas.resolver_etapa17.enviar_etapa19', side_effect=AssertionError('Não reenviar')):
+            resposta = flow_sender(replay)
+        self.assertTrue(resposta['resposta_ja_existia'])
+        atualizar_banco_com_contexto_final(replay, resposta, self.cursor)
+        self.conn.commit()
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM chatbot.respostas_desafios WHERE id_conversa=%s', (cid,)).fetchone()[0], 6)
+
+    def test_migracao_chat_fire_sabado_reexecucao_preserva_contexto(self):
+        cid, msg, v, ctx = self.inicio(FORM + '\nTurno: Sábado')
+        preparar_abertura(ctx, msg, v, self.cursor)
+        self.conn.commit()
+        sql = 'SELECT contexto_coleta,turno,origem_fireads FROM chatbot.conversa WHERE id_conversa=%s'
+        antes = self.conn.execute(sql, (cid,)).fetchone()
+        self.conn.commit()
+        migration = Path(__file__).resolve().parents[2] / 'deploy/migrations/20261021_chat_fire_turno_coleta.sql'
+        self.conn.execute(migration.read_text(encoding='utf-8'), prepare=False)
+        self.assertEqual(self.conn.execute(sql, (cid,)).fetchone(), antes)
+        with self.conn.transaction():
+            with self.assertRaises(psycopg.errors.CheckViolation):
+                with self.conn.transaction():
+                    self.conn.execute("UPDATE chatbot.conversa SET turno='sexta' WHERE id_conversa=%s", (cid,))
 
     def test_sem_fireads_preserva_canal_da_unidade(self):
         cid, msg, v, ctx = self.inicio(fireads=False)

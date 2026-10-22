@@ -389,7 +389,8 @@ class FireAdsPostgresTests(unittest.TestCase):
                 "SELECT versao FROM chatbot.migracoes_fireads ORDER BY versao"
             ).fetchall(),
             [("20261007_fireads_v1",), ("20261009_consulta_dash_v1",),
-             ("20261014_fireads_aba_geral_v1",), ("20261019_coleta_abertura_v1",)],
+             ("20261014_fireads_aba_geral_v1",), ("20261019_coleta_abertura_v1",),
+             ("20261021_chat_fire_turno_coleta_v1",)],
         )
         self.assertEqual(
             self.conn.execute(
@@ -412,7 +413,7 @@ class FireAdsPostgresTests(unittest.TestCase):
             self.conn.execute(
                 "SELECT count(*) FROM chatbot.etapa_transicao"
             ).fetchone()[0],
-            31,
+            32,
         )
 
     def test_importacao_dependente_e_retry_recuperam_snapshot(self):
@@ -461,7 +462,9 @@ class FireAdsPostgresTests(unittest.TestCase):
         )
         self.assertTrue(obtido["conversa"]["status_dependente"])
         self.assertEqual(obtido["contexto_fireads"]["origem"], "meta")
-        self.assertEqual(obtido["contexto_fireads"]["resultado"], "importado")
+        # Nome, email e destinatário foram importados; turno segue para a etapa 18.
+        self.assertEqual(obtido["contexto_fireads"]["resultado"], "incompleto")
+        self.assertIsNone(self.conn.execute('SELECT turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone()[0])
         dados, aplicacao = self.conn.execute(
             "SELECT dados,aplicacao FROM chatbot.consulta_fireads WHERE id_conversa=%s", (cid,),
         ).fetchone()
@@ -826,7 +829,7 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.indicador.assert_called_once()
         self.assertEqual(self.conn.execute(
             "SELECT status,resultado FROM chatbot.consulta_fireads",
-        ).fetchone(), ('concluida', 'importado'))
+        ).fetchone(), ('concluida', 'incompleto'))  # Preferência de turno ausente no formulário.
 
     def resultado_google(self):
         entrada = self.conn.execute('SELECT entrada FROM chatbot.consulta_fireads ORDER BY id_consulta DESC LIMIT 1').fetchone()
@@ -965,18 +968,25 @@ class FireAdsPostgresTests(unittest.TestCase):
         self.assertTrue(buscar_dados_lead_funil(outro, self.cursor)['primeiro_atendimento'])
 
     def test_organico_site_importa_e_compartilha_observacoes_nos_dois_envios(self):
+        self._verificar_observacoes_compartilhadas('Organico Site', 'organico_site', 'Orgânico Site', 'manha')
+
+    def test_chat_fire_compartilha_sabado_e_codigo_organico_nos_dois_envios(self):
+        self._verificar_observacoes_compartilhadas('Chat Fire', 'chat_fire', 'Chat Fire', 'sabado')
+
+    def _verificar_observacoes_compartilhadas(self, canal, origem, rotulo, turno):
         from core.repositories.funil import envios as fila_funil
         from workers.worker_funil.processamento import processar_envio_funil
         cid, mensagem, versao, contexto = self.solicitar_pendente()
         reserva = pendencias.reservar(self.cursor)
-        row = dict(como_aba_geral([GOOGLE], [])[0], Canal='Organico Site')
+        row = dict(como_aba_geral([GOOGLE], [])[0], Canal=canal, **{'Período preferido': turno})
         from core.integrations.fireads.coleta_abertura import interpretar_parcial
         decisao = interpretar_parcial([row], NUMERO, None, reserva['entrada']['aba'], reserva['entrada']['coleta'])
         self.assertTrue(pendencias.concluir(reserva, {'decisao': decisao, 'fontes': {'geral': [row]}}, self.cursor))
         pendencias.liberar_reserva(reserva['id_consulta'], self.cursor)
         resultado = preparar_abertura(contexto, mensagem, versao, self.cursor)
-        self.assertEqual(resultado['contexto_fireads']['origem'], 'organico_site')
-        self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,profissao='Professora',turno='manha' WHERE id_conversa=%s", (cid,))
+        self.assertEqual(resultado['contexto_fireads']['origem'], origem)
+        self.assertEqual(self.conn.execute('SELECT turno FROM chatbot.conversa WHERE id_conversa=%s', (cid,)).fetchone()[0], turno)
+        self.cursor.execute("UPDATE chatbot.conversa SET id_etapa_atual=19,profissao='Professora' WHERE id_conversa=%s", (cid,))
         self.cursor.execute('UPDATE chatbot.cliente SET idade=35')
         self.cursor.execute("""INSERT INTO chatbot.respostas_desafios(id_conversa,id_etapa,resposta)
             SELECT %s,etapa,'Às vezes' FROM generate_series(12,17) etapa""", (cid,))
@@ -1000,8 +1010,10 @@ class FireAdsPostgresTests(unittest.TestCase):
         snapshot = self.conn.execute('SELECT snapshot FROM chatbot.envios_dash').fetchone()[0]
         self.assertEqual(snapshot['observacoes'], obs)
         self.assertEqual(snapshot['referencia']['linha'], row['_row'])
-        self.assertIn('Orgânico Site', obs)
-        self.assertIn('Novo atendimento para Lead antigo', obs)
+        self.assertTrue(obs.startswith(f'[INICIO CHATBOT:1:{cid}]\nNOVO ATENDIMENTO PARA LEAD ANTIGO : {rotulo.upper()} : TITULAR\n'))
+        self.assertIn('Turno de preferência: ' + ('sábado' if turno == 'sabado' else 'manhã'), obs)
+        self.assertTrue(obs.endswith(f'[FIM CHATBOT:1:{cid}]'))
+        self.assertNotIn('Registro técnico', obs)
 
     def test_conflito_email_preserva_referencia_sem_importacao_parcial(self):
         # Consulta já existente antes do novo contrato mantém importação legada.

@@ -116,78 +116,51 @@ def montar_observacoes_lead(dados_lead, *, resultado_email=None):
     telefone_cliente = dados_lead["telefone_cliente"].strip()
     profissao = str(dados_lead.get("profissao") or "").strip()
     profissao = profissao or "Não informada"
-    aviso_telefone = ""
     resultado_email = resultado_email or _resolver_resultado_email_conversa(
         dados_lead
     )
     email_exibicao = _montar_email_exibicao(resultado_email)
 
-    if not _normalizar_telefone_brasileiro(telefone_cliente):
-        aviso_telefone = f"\n{AVISO_TELEFONE_INTERNACIONAL}\n"
-
-    tem_link = bool(str(dados_lead.get("link_agendamento") or "").strip())
-    orientacao = (
-        "Confira sua plataforma de reserva (como o Calendly) e o painel de monitoramento."
-        if tem_link else
-        "Confira o painel de monitoramento e o número comercial para verificar se o cliente enviou mensagem."
-    )
     turno = dados_lead.get("turno")
     if turno is not None:
         validar_turno(turno)
-    preferencia = f"- Turno de preferência: {ROTULOS_TURNO[turno]}\n" if turno else ""
     origem = dados_lead.get("origem_fireads")
-    descricoes = {
-        "google": "Lead veio de uma campanha do Google Ads.",
-        "meta": "Lead veio de uma campanha da Meta Ads.",
-        "organico_site": "O Lead chegou ao site de maneira orgânica e preencheu o formulário.",
-        "organico": "Lead entrou em contato com o chatbot de maneira orgânica, possivelmente por alguma rede social Meta da unidade.",
-    }
-    descricao = descricoes.get(origem, "")
+    canal = CANAIS[origem][0] if origem else ORIGEM_LEAD_CHATBOT
     estado = dados_lead.get("contexto_fireads") or {}
-    if origem == "organico" and estado.get("motivo") not in (None, "telefone_ausente"):
-        descricao = "Atendimento iniciado pelo fluxo orgânico, sem importar os dados do formulário."
-    canal = f"Canal de venda: {CANAIS[origem][0]}\n{descricao}\n\n" if origem else ""
     primeiro = dados_lead.get("primeiro_atendimento")
     classificacao = (
         "Novo lead" if primeiro is True else
         "Novo atendimento para Lead antigo" if primeiro is False else "Atendimento"
     )
-    cabecalho = (
-        f"{classificacao}\n\n"
-        f"{canal}"
-        "Cliente concluiu a triagem cognitiva pelo chatbot. "
-        f"{orientacao} A disponibilidade e a efetivação de sua reserva devem ser conferidas pela equipe.\n\n"
-        f"{preferencia}"
-        f"- Nome do cliente: {nome_cliente}\n"
-        f"- Telefone/WhatsApp do cliente: "
-        f"{telefone_cliente}\n"
-        f"- E-mail do cliente: {email_exibicao}\n"
-    )
+    destinatario = "DEPENDENTE" if dados_lead["status_dependente"] else "TITULAR"
+    linhas = [f"{classificacao.upper()} : {canal.upper()} : {destinatario}"]
+    if turno:
+        linhas.append(f"- Turno de preferência: {ROTULOS_TURNO[turno]}")
+    linhas.extend([
+        f"- Nome do cliente: {nome_cliente}",
+        f"- Telefone/WhatsApp do cliente: {telefone_cliente}",
+    ])
+    if not _normalizar_telefone_brasileiro(telefone_cliente):
+        linhas.append(f"- {AVISO_TELEFONE_INTERNACIONAL}")
+    linhas.extend([
+        f"- E-mail do cliente: {email_exibicao}",
+        f"- Profissão: {profissao}",
+    ])
 
     if dados_lead["status_dependente"]:
-        dados_pessoa = (
-            f"\nO atendimento é para um dependente de {nome_cliente}:\n\n"
-            f"- Nome do dependente: "
-            f"{dados_lead['nome_dependente'].strip()}\n"
-            f"- Idade do dependente: {dados_lead['idade_dependente']}\n"
-        )
+        linhas.extend([
+            f"- Nome do dependente: {dados_lead['nome_dependente'].strip()}",
+            f"- Idade do dependente: {dados_lead['idade_dependente']}",
+        ])
     else:
-        dados_pessoa = f"- Idade do cliente: {dados_lead['idade_cliente']}\n"
+        linhas.append(f"- Idade do cliente: {dados_lead['idade_cliente']}")
 
     triagem = _montar_perguntas_e_respostas_triagem(dados_lead)
 
-    dados_profissao = f"\n- Profissão: {profissao}\n"
-
-    resumo = (
-        cabecalho
-        + dados_profissao
-        + dados_pessoa
-        + aviso_telefone
-        + triagem
-    )
+    resumo = "\n".join(linhas) + "\n\n" + triagem
     if origem:
-        return bloco_observacoes(estado['id_integracao'], dados_lead['id_conversa'], resumo, versao=2)
-    return f"Observações de atendimento\n\n{resumo}"
+        return bloco_observacoes(estado['id_integracao'], dados_lead['id_conversa'], resumo, versao=3)
+    return resumo
 
 
 def _montar_perguntas_e_respostas_triagem(dados_lead):
@@ -203,19 +176,15 @@ def _montar_perguntas_e_respostas_triagem(dados_lead):
     faixa_etaria = obter_faixa_etaria_triagem(idade_pessoa)
     blocos = []
 
-    for numero, item in enumerate(respostas, start=1):
+    for item in respostas:
         pergunta = montar_pergunta_triagem(
             item["id_etapa"],
             faixa_etaria=faixa_etaria,
             nome_dependente=nome_dependente,
         )
-        blocos.append(
-            f"-Pergunta {numero}:\n\n"
-            f"{pergunta}\n\n"
-            f"Resposta: {item['resposta_exibicao']}"
-        )
+        blocos.append(f"- {pergunta} : {item['resposta_exibicao']}")
 
-    return "\nPerguntas e respostas da triagem:\n\n" + "\n\n".join(blocos)
+    return "\n".join(blocos)
 
 
 def _montar_nome_destaque(dados_lead):

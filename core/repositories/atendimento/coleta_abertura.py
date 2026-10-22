@@ -4,6 +4,7 @@ from copy import deepcopy
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from core.repositories.atendimento.dependentes import inserir_dependente_para_conversa
+from core.repositories.atendimento.turnos import salvar_turno_conversa
 from core.validacoes.coleta_abertura import aceito, valor, campo, etapa_inicial
 
 
@@ -35,6 +36,8 @@ def importar(abertura, id_conversa, estado, cursor):
                        (dependente, id_conversa))
         if dependente:
             inserir_dependente_para_conversa(id_conversa, cursor)
+    if estado.get('coletar_turno') and aceito(estado, 'turno'):
+        salvar_turno_conversa(id_conversa, abertura['id_unidade'], valor(estado, 'turno'), cursor)
     estado.update(status='pronto', etapa_inicial=etapa_inicial(estado))
     salvar(id_conversa, estado, cursor)
     return estado
@@ -55,6 +58,8 @@ def guardar_coletas(contexto, efeitos, cursor):
     if efeitos.get('status_dependente_atualizado'):
         texto = 'Para dependente' if efeitos['status_dependente'] else 'Para mim'
         estado['campos']['destinatario'] = campo([texto], 'destinatario', 'atendimento')
+    if efeitos.get('turno_persistido'):
+        estado['campos']['turno'] = campo([efeitos['turno']], 'turno', 'atendimento')
     if efeitos.get('destino_dado') == 'cliente':
         cursor.execute('SELECT idade FROM chatbot.cliente WHERE id_cliente=%s', (contexto['id_cliente'],))
         estado['idade_titular'] = cursor.fetchone()[0]

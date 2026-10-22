@@ -1539,7 +1539,7 @@ externo e commit local continua sujeita à duplicidade rara já aceita na V1.
 ## Extração dos campos de formulário FireAds
 
 A correspondência do telefone na aba `LEADS GERAL - Feedback` identifica o cadastro.
-Filtrar primeiro os canais Google Ads, Meta Ads e Organico Site; depois selecionar
+Filtrar primeiro os canais Google Ads, Meta Ads, Organico Site e Chat Fire; depois selecionar
 a data/hora mais recente e, no empate, a maior `_row`. Datas inválidas ficam atrás
 das válidas; sem data válida, usar a maior linha. Canais manuais não participam
 dessa seleção. O destinatário vem somente de `Para quem é`, nunca de `Perfil/Faixa`.
@@ -1565,8 +1565,8 @@ Por enquanto, campo vazio mantém o atendimento comum desde a etapa 1, com motiv
 `campos_ausentes`; destinatário fora das opções conhecidas registra
 `destinatario_desconhecido` sem inventar um vínculo. Ausência de telefone, falha
 operacional, timeout e conflito de e-mail no banco conservam os tratamentos atuais.
-A coleta parcial com saudação de formulário está proposta em
-[valida_dados_parciais_fireads.md](docs/valida_dados_parciais_fireads.md) e ainda não foi implementada.
+Este parágrafo descreve a interpretação legada. Conversas novas usam a coleta
+por campo implementada abaixo, inclusive turno quando a unidade não tem link.
 
 ## Entrega do atendimento ao dashboard FireAds
 
@@ -1586,17 +1586,27 @@ Sem referência da consulta, conferir novamente o telefone e usar a data/linha m
 recente antes de criar um cadastro orgânico. E-mail associado a outro telefone
 impede criação. Snapshot legado conserva sua seleção e seu texto originais.
 
-Google usa 113336; Meta usa 113340; Orgânico Site e orgânico usam 113481. Os dois
-últimos são origens distintas, descritas nas observações. Fallback por dado
+Google usa 113336; Meta usa 113340; Orgânico Site, Chat Fire e orgânico usam
+113481. São origens distintas, descritas nas observações. Fallback por dado
 incompleto não afirma campanha nem ausência de cadastro. Sem integração FireAds,
 preservar o canal configurado na unidade.
 
-O texto compartilhado começa com `Observações de atendimento`. Classificar como
-`Novo lead` só quando não há conversa anterior no mesmo chat (cliente/unidade);
-caso contrário usar `Novo atendimento para Lead antigo`. Profissão do titular
-precede os dados do dependente. Manter a explicação técnica da ESL Tech e a chave
-única de reconciliação. Congelar payload, canal, classificação e texto antes do
-primeiro POST, também para unidades sem FireAds. Retry não reconstrói esses dados.
+Novas observações compartilhadas usam o formato compacto, delimitado pelos mesmos
+marcadores `[INICIO CHATBOT:<integração>:<conversa>]` e `[FIM CHATBOT:…]`. O cabeçalho
+é `NOVO LEAD : <CANAL> : TITULAR` ou `DEPENDENTE`, em maiúsculas. Classificar como
+`NOVO LEAD` só quando não há conversa anterior no mesmo chat (cliente/unidade);
+caso contrário usar `NOVO ATENDIMENTO PARA LEAD ANTIGO`. Sem classificação histórica,
+usar `ATENDIMENTO`. Sem FireAds, manter a origem descritiva `META CHATBOT`, sem
+inventar identificador de integração nem alterar o código de canal configurado.
+
+Dados pessoais ocupam linhas consecutivas; profissão do titular precede os dados
+do dependente. Uma linha em branco separa os dados das seis perguntas de triagem,
+cada uma no formato `- Pergunta? : Resposta`, sem linhas vazias entre perguntas.
+Não incluir título adicional, explicação técnica da ESL Tech, descrição redundante
+do canal nem o parágrafo de orientação após a triagem. Preservar os marcadores de
+reconciliação e o conteúdo anterior da coluna Observação. Congelar payload, canal,
+classificação e texto antes do primeiro POST, também para unidades sem FireAds.
+Retry não reconstrói esses dados nem converte blocos antigos para o formato compacto.
 
 A API externa não oferece escrita condicional; edição manual entre leitura e
 POST continua podendo conflitar. Funil aceito antes de uma queda no commit local
@@ -1626,9 +1636,9 @@ Procedimento operacional: [Consumo Meta](deploy/consumo_mensal_meta.md).
 
 ## Reserva com e sem plataforma
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial), ou 17 → 19 quando o turno já estiver salvo. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 Na etapa 18, os três botões e frases afirmativas como `só posso pela tarde`,
 `prefiro ir de manhã` e `à noite fica melhor para mim` definem um único turno.
@@ -1658,7 +1668,8 @@ FireAds. A primeira mensagem pode fornecer nome do titular, e-mail e destinatár
 explícitos. Valores diferentes no mesmo campo ficam conflitantes; repetições
 equivalentes são um único valor. O telefone é sempre o remetente WhatsApp.
 
-Com os três campos aceitos, iniciar na profissão (etapa 4) sem consulta. Com
+Com todos os campos necessários aceitos, iniciar na profissão (etapa 4) sem consulta.
+Sem link de agendamento, turno também é necessário para dispensar a consulta. Com
 FireAds e coleta incompleta, consultar uma vez uma inscrição compatível; completar
 somente o desconhecido a partir dessa inscrição. Sem FireAds, perguntar o que
 falta. Nome pendente inicia na 1; destinatário pendente com nome conhecido inicia
@@ -1680,3 +1691,55 @@ Erro de leitura não autoriza criar. Salvar o destino antes do POST; retry mant�
 esse destino e reconcilia primeiro o marcador técnico. Não substituir referência
 vinculada apagada/alterada por uma inscrição nova. Somente Observação muda em
 updates, preservando conteúdo anterior; append inclui Para quem é.
+
+A proposta de sincronizar nome, e-mail, destinatário e turno está reservada em
+[um plano futuro](docs/fireads_sincronizacao_campos.md), sem ativação no projeto.
+Ela depende da FireAds liberar as colunas editáveis e não altera esta regra atual.
+
+
+## Chat Fire e turno antecipado (21/10/2026)
+
+Chat Fire é elegível na aba geral, com origem própria e código Funil 113481.
+Nome e e-mail já aceitos filtram a inscrição. Na complementação de dados,
+priorizar destinatário exato; depois mesmo tipo lógico titular/dependente;
+por último outra inscrição compatível com os demais dados conhecidos. Dentro
+de cada nível, usar data/hora e depois maior linha. No último recurso, exigir
+também o mesmo turno quando já aceito para uma unidade sem link; turno ausente
+ou diferente na planilha não satisfaz esse último nível. Sem destinatário
+conhecido, manter a escolha mais recente por nome/e-mail.
+A coluna Período preferido pode completar o turno
+apenas em unidade sem link. Não sobrescrever preferência aceita na mensagem.
+Com link, não antecipar nem exigir turno. Sem FireAds, coletar da mensagem e
+perguntar o que faltar nas etapas normais.
+
+Reconhecer apresentações como “Eu me chamo”, “Sou”, “Eu sou”, “Meu nome é” e
+“Aqui é”, inclusive após saudação. Não interpretar profissão, localização ou
+parentesco conhecidos como nome. “Quem vai fazer” é um rótulo válido de
+destinatário quando acompanhado de “Para mim” ou de uma relação reconhecida,
+como “Meu filho” e “Minha amiga”. Criança/Adulto/Idoso e Perfil/Faixa não
+definem destinatário.
+
+Na abertura, aceitar relações familiares e pessoais explícitas, incluindo
+amigo/amiga, conhecido/conhecida, colega, vizinho/vizinha e familiar, além de
+cunhado/cunhada, afilhado/afilhada, padrasto/madrasta, genro/nora e outros
+parentescos definidos no vocabulário. Aceitar respostas curtas sem “para”, como
+“Meu filho” e “Minha filha”, e com artigo, como “Para uma amiga”. Não inferir
+destinatário só porque uma frase contém “meu/minha” ou menciona outra pessoa.
+Preservar a relação na identidade para dar preferência à correspondência exata
+na consulta. Relações diferentes podem completar os dados pela equivalência
+titular/dependente, e o último recurso pode usar outro tipo sem substituir o
+destinatário informado. A consulta vincula uma única linha; a entrega posterior
+reutiliza essa referência e só acrescenta observações, preservando os campos
+da planilha. Entregas sem referência de consulta conservam sua seleção própria.
+
+Manhã, Tarde, Noite e Sábado são preferências válidas. Sábado digitado também é
+aceito na etapa 18. Os três botões permanecem e o texto explica essa alternativa.
+Preferência antecipada fica em conversa.turno e contexto_coleta, sob o lock da
+abertura. Ao concluir a triagem sem link e com turno salvo, a aresta autorizada
+17 → 19 preserva a sexta resposta e envia o contato comercial. Com link atual,
+17 → 20; sem turno, 17 → 18 → 19. E-mail faltante continua na etapa 10.
+
+Observações de Funil e dashboard incluem Chat Fire e a preferência de turno,
+inclusive sábado. Atualizar a planilha continua alterando somente Observação,
+preservando conteúdo anterior e todas as demais colunas. Não reprocessar
+aberturas antigas. Detalhes: [Chat Fire e turno antecipado](docs/chat_fire_turno_antecipado.md).

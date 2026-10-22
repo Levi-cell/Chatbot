@@ -28,7 +28,7 @@ def preparar(contexto, mensagem, lock_version, cursor, abertura, consulta):
     proteger_conversa(cid, lock_version, cursor)
     proteger_mensagem_abertura(mensagem, cursor)
     if estado is None:
-        estado = criar_contexto(cid, mensagem)
+        estado = criar_contexto(cid, mensagem, coletar_turno=not abertura.get('link_agendamento'))
         estado['fireads_aplicavel'] = bool(abertura['aplicavel'])
         estado['formulario_identificado'] = bool(abertura['aplicavel'] and estado['rota_formulario_chat'])
         salvar(cid, estado, cursor)

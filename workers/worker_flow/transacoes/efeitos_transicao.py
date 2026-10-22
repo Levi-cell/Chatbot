@@ -3,6 +3,7 @@ from core.validacoes.coleta_abertura import destinatario_coletado, EVENTO_NOME_D
 from workers.worker_flow.fireads import email_importado
 
 from core.repositories.atendimento.turnos import salvar_turno_conversa
+from core.validacoes.turno import validar_turno
 from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa18 import validar_etapa18
 
 from core.logging_config import short_value
@@ -82,6 +83,7 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_18_ESCOLHA_TURNO,
     ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
     EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK,
+    EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO,
     EVENTO_TURNO_ESCOLHIDO,
     EVENTO_AVALIACAO_SOLICITADA,
     ETAPA_20_AGENDAMENTO,
@@ -471,10 +473,13 @@ def atualizar_banco_conforme_transicao_de_etapa(
         destinos = {
             EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA: ETAPA_20_AGENDAMENTO,
             EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK: ETAPA_18_ESCOLHA_TURNO,
+            EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO: ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
         }
         if evento in destinos:
-            # 17 -> 18 ou 20: as duas rotas preservam a sexta resposta da triagem.
+            # Todas as saídas preservam a sexta resposta, inclusive o salto do turno.
             _exigir_destino(etapa_origem, evento, etapa_destino, destinos[evento])
+            if evento == EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO:
+                validar_turno(contexto_historico.get('turno'))
             return _persistir_resposta_triagem(contexto_historico, contexto_envio, cursor)
 
     # ETAPA 18

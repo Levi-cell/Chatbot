@@ -951,9 +951,9 @@ regras de negócio.
 
 ## Reserva com e sem plataforma
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial), ou 17 → 19 quando o turno já estiver salvo. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
@@ -996,6 +996,14 @@ reutiliza as mesmas observações congeladas. Formatos legados são consumidos s
 reconstrução; configuração legada de consultas concluídas usa a ponte registrada
 pela migração, sem repetir HTTP nem mudar uma decisão já salva.
 
+`core/integrations/funil/oportunidades.py` monta o texto compacto compartilhado:
+cabeçalho com classificação/canal/destinatário e seis perguntas com resposta na
+mesma linha. `bloco_observacoes(..., versao=3)` apenas o delimita pelos marcadores
+históricos, mantendo os formatos 1 e 2 disponíveis para compatibilidade. Essa
+versão é de apresentação e não altera a versão dos snapshots de entrega. A
+reconciliação usa o marcador e o bloco exato, sem depender de `NOVO LEAD` nem da
+explicação técnica removida. Snapshots existentes nunca são reformatados no retry.
+
 
 ## Coleta da primeira mensagem e dados parciais
 
@@ -1016,3 +1024,28 @@ Snapshots de entrega versão 3 acrescentam identidade de coleta e destino
 persistido, sem mudar snapshots antigos. A escolha do alvo é feita na integração,
 salva pelo repositório sob a reserva atual e confirmada pelo worker antes do POST.
 As limitações da API externa entre leitura/escrita continuam as mesmas.
+
+A sincronização dos quatro campos está apenas no plano futuro
+`docs/fireads_sincronizacao_campos.md`. Não há contrato 4 ativo no runtime;
+updates continuam escrevendo somente Observação. A futura implementação depende
+da liberação das colunas editáveis no Web App FireAds.
+
+
+### Apresentação e preferência antecipada
+
+`core/validacoes/apresentacao_nome.py` extrai apresentações naturais conservadoras.
+`core/validacoes/relacoes_destinatario.py` concentra as relações de destinatário e
+a identificação de respostas curtas sem rótulo. A coleta de abertura reutiliza
+esse vocabulário para mensagem e planilha, preservando as chaves históricas de
+identidade. Não importar validadores de etapas do worker para interpretar a abertura.
+`core/validacoes/preferencia_turno.py` é a interpretação pura compartilhada entre
+abertura, dashboard e a borda `valida_etapa18`. Domínio persistido e rótulos
+permanecem em `core/validacoes/turno.py`. O orquestrador de abertura consulta o link
+atual pelo repositório, registra se turno participa da coleta e importa a
+preferência na mesma transação protegida. Nenhum extrator acessa SQL ou workers.
+
+`resolver_etapa17` seleciona a aresta 17 → 19 quando não há link e há preferência
+persistida. `efeitos_transicao` preserva a sexta resposta também nesse caminho;
+replay usa histórico/mapa e a preferência da conversa. A migração incremental
+`20261021_chat_fire_turno_coleta.sql` amplia origem/turno e adiciona essa aresta,
+sem alterar os estados históricos nem os snapshots de entrega.

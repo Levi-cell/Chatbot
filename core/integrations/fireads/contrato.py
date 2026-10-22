@@ -12,6 +12,7 @@ CANAIS = {
     "google": ("Google Ads", "113336"),
     "meta": ("Meta Ads", "113340"),
     "organico_site": ("Orgânico Site", "113481"),
+    "chat_fire": ("Chat Fire", "113481"),
     "organico": ("Orgânico", "113481"),
 }
 
@@ -167,6 +168,9 @@ def selecionar(google, meta, numero, fuso=None):
 
 def bloco_observacoes(id_integracao, id_conversa, observacoes, *, versao=1):
     chave = f"CHATBOT:{int(id_integracao)}:{int(id_conversa)}"
+    if versao == 3:
+        return f"[INICIO {chave}]\n{observacoes}\n[FIM {chave}]"
+    # Preservar os formatos históricos para compatibilidade e reconciliação.
     if versao == 2:
         return (
             "Observações de atendimento\n\n"

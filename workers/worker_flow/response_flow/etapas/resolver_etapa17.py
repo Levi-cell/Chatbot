@@ -5,6 +5,9 @@ from workers.worker_flow.response_flow.repeticao_followup import (
 )
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa18 import enviar_etapa18
+from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa19 import enviar_etapa19
+from core.validacoes.turno import validar_turno
+from workers.worker_flow.response_flow.contato_comercial import preparar_mensagem_comercial
 
 from core.integrations.whatsapp.pywa_functions.pywa_senders.etapa17 import (
     enviar_etapa17_cliente_contexto_invalido,
@@ -20,8 +23,10 @@ from workers.worker_flow.response_flow.etapas.validadores_universais.validador_t
 )
 from workers.worker_flow.response_flow.transicoes.eventos import (
     ETAPA_18_ESCOLHA_TURNO,
+    ETAPA_19_ENCAMINHAMENTO_COMERCIAL,
     ETAPA_20_AGENDAMENTO,
     EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK,
+    EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO,
     EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA,
 )
 from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
@@ -80,10 +85,14 @@ def resolve_etapa17(contexto_historico):
             phone_id_unidade,
         )
 
-    evento = (
-        EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA if link_agendamento
-        else EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK
-    )
+    turno = contexto_historico.get('turno')
+    if link_agendamento:
+        evento = EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA
+    elif turno is not None:
+        validar_turno(turno)
+        evento = EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO
+    else:
+        evento = EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK
     # VALIDANDO DESTINOS
     # O contexto leu o link atual da unidade neste ciclo; não congelamos a configuração.
     etapa_destino = resolver_destino_transicao(
@@ -93,6 +102,13 @@ def resolve_etapa17(contexto_historico):
     if etapa_destino == ETAPA_18_ESCOLHA_TURNO:
         contexto_envio = enviar_etapa18(
             cliente_telefone, phone_id_unidade,
+            nome_dependente if status_dependente else None,
+        )
+    elif etapa_destino == ETAPA_19_ENCAMINHAMENTO_COMERCIAL:
+        contexto_envio = enviar_etapa19(
+            cliente_telefone, phone_id_unidade,
+            contexto_historico['numero_comercial_unidade'],
+            preparar_mensagem_comercial(contexto_historico, turno=turno),
             nome_dependente if status_dependente else None,
         )
     else:
@@ -111,6 +127,7 @@ def _destinos_esperados_por_evento(evento):
     return {
         EVENTO_TRIAGEM_PERGUNTA_6_RESPONDIDA: {ETAPA_20_AGENDAMENTO},
         EVENTO_TRIAGEM_CONCLUIDA_SEM_LINK: {ETAPA_18_ESCOLHA_TURNO},
+        EVENTO_TRIAGEM_CONCLUIDA_TURNO_COLETADO: {ETAPA_19_ENCAMINHAMENTO_COMERCIAL},
     }[evento]
 
 

@@ -92,7 +92,7 @@
     item.perfis.forEach(p=>tags.appendChild(criar('span','tag-contato '+p,perfil(p))));
     if(item.comercial)tags.appendChild(criar('span','tag-contato comercial',item.comercial.tag));
     else if(item.foi_funil)tags.appendChild(criar('span','tag-contato funil','Funil'));
-    const campos=[['Turno de preferência',({manha:'Manhã',tarde:'Tarde',noite:'Noite'})[item.turno]||'Não informado'],['Contato',item.contato||'Não informado'],['Profissão',item.profissao||'Não informada']];
+    const campos=[['Turno de preferência',({manha:'Manhã',tarde:'Tarde',noite:'Noite',sabado:'Sábado'})[item.turno]||'Não informado'],['Contato',item.contato||'Não informado'],['Profissão',item.profissao||'Não informada']];
     if(estado.regras.email_obrigatorio||item.email)campos.push(['E-mail',item.email||'Obrigatório · não informado']);
     if(item.dependentes.length)campos.push(['Dependente(s)',item.dependentes.join(', ')]);
     if(item.comercial){

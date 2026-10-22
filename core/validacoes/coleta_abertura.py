@@ -6,6 +6,9 @@ from copy import deepcopy
 
 from core.validacoes.email import validar_email_estrutural
 from core.validacoes.nomes_compostos import PRIMEIROS_NOMES_COMPOSTOS
+from core.validacoes.apresentacao_nome import extrair_apresentacao_nome
+from core.validacoes.preferencia_turno import extrair_preferencia_turno
+from core.validacoes.relacoes_destinatario import RELACOES, destinatario_sem_rotulo
 
 CAMPOS = ('nome', 'email', 'destinatario')
 EVENTO_NOME_DESTINO_COLETADO = 'nome_cliente_valido_destino_coletado'
@@ -39,13 +42,10 @@ def destinatario(valor):
     chave = normalizar(valor)
     if chave in {'para mim', 'mim', 'titular', 'para o titular', 'eu', 'para voce'}:
         return {'dependente': False, 'chave': 'titular', 'texto': str(valor).strip()}
-    parentes = {'pai', 'mae', 'avo', 'avos', 'filho', 'filha', 'filhos', 'neto', 'neta',
-                'irmao', 'irma', 'tio', 'tia', 'sobrinho', 'sobrinha', 'marido', 'esposa',
-                'companheiro', 'companheira', 'sogro', 'sogra', 'primo', 'prima', 'enteado', 'enteada'}
     palavras = set(chave.split())
-    parentes_presentes = sorted(palavras & parentes)
-    if parentes_presentes or any(t in chave for t in ('outra pessoa', 'dependente', 'outras pessoas')):
-        # Guardar o parentesco: mãe e filho não são a mesma inscrição no dashboard.
+    parentes_presentes = sorted(palavras & RELACOES)
+    if parentes_presentes or 'dependente' in palavras or any(t in chave for t in ('outra pessoa', 'outras pessoas')):
+        # Guardar a relação específica para priorizá-la na seleção do dashboard.
         identidade = '+'.join(parentes_presentes) if parentes_presentes else 'dependente'
         if 'mim' in palavras:
             identidade = 'titular+' + identidade
@@ -55,7 +55,8 @@ def destinatario(valor):
 
 def campo(valores, tipo, fonte='mensagem'):
     candidatos = list(dict.fromkeys(str(v).strip() for v in valores if str(v).strip()))
-    extrair = {'nome': nome, 'email': email, 'destinatario': destinatario}[tipo]
+    extrair = {'nome': nome, 'email': email, 'destinatario': destinatario,
+               'turno': extrair_preferencia_turno}[tipo]
     validos = {}
     for bruto in candidatos:
         valor = extrair(bruto)
@@ -74,9 +75,11 @@ def campo(valores, tipo, fonte='mensagem'):
     return resultado
 
 
-def extrair(texto):
+def extrair(texto, *, coletar_turno=False):
     texto = str(texto or '')
     valores = {c: [] for c in CAMPOS}
+    if coletar_turno:
+        valores['turno'] = []
     # E-mails diferentes nunca são resolvidos escolhendo a primeira ocorrência.
     valores['email'] = re.findall(r'[^\s@:,;<>]+@[^\s@,;<>]+', texto)
     for linha in texto.splitlines():
@@ -85,17 +88,29 @@ def extrair(texto):
             rotulo = normalizar(rotulo)
             if rotulo in {'nome', 'nome completo', 'full name', 'nome do titular', 'seu nome', 'qual seu nome', 'qual e seu nome'}:
                 valores['nome'].append(valor)
-            elif rotulo.startswith('para quem') or rotulo in {'destinatario', 'atendimento para', 'treino para'}:
+            elif rotulo.startswith('para quem') or rotulo in {
+                'destinatario', 'atendimento para', 'treino para', 'quem vai fazer',
+                'quem vai fazer o treino', 'quem vai fazer o curso', 'quem vai fazer o atendimento',
+            }:
                 valores['destinatario'].append(valor)
             elif rotulo in {'email', 'e mail', 'seu email', 'seu e mail'} and not valor.strip().count('@'):
                 valores['email'].append(valor)
-        apresentacao = re.match(r'^\s*(?:me chamo|meu nome é)\s+([^\n,.!?]+)', linha, re.I)
+            elif coletar_turno and rotulo in {'turno', 'periodo', 'melhor periodo',
+                                             'periodo preferido', 'turno preferido',
+                                             'turno de preferencia', 'qual turno voce prefere'}:
+                valores['turno'].append(valor)
+        apresentacao = extrair_apresentacao_nome(linha)
         if apresentacao:
-            valores['nome'].append(apresentacao.group(1))
-        if normalizar(linha).startswith('para ') and ':' not in linha:
+            valores['nome'].append(apresentacao)
+        if coletar_turno and ':' not in linha:
+            # Exige escolha explícita fora de um campo; 'boa tarde' não é turno.
+            for frase in re.split(r'[.!;\n]+', linha):
+                if re.match(r'^\s*(?:(?:eu|so|só)\s+)*(?:prefiro|posso|escolho|minha prefer)', frase, re.I):
+                    valores['turno'].append(frase)
+        if ':' not in linha and '?' not in linha and destinatario_sem_rotulo(normalizar(linha)):
             if destinatario(linha):
                 valores['destinatario'].append(linha)
-    return {c: campo(valores[c], c) for c in CAMPOS}
+    return {c: campo(valores[c], c) for c in valores}
 
 
 def aceito(estado, tipo):
@@ -111,7 +126,8 @@ def etapa_inicial(estado):
 
 
 def completo(estado):
-    return all(aceito(estado, c) for c in CAMPOS)
+    campos = CAMPOS + (('turno',) if estado.get('coletar_turno') else ())
+    return all(aceito(estado, c) for c in campos)
 
 
 def validar_contexto(contexto):
@@ -134,9 +150,14 @@ def email_coletado(contexto):
     return bool(estado and aceito(estado, 'email'))
 
 
-def criar_contexto(id_conversa, mensagem):
-    campos = extrair(mensagem.get('conteudo_texto') if mensagem.get('tipo_mensagem') == 'text' else '')
+def criar_contexto(id_conversa, mensagem, *, coletar_turno=False):
+    campos = extrair(mensagem.get('conteudo_texto') if mensagem.get('tipo_mensagem') == 'text' else '',
+                    coletar_turno=coletar_turno)
     return {'versao': 1, 'id_conversa': id_conversa, 'id_mensagem': mensagem['id_mensagem'],
             'id_hash': mensagem['id_hash'], 'status': 'preparando', 'campos': campos,
             'mensagem_original': deepcopy(campos), 'formulario_identificado': False,
-            'rota_formulario_chat': bool(re.search(r'(?im)^\s*(?:full name|nome(?: completo| do titular)?|para quem[^:\n]*|e-?mail)\s*[?:]', str(mensagem.get('conteudo_texto') or '')))}
+            'coletar_turno': coletar_turno,
+            'rota_formulario_chat': bool(re.search(
+                r'(?im)^\s*(?:full name|nome(?: completo| do titular)?|para quem[^:\n]*|'
+                r'quem vai fazer(?: o (?:treino|curso|atendimento))?|e-?mail)\s*[?:]',
+                str(mensagem.get('conteudo_texto') or '')))}

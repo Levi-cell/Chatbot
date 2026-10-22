@@ -21,7 +21,7 @@ def montar_mensagem_contato_comercial(
         raise ValueError("Idade do participante ausente para contato comercial")
     artigo = "a" if genero_agente == "feminino" else "o"
     inicio = f"Olá, venho do atendimento com {artigo} {nome_agente.strip()}, me chamo {nome_cliente.strip()}"
-    preferencia = (
+    preferencia = " no sábado" if turno == 'sabado' else (
         f" no turno da {ROTULOS_TURNO[validar_turno(turno)]}"
         if turno is not None
         else ""
@@ -32,7 +32,8 @@ def montar_mensagem_contato_comercial(
             f"{inicio} e gostaria de reservar uma demonstração prática para "
             f"{nome_dependente.strip()}, que tem {idade_aluno} anos."
             + (
-                f" Prefiro o turno da {ROTULOS_TURNO[validar_turno(turno)]}."
+                (" Prefiro sábado." if turno == 'sabado'
+                 else f" Prefiro o turno da {ROTULOS_TURNO[validar_turno(turno)]}.")
                 if turno is not None
                 else ""
             )

@@ -157,13 +157,30 @@ class EntregaAbaGeralTests(unittest.TestCase):
             "resultado_email_fireads": "email_valido", "contexto_fireads": {"id_integracao": 1},
             "triagem_respostas": [{"id_etapa": etapa, "resposta": "nunca"} for etapa in range(12,18)],
         }
-        for origem, codigo in (("google", "113336"), ("meta", "113340"), ("organico_site", "113481"), ("organico", "113481")):
-            for primeiro in (True, False):
+        for origem, codigo in (("google", "113336"), ("meta", "113340"), ("organico_site", "113481"), ("organico", "113481"), ("chat_fire", "113481")):
+            for primeiro in (True, False, None):
                 texto = montar_observacoes_lead(dict(dados, origem_fireads=origem, primeiro_atendimento=primeiro))
-                self.assertTrue(texto.startswith("Observações de atendimento\n"))
+                classificacao = ("NOVO LEAD" if primeiro is True else
+                                 "NOVO ATENDIMENTO PARA LEAD ANTIGO" if primeiro is False else "ATENDIMENTO")
+                self.assertTrue(texto.startswith(
+                    f"[INICIO CHATBOT:1:25]\n{classificacao} : {CANAIS[origem][0].upper()} : DEPENDENTE\n"
+                ))
                 self.assertNotIn("— conversa", texto)
-                self.assertIn("Novo lead" if primeiro else "Novo atendimento para Lead antigo", texto)
                 self.assertLess(texto.index("Profissão:"), texto.index("Nome do dependente:"))
                 self.assertEqual(CANAIS[origem][1], codigo)
-                if origem == "organico_site":
-                    self.assertIn("chegou ao site de maneira orgânica", texto)
+                self.assertIn("Com que frequência João se distrai com facilidade durante tarefas ou atividades escolares? : Nunca", texto)
+                self.assertIn("Com que frequência João fica desmotivado(a), impaciente ou frustrado(a) diante de atividades que exigem concentração? : Nunca", texto)
+
+    def test_bloco_compacto_preserva_historico_e_reconcilia_sem_repetir(self):
+        antigo = bloco_observacoes(1, 24, "Histórico antigo")
+        historico = "  Anotação manual preservada  \n\n" + antigo + "\n\n" + self.bloco
+        compacto = bloco_observacoes(1, 26, "NOVO ATENDIMENTO PARA LEAD ANTIGO : GOOGLE ADS : TITULAR\nDados", versao=3)
+        registro = dict(REGISTRO, **{"Observação": historico})
+        op = preparar_escrita([registro], self.snapshot, compacto)
+        self.assertEqual(op, {"row": 44, "observacoes": historico + "\n\n" + compacto})
+        # Simula resposta perdida: próximo ciclo encontra exatamente o bloco enviado.
+        entregue = dict(registro, _row=43, **{"Observação": op["observacoes"]})
+        self.assertIsNone(preparar_escrita([entregue], self.snapshot, compacto))
+        entregue["Observação"] = entregue["Observação"].replace("TITULAR", "DEPENDENTE")
+        with self.assertRaises(ErroFireAds):
+            preparar_escrita([entregue], self.snapshot, compacto)

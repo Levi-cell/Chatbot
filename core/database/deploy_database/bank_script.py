@@ -287,8 +287,8 @@ def criar_tabelas():
             id_etapa_atual INT,
 
             status_ativa BOOLEAN NOT NULL DEFAULT TRUE,
-            turno VARCHAR(5) CONSTRAINT ck_conversa_turno
-                CHECK (turno IS NULL OR turno IN ('manha', 'tarde', 'noite')),
+            turno VARCHAR(6) CONSTRAINT ck_conversa_turno
+                CHECK (turno IS NULL OR turno IN ('manha', 'tarde', 'noite', 'sabado')),
             status_dependente BOOLEAN DEFAULT FALSE,
             profissao VARCHAR(100) NULL,
 
