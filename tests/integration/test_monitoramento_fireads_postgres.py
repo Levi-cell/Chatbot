@@ -1,11 +1,21 @@
 """Última conversa no período, isolamento de unidade e métricas com SQL real."""
 import unittest
+from copy import deepcopy
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import patch
+from django.db import connections
+from django.db.backends.postgresql.base import DatabaseWrapper
+from psycopg.conninfo import conninfo_to_dict
 from psycopg.types.json import Jsonb
 
 from tests.integration import test_fireads_postgres as base
-from tests.unit.test_monitoramento_origens import contexto
-from core.integrations.fireads.atribuicao import CHAVE
+from tests.unit.test_monitoramento_origens import contexto, ROW
+from core.integrations.fireads.atribuicao import CHAVE, capturar
+from core.integrations.fireads.contrato import ABA_DESTINO
 from core.repositories.monitoramento import painel
+from callback.monitoramento import services
+from callback.monitoramento.periodos import resolver_periodo
 from callback.monitoramento.apresentacao import consolidar_conversas
 from callback.monitoramento.origens import montar_origens
 
@@ -64,3 +74,55 @@ class PainelFireAdsPostgresTests(unittest.TestCase):
         self.assertTrue(painel.buscar_unidade(1, self.cursor)['fireads_habilitada'])
         self.conn.execute('UPDATE chatbot.integracao_fireads SET integracao_ativa=FALSE')
         self.assertFalse(painel.buscar_unidade(1, self.cursor)['fireads_habilitada'])
+
+    def test_cursor_django_carrega_conversas_e_relatorios_com_jsonb_novo_e_legado(self):
+        # O teste acima usa psycopg direto. Produção usa o cursor do Django,
+        # cuja configuração de JSONB devolve texto para as consultas SQL brutas.
+        self.conversa('2026-10-01', 'Meta Ads')
+        legado_id = self.conversa('2026-10-02', 'Meta Ads')
+        row = dict(ROW, Canal='Meta Ads', Anuncio='QR001 legado')
+        contexto_legado = {
+            'origem': 'meta', 'id_conversa': legado_id, 'concluida': True,
+            'referencia': capturar(row, ABA_DESTINO)['referencia'],
+        }
+        self.conn.execute(
+            'UPDATE chatbot.conversa SET contexto_fireads=%s WHERE id_conversa=%s',
+            (Jsonb(contexto_legado), legado_id),
+        )
+        self.conn.execute('''INSERT INTO chatbot.consulta_fireads
+            (id_conversa,id_unidade,id_integracao_fireads,entrada,status,
+             consulta_concluida,resultado,dados,consultado_em)
+            VALUES (%s,1,1,'{}','concluida',TRUE,'importado',%s,now())''',
+            (legado_id, Jsonb({'fontes': {'geral': [row]}})),
+        )
+        self.conn.commit()
+
+        # setUp já conferiu que o DSN é o PostgreSQL local descartável.
+        params = conninfo_to_dict(base.DSN)
+        config = deepcopy(connections['default'].settings_dict)
+        config.update(
+            NAME=params['dbname'], USER=params.get('user', ''),
+            PASSWORD=params.get('password', ''), HOST=params['host'],
+            PORT=params.get('port', '5432'),
+            OPTIONS={'options': '-c search_path=chatbot', 'connect_timeout': 5},
+        )
+        banco = DatabaseWrapper(config, alias='teste_monitoramento_fireads')
+        self.addCleanup(banco.close)
+        with banco.cursor() as cursor:
+            cursor.execute('''SELECT c.contexto_fireads,q.dados
+                FROM chatbot.conversa c JOIN chatbot.consulta_fireads q USING(id_conversa)
+                WHERE c.id_conversa=%s''', (legado_id,))
+            self.assertTrue(all(isinstance(valor, str) for valor in cursor.fetchone()))
+
+        periodo = resolver_periodo('total', agora=datetime(2026, 10, 3, tzinfo=timezone.utc))
+        with patch.object(services, 'connection', banco):
+            conversas = services.carregar_conversas(SimpleNamespace(id_unidade=1), periodo)
+            relatorio = services.carregar_relatorio(SimpleNamespace(id_unidade=1), periodo)
+        self.assertTrue(conversas['unidade']['fireads_habilitada'])
+        self.assertEqual(len(conversas['conversas']), 1)
+        self.assertEqual(conversas['conversas'][0]['origem']['anuncio'], 'QR001 legado')
+        meta = next(c for c in relatorio['origens']['canais'] if c['canal'] == 'meta')
+        self.assertEqual(meta['atendimentos'], 2)
+        self.assertEqual(relatorio['origens']['sem_origem'], 0)
+        self.assertEqual({a['anuncio'] for a in relatorio['origens']['anuncios']},
+                         {'QR001', 'QR001 legado'})

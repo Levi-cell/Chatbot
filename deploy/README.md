@@ -376,3 +376,16 @@ Validar `tests.unit.test_monitoramento_origens`, `test_monitoramento_painel` e
 `test_encerramentos_por_idade`, além das suítes FireAds. Testes SQL de período,
 isolamento e contagens ficam em `tests.integration.test_monitoramento_fireads_postgres`
 e só devem rodar no PostgreSQL descartável local especificado pela suíte.
+
+### Correção de leitura JSONB do monitoramento — 23/10/2026
+
+O repositório do painel converte `contexto_fireads` e `dados_consulta` retornados
+como texto pelo cursor do Django antes da apresentação. Corrige falha ao carregar
+Conversas/Relatórios com consulta FireAds salva e a ausência consequente dos filtros.
+Sobre a V1.16.0 já instalada, atualizar o código, executar `manage.py check` e
+`tests.unit.test_monitoramento_origens`/`tests.unit.test_monitoramento_painel`, e
+recarregar `chatbot-webhook.service`. Esta correção isolada não exige SQL,
+collectstatic, mudança de configuração nem reinício dos workers. Confirmar as
+rotas autenticadas de dados em unidade integrada: HTTP 200 no login sozinho não
+exercita a leitura de origem. O teste adicional com Django/PostgreSQL usa somente
+o banco descartável local da suíte de integração.

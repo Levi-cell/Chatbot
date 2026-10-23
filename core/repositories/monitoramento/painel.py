@@ -1,9 +1,30 @@
 """Consultas somente leitura do painel, sempre limitadas à unidade autorizada."""
 
+import json
+
+
+def _objeto_json(valor):
+    """Normaliza JSONB do cursor Django (texto) ou psycopg (dict).
+
+    Contexto ausente ou fora do contrato permanece desconhecido no painel.
+    A conversão é local à leitura; não altera o JSON persistido no banco.
+    """
+    if isinstance(valor, str):
+        try:
+            valor = json.loads(valor)
+        except json.JSONDecodeError:
+            return None
+    return valor if isinstance(valor, dict) else None
+
 
 def _linhas(cursor):
     colunas = [item[0] for item in cursor.description]
-    return [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+    linhas = [dict(zip(colunas, linha)) for linha in cursor.fetchall()]
+    for linha in linhas:
+        for campo in ('contexto_fireads', 'dados_consulta'):
+            if campo in linha:
+                linha[campo] = _objeto_json(linha[campo])
+    return linhas
 
 
 def _linha(cursor):

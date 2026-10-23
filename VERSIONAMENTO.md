@@ -174,6 +174,10 @@ Commit: `5fc047e3a049e6aeb4b56e3e766cba2bcdeb664b`
 
 Commit: `5ff1681502eeade253f60201cfd691ba5024acf9`
 
+### V1.16.0 — Monitoramento FireAds e entregas coordenadas
+
+Commit: `fa5c30ca37f35cb34532053ae1190efd0d59fdf1`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

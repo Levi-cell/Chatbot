@@ -1,5 +1,6 @@
 """Origens comprovadas, contagem por conversa e recusa explícita de duplicidade."""
 from copy import deepcopy
+import json
 import unittest
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from core.integrations.fireads.atribuicao import CHAVE, capturar, vincular, ler
 from core.integrations.fireads.cliente import ClienteFireAds, TelefoneDuplicadoFireAds
 from core.integrations.fireads.contrato import ABA_DESTINO, ErroFireAds
 from tests.unit.test_coleta_abertura import ROW
+from core.repositories.monitoramento import painel as repositorio_painel
 
 
 def contexto(cid, canal='Meta Ads', anuncio=None, momento='consulta_inicial'):
@@ -19,6 +21,34 @@ def contexto(cid, canal='Meta Ads', anuncio=None, momento='consulta_inicial'):
 
 
 class OrigensTests(unittest.TestCase):
+    def test_json_textual_do_django_preserva_origem_nova_e_legada(self):
+        row = dict(ROW, Canal='Meta Ads', Anuncio='QR001 legado')
+        legado = {'referencia': capturar(row, ABA_DESTINO)['referencia']}
+        dados = {'fontes': {'geral': [row]}}
+        colunas = ['id_conversa', 'id_cliente', 'contexto_fireads', 'dados_consulta', 'ultima_mensagem']
+        for serializar in (lambda v: v, json.dumps):
+            cursor = Mock(description=[(c,) for c in colunas])
+            cursor.fetchall.return_value = [
+                (1, 10, serializar(contexto(1, anuncio='QR001 novo')), None, '{texto da mensagem}'),
+                (2, 11, serializar(legado), serializar(dados), 'Olá'),
+            ]
+            linhas = repositorio_painel._linhas(cursor)
+            self.assertEqual(linhas[0]['ultima_mensagem'], '{texto da mensagem}')
+            conversas = consolidar_conversas(linhas)
+            self.assertEqual({c['origem']['anuncio'] for c in conversas}, {'QR001 novo', 'QR001 legado'})
+            relatorio = montar_origens(linhas)
+            meta = next(c for c in relatorio['canais'] if c['canal'] == 'meta')
+            self.assertEqual(meta['atendimentos'], 2)
+
+    def test_json_ausente_ou_invalido_nao_inventa_origem_nem_quebra_painel(self):
+        for valor in (None, '', '{invalido', 'null', '[]', 'true', '12', '"texto"', [], False):
+            with self.subTest(valor=valor):
+                cursor = Mock(description=[(c,) for c in ('id_conversa', 'id_cliente', 'contexto_fireads', 'dados_consulta')])
+                cursor.fetchall.return_value = [(1, 10, valor, valor)]
+                linhas = repositorio_painel._linhas(cursor)
+                self.assertIsNone(consolidar_conversas(linhas)[0]['origem'])
+                self.assertEqual(montar_origens(linhas)['sem_origem'], 1)
+
     def test_provisorio_codigo_compartilhado_e_lead_no_dash_nao_provam_origem(self):
         for ctx in ({}, {'origem': 'meta'}, {'origem': 'organico', 'lead_no_dash': True},
                     {'codigo_canal_venda': '113481'}, {CHAVE: {'versao': 2}}, contexto(99)):

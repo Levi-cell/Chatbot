@@ -370,3 +370,27 @@ ou mensagens exatas normalizadas de telefone duplicado/já cadastrado; HTTP 400/
 também exige esse corpo explícito. O contrato publicado ainda não confirmou um
 código próprio. Resposta diferente fica pendente e não dispara update especulativo.
 Não houve POST de teste na FireAds nem retroatribuição de campanhas históricas.
+
+### Correção da leitura JSONB — 23/10/2026
+
+O cursor SQL bruto do Django retorna `contexto_fireads` e `dados_consulta` como
+texto JSON, enquanto o psycopg direto usado nos testes anteriores os devolvia
+como dicionários. Sem conversão, uma consulta legada causava `AttributeError`
+ao montar Conversas/Relatórios; o painel não recebia a indicação de integração
+habilitada e, por isso, também não exibia os filtros FireAds. Contextos novos
+sem consulta podiam apenas perder a identificação de origem, sem lançar erro.
+
+A normalização fica em `core/repositories/monitoramento/painel.py`, antes de
+entregar os dois campos às funções de apresentação. Aceita objetos já convertidos
+ou JSON textual; valor ausente/inválido permanece desconhecido. Demais colunas,
+incluindo texto de mensagens, não são interpretadas como JSON.
+
+Não cria colunas, não migra dados nem altera a lógica dos workers. O deploy desta
+correção isolada exige atualizar o código e recarregar o webhook. Não precisa de
+SQL, collectstatic ou reinício dos workers. A regressão usa também o cursor real
+do Django no PostgreSQL descartável, com os serviços completos de ambas as seções.
+
+Validação da correção: 93 testes unitários e 2 testes de integração aprovados,
+Django check sem problemas. O comportamento anterior foi reproduzido com JSON
+textual, causando `AttributeError: 'str' object has no attribute 'get'`. A tentativa
+de leitura direta da produção expirou na conexão; não houve alteração em produção.

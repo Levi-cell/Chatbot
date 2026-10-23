@@ -444,6 +444,12 @@ do período, sem excluir uma antiga por existir outra fora do intervalo.
 recortar, depois selecionar; limites de período; Funil/avaliação da mesma conversa;
 destinatário indefinido; isolamento por unidade e contagem de todos os atendimentos.
 Reutiliza somente PostgreSQL `test_chatbot_fireads` descartável em loopback.
+Também executa os serviços completos de Conversas e Relatórios com o cursor
+PostgreSQL real do Django, que retorna JSONB como texto. O caso combina contexto
+novo e consulta legada, conferindo a habilitação FireAds e os anúncios sem alterar
+o banco real. A suíte unitária cobre ainda JSON ausente/inválido e preservação do
+texto comum das mensagens. Isso evita que testes com psycopg direto ou mocks que
+já retornam dicionários escondam uma incompatibilidade da leitura em produção.
 `test_entrega_fireads_primeiro_postgres` também cobre persistência do anúncio
 nas duas capturas, novo Orgânico mesmo com um anterior, resposta perdida sem
 duplicar e recusa explícita de append com alternativa Orgânica persistida.
