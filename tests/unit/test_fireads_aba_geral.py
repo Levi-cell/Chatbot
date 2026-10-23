@@ -30,11 +30,13 @@ class AbaGeralTests(unittest.TestCase):
                 self.assertEqual(decisao["origem"], origem)
                 self.assertEqual(decisao["referencia"]["linha"], 44)
                 self.assertEqual(decisao["dados_titular"]["nome"], "Ana Paula")
-        for canal in ("Indicação", "Lead Franqueador", "MKT DIGITAL - GOOGLE ADS", "Orgânico"):
+        for canal in ("Indicação", "Lead Franqueador", "Orgânico"):
             decisao = interpretar([dict(REGISTRO, Canal=canal)], NUMERO)
             self.assertEqual(decisao["motivo"], "canal_nao_elegivel")
             self.assertEqual(decisao["dados_titular"], {})
             self.assertIsNotNone(decisao["referencia"])
+        with self.assertRaises(ErroFireAds):
+            interpretar([dict(REGISTRO, Canal="MKT DIGITAL - GOOGLE ADS")], NUMERO)
 
     def test_data_hora_e_depois_linha_sem_preferencia_por_canal(self):
         for canal in ("Google Ads", "Meta Ads", "Organico Site"):

@@ -118,10 +118,10 @@ class ChatFireTests(TestCase):
             self.assertEqual(valor(r['coleta'], 'turno'), esperado)
             self.assertTrue(completo(r['coleta']))
 
-    def test_turno_nao_e_identidade_nem_autoriza_importar_outro_email(self):
+    def test_mesmo_telefone_vincula_sem_substituir_email_aceito(self):
         c = coleta(FORM + '\nTurno: Sábado')
         r = self.consultar(c, [dict(ROW, Email='outro@example.com', Canal='Chat Fire', **{'Período preferido': 'Sábado'})])
-        self.assertIsNone(r['referencia'])
+        self.assertEqual(r['referencia']['linha'], 44)
         self.assertEqual(valor(r['coleta'], 'email'), 'ana@example.com')
 
     def test_chat_fire_participa_da_recencia_sem_alterar_outros_codigos(self):

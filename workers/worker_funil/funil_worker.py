@@ -103,8 +103,8 @@ def executar_ciclo_funil():
                 resumo["falhas"] += 1
             print("---------------PROXIMO ENVIO------------------")
 
-        # Fila independente: tentativas de dashboard não dependem de haver
-        # novos leads elegíveis ao Funil neste ciclo.
+        # Recupera também entregas históricas (Funil já enviado) e pendências
+        # do dashboard cujo retry ficou pronto antes do retry do Funil.
         resumo['dash'] = processar_lote(conn, cursor, FUNIL_LIMITE_POR_CICLO)
         logger.info('dash_ciclo | %s', resumo['dash'])
         return resumo

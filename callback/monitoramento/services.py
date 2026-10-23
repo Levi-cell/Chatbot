@@ -17,6 +17,7 @@ from .apresentacao import (
 )
 from .encerramentos import apresentar_encerramento, montar_tabela_encerramentos
 from .faixa_etaria import consultar_faixa_etaria, distribuir_dependentes_por_titular
+from .origens import montar_origens
 
 
 FUSO_PAINEL = ZoneInfo('America/Sao_Paulo')
@@ -59,17 +60,21 @@ def carregar_conversas(acesso, periodo):
         )
         encerramentos = repositorio_encerramentos.buscar_encerramentos_atuais(
             acesso.id_unidade, [linha['id_conversa'] for linha in linhas], cursor,
+            fim=periodo.fim,
         )
     comerciais = {linha['id_cliente']: apresentar_encerramento(linha) for linha in encerramentos}
     conversas = consolidar_conversas(linhas)
     for item in conversas:
         item['ultima_atividade'] = _iso(item['ultima_atividade'])
         item['comercial'] = comerciais.get(item['id_cliente'])
+        if not unidade.get('fireads_habilitada'):
+            item['origem'] = None
     metricas['nota_media'] = float(metricas['nota_media']) if metricas.get('nota_media') is not None else None
     return {
         'unidade': {
             'nome': unidade['nome_unidade'],
             'agente': unidade['nome_agente'],
+            'fireads_habilitada': bool(unidade.get('fireads_habilitada')),
             'regras': {
                 'idade_minima_suporte': validar_idade_minima_suporte(unidade['idade_minima_suporte']),
                 'email_obrigatorio': bool(unidade['email_obrigatorio']),
@@ -185,6 +190,9 @@ def carregar_relatorio(acesso, periodo):
             acesso.id_unidade, periodo.inicio, periodo.fim, cursor,
             _granularidade(periodo, unidade),
         )
+        origens = (montar_origens(repositorio.buscar_origens(
+            acesso.id_unidade, periodo.inicio, periodo.fim, cursor,
+        )) if unidade.get('fireads_habilitada') else None)
     for grupo in (metricas, anteriores or {}):
         if grupo.get('nota_media') is not None:
             grupo['nota_media'] = float(grupo['nota_media'])
@@ -206,6 +214,7 @@ def carregar_relatorio(acesso, periodo):
         satisfacao, etapas, atividade,
     )
     relatorio.update({
+        'origens': origens,
         'encerramentos_por_idade': montar_tabela_encerramentos(
             contagens_idade,
             idade_minima_suporte=unidade['idade_minima_suporte'],

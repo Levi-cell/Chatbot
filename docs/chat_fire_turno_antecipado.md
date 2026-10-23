@@ -18,9 +18,8 @@ sem identificação segura seguem a consulta e/ou a pergunta normal.
 curtas sem rótulo, como “Minha amiga” e “Meu filho”, também são extraídas.
 Criança, adulto, idoso e Perfil/Faixa não definem destinatário, mesmo sob o rótulo
 “Quem vai fazer”. Frases soltas de indicação (“Minha amiga me indicou vocês”),
-posse (“Meu nome”) e negação não definem participante. A compatibilidade com o
-dashboard conserva a relação conhecida para priorizá-la. Na complementação,
-amiga e filha também podem corresponder pelo mesmo valor lógico de dependente.
+posse (“Meu nome”) e negação não definem participante. A relação já aceita é preservada; ela não filtra registros na consulta.
+A identificação da linha usa somente telefone e recência.
 
 Sem link de agendamento na unidade, turno é o quarto campo da coleta. Reconhece
 Manhã, Tarde, Noite e Sábado em rótulos como “Melhor período”, “Período preferido”,
@@ -35,34 +34,18 @@ Sem FireAds, aproveitar a mensagem e perguntar o que faltar na respectiva etapa.
 
 ## Complementação pela FireAds
 
-Os canais elegíveis passam a ser Google Ads, Meta Ads, Orgânico Site e Chat Fire.
-Selecionar uma única inscrição do telefone, em canal elegível, sempre compatível
-com nome/e-mail já aceitos. Quando o destinatário for conhecido, procurar nesta
-ordem: relação exata; mesmo valor lógico titular/dependente; demais registros
-compatíveis. Dentro de cada prioridade, usar data/hora mais recente e depois
-maior linha. Assim, “Minha filha” pode aproveitar o e-mail de “Minha amiga” se
-não houver inscrição compatível com a relação exata.
+Google Ads, Meta Ads, Orgânico Site e Chat Fire participam da seleção.
+Orgânico, Indicação e Lead Franqueador não fornecem dados nem são reutilizados
+automaticamente em nova conversa. Selecionar uma única linha do mesmo
+telefone por data/hora e depois maior linha, usando todas as variantes suportadas.
+Nome/e-mail, destinatário e turno diferentes não excluem essa linha. Completar
+apenas campos pendentes; nunca misturar dados de várias inscrições.
 
-Somente no último recurso, com destinatário divergente/ausente na planilha, o
-turno já aceito em unidade sem link também precisa coincidir. Turno vazio,
-inválido ou diferente nessa linha não satisfaz o último recurso. Com relação
-exata ou mesmo tipo lógico, o turno da planilha não bloqueia a inscrição. Sem
-destinatário conhecido, manter a seleção mais recente por nome/e-mail, para
-completar o que falta. Nenhum valor já aceito da mensagem é sobrescrito.
-
-A linha escolhida fica vinculada à consulta e à entrega posterior, que acrescenta
-somente as observações. A relação no cadastro da planilha permanece intacta,
-mesmo quando o atendimento atual é para outro destinatário. Para entregas sem
-consulta/referência anterior, permanece a seleção específica de destino descrita
-no contrato de coleta; esta ampliação trata da complementação na consulta inicial.
-
-Nome, Email, Para quem é e Período preferido completam apenas campos pendentes.
-Não misturar inscrições. Campo ausente, incompatibilidade, erro e timeout mantêm
-os dados já aceitos e deixam a coleta restante para o atendimento.
-
-Exemplo Alline: extrair nome e Sábado da mensagem; obter e-mail no registro Chat
-Fire compatível; “Para quem é” vazio inicia a pergunta de destinatário na etapa 2.
-E-mail e turno já coletados não serão perguntados novamente.
+Mensagem completa dispensa a consulta inicial; sua estrutura não comprova Meta.
+A entrega confirma o canal antes dos dois envios, inclusive sem consulta inicial.
+Exemplo Alline: manter nome e Sábado da mensagem, buscar e-mail na linha mais
+recente do telefone; destinatário ainda ausente inicia pergunta na etapa 2.
+E-mail e turno aceitos não são perguntados novamente.
 
 ## Persistência e transição
 
@@ -95,18 +78,19 @@ pergunta. Nenhum formulário antigo ou conversa já iniciada é reprocessado.
 | Chat Fire | 113481 |
 | Orgânico | 113481 |
 
-Chat Fire é uma origem própria (`chat_fire`). As observações compactas o identificam
-no cabeçalho, por exemplo `NOVO LEAD : CHAT FIRE : TITULAR`. Os snapshots
-salvos continuam sendo a fonte de verdade dos retries. Na V1.14.0 publicada, a
-entrega altera apenas Observação da linha vinculada; a preferência consta do
-resumo enviado aos dois sistemas.
+Chat Fire é uma origem própria (`chat_fire`), identificada no cabeçalho das
+observações, com código 113481. Novos snapshots 5 resolvem telefone/linha/canal e
+gravam o dashboard antes de enviar ao Funil. Se há apenas canais manuais, Orgânico ou o
+telefone não existe, criar novo Orgânico; se a consulta falhar, manter pendente.
+Recusa explícita de append por telefone duplicado permite usar um Orgânico
+existente no ciclo seguinte; respostas perdidas reconciliam a própria entrega.
 
-Em 22/10/2026, o [plano de sincronização](fireads_sincronizacao_campos.md) foi
-aplicado ao código local. Novos snapshots 4 também sincronizam Nome, Email,
-Para quem é e, sem link, Período preferido aceitos da mensagem ou do atendimento.
-Dados apenas importados do dashboard não são regravados em updates. Essa mudança
-não converte snapshots anteriores e só pode ser publicada depois de a FireAds
-liberar as colunas editáveis. Não acrescenta migração à atualização de Chat Fire/turno.
+Nome, Email, Para quem é e, sem link, Período preferido aceitos da mensagem ou do
+atendimento são sincronizados. Campos apenas importados não são regravados em
+updates. Preservar observações anteriores e demais colunas, incluindo Canal.
+Retries usam a mesma decisão; entrega histórica não é reclassificada. Esta
+revisão não exige nova migração SQL. Ver
+[plano prático](fireads_sincronizacao_campos.md).
 
 ## Migração e validação
 

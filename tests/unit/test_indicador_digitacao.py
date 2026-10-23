@@ -438,10 +438,10 @@ class DigitacaoConsultaTests(HTTPMetaSimulada, unittest.TestCase):
         self.mensagem.assert_not_called()
         self.liberar.assert_not_called()
 
-    def test_indicador_nao_reinicia_prazo_da_consulta(self):
-        for inicio, fim, esperado in ((100, 103, 287), (100, 401, 0)):
+    def test_indicador_respeita_reserva_e_margem_de_persistencia(self):
+        for inicio, fim, esperado in ((100, 103, 300), (100, 120, 295), (100, 431, 0)):
             with self.subTest(restante=esperado):
-                self.reserva["restante"] = 290
+                self.reserva["restante"] = 330
                 with patch.object(consulta_worker, "time") as relogio, patch.object(
                     consulta_worker, "get_conn", return_value=FakeConn(FakeCursor()),
                 ):

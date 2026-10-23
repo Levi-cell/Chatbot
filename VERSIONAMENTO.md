@@ -170,6 +170,10 @@ Commit: `9468e23cbb0ead6cf09c7189a884704ed21b80ad`
 
 Commit: `5fc047e3a049e6aeb4b56e3e766cba2bcdeb664b`
 
+### V1.15.0 — Sincronização dos campos do chatbot com a FireAds
+
+Commit: `5ff1681502eeade253f60201cfd691ba5024acf9`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

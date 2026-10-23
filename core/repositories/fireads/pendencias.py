@@ -2,6 +2,7 @@
 
 from psycopg.types.json import Jsonb
 from core.integrations.fireads.aba_geral import VERSAO_CONSULTA
+from core.integrations.fireads.prazos import RESERVA_CONSULTA_SEGUNDOS
 
 
 def solicitar(abertura, id_conversa, numero, cursor):
@@ -116,7 +117,7 @@ def liberar_reserva(id_consulta, cursor):
 
 
 def reservar(cursor):
-    """Reserva entre processos e recupera queda sem esperar o prazo de 300s.
+    """Reserva exclusiva: 300s de HTTP e margem para indicador/persistência.
 
     A consulta de candidatos não adquire advisory locks. Cada lock é solicitado
     explicitamente para um único ID, evitando locks extras por avaliação do SQL.
@@ -141,7 +142,9 @@ def reservar(cursor):
         cursor.execute(
             """UPDATE chatbot.consulta_fireads q SET status='processando',
               tentativas=tentativas+1,versao_reserva=versao_reserva+1,
-              processing_started_at=clock_timestamp(),reserva_ate=prazo_final,
+              processing_started_at=clock_timestamp(),
+              prazo_final=clock_timestamp()+(%s * INTERVAL '1 second'),
+              reserva_ate=clock_timestamp()+(%s * INTERVAL '1 second'),
               atualizado_em=clock_timestamp()
             FROM chatbot.conversa c,chatbot.unidade u,chatbot.integracao_fireads i
             WHERE q.id_consulta=%s AND q.status IN ('pendente','processando')
@@ -155,7 +158,7 @@ def reservar(cursor):
               AND i.fuso_formularios IS NOT DISTINCT FROM q.entrada->>'fuso'
             RETURNING q.id_consulta,q.id_conversa,q.versao_reserva,q.entrada,
                       EXTRACT(EPOCH FROM q.prazo_final-clock_timestamp())""",
-            (ident,),
+            (RESERVA_CONSULTA_SEGUNDOS, RESERVA_CONSULTA_SEGUNDOS, ident),
         )
         row = cursor.fetchone()
         if row is not None:

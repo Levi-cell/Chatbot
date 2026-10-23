@@ -1,0 +1,7 @@
+"""Prazos compartilhados entre HTTP, reservas e recuperação da FireAds."""
+
+HTTP_SEGUNDOS = 300
+MARGEM_PERSISTENCIA_SEGUNDOS = 30
+RESERVA_CONSULTA_SEGUNDOS = HTTP_SEGUNDOS + MARGEM_PERSISTENCIA_SEGUNDOS
+# Uma entrega faz GET + POST. Uma decisão nova pode exigir um GET anterior.
+RESERVA_ENTREGA_SEGUNDOS = 3 * HTTP_SEGUNDOS + 2 * MARGEM_PERSISTENCIA_SEGUNDOS

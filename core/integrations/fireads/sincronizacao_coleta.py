@@ -112,7 +112,8 @@ def escolher(rows, snapshot):
             row = mais_recente(elegiveis, snapshot.get('fuso'))
     if row is not None:
         return {'tipo': 'update', 'referencia': referencia_registro(row, snapshot['aba'], snapshot.get('fuso'))}
-    _email_cruzado(rows, snapshot)
+    if snapshot.get('versao') != 5:
+        _email_cruzado(rows, snapshot)
     return {'tipo': 'create'}
 
 
@@ -141,7 +142,8 @@ def preparar(rows, snapshot, bloco):
     if marcado is not None:
         # Append já aplicado: corrigir eventual escrita parcial, nunca duplicar.
         return _atualizar(marcado, snapshot, bloco)
-    _email_cruzado(rows, snapshot)
+    if snapshot.get('versao') != 5:
+        _email_cruzado(rows, snapshot)
     dados = {'Nome': snapshot['nome'], 'Email': snapshot['email'],
              'WhatsApp': telefone(snapshot['telefone']), 'Perfil/Faixa': snapshot['perfil'],
              'Para quem é': snapshot['para_quem'], 'Canal': CANAIS[snapshot['origem']][0]}

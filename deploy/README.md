@@ -322,3 +322,57 @@ antigos nem reprocessar envios concluídos. Se a API recusar uma coluna ou retor
 recibo incompleto, o dashboard permanece pendente para retomada; isso não deve
 reenviar um lead já confirmado no Funil. Os testes locais simulam a API e não
 atestam que a implantação externa foi atualizada.
+
+
+## Telefone, dashboard antes do Funil e prazos — revisão de 22/10/2026
+
+Atualização sobre a V1.15.0; sem SQL novo, sem alteração de dependências e sem
+conversão de snapshots existentes. Novas entregas FireAds gravam snapshot 5,
+resolvem o canal pela linha mais recente do telefone e só enviam ao Funil após
+a confirmação do dashboard. A indisponibilidade FireAds passa a adiar o Funil
+nessas unidades. Unidade sem FireAds mantém seu envio direto e código configurado.
+
+Parar follow-up, flow, consulta-dash e Funil antes de atualizar esses módulos;
+executar checks/testes e retomar consulta-dash/flow, depois follow-up e Funil.
+Nenhum comando de migração deve ser executado para esta revisão. Preservar as
+migrações já aplicadas na V1.14.0. Não reiniciar/reprocessar envios sent.
+
+Cada GET/POST FireAds tem 300s próprios; redirects compartilham o orçamento da
+operação. A consulta pendente tem até 300s na fila, e ao ser reservada ganha
+330s (300 HTTP + 30 de margem). Dashboard reserva 960s. O prazo efetivo do Funil
+é no mínimo 960s, mesmo com configuração antiga de 900s, para cobrir a preparação,
+GET e POST sequenciais. Reinício durante uma escrita exige reconciliação e pode
+aguardar a expiração da reserva; reiniciar não ignora next_attempt_at.
+
+Manter as colunas/recibos FireAds liberados para V1.15.0. Sem formulário elegível,
+canal desconhecido/vazio mantém pendente sem atribuir código. Só os quatro canais
+de formulário permitem reutilizar linha. Somente Orgânico ou canais manuais levam
+a novo Orgânico (113481); retentativas reconciliam a própria entrega.
+
+Validação direcionada: `tests.unit.test_fireads_entrega_telefone` e
+`tests.integration.test_entrega_fireads_primeiro_postgres`, além da regressão de
+coleta/turno/digitando e entregas legadas. Integração somente em banco descartável
+local `test_chatbot_fireads`; nunca usar credenciais de produção na suíte.
+
+Rollback: snapshots 5 não são entendidos pelo código V1.15.0. Não voltar esse
+worker enquanto houver entregas 5 pendentes sem antes resolver sua compatibilidade.
+As observações e payloads históricos permanecem congelados.
+
+## Monitoramento FireAds, filtros e relatórios — revisão de 22/10/2026
+
+Sem migração SQL adicional: origem e anúncio usam a chave versionada
+`atribuicao_monitoramento` no JSONB `contexto_fireads` existente e no snapshot da
+entrega. Não rodar backfill nem reprocessar atendimentos antigos. Meta sem anúncio
+entra em “Anúncio não informado”; origem sem evidência fica não identificada.
+
+Esta revisão também altera Django e arquivos estáticos: além dos workers acima,
+parar/reiniciar `chatbot-webhook.service` no deploy e executar `manage.py check`
+e `manage.py collectstatic --noinput` com o usuário/ambiente chatbot. Os URLs de
+CSS/JS receberam nova versão para evitar cache antigo no navegador. Conferir os
+filtros e o bloco Origem dos atendimentos em unidade integrada e não integrada.
+Nenhum serviço systemd, variável de ambiente ou dependência nova é necessária.
+
+Validar `tests.unit.test_monitoramento_origens`, `test_monitoramento_painel` e
+`test_encerramentos_por_idade`, além das suítes FireAds. Testes SQL de período,
+isolamento e contagens ficam em `tests.integration.test_monitoramento_fireads_postgres`
+e só devem rodar no PostgreSQL descartável local especificado pela suíte.

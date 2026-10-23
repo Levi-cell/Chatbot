@@ -5,6 +5,7 @@ from core.integrations.fireads.aba_geral import (
     ORIGENS, VERSAO_CONSULTA, selecionar_registro, mais_recente, referencia_registro,
 )
 from core.integrations.fireads.extratores import extrair_email, extrair_nome
+from core.integrations.fireads.atribuicao import CHAVE, capturar
 
 
 def decisao_organica(resultado, motivo=None, *, referencia=None):
@@ -17,7 +18,7 @@ def decisao_organica(resultado, motivo=None, *, referencia=None):
     }
 
 
-def interpretar(rows, numero, fuso=None, *, aba=ABA_DESTINO):
+def _interpretar(rows, numero, fuso=None, *, aba=ABA_DESTINO):
     row, encontrados = selecionar_registro(rows, numero, fuso)
     alvo_entrega = row if row is not None else mais_recente(encontrados, fuso)
     referencia = referencia_registro(alvo_entrega, aba, fuso)
@@ -51,3 +52,11 @@ def interpretar(rows, numero, fuso=None, *, aba=ABA_DESTINO):
             "resultado_email": "email_valido",
         },
     }
+
+
+def interpretar(rows, numero, fuso=None, *, aba=ABA_DESTINO):
+    from core.integrations.fireads.aba_geral import selecionar_entrega
+    row = selecionar_entrega(rows, numero, fuso)
+    decisao = _interpretar(rows, numero, fuso, aba=aba)
+    decisao[CHAVE] = capturar(row, aba, fuso)
+    return decisao

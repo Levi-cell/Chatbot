@@ -147,7 +147,8 @@ class ComplementacaoTests(unittest.TestCase):
         self.assertEqual(resultado['resultado'], 'importado')
         self.assertEqual(valor(resultado['coleta'], 'email'), 'ana@example.com')
         diferente = dict(ROW, Nome='Ana Maria Silva')
-        self.assertEqual(self.consulta(texto, [diferente])['resultado'], 'ausente')
+        self.assertEqual(self.consulta(texto, [diferente])['resultado'], 'importado')
+        self.assertEqual(valor(self.consulta(texto, [diferente])['coleta'], 'nome'), 'Ana Paula')
 
     def test_completa_so_campo_faltante_de_um_registro_compativel(self):
         r = self.consulta('Full name: Ana Paula Silva\nPara quem é: Para mim', [ROW])
@@ -159,10 +160,11 @@ class ComplementacaoTests(unittest.TestCase):
         r = self.consulta(FORM + '\nEmail: outro@example.com', [dict(ROW, Email='terceiro@example.com')])
         self.assertEqual(valor(r['coleta'], 'email'), 'terceiro@example.com')
 
-    def test_incompativel_nao_e_aproveitado_nem_vinculado(self):
+    def test_divergencia_nao_impede_complementar_destinatario_pelo_telefone(self):
         r = self.consulta('Full name: Ana Paula Silva\nEmail: novo@example.com', [ROW])
-        self.assertIsNone(r['referencia'])
-        self.assertIsNone(valor(r['coleta'], 'destinatario'))
+        self.assertEqual(r['referencia']['linha'], 44)
+        self.assertFalse(valor(r['coleta'], 'destinatario')['dependente'])
+        self.assertEqual(valor(r['coleta'], 'email'), 'novo@example.com')
 
     def test_nao_mistura_campos_entre_inscricoes(self):
         r = self.consulta('Oi', [dict(ROW, Email='', _row=45), dict(ROW, Nome='', _row=46)])

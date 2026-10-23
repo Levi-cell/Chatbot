@@ -104,10 +104,25 @@ def _perfil_resumido(status_dependente, faixa):
 
 
 def consolidar_conversas(linhas):
+    from core.integrations.fireads.atribuicao import ler
+    # Defesa adicional para consumidores que não passaram pela seleção SQL.
+    representantes = {}
+    historico = {}
+    for linha in linhas:
+        cid = linha['id_cliente']
+        historico.setdefault(cid, set()).update(linha.get('ids_conversa_periodo') or [linha['id_conversa']])
+        chave = (str(linha.get('iniciou_em') or ''), linha['id_conversa'])
+        if cid not in representantes or chave > representantes[cid]:
+            representantes[cid] = chave
+    linhas = [l for l in linhas if (str(l.get('iniciou_em') or ''), l['id_conversa']) == representantes[l['id_cliente']]]
     clientes = {}
     for linha in linhas:
         cliente = clientes.setdefault(linha['id_cliente'], {
             'id_cliente': linha['id_cliente'],
+            'id_conversa_atual': linha['id_conversa'],
+            'destinatario': ('dependente' if linha.get('status_dependente') is True else
+                             'titular' if linha.get('status_dependente') is False else None),
+            'origem': ler(linha.get('contexto_fireads'), linha['id_conversa'], linha.get('dados_consulta')),
             'nome': linha.get('nome_cliente') or 'Cliente sem nome',
             'contato': linha.get('waid_telefone') or '',
             'email': linha.get('email') or '',
@@ -167,7 +182,7 @@ def consolidar_conversas(linhas):
         'dependente': 6,
     }
     for cliente in clientes.values():
-        cliente['ids_conversa'].sort()
+        cliente['ids_conversa'] = sorted(historico[cliente['id_cliente']])
         cliente['perfis'] = sorted(cliente['perfis'], key=lambda item: ordem[item])
         cliente['perfis_resumidos'] = sorted(
             cliente['perfis_resumidos'], key=lambda item: ordem_resumida[item]

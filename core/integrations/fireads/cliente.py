@@ -3,7 +3,18 @@
 import time
 from urllib.parse import urlparse
 import requests
-from .contrato import ErroFireAds
+from .contrato import ErroFireAds, normalizar
+
+
+class TelefoneDuplicadoFireAds(ErroFireAds):
+    """Recusa inequívoca do append; não representa timeout ou falha genérica."""
+
+
+def _duplicidade(body):
+    return isinstance(body, dict) and body.get('success') is False and (
+        body.get('code') == 'DUPLICATE_PHONE' or normalizar(body.get('error')) in {
+            'telefone ja cadastrado', 'telefone duplicado', 'numero de telefone ja cadastrado',
+        })
 
 
 class PrazoConsultaFireAdsEsgotado(ErroFireAds):
@@ -29,9 +40,11 @@ def validar_url(url, *, resposta=False):
 
 
 class ClienteFireAds:
-    def __init__(self, url, *, segundos=25, timeout_leitura=8, session=None):
+    def __init__(self, url, *, segundos=25, timeout_leitura=8, session=None, por_operacao=False):
         """Leitura=None usa o prazo restante; padrões das escritas são preservados."""
         self.url = validar_url(url)
+        self.segundos = segundos
+        self.por_operacao = por_operacao
         self.deadline = None if segundos is None else time.monotonic() + segundos
         self.timeout_leitura = timeout_leitura
         self.session = session or requests.Session()
@@ -74,6 +87,8 @@ class ClienteFireAds:
             body = response.json()
         except ValueError as exc:
             raise ErroFireAds("Resposta FireAds não é JSON") from exc
+        if _duplicidade(body):
+            raise TelefoneDuplicadoFireAds('Criação recusada por telefone duplicado')
         if not isinstance(body, dict) or body.get("success") is not True:
             if isinstance(body, dict) and str(body.get('error') or '').startswith('Coluna não editável:'):
                 raise ErroFireAds('Web App FireAds não autoriza as colunas; atualizar EDITABLE_COLUMNS')
@@ -81,6 +96,7 @@ class ClienteFireAds:
         return body
 
     def consultar(self, aba):
+        self._iniciar_operacao()
         body = self._json(
             self._request("GET", self.url, params={"sheet": aba, "abas": "0"})
         )
@@ -96,6 +112,7 @@ class ClienteFireAds:
         return data
 
     def enviar(self, aba, *, dados=None, row=None, observacoes=None, campos=None):
+        self._iniciar_operacao()
         if row is None:
             if campos:
                 raise ErroFireAds("Campos de atualização sem linha de destino")
@@ -110,7 +127,17 @@ class ClienteFireAds:
                 "row": int(row),
                 "updates": {**campos, "Observação": observacoes},
             }
-        result = self._json(self._request("POST", self.url, json=payload))
+        try:
+            result = self._json(self._request("POST", self.url, json=payload))
+        except requests.HTTPError as exc:
+            if row is None and exc.response is not None and exc.response.status_code in (400, 409):
+                try:
+                    recusada = _duplicidade(exc.response.json())
+                except ValueError:
+                    recusada = False
+                if recusada:
+                    raise TelefoneDuplicadoFireAds('Criação recusada por telefone duplicado') from None
+            raise
         if result.get("aba") != aba:
             raise ErroFireAds("Recibo de outra aba")
         if row is None:
@@ -120,3 +147,8 @@ class ClienteFireAds:
               or not set(payload['updates']) <= set(result['updated'])):
             raise ErroFireAds("Update sem confirmação da linha/coluna")
         return result
+
+    def _iniciar_operacao(self):
+        # GET e POST têm orçamentos próprios. Redirects não reiniciam o prazo.
+        if self.por_operacao:
+            self.deadline = None if self.segundos is None else time.monotonic() + self.segundos

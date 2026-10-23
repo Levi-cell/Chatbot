@@ -4,8 +4,8 @@ from core.validacoes.encerramento_por_idade import MOTIVOS_IDADE
 from .painel import _linhas, _periodo
 
 
-def buscar_encerramentos_atuais(id_unidade, ids_conversas, cursor):
-    """Só a última conversa real pode qualificar um chat do período selecionado.
+def buscar_encerramentos_atuais(id_unidade, ids_conversas, cursor, *, fim=None):
+    """Recebe somente as representantes já escolhidas dentro do período.
 
     O histórico adicional é lido em lote. O hash de origem sobrevive à limpeza
     da fila; não depender de id_mensagem_fila nem do cadastro atual do dependente.
@@ -16,6 +16,7 @@ def buscar_encerramentos_atuais(id_unidade, ids_conversas, cursor):
     motivos = sorted(MOTIVOS_IDADE)
     marcadores_ids = ', '.join(['%s'] * len(ids))
     marcadores_motivos = ', '.join(['%s'] * len(motivos))
+    limite = 'AND c.finalizou_em < %s' if fim is not None else ''
     cursor.execute(f"""
         SELECT c.id_conversa, c.id_cliente, c.status_dependente,
                c.motivo_encerramento, c.finalizou_em,
@@ -38,13 +39,8 @@ def buscar_encerramentos_atuais(id_unidade, ids_conversas, cursor):
            AND c.status_ativa = FALSE AND c.id_etapa_atual = 6
            AND c.finalizou_em IS NOT NULL
            AND c.motivo_encerramento IN ({marcadores_motivos})
-           AND NOT EXISTS (
-               SELECT 1 FROM chatbot.conversa posterior
-                WHERE posterior.id_unidade = c.id_unidade
-                  AND posterior.id_cliente = c.id_cliente
-                  AND posterior.id_conversa > c.id_conversa
-           )
-    """, tuple([id_unidade] + ids + motivos))
+           {limite}
+    """, tuple([id_unidade] + ids + motivos + ([fim] if fim is not None else [])))
     return _linhas(cursor)
 
 

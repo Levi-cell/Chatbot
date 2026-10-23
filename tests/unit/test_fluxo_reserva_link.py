@@ -199,7 +199,11 @@ class FluxoReservaTests(unittest.TestCase):
                 self.assertIn(
                     "João, que tem 12 anos" if dependente else "tenho 40 anos", pretexto
                 )
-                self.assertIn("turno da ", pretexto)
+                self.assertIn({
+                    "manha": "Prefiro pela manhã.",
+                    "tarde": "Prefiro à tarde.",
+                    "noite": "Prefiro à noite.",
+                }[turno], pretexto)
                 self.assertIn("*experiência Supera*", envio["mensagem_bot"])
                 self.assertNotIn("por cortesia da unidade", envio["mensagem_bot"])
                 self.assertNotIn("por cortesia da unidade", pretexto)
@@ -342,7 +346,7 @@ class FluxoReservaTests(unittest.TestCase):
         botao = self.http.send_message.call_args.kwargs["buttons"]
         mensagem = parse_qs(urlparse(botao.url).query)["text"][0]
         self.assertIn("João, que tem 12 anos", mensagem)
-        self.assertIn("turno da manhã", mensagem)
+        self.assertIn("Prefiro pela manhã.", mensagem)
 
     def test_pesquisa_compartilhada_ate_final24_com_e_sem_comentario(self):
         for etapa, resposta, destino, evento in (

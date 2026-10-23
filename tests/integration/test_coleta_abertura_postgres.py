@@ -62,7 +62,8 @@ class ColetaPostgresTests(unittest.TestCase):
         with patch('workers.worker_flow.coleta_abertura.criar_contexto', side_effect=AssertionError('Não reextrair')):
             retomado = preparar_abertura(ctx, dict(msg, conteudo_texto='Texto posterior'), v, self.cursor)
         self.assertEqual(retomado['contexto_coleta'], novo['contexto_coleta'])
-        self.assertEqual(retomado['contexto_fireads']['origem'], 'meta')
+        self.assertEqual(retomado['contexto_fireads']['origem'], 'organico')
+        self.assertEqual(retomado['contexto_fireads']['motivo'], 'canal_pendente_entrega')
 
     def test_tres_campos_sem_turno_consulta_e_persiste_preferencia_do_dashboard(self):
         cid, msg, v, ctx = self.inicio(FORM)
@@ -292,7 +293,7 @@ class ColetaPostgresTests(unittest.TestCase):
         externo.enviar.side_effect = enviar
         with patch('workers.worker_funil.fireads.ClienteFireAds', return_value=externo):
             self.assertTrue(processar(envio, self.conn, self.cursor))
-        self.assertEqual(externo.enviar.call_args.kwargs['dados']['Canal'], 'Meta Ads')
+        self.assertEqual(externo.enviar.call_args.kwargs['dados']['Canal'], 'Orgânico')
         self.assertEqual(externo.enviar.call_args.kwargs['dados']['Nome'], 'Ana Paula Silva')
         self.assertEqual(externo.enviar.call_args.kwargs['dados']['Período preferido'], 'Tarde')
         self.assertEqual(self.conn.execute('SELECT status FROM chatbot.envios_dash').fetchone()[0], 'sent')

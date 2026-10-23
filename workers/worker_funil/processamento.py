@@ -1,8 +1,10 @@
 """Processa uma reserva do Funil preservando a fronteira transacional."""
 
 import json
-from core.repositories.fireads.envios import congelar
+from core.repositories.fireads.envios import congelar, bloquear_contato, liberar_contato, chave_contato
 from core.repositories.funil import snapshots
+from workers.worker_funil.preparacao_fireads import preparar_destino
+from workers.worker_funil.fireads import processar_antes_funil
 import logging
 
 import psycopg
@@ -33,6 +35,7 @@ def processar_envio_funil(envio, conn, cursor):
     id_funil_envio = envio["id_funil_envio"]
     id_conversa = envio["id_conversa"]
     sucesso_externo = False
+    contato_reservado = None
 
     try:
         snapshot = snapshots.buscar(id_conversa, cursor)
@@ -42,12 +45,32 @@ def processar_envio_funil(envio, conn, cursor):
                 raise ValueError("Conversa não está mais elegível ao Funil")
             integracao = buscar_integracao_funil_por_unidade(dados_lead["id_unidade"], cursor)
             _validar_integracao_ativa(integracao)
+            if dados_lead.get('origem_fireads') is not None:
+                chave = chave_contato(dados_lead['contexto_fireads']['id_integracao'],
+                                      dados_lead['telefone_cliente'])
+                if not bloquear_contato(chave, cursor):
+                    raise ValueError('Outro envio deste contato está em andamento')
+                contato_reservado = chave
+            # A origem é resolvida antes de produzir as observações comuns.
+            dados_lead = preparar_destino(dados_lead, conn, cursor)
+            snapshots.conferir(envio, {'url_funil': integracao['link_api_carrossel']}, cursor,
+                               lease_segundos=FUNIL_LEASE_SEGUNDOS)
             payload = montar_payload_oportunidade(dados_lead)
             payload, canal, url_funil = congelar(dados_lead, payload, integracao, cursor)
             snapshot = snapshots.salvar(id_conversa, payload, canal, url_funil, cursor)
         snapshots.conferir(envio, snapshot, cursor, lease_segundos=FUNIL_LEASE_SEGUNDOS)
 
         # O SELECT não deve manter uma transação aberta durante a chamada HTTP.
+        conn.commit()
+
+        if not processar_antes_funil(id_conversa, conn, cursor):
+            registrar_falha_envio(id_funil_envio, 'Dashboard ainda pendente', cursor,
+                                 retry_segundos=1800)
+            conn.commit()
+            logger.info('funil_aguardando_dashboard | id_conversa=%s', id_conversa)
+            return False
+        # HTTP pode ter consumido minutos: revalidar posse antes do POST Funil.
+        snapshots.conferir(envio, snapshot, cursor, lease_segundos=FUNIL_LEASE_SEGUNDOS)
         conn.commit()
 
         resultado = enviar_oportunidade(
@@ -141,6 +164,11 @@ def processar_envio_funil(envio, conn, cursor):
             exc,
         )
         return False
+
+    finally:
+        if contato_reservado is not None and not conn.closed:
+            liberar_contato(contato_reservado, cursor)
+            conn.commit()
 
 
 def _validar_integracao_ativa(integracao):

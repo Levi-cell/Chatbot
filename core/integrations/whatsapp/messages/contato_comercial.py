@@ -1,6 +1,14 @@
 """Texto que o cliente pode enviar ao consultor ao abrir o botão comercial."""
 
-from core.validacoes.turno import ROTULOS_TURNO, validar_turno
+from core.validacoes.turno import validar_turno
+
+
+TEXTOS_PREFERENCIA = {
+    "manha": " Prefiro pela manhã.",
+    "tarde": " Prefiro à tarde.",
+    "noite": " Prefiro à noite.",
+    "sabado": " Prefiro no sábado.",
+}
 
 
 def montar_mensagem_contato_comercial(
@@ -21,8 +29,8 @@ def montar_mensagem_contato_comercial(
         raise ValueError("Idade do participante ausente para contato comercial")
     artigo = "a" if genero_agente == "feminino" else "o"
     inicio = f"Olá, venho do atendimento com {artigo} {nome_agente.strip()}, me chamo {nome_cliente.strip()}"
-    preferencia = " no sábado" if turno == 'sabado' else (
-        f" no turno da {ROTULOS_TURNO[validar_turno(turno)]}"
+    preferencia = (
+        TEXTOS_PREFERENCIA[validar_turno(turno)]
         if turno is not None
         else ""
     )
@@ -31,14 +39,9 @@ def montar_mensagem_contato_comercial(
         return (
             f"{inicio} e gostaria de reservar uma demonstração prática para "
             f"{nome_dependente.strip()}, que tem {idade_aluno} anos."
-            + (
-                (" Prefiro sábado." if turno == 'sabado'
-                 else f" Prefiro o turno da {ROTULOS_TURNO[validar_turno(turno)]}.")
-                if turno is not None
-                else ""
-            )
+            + preferencia
         )
     return (
         f"{inicio}, tenho {idade_aluno} anos e gostaria de reservar "
-        f"uma demonstração prática para mim{preferencia}."
+        f"uma demonstração prática para mim.{preferencia}"
     )

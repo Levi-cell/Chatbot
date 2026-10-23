@@ -415,3 +415,41 @@ conservam o mesmo envio, sem duplicar o bloco. Usa PostgreSQL descartável local
 com HTTP simulado; não confirma liberação de colunas no Apps Script publicado.
 Contrato, arquivos completos e pré-requisito externo estão no
 [plano aplicado](../docs/fireads_sincronizacao_campos.md).
+
+
+### Telefone e entrega FireAds antes do Funil — 22/10/2026
+
+`test_fireads_entrega_telefone` cobre todas as variantes de telefone, recência,
+canais manuais, criação Orgânico, recuperação com marcador e 300s separados para
+GET e POST (sem renovar nos redirects). As suítes de coleta/destinatário/turno
+passam a exigir que campos divergentes não excluam a linha do mesmo telefone.
+
+`test_entrega_fireads_primeiro_postgres` usa o schema real em PostgreSQL local
+vazio, substituindo apenas HTTP/WhatsApp: confirmação dashboard antes do Funil,
+canal Chat Fire da leitura final, falha GET sem criar nem enviar, POST com resposta
+perdida, retry Funil sem nova escrita, unidade sem FireAds, prazo renovado após
+fila e reserva de dashboard ainda válida aos cinco minutos. As suítes históricas
+continuam cobrindo contratos 1–4. Não chama serviços de produção.
+
+### Monitoramento por período e origem FireAds — 22/10/2026
+
+`test_monitoramento_origens` verifica atribuição comprovada, anúncio só Meta,
+origens provisórias fora dos totais, compatibilidade com a referência histórica,
+conversas versus contatos únicos, isolamento dos dados públicos e habilitação
+do recurso pelo servidor. `test_monitoramento_painel` e
+`test_encerramentos_por_idade` validam que tags/filtros usam só a representante
+do período, sem excluir uma antiga por existir outra fora do intervalo.
+
+`test_monitoramento_fireads_postgres` verifica as consultas SQL reais: primeiro
+recortar, depois selecionar; limites de período; Funil/avaliação da mesma conversa;
+destinatário indefinido; isolamento por unidade e contagem de todos os atendimentos.
+Reutiliza somente PostgreSQL `test_chatbot_fireads` descartável em loopback.
+`test_entrega_fireads_primeiro_postgres` também cobre persistência do anúncio
+nas duas capturas, novo Orgânico mesmo com um anterior, resposta perdida sem
+duplicar e recusa explícita de append com alternativa Orgânica persistida.
+O fixture PostgreSQL bloqueia HTTP real por padrão; mocks fornecem as respostas.
+
+Revisão visual local com dados fictícios: Chrome via Playwright, desktop 1440×1050
+e celular 390×844. Conferidos filtros, submenu FireAds, Escape/Enter, toque,
+lista vazia limpando seleção, cinco barras, anúncios não informados, unidade sem
+integração e ausência de rolagem horizontal. Nenhuma publicação está incluída.

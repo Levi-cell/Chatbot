@@ -26,6 +26,8 @@ def buscar_unidade(id_unidade, cursor):
     cursor.execute("""
         SELECT u.id_unidade, u.nome_unidade, ac.nome_agente, ac.idade_minima_suporte,
                ac.email_obrigatorio, ac.bpa_ativo,
+               EXISTS (SELECT 1 FROM chatbot.integracao_fireads i
+                       WHERE i.id_unidade=u.id_unidade AND i.integracao_ativa AND i.contrato_validado) AS fireads_habilitada,
                MIN(CASE WHEN h.quem_enviou = 'cliente' THEN h.received_data_hora END) AS inicio_historico
           FROM chatbot.unidade u
           JOIN chatbot.atendimento_customizado ac ON ac.id_unidade = u.id_unidade
@@ -49,7 +51,9 @@ def listar_conversas(id_unidade, inicio, fim, cursor):
     filtro_atividade = _periodo('h.received_data_hora', inicio, fim, p_atividade)
     cursor.execute(f"""
         WITH conversas_periodo AS (
-            SELECT c.*
+            SELECT c.*,
+                   ROW_NUMBER() OVER (PARTITION BY c.id_cliente ORDER BY c.iniciou_em DESC, c.id_conversa DESC) AS ordem,
+                   ARRAY_AGG(c.id_conversa) OVER (PARTITION BY c.id_cliente) AS ids_conversa_periodo
               FROM chatbot.conversa c
              WHERE c.id_unidade = %s
                AND EXISTS (
@@ -58,18 +62,16 @@ def listar_conversas(id_unidade, inicio, fim, cursor):
                       AND h0.quem_enviou = 'cliente' {filtro_contato}
                )
         )
-        SELECT c.id_cliente, c.id_conversa, c.status_dependente,
+        SELECT c.id_cliente, c.id_conversa, c.iniciou_em, c.ids_conversa_periodo,
+               CASE WHEN c.status_dependente IS TRUE OR c.id_etapa_atual >= 4
+                    OR c.contexto_coleta #>> '{{campos,destinatario,status}}' = 'aceito'
+                    THEN c.status_dependente ELSE NULL END AS status_dependente,
+               c.contexto_fireads, q.dados AS dados_consulta,
                c.id_etapa_atual, c.turno, cl.nome AS nome_cliente, cl.waid_telefone,
                cl.email, cl.idade AS idade_titular,
                cl.profissao AS profissao_cliente, c.profissao AS profissao_conversa,
                d.nome_dependente, d.idade AS idade_dependente,
-               CASE WHEN c.followup_stage IN (1, 2) AND NOT EXISTS (
-                   -- Considera atendimentos novos até fora do período selecionado.
-                   SELECT 1 FROM chatbot.conversa posterior
-                   WHERE posterior.id_cliente = c.id_cliente
-                     AND posterior.id_unidade = c.id_unidade
-                     AND posterior.id_conversa > c.id_conversa
-               ) THEN c.followup_stage ELSE 0 END AS followup_stage_atual,
+               c.followup_stage AS followup_stage_atual,
                EXISTS (SELECT 1 FROM chatbot.funil_envios f
                         WHERE f.id_conversa = c.id_conversa AND f.status = 'sent'
                         {filtro_funil}) AS foi_funil,
@@ -89,8 +91,10 @@ def listar_conversas(id_unidade, inicio, fim, cursor):
                    AND (h.quem_enviou = 'cliente' OR (h.quem_enviou = 'bot' AND h.status_envio = 'sent'))
                  ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1) AS ultima_mensagem_id
           FROM conversas_periodo c
+          LEFT JOIN chatbot.consulta_fireads q ON q.id_conversa=c.id_conversa
           JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
           LEFT JOIN chatbot.dependente d ON d.id_conversa = c.id_conversa
+         WHERE c.ordem=1
          ORDER BY ultima_atividade DESC NULLS LAST, c.id_conversa DESC
     """, tuple(
         p_contato + p_funil + p_avaliacao
@@ -205,28 +209,34 @@ def buscar_etapas(id_unidade, inicio, fim, cursor):
     filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
     cursor.execute(f"""
         WITH conversas_periodo AS (
-            SELECT c.id_cliente, c.id_conversa, c.id_etapa_atual,
-                   MAX(h.received_data_hora) AS ultima_atividade
-              FROM chatbot.conversa c
-              JOIN chatbot.historico_mensagens h
-                ON h.id_conversa = c.id_conversa
-             WHERE c.id_unidade = %s AND h.quem_enviou = 'cliente' {filtro}
-             GROUP BY c.id_cliente, c.id_conversa, c.id_etapa_atual
-        ),
-        ultimas_conversas AS (
-            SELECT *, ROW_NUMBER() OVER (
-                       PARTITION BY id_cliente
-                       ORDER BY ultima_atividade DESC, id_conversa DESC
-                   ) AS ordem
-              FROM conversas_periodo
+            SELECT c.id_conversa, c.id_etapa_atual FROM chatbot.conversa c
+             WHERE c.id_unidade=%s AND EXISTS (
+                 SELECT 1 FROM chatbot.historico_mensagens h WHERE h.id_conversa=c.id_conversa
+                   AND h.quem_enviou='cliente' {filtro})
         )
-        SELECT e.id_etapa, e.nome_etapa, COUNT(c.id_cliente) AS quantidade
-          FROM chatbot.etapa e
-          LEFT JOIN ultimas_conversas c
-            ON c.id_etapa_atual = e.id_etapa AND c.ordem = 1
+        SELECT e.id_etapa, e.nome_etapa, COUNT(c.id_conversa) AS quantidade
+          FROM chatbot.etapa e LEFT JOIN conversas_periodo c ON c.id_etapa_atual=e.id_etapa
          WHERE e.id_etapa BETWEEN 1 AND 24
-         GROUP BY e.id_etapa, e.nome_etapa ORDER BY e.id_etapa
+         GROUP BY e.id_etapa,e.nome_etapa ORDER BY e.id_etapa
     """, tuple(parametros))
+    return _linhas(cursor)
+
+
+def buscar_origens(id_unidade, inicio, fim, cursor):
+    parametros = [id_unidade]
+    filtro = _periodo('h.received_data_hora', inicio, fim, parametros)
+    p_funil = []
+    f_funil = _periodo('f.enviado_em', inicio, fim, p_funil)
+    cursor.execute(f"""
+        SELECT c.id_conversa,c.id_cliente,c.contexto_fireads,
+               CASE WHEN c.contexto_fireads ? 'atribuicao_monitoramento' THEN NULL ELSE q.dados END AS dados_consulta,
+               EXISTS (SELECT 1 FROM chatbot.funil_envios f WHERE f.id_conversa=c.id_conversa
+                       AND f.status='sent' {f_funil}) AS foi_funil
+          FROM chatbot.conversa c LEFT JOIN chatbot.consulta_fireads q ON q.id_conversa=c.id_conversa
+         WHERE c.id_unidade=%s AND EXISTS (
+             SELECT 1 FROM chatbot.historico_mensagens h WHERE h.id_conversa=c.id_conversa
+               AND h.quem_enviou='cliente' {filtro})
+    """, tuple(p_funil + parametros))
     return _linhas(cursor)
 
 

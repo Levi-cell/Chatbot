@@ -57,12 +57,12 @@ class AutoridadeTests(unittest.TestCase):
         self.assertNotIn('turno', snap['identidade_coleta'])
         self.assertFalse(snap['coletar_turno'])
 
-    def test_consulta_divergente_preserva_os_conhecidos_e_deixa_so_ausente_pendente(self):
+    def test_consulta_divergente_preserva_conhecidos_e_completa_email(self):
         estado = coleta('Nome: Ana Paula Silva\nPara quem é: Minha filha\nTurno: Tarde')
         r = interpretar_parcial([row(Nome='Outro Nome')], NUMERO, None, ABA_DESTINO, estado)
         for tipo in ('nome', 'destinatario', 'turno'):
             self.assertEqual(r['coleta']['campos'][tipo], estado['campos'][tipo])
-        self.assertEqual(r['coleta']['campos']['email']['status'], 'ausente')
+        self.assertEqual(r['coleta']['campos']['email']['valor'], 'ana@example.com')
 
 
 class SelecaoTests(unittest.TestCase):
@@ -72,17 +72,17 @@ class SelecaoTests(unittest.TestCase):
                 row(_row=100, Canal='Indicação')]
         self.assertEqual(escolher(rows, retrato())['referencia']['linha'], 45)
 
-    def test_relacao_exata_depois_logica_depois_demais_e_recencia(self):
+    def test_recencia_independe_da_relacao_e_do_turno(self):
         snap = retrato(coleta(FORM.replace('Para mim', 'Minha filha')))
         rows = [dict(row(), _row=10, **{'Para quem é': 'Para minha filha'}),
                 dict(row(), _row=20, **{'Para quem é': 'Para uma amiga'}),
                 dict(row(), _row=30, **{'Período preferido': 'Tarde'})]
-        for restantes, linha in [(rows, 10), (rows[1:], 20), (rows[2:], 30)]:
+        for restantes, linha in [(rows, 30), (rows[1:], 30), (rows[2:], 30)]:
             self.assertEqual(escolher(restantes, snap)['referencia']['linha'], linha)
 
-    def test_prioridade_compativel_nome_email_antes_de_divergente_recente(self):
+    def test_email_divergente_nao_exclui_registro_mais_recente(self):
         rows = [row(_row=44), row(_row=99, Email='outro@example.com')]
-        self.assertEqual(escolher(rows, retrato())['referencia']['linha'], 44)
+        self.assertEqual(escolher(rows, retrato())['referencia']['linha'], 99)
 
     def test_fallback_usa_data_antes_da_linha(self):
         rows = [dict(row(Nome='X'), _row=90, **{'Data/Hora': '18/10/2026'}),

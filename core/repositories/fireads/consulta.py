@@ -2,6 +2,7 @@
 
 from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
+from core.integrations.fireads.atribuicao import CHAVE, vincular
 
 from core.repositories.atendimento.dependentes import inserir_dependente_para_conversa
 from core.repositories.atendimento.followup import LockConversaPerdido
@@ -93,6 +94,8 @@ def aplicar_decisao(abertura, id_conversa, id_consulta, decisao, cursor):
         concluida=True,
         id_conversa=id_conversa,
     )
+    if decisao.get(CHAVE):
+        decisao[CHAVE] = vincular(decisao[CHAVE], id_conversa)
     cursor.execute(
         """UPDATE chatbot.conversa SET origem_fireads=%s,contexto_fireads=%s
         WHERE id_conversa=%s AND id_etapa_atual IS NULL AND contexto_fireads IS NULL

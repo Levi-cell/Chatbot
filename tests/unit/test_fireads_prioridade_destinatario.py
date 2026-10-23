@@ -1,4 +1,4 @@
-"""Complementação usa prioridades de destinatário sem sobrescrever a mensagem."""
+"""Complementação por telefone e recência sem sobrescrever a mensagem."""
 
 from copy import deepcopy
 import unittest
@@ -38,15 +38,16 @@ class PrioridadeDestinatarioTests(unittest.TestCase):
         self.assertEqual(r['coleta']['campos']['destinatario']['fonte'], 'mensagem')
         self.assertEqual(estado, antes)
 
-    def test_relacao_exata_antiga_precede_dependente_equivalente_mais_recente(self):
+    def test_registro_recente_precede_relacao_exata_antiga(self):
         r = consultar([registro(44, 'Para minha filha'), registro(90, 'Para uma amiga',
                        **{'Data/Hora': '21/10/2026 10:00'})])
-        self.assertEqual(r['referencia']['linha'], 44)
+        self.assertEqual(r['referencia']['linha'], 90)
 
-    def test_mesmo_tipo_precede_outro_tipo_mais_recente(self):
+    def test_tipo_diferente_recente_e_selecionado_sem_substituir_o_informado(self):
         r = consultar([registro(44, 'Minha amiga'), registro(90, 'Para mim',
                        **{'Data/Hora': '21/10/2026 10:00'})])
-        self.assertEqual(r['referencia']['linha'], 44)
+        self.assertEqual(r['referencia']['linha'], 90)
+        self.assertTrue(valor(r['coleta'], 'destinatario')['dependente'])
 
     def test_cada_prioridade_desempata_por_data_e_linha(self):
         for destinatario in ('Minha filha', 'Meu amigo', 'Para mim'):
@@ -65,17 +66,17 @@ class PrioridadeDestinatarioTests(unittest.TestCase):
                 self.assertEqual(valor(r['coleta'], 'email'), 'ana@example.com')
                 self.assertEqual(r['coleta']['campos']['destinatario'], estado['campos']['destinatario'])
 
-    def test_ultimo_recurso_exige_turno_igual_quando_ja_aceito_sem_link(self):
+    def test_turno_divergente_nao_filtra_e_aceito_e_preservado(self):
         estado = coleta(turno='Tarde')
         rows = [registro(44, 'Para mim', **{'Período preferido': 'Tarde'}),
                 registro(45, 'Para mim', **{'Período preferido': 'Noite'}),
                 registro(46, 'Para mim', **{'Período preferido': ''})]
         r = consultar(rows, estado)
-        self.assertEqual(r['referencia']['linha'], 44)
+        self.assertEqual(r['referencia']['linha'], 46)
         self.assertEqual(valor(r['coleta'], 'turno'), 'tarde')
         r = consultar(rows[1:], estado)
-        self.assertIsNone(r['referencia'])
-        self.assertIsNone(valor(r['coleta'], 'email'))
+        self.assertEqual(r['referencia']['linha'], 46)
+        self.assertEqual(valor(r['coleta'], 'email'), 'ana@example.com')
 
     def test_turno_nao_anula_prioridades_de_relacao_ou_tipo(self):
         for destinatario in ('Minha filha', 'Minha amiga'):
@@ -91,15 +92,16 @@ class PrioridadeDestinatarioTests(unittest.TestCase):
         self.assertEqual(r['referencia']['linha'], 44)
         self.assertNotIn('turno', r['coleta']['campos'])
 
-    def test_nome_email_conhecidos_filtram_todos_os_niveis(self):
+    def test_nome_email_divergentes_nao_filtram_e_conhecidos_sao_preservados(self):
         for destinatario in ('Minha filha', 'Minha amiga', 'Para mim'):
             with self.subTest(destinatario=destinatario):
-                self.assertIsNone(consultar([registro(44, destinatario, Nome='Outra Pessoa')])['referencia'])
+                self.assertEqual(consultar([registro(44, destinatario, Nome='Outra Pessoa')])['referencia']['linha'], 44)
                 r = consultar([registro(44, destinatario, Email='outro@example.com')],
                               coleta(extras='\nEmail: ana@example.com'))
-                self.assertIsNone(r['referencia'])
+                self.assertEqual(r['referencia']['linha'], 44)
+                self.assertEqual(valor(r['coleta'], 'email'), 'ana@example.com')
         rows = [registro(45, 'Minha filha', Nome='Outra Pessoa'), registro(44, 'Minha amiga')]
-        self.assertEqual(consultar(rows)['referencia']['linha'], 44)
+        self.assertEqual(consultar(rows)['referencia']['linha'], 45)
 
     def test_outro_telefone_e_canal_manual_nao_entram_na_prioridade(self):
         rows = [registro(44, 'Minha filha', WhatsApp='5511999990003'),
@@ -114,10 +116,10 @@ class PrioridadeDestinatarioTests(unittest.TestCase):
         self.assertIsNone(valor(r['coleta'], 'destinatario'))
         self.assertEqual(valor(r['coleta'], 'turno'), 'sabado')
 
-    def test_nao_mistura_email_de_outra_linha_apos_escolher_relacao_exata(self):
-        rows = [registro(44, 'Minha filha', Email=''), registro(45, 'Minha amiga')]
+    def test_nao_resgata_email_antigo_quando_linha_recente_esta_vazia(self):
+        rows = [registro(44, 'Minha filha'), registro(45, 'Minha amiga', Email='')]
         r = consultar(rows)
-        self.assertEqual(r['referencia']['linha'], 44)
+        self.assertEqual(r['referencia']['linha'], 45)
         self.assertIsNone(valor(r['coleta'], 'email'))
 
     def test_entrega_usa_a_linha_vinculada_sem_alterar_campos_da_planilha(self):

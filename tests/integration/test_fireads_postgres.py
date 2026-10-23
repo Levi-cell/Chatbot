@@ -49,6 +49,8 @@ GOOGLE = {
 )
 class FireAdsPostgresTests(unittest.TestCase):
     def setUp(self):
+        self.enterContext(patch('requests.sessions.Session.request',
+                               side_effect=AssertionError('HTTP real proibido nos testes de integração')))
         self.indicador = self.enterContext(patch(
             "workers.worker_consulta_dash.consulta_worker.indicar_digitacao", return_value=True,
         ))
@@ -978,7 +980,8 @@ class FireAdsPostgresTests(unittest.TestCase):
         from workers.worker_funil.processamento import processar_envio_funil
         cid, mensagem, versao, contexto = self.solicitar_pendente()
         reserva = pendencias.reservar(self.cursor)
-        row = dict(como_aba_geral([GOOGLE], [])[0], Canal=canal, **{'Período preferido': turno})
+        row = dict(como_aba_geral([GOOGLE], [])[0], Canal=canal,
+                   **{'Período preferido': turno, 'Observação': 'Anotação original'})
         from core.integrations.fireads.coleta_abertura import interpretar_parcial
         decisao = interpretar_parcial([row], NUMERO, None, reserva['entrada']['aba'], reserva['entrada']['coleta'])
         self.assertTrue(pendencias.concluir(reserva, {'decisao': decisao, 'fontes': {'geral': [row]}}, self.cursor))
@@ -1001,6 +1004,12 @@ class FireAdsPostgresTests(unittest.TestCase):
         fila_funil.sincronizar_envios_elegiveis(self.cursor)
         envio = fila_funil.reivindicar_proximo_envio(self.cursor)
         self.conn.commit()
+        cliente_dash = Mock()
+        cliente_dash.consultar.return_value = {'headers': list(row), 'rows': [row]}
+        cliente_dash.enviar.side_effect = lambda aba, **op: {
+            'success': True, 'aba': aba, 'row': op['row'], 'updated': [*op['campos'], 'Observação']}
+        self.enterContext(patch('workers.worker_funil.preparacao_fireads.ClienteFireAds', return_value=cliente_dash))
+        self.enterContext(patch('workers.worker_funil.fireads.ClienteFireAds', return_value=cliente_dash))
         with patch('workers.worker_funil.processamento.enviar_oportunidade', return_value={'resposta': {}, 'status_http': 200}) as http:
             sucesso = processar_envio_funil(envio, self.conn, self.cursor)
             self.assertTrue(sucesso, self.conn.execute('SELECT ultimo_erro FROM chatbot.funil_envios').fetchone())

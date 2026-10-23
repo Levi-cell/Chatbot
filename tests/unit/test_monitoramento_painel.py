@@ -238,8 +238,9 @@ class MonitoramentoPainelTests(unittest.TestCase):
         ]
         resultado = consolidar_conversas(linhas)
         self.assertEqual(resultado[0]['ids_conversa'], [10, 11])
-        self.assertEqual(resultado[0]['perfis'], ['dependente', 'menor', 'idoso'])
-        self.assertEqual(resultado[0]['perfis_resumidos'], ['dependente_menor', 'idoso'])
+        self.assertEqual(resultado[0]['perfis'], ['idoso'])
+        self.assertEqual(resultado[0]['perfis_resumidos'], ['idoso'])
+        self.assertEqual(resultado[0]['destinatario'], 'titular')
         self.assertEqual(resultado[0]['ultima_mensagem'], 'Olá')
 
     def test_perfis_resumidos_distinguem_dependentes_e_titulares(self):

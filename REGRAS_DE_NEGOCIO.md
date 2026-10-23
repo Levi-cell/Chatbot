@@ -1285,7 +1285,10 @@ Implementação principal:
   dias, 2, 3 e 6 meses e 1 ano. Uma janela finita compara seus indicadores com
   a janela imediatamente anterior de igual duração.
 - Conversas técnicas do mesmo cliente são consolidadas somente dentro da unidade
-  autorizada. Os filtros locais são Todas, Comercial, Follow-up, Funil e Avaliadas; os
+  autorizada. Primeiro recortar conversas com mensagem do cliente no período
+  (início inclusivo/fim exclusivo), depois escolher a última por iniciou_em e ID.
+  Todos os filtros e tags usam essa representante, sem herdar estados das anteriores.
+  Os filtros locais incluem Todas, Comercial, Follow-up, Funil, Avaliadas, Titular e Dependentes; os
   perfis visuais são Menor de 18, Adulto, 60+ e Dependente. Na lista de
   conversas, as etiquetas ao lado da data preservam a relação entre faixa
   etária e destino nas formas abreviadas DP -18, DP 18–59, DP 60+, 18–59 e
@@ -1297,8 +1300,8 @@ Implementação principal:
 - As opções `idade_minima_suporte`, `email_obrigatorio` e `bpa_ativo` são lidas
   da unidade. O limite é apresentado como política; não modifica tags 18–59/60+
   ou de dependentes nem esconde envios ao Funil registrados em qualquer faixa.
-- Comercial mostra somente chats cuja última conversa real na unidade encerrou
-  por idade. Uma conversa nova remove a tag, mesmo fora do período consultado;
+- Comercial mostra somente chats cuja última conversa elegível no período encerrou
+  por idade. Uma conversa nova dentro do período remove a tag anterior; fora dele não interfere;
   a configuração atual não altera uma tag histórica. A legenda explica cada filtro.
 - Relatórios possui a tabela Encaminhamentos e encerramentos por idade abaixo
   dos quatro KPIs. Conta conversas (não contatos), por `finalizou_em >= início`
@@ -1310,8 +1313,9 @@ Implementação principal:
   Distingue contato enviado de encerramento sem contato; não comprova clique,
   atendimento humano, matrícula ou envio ao Funil. Falha de consulta não é zero.
 - O relatório mostra métricas, comparação, demanda ao longo do tempo, perfis,
-  satisfação e a etapa atual da conversa mais recente de cada contato que teve
-  atividade no período. Cada contato conta uma vez. A etapa é um retrato atual;
+  satisfação e a etapa registrada de todas as conversas com atividade do cliente
+  no período. Contatos únicos e contatos enviados ao Funil deduplicam por cliente;
+  origens, anúncios e etapas contam por conversa. A etapa é um retrato atual;
   o banco não permite reconstruir em qual etapa a conversa estava em uma data
   passada.
 - O histórico armazena texto e tipo da mensagem, mas não o payload exato dos
@@ -1468,8 +1472,8 @@ Depois do encerramento, outra mensagem abre novo ID de conversa, com stage zero
 e mensagem inicial da etapa 1, sem prefixo de retorno nem nome de cadastro antigo.
 
 O filtro **Follow-up** do painel considera stage 1 ou 2 da conversa mais recente
-do mesmo cliente/unidade. Uma conversa posterior invalida o marcador antigo,
-inclusive se estiver fora do período selecionado. O chat continua reunindo todo
+do mesmo cliente/unidade dentro do período. Uma conversa posterior só invalida
+o marcador antigo se também participar do recorte. O chat continua reunindo todo
 o histórico permitido pelo período; excluir do filtro não apaga atendimento.
 
 A primeira entrada aceita com stage positivo em conversa ainda ativa é armazenada e validada pelos
@@ -1674,7 +1678,7 @@ equivalentes são um único valor. O telefone é sempre o remetente WhatsApp.
 
 Com todos os campos necessários aceitos, iniciar na profissão (etapa 4) sem consulta.
 Sem link de agendamento, turno também é necessário para dispensar a consulta. Com
-FireAds e coleta incompleta, consultar uma vez uma inscrição compatível; completar
+FireAds e coleta incompleta, consultar uma vez o registro elegível mais recente do telefone; completar
 somente o desconhecido a partir dessa inscrição. Sem FireAds, perguntar o que
 falta. Nome pendente inicia na 1; destinatário pendente com nome conhecido inicia
 na 2; nome e destinatário conhecidos iniciam na 4. E-mail pendente mantém a etapa
@@ -1687,39 +1691,70 @@ reinterpretar mensagens de conversas em andamento nem reconsultar por etapa.
 Unidades sem FireAds preservam codigo_canal_venda da integração Funil (padrão
 113340); a coleta não lhes atribui origem FireAds nem gera entrega ao dashboard.
 
-Na entrega com snapshot 4 e sem referência vinculada, selecionar pelo telefone
-do remetente entre Google Ads, Meta Ads, Orgânico Site e Chat Fire. Priorizar
-nome/e-mail compatíveis, destinatário exato, equivalência titular/dependente e
-demais compatíveis, incluindo turno no último recurso sem link. Dentro de cada
-prioridade, data/hora mais recente e depois maior linha. Se nenhum combinar,
-usar a inscrição elegível mais recente desse telefone e sincronizar os dados
-aceitos no chatbot; divergência não cria outra inscrição. Sem inscrição elegível,
-criar com a origem preservada e a proteção de e-mail em outro telefone.
+Na consulta e na preparação de uma entrega nova, o telefone do remetente é a
+única identidade. Procurar todas as variantes brasileiras já suportadas, com e
+sem DDI, máscaras e nono dígito. Somente Google Ads, Meta Ads, Chat Fire e Orgânico
+Site autorizam reutilizar uma linha; entre elas escolher data/hora válida mais recente e depois maior linha.
+Sem data válida, usar maior linha. Nome, e-mail, destinatário e turno não filtram.
+Se somente os canais manuais existirem, preservar essas linhas e criar Orgânico
+(113481). Sem telefone encontrado após leitura bem-sucedida, também criar Orgânico.
+Somente registros Orgânico também levam a criar outra linha para uma nova conversa.
+Retentativa da mesma entrega reconcilia o marcador e não cria outra linha.
+Recusa inequívoca de append por telefone duplicado permite atualizar o Orgânico
+mais recente do mesmo telefone no próximo ciclo, com a decisão persistida.
+Sem formulário elegível, canal vazio/desconhecido mantém a entrega pendente, sem
+inventar código nem criar duplicata. Canais conhecidos: Google Ads 113336, Meta
+Ads 113340, Orgânico Site/Chat Fire/Orgânico 113481.
 
-Congelar campos e destino antes do POST. Retry mantém esses valores mesmo se
-o cadastro local mudar; relocaliza a inscrição pelos campos não escritos e
-reconhece gravação parcial feita pelo próprio chatbot. Não trocar uma referência
-apagada ou ambígua por outra inscrição. Preservar observações anteriores e o
-bloco compacto compartilhado com o Funil. Erro de leitura não autoriza criar.
+O painel só atribui FireAds com evidência de um desses quatro canais. `lead_no_dash`
+ou código comercial compartilhado não provam origem. Uma consulta inicial bem-sucedida
+ou a preparação da entrega confirmam a atribuição; mensagem completa não cria
+consulta extra para métricas. Timeout/origem provisória fica sem identificação.
+Unidades integradas têm filtro FireAds com os quatro subcanais e filtro 100% orgânico.
+Titular/Dependentes exigem destinatário confirmado; false padrão não prova titular.
+Relatórios exibem barras de atendimentos/envios confirmados ao Funil por canal,
+contando todas as conversas do período e deduplicando retentativas. Para Meta,
+agrupar a coluna `Anuncio` (sem acento), com grupo Anúncio não informado quando vazio.
+O nome/código do criativo não é apresentado como ID oficial da Meta. Dados antigos
+só entram quando já existe evidência persistida; não consultar planilha atual
+para atribuir campanha histórica. Sem integração, não mostrar esses filtros/métricas.
 
-Implementação local aplicada em 22/10/2026 conforme
-[o plano de sincronização](docs/fireads_sincronizacao_campos.md). A publicação em
-produção requer a FireAds liberar as quatro colunas editáveis no Web App e
-confirmar todas as colunas gravadas no recibo. Não exige outra migração SQL nem
-converte envios antigos. Mensagem inicial é prioritária; correções explícitas
-aceitas durante o atendimento prevalecem. A consulta só completa o desconhecido.
+Na abertura, importar somente campos ausentes/inválidos/conflitantes; preservar
+os aceitos da mensagem. O que faltar continua sendo perguntado na etapa habitual.
+Mensagem completa dispensa a consulta inicial e não implica origem Meta Ads.
+A entrega sempre confirma a linha e o canal na planilha antes de gerar o payload.
+Para unidades FireAds, gravar/confirmar o dashboard ANTES do Funil. Sem FireAds,
+continuar enviando diretamente ao Funil com o código configurado da unidade.
+
+Novos snapshots 5 congelam linha, canal, campos e observações antes do primeiro
+POST. A recuperação mantém a decisão, reconhece escrita parcial e resposta
+perdida; não troca destino por uma inscrição posterior. Preservar observações
+existentes e acrescentar o bloco compartilhado apenas uma vez. Dados aceitos na
+mensagem ou atendimento atualizam Nome, Email, Para quem é e, sem link, Período
+preferido; correções explícitas aceitas no atendimento prevalecem. Campos ausentes
+não apagam a planilha. Canal, telefone, data e demais colunas são preservados.
+
+Timeout nunca comprova ausência. Falha do dashboard mantém também o Funil pendente.
+Dashboard já confirmado e Funil pendente retomam somente o Funil. Envios históricos
+mantêm seu payload/canal, sem conversão ou reenvio dos concluídos. A limitação
+histórica de resposta perdida do próprio Funil continua; ele não oferece aqui
+reconciliação equivalente ao marcador do dashboard.
+
+Consulta, update e append têm cada um até 300s de HTTP, incluindo redirects.
+A fila inicial espera até 300s; a reserva exclusiva renova o prazo para 330s,
+separando 300s HTTP e margem de 30s para indicador/persistência. Restarts não
+renovam uma consulta já expirada. Na entrega, a reserva é de 960s; o Funil usa
+no mínimo esse prazo. O HTTP fica fora de transações; locks de sessão por contato
+serializam a preparação e escrita entre nossos workers, sem bloquear operadores.
+Não exige nova migração SQL. O plano atualizado está em
+[fireads_sincronizacao_campos.md](docs/fireads_sincronizacao_campos.md).
 
 
 ## Chat Fire e turno antecipado (21/10/2026)
 
 Chat Fire é elegível na aba geral, com origem própria e código Funil 113481.
-Nome e e-mail já aceitos filtram a inscrição. Na complementação de dados,
-priorizar destinatário exato; depois mesmo tipo lógico titular/dependente;
-por último outra inscrição compatível com os demais dados conhecidos. Dentro
-de cada nível, usar data/hora e depois maior linha. No último recurso, exigir
-também o mesmo turno quando já aceito para uma unidade sem link; turno ausente
-ou diferente na planilha não satisfaz esse último nível. Sem destinatário
-conhecido, manter a escolha mais recente por nome/e-mail.
+Nome, e-mail, destinatário e turno já aceitos não filtram registros da planilha.
+Selecionar pelo telefone e recência, preservando o que o cliente informou.
 A coluna Período preferido pode completar o turno
 apenas em unidade sem link. Não sobrescrever preferência aceita na mensagem.
 Com link, não antecipar nem exigir turno. Sem FireAds, coletar da mensagem e

@@ -69,9 +69,10 @@ def preparar(contexto, mensagem, lock_version, cursor, abertura, consulta):
     if not estado['fireads_aplicavel']:
         return anexar(contexto, estado)
     if decisao is None:
-        decisao = {'resultado': 'importado', 'origem': 'meta', 'referencia': None, 'motivo': 'formulario_chat_completo'}
-    elif estado['rota_formulario_chat'] and decisao.get('origem') == 'organico' and not decisao.get('referencia'):
-        decisao['origem'] = 'meta'
+        # Sem consulta não há atribuição de campanha. A entrega resolve a origem
+        # pela planilha antes de congelar as observações dos dois destinos.
+        decisao = {'resultado': 'importado', 'origem': 'organico', 'referencia': None,
+                   'motivo': 'canal_pendente_entrega'}
     decisao.pop('coleta', None)
     if decisao.get('resultado') == 'importado' and not completo(estado):
         decisao['resultado'] = 'incompleto'

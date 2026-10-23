@@ -5,6 +5,7 @@ import time
 
 from core.database.connection_aws import get_conn
 from core.integrations.whatsapp.pywa_functions.digitacao import indicar_digitacao
+from core.integrations.fireads.prazos import HTTP_SEGUNDOS, MARGEM_PERSISTENCIA_SEGUNDOS
 from core.repositories.fireads import pendencias
 from workers.worker_consulta_dash.consulta import consultar
 
@@ -35,10 +36,12 @@ def executar_ciclo():
                 mensagem["id_phone_unidade"], mensagem["id_hash"],
                 id_mensagem=mensagem["id_mensagem"], id_conversa=reserva["id_conversa"],
             )
-        # O indicador também consome o orçamento existente, sem reiniciar os 300s.
-        reserva["restante"] = max(
-            0.0, float(reserva["restante"]) - (time.monotonic() - inicio_reserva),
-        )
+        # A espera na fila não consome os 300s do HTTP. A reserva foi renovada
+        # sob advisory lock; margem separada permite confirmar o resultado.
+        reserva["restante"] = min(HTTP_SEGUNDOS, max(
+            0.0, float(reserva["restante"]) - (time.monotonic() - inicio_reserva)
+            - MARGEM_PERSISTENCIA_SEGUNDOS / 2,
+        ))
         resultado = consultar(reserva)
         gravado = pendencias.concluir(reserva, resultado, cursor)
         # Se o orçamento terminou durante a chamada, persistir o timeout também

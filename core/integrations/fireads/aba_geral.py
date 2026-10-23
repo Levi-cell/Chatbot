@@ -6,7 +6,9 @@ from .contrato import ErroFireAds, instante, localizar, normalizar, telefone
 
 VERSAO_CONSULTA = 2
 ORIGENS = {"google ads": "google", "meta ads": "meta", "organico site": "organico_site",
-           "chat fire": "chat_fire"}
+           "chat fire": "chat_fire", "organico": "organico"}
+CANAIS_FORMULARIO = {chave for chave, valor in ORIGENS.items() if valor != 'organico'}
+CANAIS_MANUAIS = {"indicacao", "lead franqueador"}
 CAMPOS_IDENTIDADE = ("WhatsApp", "Data/Hora", "Canal", "Nome", "Email", "Para quem é")
 
 
@@ -30,8 +32,22 @@ def mais_recente(rows, fuso=None):
 
 def selecionar_registro(rows, numero, fuso=None):
     encontrados = localizar(rows, numero, "WhatsApp", incluir_equivalentes=True)
-    elegiveis = [r for r in encontrados if normalizar(r.get("Canal")) in ORIGENS]
+    elegiveis = [r for r in encontrados if normalizar(r.get("Canal")) in CANAIS_FORMULARIO]
     return mais_recente(elegiveis, fuso), encontrados
+
+
+def selecionar_entrega(rows, numero, fuso=None):
+    """Só o telefone identifica; canais manuais nunca são alvo de escrita.
+
+    Canal desconhecido não é prova de ausência: exige configuração, sem criar
+    duplicata nem atribuir um código comercial inventado.
+    """
+    encontrados = localizar(rows, numero, "WhatsApp", incluir_equivalentes=True)
+    candidatos = [r for r in encontrados if normalizar(r.get("Canal")) in CANAIS_FORMULARIO]
+    row = mais_recente(candidatos, fuso)
+    if row is None and any(normalizar(r.get('Canal')) not in set(ORIGENS) | CANAIS_MANUAIS for r in encontrados):
+        raise ErroFireAds("Canal da linha mais recente não reconhecido; configurar antes de enviar")
+    return row
 
 
 def referencia_registro(row, aba, fuso=None):

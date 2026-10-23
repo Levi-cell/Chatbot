@@ -1,8 +1,9 @@
-"""Completa campos a partir de uma única inscrição compatível da aba geral."""
+"""Completa ausências a partir do registro mais recente do mesmo telefone."""
 
 from copy import deepcopy
 from core.validacoes.coleta_abertura import CAMPOS, campo, aceito, completo, normalizar
-from core.integrations.fireads.aba_geral import ORIGENS, mais_recente, referencia_registro
+from core.integrations.fireads.aba_geral import ORIGENS, selecionar_entrega, referencia_registro, mais_recente
+from core.integrations.fireads.atribuicao import CHAVE, capturar
 from core.integrations.fireads.contrato import localizar
 from core.integrations.fireads.extratores import extrair_nome, extrair_email
 
@@ -43,39 +44,13 @@ def compativel(conhecidos, candidatos, *, campos=CAMPOS):
 
 
 def selecionar_para_complementacao(rows, estado, fuso=None):
-    """Relação exata, mesmo titular/dependente e, por último, demais dados.
-
-    Nome/e-mail aceitos continuam obrigatórios em todos os níveis. O turno já
-    coletado restringe somente o último recurso com destinatário divergente.
-    Cada nível escolhe uma única inscrição pela data e depois pela linha.
-    """
-    conhecidos = estado['campos']
-    candidatos = [(row, campos_registro(row)) for row in rows]
-    candidatos = [(row, campos) for row, campos in candidatos
-                  if compativel(conhecidos, campos, campos=('nome', 'email'))]
-    if aceito(estado, 'destinatario'):
-        alvo = conhecidos['destinatario']
-        definidos = [(row, campos) for row, campos in candidatos
-                     if campos['destinatario']['status'] == 'aceito']
-        exatos = [row for row, campos in definidos
-                  if campos['destinatario']['identidade'] == alvo['identidade']]
-        if exatos:
-            return mais_recente(exatos, fuso)
-        equivalentes = [row for row, campos in definidos
-                        if campos['destinatario']['valor']['dependente'] == alvo['valor']['dependente']]
-        if equivalentes:
-            return mais_recente(equivalentes, fuso)
-        if estado.get('coletar_turno') and aceito(estado, 'turno'):
-            candidatos = [(row, campos) for row, campos in candidatos
-                          if compativel(conhecidos, campos, campos=('turno',))]
-    return mais_recente([row for row, _ in candidatos], fuso)
+    """Recebe somente linhas elegíveis do telefone; outros campos não filtram."""
+    return mais_recente(rows, fuso)
 
 
 def interpretar_parcial(rows, numero, fuso, aba, estado):
     resultado = deepcopy(estado)
-    encontrados = localizar(rows, numero, 'WhatsApp', incluir_equivalentes=True)
-    elegiveis = [r for r in encontrados if normalizar(r.get('Canal')) in ORIGENS]
-    row = selecionar_para_complementacao(elegiveis, estado, fuso)
+    row = selecionar_entrega(rows, numero, fuso)
     if row is not None:
         for c, recebido in campos_registro(row).items():
             if c == 'turno' and not resultado.get('coletar_turno'):
@@ -84,7 +59,7 @@ def interpretar_parcial(rows, numero, fuso, aba, estado):
                 resultado['campos'][c] = recebido
         resultado['formulario_identificado'] = True
     return {'resultado': 'importado' if completo(resultado) else ('incompleto' if row else 'ausente'),
-            'origem': ORIGENS[normalizar(row.get('Canal'))] if row else (
-                'meta' if estado['rota_formulario_chat'] else 'organico'),
+            'origem': ORIGENS[normalizar(row.get('Canal'))] if row else 'organico',
             'referencia': referencia_registro(row, aba, fuso), 'coleta': resultado,
-            'motivo': None if row else 'sem_registro_compativel', 'dados_titular': {}}
+            CHAVE: capturar(row, aba, fuso),
+            'motivo': None if row else 'sem_registro_elegivel', 'dados_titular': {}}

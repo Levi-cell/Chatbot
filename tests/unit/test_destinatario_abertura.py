@@ -85,12 +85,12 @@ class DestinatarioAberturaTests(unittest.TestCase):
         self.assertTrue(valor(coleta, 'destinatario')['dependente'])
         self.assertEqual(etapa_inicial(estado('Meu amigo')), 1)
 
-    def test_dashboard_prefere_relacao_exata_e_aceita_outro_dependente(self):
+    def test_dashboard_usa_recencia_sem_substituir_relacao_da_mensagem(self):
         coleta = estado('Full name: Ana Paula Silva\nMinha amiga')
         amiga = dict(ROW, **{'Para quem é': 'Para uma amiga'})
         filha = dict(ROW, _row=46, **{'Para quem é': 'Para minha filha'})
         decisao = interpretar_parcial([amiga, filha], NUMERO, None, ABA_DESTINO, coleta)
-        self.assertEqual(decisao['referencia']['linha'], amiga['_row'])
+        self.assertEqual(decisao['referencia']['linha'], filha['_row'])
         self.assertEqual(valor(decisao['coleta'], 'email'), 'ana@example.com')
         self.assertEqual(decisao['coleta']['campos']['destinatario']['fonte'], 'mensagem')
         equivalente = interpretar_parcial([filha], NUMERO, None, ABA_DESTINO, coleta)

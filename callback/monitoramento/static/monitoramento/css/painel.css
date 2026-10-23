@@ -311,6 +311,43 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .mini-tag.comercial,.tag-contato.comercial{background:#fff0cf;color:#71501b}
 .grupo-filtros{position:relative;display:flex;align-items:center;gap:4px;padding-right:8px;flex-shrink:0}
 .grupo-filtros .filtros-conversas{flex:1;min-width:0}
+.seletor-filtros{position:relative;flex:1;min-width:0;margin:0 0 8px 12px;color:#25492b}
+.seletor-filtros>summary{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 12px;border:1px solid #dce3d7;border-radius:10px;background:#fff;cursor:pointer;list-style:none}
+.seletor-filtros summary::-webkit-details-marker{display:none}
+.seletor-filtros>summary strong{flex:1;font-size:13px;overflow-wrap:anywhere}
+.filtro-prefixo{font-size:12px;color:#667463}
+.seletor-filtros summary:focus-visible,.menu-filtros button:focus-visible{outline:2px solid #477644;outline-offset:2px}
+.menu-filtros{position:absolute;z-index:30;top:calc(100% + 6px);left:0;right:0;padding:10px;background:#fff;border:1px solid #dce3d7;border-radius:14px;box-shadow:0 10px 30px #17301b26;max-height:var(--altura-menu-filtros,50dvh);overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
+.menu-instrucao,.grupo-fireads,.menu-filtros>[data-filtro="organico"]{grid-column:1/-1}
+.menu-instrucao{font-size:11px;line-height:1.5;color:#667463;margin:2px 6px 8px}
+.menu-filtros button,.grupo-fireads>summary{display:flex;align-items:center;justify-content:space-between;min-height:40px;width:100%;text-align:left;border:0;border-radius:8px;background:#fff;color:#304b31;padding:9px 12px;font:inherit;font-size:13px;cursor:pointer;white-space:normal}
+.menu-filtros button:hover,.grupo-fireads>summary:hover{background:#f0f5ec}
+.menu-filtros button.ativo{background:#284f30;color:#fff;font-weight:600}
+.grupo-fireads{border-top:1px solid #e9ede5;border-bottom:1px solid #e9ede5;margin:6px 0;padding:5px 0}
+.grupo-fireads>summary{list-style:none;font-weight:600}
+.submenu-fireads{padding-left:12px;border-left:2px solid #d7e5cc;margin:4px 8px}
+.tag-contato.origem,.mini-tag.origem{background:#e4edf4;color:#335e78}
+.origens-fireads{margin:20px 0;border-top:3px solid #668250}
+.resumo-origens{display:flex;flex-wrap:wrap;gap:14px 32px;padding:6px 0 16px;border-bottom:1px solid #e7ece2}
+.resumo-origens>div{display:flex;flex-direction:column;gap:4px}
+.resumo-origens strong{font-size:24px;font-weight:650;color:#284f30}
+.resumo-origens span,.legenda-origens{font-size:12px;color:#647260;line-height:1.5}
+.legenda-origens{margin:18px 0 8px}
+.tabela-origens{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.tabela-origens th,.tabela-origens td{padding:13px 8px;border-bottom:1px solid #edf0e9;vertical-align:middle;overflow-wrap:anywhere}
+.tabela-origens th{text-align:left;font-weight:500}
+.tabela-origens th:first-child{width:60%}
+.tabela-origens thead th{color:#61715b;font-size:11px;font-weight:600}
+.tabela-origens td,.tabela-origens thead th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.valor-funil{color:#2b633c;font-weight:650}
+.barras-origem{position:relative;height:10px;background:#f0f3ec;border-radius:6px;margin-top:8px;overflow:hidden}
+.barra-origem,.barra-funil{position:absolute;inset:0 auto 0 0;display:block;border-radius:6px;background:#b6cda0}
+.barra-funil{background:#3b6842}
+.anuncios-meta{margin-top:18px;padding:0 14px;border:1px solid #dce5d5;border-radius:10px;background:#fbfcf9}
+.anuncios-meta>summary{padding:14px 0;cursor:pointer;font-weight:600;font-size:13px;color:#365737}
+.anuncios-meta>summary:focus-visible{outline:2px solid #477644;outline-offset:2px}
+.anuncios-meta .tabela-origens{margin-bottom:12px}
+@media(max-width:720px){.menu-filtros button,.grupo-fireads>summary{min-height:44px}.tabela-origens th:first-child{width:44%}.tabela-origens th,.tabela-origens td{padding:12px 5px}.resumo-origens{gap:16px}.resumo-origens strong{font-size:22px}.anuncios-meta{padding:0 8px}}
 .informacao-filtros{flex:0 0 28px;width:28px;height:28px;border:1px solid #dce3d7;border-radius:50%;background:#fff;color:#395a36;font-weight:700;cursor:pointer}
 .informacao-filtros:focus-visible{outline:2px solid #395a36;outline-offset:2px}
 .legenda-filtros{position:absolute;z-index:20;left:10px;right:10px;top:100%;max-height:min(400px,50dvh);overflow:auto;padding:16px;background:#fff;border:1px solid #dce3d7;border-radius:12px;box-shadow:0 8px 24px #142b1526;font-size:12px;line-height:1.5}

@@ -1020,24 +1020,57 @@ fila existente; mensagem completa não cria consulta fictícia. Eventos históri
 `oferta_aceita_email_fireads` e `retorno_confirmado_email_fireads` conservam seus
 nomes para replay, mas aceitam também e-mail previamente coletado nesta conversa.
 
-Snapshots de entrega versão 3 conservam a identidade de coleta, o destino
-persistido e updates apenas de Observação. Novos snapshots com coleta usam
-versão 4: `core/integrations/fireads/sincronizacao_coleta.py` seleciona o destino
-e prepara os quatro campos aceitos no chatbot. O repositório congela os valores
-na criação do envio e salva o destino sob a reserva atual antes do primeiro POST.
-O worker confirma a transação antes do HTTP e mantém o lock de sessão por contato.
+Snapshots 1–4 já persistidos continuam legíveis, sem reconstrução ou alteração
+retroativa do canal. Novas entregas FireAds usam snapshot 5. O orquestrador
+`workers/worker_funil/preparacao_fireads.py` consulta a aba geral antes de montar
+qualquer payload; SQL continua em `core/repositories/fireads/envios.py`.
+`selecionar_entrega` em `aba_geral.py` escolhe por telefone/data/linha, exclui
+Indicação/Lead Franqueador e recusa canal desconhecido sem criar duplicata.
 
-Retries usam os campos congelados, reconhecem escrita parcial pelos atributos
-que não alteramos e relocalizam a inscrição quando possível. Marcador técnico
-sem os campos corretos requer reparo; bloco e campos corretos dispensam novo
-POST. `ClienteFireAds` envia Observação por último e exige recibo de todas as
-colunas. Snapshots legados não são convertidos nem reformatados. O contrato 4 é
-interno ao JSON, não uma release nem uma alteração SQL.
+A decisão e os dois payloads são congelados na mesma transação. O lock de sessão
+por integração/telefone cobre a preparação, gravação e envio, sendo liberado no
+finally. HTTP não mantém transação aberta. O worker processa o dashboard antes
+do Funil; dashboard pendente impede o POST Funil, enquanto dashboard sent evita
+repetir sua escrita. A fila independente ainda recupera dashboards históricos
+cujo Funil já foi enviado. Pagamento, configuração e posse são revalidados.
 
-Aplicação local em 22/10/2026 documentada em
-`docs/fireads_sincronizacao_campos.md`. O deploy exige liberação das colunas
-editáveis no Web App FireAds. As limitações de concorrência entre GET e POST
-externos continuam: o lock do chatbot não protege edições manuais da planilha.
+A reconciliação conserva a inscrição decidida, reconhece colunas já escritas e
+marcadores; não basta encontrar o marcador se os campos divergem. Observação vai
+por último e o recibo precisa confirmar todas as colunas solicitadas. Os GETs e
+POSTs não são atômicos com edições externas: não reordenar/excluir linhas durante
+a entrega. A janela histórica entre aceite do Funil e confirmação no banco
+continua conhecida, sem promessa de exactly-once externa.
+
+`core/integrations/fireads/prazos.py` centraliza 300s por operação HTTP, 330s para
+a reserva de consulta e 960s para entrega. A espera inicial da fila tem seus
+300s; a reserva renova o prazo sob advisory lock. Redis não controla essas decisões.
+O cliente em modo `por_operacao=True` reinicia o orçamento só na entrada de
+consultar/enviar, nunca em redirecionamentos. Erro de leitura não autoriza append.
+Campos e prazos reutilizam JSON/colunas existentes; não há DDL novo.
+
+### Atribuição e monitoramento FireAds — 22/10/2026
+
+`core/integrations/fireads/atribuicao.py` centraliza o metadado versionado
+`contexto_fireads.atribuicao_monitoramento`: canal confirmado, criativo Meta,
+momento/data da captura, referência e ID da conversa. A captura inicial é
+preservada quando a preparação da entrega confirma outra referência; a captura
+final orienta o painel. O snapshot 5 guarda o mesmo metadado. Ausência da chave
+não significa Orgânico; a leitura legada exige referência/resultado comprovado.
+
+O painel usa somente SQL local por unidade autorizada. Recorta pelo período
+antes de selecionar a representante por cliente/unidade; todos os filtros usam
+essa conversa. Relatórios usam todas as conversas elegíveis, com nomes distintos
+para atendimentos e contatos únicos. O servidor decide a habilitação FireAds;
+não devolve contexto interno, URLs ou dados brutos da planilha ao navegador.
+
+Origem/anúncio são capturados nas consultas já previstas, sem novo worker ou
+chamadas externas para métricas. `Anuncio` não faz parte de CAMPOS_IDENTIDADE.
+A alternativa por duplicidade só é persistida após recusa explícita do append;
+outro ciclo lê novamente e congela a linha Orgânica alternativa. Erro genérico e
+timeout nunca autorizam essa troca. Contratos antigos continuam consumíveis.
+
+Plano prático atualizado: `docs/fireads_sincronizacao_campos.md`. As quatro
+colunas editáveis e o contrato de recibo da V1.15.0 continuam necessários.
 
 
 ### Apresentação e preferência antecipada

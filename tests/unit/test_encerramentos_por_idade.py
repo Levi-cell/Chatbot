@@ -152,7 +152,7 @@ class PainelEncerramentosTests(unittest.TestCase):
                           (base+1, conversa, 6, 'bot', 'sent', resposta or montar_mensagem_suporte_idoso_etapa6(60),
                            tipo, '2026-09-15', f'saida-{base}', f'entrada-{base}'))
 
-    def test_nova_conversa_remove_tag_inclusive_fora_do_periodo(self):
+    def test_comercial_usa_representante_do_periodo_sem_exclusao_global(self):
         self.conversa(1)
         self.historico(1)
         rows = buscar_encerramentos_atuais(1, [1], self.cursor)
@@ -162,7 +162,10 @@ class PainelEncerramentosTests(unittest.TestCase):
         self.assertEqual(len(buscar_encerramentos_atuais(1, [1, 2], self.cursor)), 1)
         self.assertEqual(buscar_encerramentos_atuais(2, [1], self.cursor), [])
         self.conversa(3, ativa=True, motivo=None, data=None, etapa=1)
-        self.assertEqual(buscar_encerramentos_atuais(1, [1], self.cursor), [])
+        # Se 3 estiver fora do período, 1 continua sendo a representante.
+        self.assertEqual(len(buscar_encerramentos_atuais(1, [1], self.cursor)), 1)
+        self.assertEqual(buscar_encerramentos_atuais(1, [3], self.cursor), [])
+        self.assertEqual(buscar_encerramentos_atuais(1, [1], self.cursor, fim='2026-09-15'), [])
         # O relatório continua contando a conversa antiga encerrada no período.
         contagens = contar_encerramentos_por_motivo(1, '2026-09-01', '2026-10-01', self.cursor)
         self.assertEqual(contagens[0]['conversas'], 1)
