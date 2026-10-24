@@ -10,10 +10,15 @@ acrescenta anúncios Google, detalhamento opcional de perfis e uma rotina extern
 ao atendimento para descobrir origem. Esta atualização substitui especificamente
 as limitações anteriores “apenas anúncios Meta” e “sem worker extra de métricas”.
 
-- O card de origens contém a ação “Ver perfis” por canal e por anúncio. Um painel
-  lateral único apresenta titular/dependente, faixa atual, totais e envios ao
-  Funil da mesma conversa no período. Campos desconhecidos não viram titular por
-  padrão; a idade é da pessoa que fará o treino. Os cartões gerais permanecem.
+- O card de origens contém a ação “Ver perfis” por canal e por anúncio. Uma janela
+  centralizada apresenta o canal/anúncio e o período em cabeçalho fixo, totais,
+  grupos separados de titulares/dependentes e envios ao Funil. Cada faixa mostra
+  quantidade e percentual sobre todos os atendimentos da seleção, incluindo os
+  perfis desconhecidos. Não é percentual de conversão; arredondamentos podem
+  impedir soma exata de 100%. Todas as conversas de cada chat no período contam,
+  cada uma uma vez. Campos desconhecidos não viram titular por padrão; a idade
+  é da pessoa que fará o treino. Os cartões gerais permanecem. A janela adapta
+  sua largura ao celular e fecha por botão, Escape ou clique fora, devolvendo foco.
 - Google e Meta têm grupos separados, mesmo com nomes de anúncio iguais. Campo
   vazio entra em “Anúncio não informado”; outros canais não agrupam anúncio.
 - A ajuda junto a “ainda sem origem” funciona com mouse, teclado e toque. Explica

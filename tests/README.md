@@ -505,3 +505,26 @@ mantiveram canal e anúncio não informado. Nenhuma escrita no banco/API/cache o
 envio de mensagem. A falha anterior vinha do caminho Linux do certificado local;
 foi usado o bundle oficial AWS no processo Windows sem alterar o `.env`.
 Os totais acima são registros da planilha, não métricas de atendimentos do painel.
+
+### Refinamento da janela de perfis — 24/10/2026
+
+O detalhamento lateral passou a uma janela centralizada, com cabeçalho/período
+fixos, grupos de titulares/dependentes/não informados e percentuais sobre todos
+os atendimentos do canal ou anúncio selecionado. A consulta e a agregação por
+conversa não foram alteradas; nenhuma migração SQL é necessária.
+
+Validação direcionada: **49 testes aprovados** com o comando:
+
+```text
+python -m unittest tests.unit.test_monitoramento_origens tests.unit.test_monitoramento_painel tests.unit.test_encerramentos_por_idade tests.unit.test_origem_fireads -q
+```
+
+Chrome/Playwright com dados fictícios em larguras 1440, 768, 390 e 320px:
+centralização, grupos, somas, percentuais incluindo desconhecidos, nomes longos,
+anúncios iguais em Meta/Google separados, período visível, carregamento/erro,
+seleção vazia, atualização mantendo rolagem, botão sempre acessível, Tab dentro
+da janela, Escape/clique fora e retorno de foco. Sem overflow horizontal nem
+erros JavaScript. Sintaxe JS e `git diff --check` conferidos. Roteiro e capturas
+locais em `codex_patch/origens_visual/verificar_modal.cjs` e `modal-*.png`
+(ignorados pelo Git, sem dados reais). A conferência anterior da ajuda, toque e
+atualização automática também passou com a nova janela.

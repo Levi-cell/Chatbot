@@ -353,7 +353,7 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .legenda-filtros{position:absolute;z-index:20;left:10px;right:10px;top:100%;max-height:min(400px,50dvh);overflow:auto;padding:16px;background:#fff;border:1px solid #dce3d7;border-radius:12px;box-shadow:0 8px 24px #142b1526;font-size:12px;line-height:1.5}
 .legenda-filtros dl{margin:10px 0 0}.legenda-filtros dt{font-weight:700;color:#2b4930}.legenda-filtros dd{margin:0 0 8px;color:#586557}
 .tabela-encerramentos{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
-.tabela-encerramentos caption.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.tabela-encerramentos caption.sr-only,.tabela-perfis-origem caption.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .tabela-encerramentos th,.tabela-encerramentos td{padding:12px 10px;border-bottom:1px solid #e9eee5;text-align:left;overflow-wrap:anywhere}
 .tabela-encerramentos thead th{color:#63705d;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
 .tabela-encerramentos th:first-child{width:46%}.tabela-encerramentos th:last-child{width:16%}
@@ -379,30 +379,59 @@ main{width:100%;max-width:1600px;min-width:0;margin:0 auto}
 .anuncios-origem>summary:focus-visible{outline:2px solid #477644;outline-offset:2px}
 .anuncios-origem .tabela-origens{margin-bottom:12px}
 .perfis-origem-aberto{overflow:hidden}
-.perfis-origem-dialogo{box-sizing:border-box;position:fixed;inset:0 0 0 auto;margin:0;width:min(560px,100vw);height:100dvh;max-width:100vw;max-height:100dvh;padding:0;border:0;border-left:1px solid #dce5d5;background:#fff;color:#253d28;box-shadow:-15px 0 55px #162e1b25}
+.perfis-origem-dialogo{box-sizing:border-box;position:fixed;inset:0;margin:auto;width:min(920px,calc(100vw - 64px));max-width:100vw;max-height:calc(100dvh - 64px);padding:0;border:1px solid var(--linha);border-radius:24px;overflow:hidden;background:var(--branco);color:var(--texto);box-shadow:0 24px 90px #10241440}
 .perfis-origem-dialogo[open]{display:flex;flex-direction:column}
 .perfis-origem-dialogo::backdrop{background:#10241466}
-.perfis-origem-topo{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 24px;border-bottom:1px solid #edf0e9;background:#f6f9f2;flex-shrink:0}
-.perfis-origem-topo .sobrelinha{margin:0;font-size:10px;letter-spacing:.12em}
-.perfis-origem-fechar{background:white;border:1px solid #dce5d5;border-radius:22px;padding:9px 14px;color:#315b36;cursor:pointer;white-space:nowrap}
-.perfis-origem-conteudo{overflow:auto;flex:1;padding:28px 24px;overscroll-behavior:contain}
-.perfis-origem-conteudo h2{margin:0 0 10px;font-size:24px;line-height:1.3;overflow-wrap:anywhere}
-.perfis-origem-contexto{font-size:12px;line-height:1.6;color:#6b7863;margin-bottom:24px}
-.perfis-origem-totais{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
-.perfis-origem-totais>div{padding:16px 20px;border:1px solid #e4ecdd;background:#f8fbf3;border-radius:12px}
+.perfis-origem-topo{padding:26px 32px 20px;border-bottom:1px solid var(--linha);background:#f8faf5;flex-shrink:0}
+.perfis-origem-cabecalho{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+.perfis-origem-identidade{min-width:0;max-height:25dvh;overflow:auto}
+.perfis-origem-topo .sobrelinha{margin:0 0 8px;font-size:10px;letter-spacing:.12em}
+.perfis-origem-identidade h2{margin:0;font-size:26px;line-height:1.25;letter-spacing:-.025em;overflow-wrap:anywhere;color:var(--verde-900)}
+.perfis-origem-contexto{font-size:12px;line-height:1.5;color:var(--muted);margin:7px 0 0}
+.perfis-origem-fechar{flex-shrink:0;min-height:44px;background:white;border:1px solid var(--linha);border-radius:22px;padding:9px 14px;color:var(--verde-800);cursor:pointer;white-space:nowrap;font-size:12px}
+.perfis-origem-fechar:hover{background:#e9f0e1}
+.perfis-origem-periodo{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline;margin-top:18px;padding-top:14px;border-top:1px solid #e5eadf;font-size:12px;line-height:1.5;color:#5b6c55}
+.perfis-origem-periodo strong{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--verde-700)}
+.perfis-origem-conteudo{min-height:0;overflow:auto;flex:1;padding:24px 32px 28px;overscroll-behavior:contain;scrollbar-gutter:stable}
+.perfis-origem-conteudo:focus-visible{outline:2px solid #83a84d;outline-offset:-3px}
+.perfis-origem-totais{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:26px}
+.perfis-origem-totais>div{padding:18px 22px;border:1px solid #e4ecdd;background:#f8fbf3;border-radius:14px}
 .perfis-origem-totais strong,.perfis-origem-totais span{display:block}
-.perfis-origem-totais strong{font-size:28px;font-variant-numeric:tabular-nums}
-.perfis-origem-totais span{font-size:12px;color:#6b7863;margin-top:6px}
-.tabela-perfis-origem th:first-child{width:56%}
-.perfis-origem-conteudo .nota-faixa{line-height:1.7;margin-top:20px}
+.perfis-origem-totais strong{font-size:32px;font-variant-numeric:tabular-nums;color:var(--verde-800);overflow-wrap:anywhere}
+.perfis-origem-totais span{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+.perfis-origem-distribuicao{font-size:16px;margin:0 0 7px;color:var(--verde-900)}
+.perfis-origem-legenda{font-size:12px;line-height:1.6;color:var(--muted);margin:0 0 18px}
+.perfis-origem-grupo{border:1px solid var(--linha);border-radius:14px;overflow:hidden;margin-top:14px}
+.perfis-origem-grupo-topo{display:flex;align-items:baseline;justify-content:space-between;gap:6px 16px;flex-wrap:wrap;padding:15px 18px;background:#f5f8f0;border-bottom:1px solid var(--linha)}
+.perfis-origem-grupo-topo h3{margin:0;font-size:14px;color:var(--verde-800)}
+.perfis-origem-grupo-topo span{font-size:11px;line-height:1.5;color:#5b6c55;font-variant-numeric:tabular-nums}
+.tabela-perfis-origem{width:100%;border-collapse:collapse;table-layout:fixed;font-size:13px}
+.tabela-perfis-origem th,.tabela-perfis-origem td{padding:13px 18px;border-bottom:1px solid #edf0e9;overflow-wrap:anywhere}
+.tabela-perfis-origem th:first-child{width:46%;text-align:left}
+.tabela-perfis-origem thead th{color:var(--muted);font-size:11px;font-weight:500}
+.tabela-perfis-origem tbody th{font-weight:500;line-height:1.5}
+.tabela-perfis-origem td,.tabela-perfis-origem thead th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.tabela-perfis-origem tbody tr:last-child>*{border-bottom:0}
+.perfil-quantidade{font-weight:650}.perfil-percentual{color:var(--muted)}
+.perfis-origem-notas{margin-top:24px;padding-top:20px;border-top:1px solid var(--linha);color:var(--muted);font-size:12px;line-height:1.6}
+.perfis-origem-notas strong{font-size:12px;color:#53634d}.perfis-origem-notas p{margin:8px 0 0}
+@media(max-width:600px){
+  .perfis-origem-dialogo{width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border-radius:18px}
+  .perfis-origem-topo{padding:20px 18px 16px}.perfis-origem-cabecalho{gap:12px}
+  .perfis-origem-identidade h2{font-size:22px}.perfis-origem-fechar{padding:8px 12px}
+  .perfis-origem-conteudo{padding:20px 16px;scrollbar-gutter:auto}
+  .perfis-origem-periodo{margin-top:14px;padding-top:12px;flex-direction:column;gap:4px}
+  .perfis-origem-totais{gap:10px;margin-bottom:22px}.perfis-origem-totais>div{padding:14px 12px}
+  .perfis-origem-totais strong{font-size:28px}.perfis-origem-totais span{font-size:11px}
+  .perfis-origem-grupo-topo{padding:13px 12px}
+  .tabela-perfis-origem th,.tabela-perfis-origem td{padding:12px 6px;font-size:12px}
+  .tabela-perfis-origem thead th{font-size:10px;line-height:1.4}.tabela-perfis-origem th:first-child{width:41%;padding-left:12px}
+  .tabela-perfis-origem th:last-child,.tabela-perfis-origem td:last-child{padding-right:12px}
+}
 @media(max-width:560px){
   .origens-fireads .tabela-origens{font-size:12px}
   .origens-fireads .tabela-origens th:first-child{width:50%}
   .origens-fireads .tabela-origens thead th{font-size:10px}
   .nome-canal-origem{gap:7px}.anuncios-origem{padding:0 8px}
-  .perfis-origem-topo{padding:16px}.perfis-origem-conteudo{padding:24px 16px}
-  .tabela-perfis-origem th:first-child{width:50%}
-  .tabela-perfis-origem th,.tabela-perfis-origem td{padding:13px 4px;font-size:12px}
-  .perfis-origem-totais>div{padding:14px}
 }
 @media(pointer:coarse){.ver-perfis-origem,.perfis-origem-fechar{min-height:44px}}

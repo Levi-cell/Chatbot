@@ -2,6 +2,8 @@
 (() => {
   'use strict';
   const numero = new Intl.NumberFormat('pt-BR');
+  const percentual = new Intl.NumberFormat('pt-BR', {style: 'percent', maximumFractionDigits: 1});
+  const participacao = (quantidade, total) => percentual.format(total > 0 ? quantidade / total : 0);
   const criar = (tag, classe = '', texto = '') => {
     const n = document.createElement(tag);
     n.className = classe;
@@ -62,14 +64,33 @@
     if (estado.dialogo) return estado.dialogo;
     const d = criar('dialog', 'perfis-origem-dialogo');
     d.setAttribute('aria-labelledby', 'tituloPerfisOrigem');
+    d.setAttribute('aria-describedby', 'periodoPerfisOrigem');
     const topo = criar('header', 'perfis-origem-topo');
-    topo.appendChild(criar('span', 'sobrelinha', 'PERFIL DOS ATENDIMENTOS'));
+    const linha = criar('div', 'perfis-origem-cabecalho');
+    const identidade = criar('div', 'perfis-origem-identidade');
+    const titulo = criar('h2'); titulo.id = 'tituloPerfisOrigem';
+    const contexto = criar('p', 'perfis-origem-contexto');
+    identidade.append(criar('p', 'sobrelinha', 'PERFIL DOS ATENDIMENTOS'), titulo);
     const fechar = criar('button', 'perfis-origem-fechar', 'Fechar ×');
     fechar.type = 'button';
     fechar.addEventListener('click', () => d.close());
-    topo.appendChild(fechar);
+    linha.append(identidade, fechar);
+    const periodo = criar('div', 'perfis-origem-periodo'); periodo.id = 'periodoPerfisOrigem';
+    const intervalo = criar('span');
+    periodo.append(criar('strong', '', 'Período selecionado'), intervalo);
+    topo.append(linha, contexto, periodo);
     const conteudo = criar('div', 'perfis-origem-conteudo');
+    conteudo.tabIndex = 0;
+    conteudo.setAttribute('role', 'region');
+    conteudo.setAttribute('aria-label', 'Distribuição dos perfis e interpretação dos números');
     d.append(topo, conteudo);
+    d.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const focaveis = [...d.querySelectorAll('button:not([disabled]), [tabindex="0"]')];
+      const primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1];
+      if (e.shiftKey && document.activeElement === primeiro) { e.preventDefault(); ultimo.focus(); }
+      else if (!e.shiftKey && document.activeElement === ultimo) { e.preventDefault(); primeiro.focus(); }
+    });
     d.addEventListener('click', e => {
       const r = d.getBoundingClientRect();
       if (e.target === d && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) d.close();
@@ -82,44 +103,78 @@
       botao?.focus({preventScroll: true});
     });
     document.body.appendChild(d);
-    estado.dialogo = {elemento: d, conteudo};
+    estado.dialogo = {elemento: d, conteudo, titulo, contexto, intervalo};
     return estado.dialogo;
   }
 
-  function atualizarDetalhe(mensagem) {
+  function grupoPerfis(titulo, perfis, total) {
+    const grupo = criar('section', 'perfis-origem-grupo');
+    const resumo = criar('div', 'perfis-origem-grupo-topo');
+    const quantidade = perfis.reduce((soma, p) => soma + p.atendimentos, 0);
+    resumo.append(criar('h3', '', titulo), criar('span', '',
+      numero.format(quantidade) + (quantidade === 1 ? ' atendimento' : ' atendimentos') + ' · ' + participacao(quantidade, total) + ' do total'));
+    grupo.appendChild(resumo);
+    const tabela = criar('table', 'tabela-perfis-origem');
+    const caption = criar('caption', 'sr-only', titulo + ': atendimentos por faixa etária e envios ao Funil');
+    const head = criar('thead'), tr = criar('tr');
+    ['Faixa etária', 'Total', '% do total', 'No Funil'].forEach(t => {
+      const th = criar('th', '', t); th.scope = 'col'; tr.appendChild(th);
+    });
+    head.appendChild(tr);
+    const body = criar('tbody');
+    perfis.forEach(p => {
+      const linha = criar('tr');
+      const th = criar('th', '', p.rotulo.replace(/^(Titular|Dependente) · /, '')); th.scope = 'row';
+      linha.append(th, criar('td', 'perfil-quantidade', numero.format(p.atendimentos)),
+        criar('td', 'perfil-percentual', participacao(p.atendimentos, total)), criar('td', 'valor-funil', numero.format(p.funil)));
+      body.appendChild(linha);
+    });
+    tabela.append(caption, head, body); grupo.appendChild(tabela);
+    return grupo;
+  }
+
+  function atualizarDetalhe(mensagem, carregando = false) {
     if (!estado.selecao) return;
-    const {elemento, conteudo} = dialogo(), s = estado.selecao;
+    const {elemento, conteudo, titulo, contexto, intervalo} = dialogo(), s = estado.selecao;
     const canal = estado.dados?.canais.find(c => c.canal === s.canal);
     const item = s.anuncio === undefined ? canal : (s.canal === 'meta' ? estado.dados?.anuncios : estado.dados?.anuncios_google)?.find(a => a.anuncio === s.anuncio);
-    const titulo = s.anuncio === undefined ? (canal?.rotulo || s.rotulo) : (s.anuncio || 'Anúncio não informado');
+    titulo.textContent = s.anuncio === undefined ? (canal?.rotulo || s.rotulo) : (s.anuncio || 'Anúncio não informado');
+    contexto.textContent = s.anuncio === undefined ? 'Canal de origem' : 'Anúncio · ' + (canal?.rotulo || s.rotulo);
+    intervalo.textContent = estado.periodo?.texto || 'Período dos relatórios';
     const posicao = conteudo.scrollTop;
     conteudo.replaceChildren();
-    const h = criar('h2', '', titulo); h.id = 'tituloPerfisOrigem';
-    conteudo.append(h, criar('p', 'perfis-origem-contexto', (s.anuncio === undefined ? 'Canal de origem' : (canal?.rotulo || s.rotulo)) + ' · ' + (estado.periodo?.texto || '')));
+    elemento.setAttribute('aria-busy', String(carregando));
     if (mensagem || !item) {
-      conteudo.appendChild(criar('p', 'estado-vazio', mensagem || 'Nenhum atendimento desta seleção no período.'));
+      const aviso = criar('p', 'estado-vazio', mensagem || 'Nenhum atendimento desta seleção no período.');
+      aviso.setAttribute('role', 'status'); conteudo.appendChild(aviso);
       return;
     }
     const totais = criar('div', 'perfis-origem-totais');
-    [[item.atendimentos, 'atendimentos'], [item.funil, 'no Funil']].forEach(([valor, rotulo]) => {
+    [[item.atendimentos, 'Atendimentos no período'], [item.funil, 'Envios confirmados ao Funil']].forEach(([valor, rotulo]) => {
       const item = criar('div'); item.append(criar('strong', '', numero.format(valor)), criar('span', '', rotulo)); totais.appendChild(item);
     });
     conteudo.appendChild(totais);
     if (!item.perfis?.length) conteudo.appendChild(criar('p', 'estado-vazio', 'Nenhum atendimento nesta seleção.'));
     else {
-      const tabela = criar('table', 'tabela-origens tabela-perfis-origem');
-      tabela.appendChild(cabecalho('Perfil'));
-      const body = criar('tbody');
-      item.perfis.forEach(p => {
-        const tr = criar('tr'), th = criar('th', '', p.rotulo); th.scope = 'row';
-        tr.append(th, criar('td', '', numero.format(p.atendimentos)), criar('td', 'valor-funil', numero.format(p.funil))); body.appendChild(tr);
+      conteudo.append(criar('h3', 'perfis-origem-distribuicao', 'Distribuição dos atendimentos'),
+        criar('p', 'perfis-origem-legenda', 'Percentuais sobre todos os atendimentos ' + (s.anuncio === undefined ? 'deste canal' : 'deste anúncio') + ' no período, incluindo perfis não informados.'));
+      const grupos = [
+        ['Titulares', p => p.chave.startsWith('titular_')],
+        ['Dependentes', p => p.chave.startsWith('dependente_')],
+        ['Perfil não informado', p => !p.chave.startsWith('titular_') && !p.chave.startsWith('dependente_')]
+      ];
+      grupos.forEach(([nome, selecionar]) => {
+        const perfis = item.perfis.filter(selecionar);
+        if (perfis.length) conteudo.appendChild(grupoPerfis(nome, perfis, item.atendimentos));
       });
-      tabela.appendChild(body); conteudo.appendChild(tabela);
     }
-    conteudo.appendChild(criar('p', 'nota-faixa', 'Cada conversa conta uma vez. O perfil é da pessoa que fará o treinamento; para dependentes, usamos a idade do dependente. Faixas atuais, conforme os dados cadastrados. Informações ainda não coletadas aparecem separadamente.'));
-    conteudo.appendChild(criar('p', 'nota-faixa', 'No Funil: envios confirmados desta mesma conversa no período. Não confirma agendamento ou venda.'));
+    const notas = criar('div', 'perfis-origem-notas');
+    notas.append(criar('strong', '', 'Como ler estes números'),
+      criar('p', '', 'Todas as conversas de cada chat (cliente e unidade) no período são consideradas, e cada conversa conta uma única vez. Um mesmo contato pode ter mais de um atendimento.'),
+      criar('p', '', 'O perfil é da pessoa que fará o treinamento; para dependentes, usamos a idade do dependente. Faixas atuais, conforme os dados cadastrados. Informações ainda não coletadas aparecem separadamente.'),
+      criar('p', '', 'No Funil: envios confirmados destas mesmas conversas no período. Não confirma agendamento ou venda. Percentuais são arredondados e podem não somar exatamente 100%.'));
+    conteudo.appendChild(notas);
     conteudo.scrollTop = posicao;
-    elemento.setAttribute('aria-busy', 'false');
   }
 
   function botaoPerfil(selecao) {
@@ -130,6 +185,7 @@
     b.addEventListener('click', () => {
       fecharAjuda(); estado.selecao = selecao; atualizarDetalhe();
       dialogo().elemento.showModal(); document.body.classList.add('perfis-origem-aberto');
+      dialogo().conteudo.scrollTop = 0;
     });
     return b;
   }
@@ -194,7 +250,7 @@
   document.addEventListener('scroll', e => { if (estado.ajuda && !estado.ajuda.caixa.contains(e.target)) fecharAjuda(); }, true);
   window.MonitoramentoOrigens = {
     render,
-    aguardar(periodo) { estado.periodo = {texto: periodo}; estado.dados = null; atualizarDetalhe('Atualizando o período…'); },
+    aguardar(periodo) { estado.periodo = {texto: periodo}; estado.dados = null; atualizarDetalhe('Atualizando o período…', true); },
     falhou() { atualizarDetalhe('Não foi possível atualizar. Aguarde uma nova tentativa.'); },
     fechar() { fecharAjuda(); if (estado.dialogo?.elemento.open) estado.dialogo.elemento.close(); }
   };

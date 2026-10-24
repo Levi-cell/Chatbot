@@ -895,11 +895,22 @@ com prioridade inclusive para alteração de anúncio dentro do mesmo canal.
 
 ### Apresentação e limites
 
-Detalhamento opcional permanece no card de origens. O diálogo contém seleção,
-período, totais, tabela por perfil e notas de interpretação. No celular ocupa a
-tela, evitando uma árvore de submenus. Mantém seleção/expansão durante atualização;
+Detalhamento opcional permanece no card de origens. Conforme refinamento aprovado
+em 24/10/2026, o diálogo antes lateral passa a ser uma janela centralizada ampla,
+com seleção e período em cabeçalho fixo. Mostra totais e tabelas separadas para
+titulares, dependentes e perfil não informado, com quantidades, percentuais e
+envios ao Funil. No celular ocupa quase toda a tela, com rolagem interna e botão
+de fechamento sempre acessível. Mantém seleção/expansão durante atualização;
 fecha com botão, Escape ou fundo e devolve foco. Ajuda funciona com foco, mouse e
 clique/toque. Textos externos são inseridos como texto, sem HTML.
+
+Percentuais de cada faixa e grupo usam o total de atendimentos do canal/anúncio
+aberto no período, incluindo não informados; não representam conversão ao Funil.
+Arredondar para até uma casa decimal e explicar a possível diferença na soma.
+O período é herdado dos relatórios, sem seletor próprio. Contar todas as conversas
+de cada chat (cliente × unidade) nesse período, sem reduzir à última conversa ou
+a contatos únicos. Preservar menores, abaixo da idade mínima e idade/perfil
+ausentes nas categorias já existentes. Não exige alteração de consulta ou SQL.
 
 A idade exibida é a atualmente cadastrada para o participante, não uma captura
 histórica. Atribuição pode ser corrigida pelo Funil. Não há retroação automática
