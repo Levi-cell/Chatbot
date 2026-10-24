@@ -54,12 +54,12 @@ class OrigensTests(unittest.TestCase):
                     {'codigo_canal_venda': '113481'}, {CHAVE: {'versao': 2}}, contexto(99)):
             self.assertIsNone(ler(ctx, 1))
 
-    def test_anuncio_so_meta_e_payload_publico_nao_expoe_referencia(self):
+    def test_anuncio_so_meta_google_e_payload_publico_nao_expoe_referencia(self):
         for canal in ('Google Ads', 'Meta Ads', 'Chat Fire', 'Orgânico Site', None):
             ctx = contexto(1, canal, '  QR001  [form-8.0] \n')
             origem = ler(ctx, 1)
             self.assertEqual(origem['fireads'], bool(canal))
-            self.assertEqual(origem['anuncio'], 'QR001 [form-8.0]' if canal == 'Meta Ads' else None)
+            self.assertEqual(origem['anuncio'], 'QR001 [form-8.0]' if canal in ('Meta Ads', 'Google Ads') else None)
             self.assertEqual(set(origem), {'canal', 'rotulo', 'anuncio', 'fireads'})
             self.assertNotIn('ana@example.com', str(origem))
 

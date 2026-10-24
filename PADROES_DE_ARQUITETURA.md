@@ -1048,10 +1048,10 @@ O cliente em modo `por_operacao=True` reinicia o orçamento só na entrada de
 consultar/enviar, nunca em redirecionamentos. Erro de leitura não autoriza append.
 Campos e prazos reutilizam JSON/colunas existentes; não há DDL novo.
 
-### Atribuição e monitoramento FireAds — 22/10/2026
+### Atribuição e monitoramento FireAds — atualizado em 24/10/2026
 
 `core/integrations/fireads/atribuicao.py` centraliza o metadado versionado
-`contexto_fireads.atribuicao_monitoramento`: canal confirmado, criativo Meta,
+`contexto_fireads.atribuicao_monitoramento`: canal confirmado, referência de anúncio Meta/Google,
 momento/data da captura, referência e ID da conversa. A captura inicial é
 preservada quando a preparação da entrega confirma outra referência; a captura
 final orienta o painel. O snapshot 5 guarda o mesmo metadado. Ausência da chave
@@ -1063,14 +1063,43 @@ essa conversa. Relatórios usam todas as conversas elegíveis, com nomes distint
 para atendimentos e contatos únicos. O servidor decide a habilitação FireAds;
 não devolve contexto interno, URLs ou dados brutos da planilha ao navegador.
 
-Origem/anúncio são capturados nas consultas já previstas, sem novo worker ou
-chamadas externas para métricas. `Anuncio` não faz parte de CAMPOS_IDENTIDADE.
+Origem/anúncio são capturados na abertura, na preparação da entrega e, desde
+24/10/2026, pelo `worker_origem_fireads` nas conversas cuja abertura completa
+dispensou a consulta inicial. `Anuncio` não faz parte de CAMPOS_IDENTIDADE.
 A alternativa por duplicidade só é persistida após recusa explícita do append;
 outro ciclo lê novamente e congela a linha Orgânica alternativa. Erro genérico e
 timeout nunca autorizam essa troca. Contratos antigos continuam consumíveis.
 
 Plano prático atualizado: `docs/fireads_sincronizacao_campos.md`. As quatro
 colunas editáveis e o contrato de recibo da V1.15.0 continuam necessários.
+
+#### Fronteira entre os seis workers
+
+O inventário central está em [workers/README.md](workers/README.md), incluindo
+inicializadores, serviços, cadências, efeitos e recuperação. O webhook é serviço
+web. Flow é dono do atendimento, consulta-dash complementa a abertura, Funil
+entrega aos destinos, follow-up envia lembretes, consumo-Meta coleta analytics
+e origem-FireAds preenche somente as métricas locais.
+
+`core/integrations/fireads/origem.py` interpreta a leitura, sem SQL ou POST.
+`core/repositories/fireads/origens.py` seleciona e revalida as candidatas.
+O orquestrador possui conexão, commit/rollback e cache de leituras por ciclo.
+Não há transação aberta durante HTTP. Advisory lock de sessão exclui instâncias
+simultâneas; páginas por ID e marco fixo permitem retentar sem fila nova.
+O predicado de etapa/link é compartilhado em `funil/elegibilidade.py`.
+
+`contexto_fireads.verificacao_origem` versão 1 separa verificação concluída de
+origem confirmada. Canal vazio conclui a leitura, mas continua desconhecido no
+painel. Somente `atribuicao_monitoramento` confirmada (ou evidência legada válida)
+autoriza a contagem por canal. JSON nulo de abertura não é inicializado pelo novo
+worker. Revalidação atômica impede resultados tardios de substituir a preparação
+do Funil. A captura periódica é preservada em `periodica` quando substituída.
+
+O painel lê somente o banco autorizado da unidade; nunca chama a FireAds.
+Perfis por canal/anúncio somam conversas do período, com destinatário confirmado
+e idade do participante. Idades atuais não são retratos históricos. Campos
+ausentes têm grupos próprios. `origens.js` concentra ajuda e um único diálogo
+de perfis; `painel.js` coordena período, atualização e navegação.
 
 
 ### Apresentação e preferência antecipada

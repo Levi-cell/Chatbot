@@ -1,6 +1,36 @@
 # Monitoramento: filtros por período, origens FireAds e anúncios
 
-Data da consolidação: 22/10/2026.
+Data da consolidação original: 22/10/2026. Evolução local: 24/10/2026.
+
+## Atualização aplicada em 24/10/2026
+
+As definições abaixo registram a entrega original da V1.16.0/V1.16.1. A ampliação
+aprovada em [plano_relatorios_perfis_origens_anuncios.md](../plano_relatorios_perfis_origens_anuncios.md)
+acrescenta anúncios Google, detalhamento opcional de perfis e uma rotina externa
+ao atendimento para descobrir origem. Esta atualização substitui especificamente
+as limitações anteriores “apenas anúncios Meta” e “sem worker extra de métricas”.
+
+- O card de origens contém a ação “Ver perfis” por canal e por anúncio. Um painel
+  lateral único apresenta titular/dependente, faixa atual, totais e envios ao
+  Funil da mesma conversa no período. Campos desconhecidos não viram titular por
+  padrão; a idade é da pessoa que fará o treino. Os cartões gerais permanecem.
+- Google e Meta têm grupos separados, mesmo com nomes de anúncio iguais. Campo
+  vazio entra em “Anúncio não informado”; outros canais não agrupam anúncio.
+- A ajuda junto a “ainda sem origem” funciona com mouse, teclado e toque. Explica
+  consulta dispensada, complementação inicial, entrega e limitações; não conclui
+  que toda origem ausente significa abandono.
+- `worker_origem_fireads` atua somente após abertura completa, sem consulta
+  inicial e antes de elegibilidade/entrega comercial. Consulta a cada duas horas,
+  após o ciclo anterior, com marco de ativação fixo. Erro permanece pendente;
+  canal vazio conclui a leitura sem atribuição. Funil pode corrigir posteriormente.
+- Fonte de métricas é sempre o banco local. A navegação e os filtros de Conversas
+  continuam usando a última conversa do período; Relatórios usam todas as
+  conversas do período. Não existem consultas FireAds disparadas pelo navegador.
+
+Operação: [deploy](../deploy/README.md#perfis-anúncios-google-e-worker-de-origem--24102026).
+Responsabilidades: [workers](../workers/README.md). Não há migração SQL nesta evolução.
+
+## Registro original de 22/10/2026
 
 Status: aplicado ao código local em 22/10/2026. Inclui filtros, relatórios,
 atribuição por conversa e seleção de registros. Ainda não representa deploy.

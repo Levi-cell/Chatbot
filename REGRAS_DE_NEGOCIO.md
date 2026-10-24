@@ -1792,3 +1792,33 @@ inclusive sábado. O conteúdo anterior de Observação é preservado; apenas os
 quatro campos autorizados podem ser sincronizados nos novos envios com coleta.
 Não reprocessar aberturas antigas. Detalhes:
 [Chat Fire e turno antecipado](docs/chat_fire_turno_antecipado.md).
+
+## Perfis e verificação periódica de origem — 24/10/2026
+
+O detalhamento opcional por canal/anúncio usa todas as conversas do período,
+contadas uma vez. Titular/dependente depende de informação confirmada; a faixa
+é da pessoa atendida, com idade do dependente quando aplicável. Ausências têm
+grupos próprios. Envios ao Funil são os confirmados para a mesma conversa no
+período; não representam reserva ou venda. Os cartões gerais e o filtro pela
+última conversa do período permanecem.
+
+Referências de anúncios são agrupadas separadamente para Meta Ads e Google Ads,
+usando `Anuncio` da linha selecionada. Outros canais ignoram anúncio. Nome igual
+em canais diferentes não é o mesmo grupo; vazio é “Anúncio não informado”.
+
+`worker_origem_fireads` considera apenas integrações ativas e válidas, com
+pagamento ativo, abertura completa aplicada e consulta inicial explicitamente
+dispensada. Antes da elegibilidade comercial e sem entrega materializada, pode
+identificar origem mesmo de atendimento abandonado/encerrado. Executa a cada
+duas horas após o ciclo anterior, limitado ao marco fixo de ativação. Consulta
+inicial com erro continua fora desse worker.
+
+Ausência comprovada de formulário elegível confirma orgânico. Linha com canal
+vazio/desconhecido encerra a verificação mantendo origem desconhecida. Anúncio
+vazio não é erro. Erros de leitura ficam para o próximo ciclo, se ainda elegível.
+Não mudar etapas, enviar mensagens ou criar/atualizar a planilha para métricas.
+O Funil reconfirma canal/anúncio e pode corrigir a atribuição; preservar evidência
+anterior. A ajuda do painel não trata toda origem desconhecida como abandono.
+
+Detalhes operacionais: [workers](workers/README.md) e
+[plano aplicado](plano_relatorios_perfis_origens_anuncios.md).

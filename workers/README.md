@@ -1,12 +1,51 @@
 # Workers
 
-Camada assíncrona responsável pelo atendimento no WhatsApp, lembretes de
-inatividade e publicação periódica de oportunidades no Funil de Vendas.
+Camada assíncrona de atendimento, consulta FireAds, entrega comercial,
+lembretes, consumo Meta e identificação de origem para o monitoramento.
 
 - [Portal do projeto](../README.md)
 - [Regras de negócio](../REGRAS_DE_NEGOCIO.md)
 - [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md)
 - [Rotina de implementação de etapas](../ROTINA_IMPLEMENTACAO_ETAPAS.md)
+
+## Inventário atual — 24/10/2026
+
+São **seis workers** e um serviço web. `chatbot-webhook.service` recebe os
+eventos, alimenta a fila e serve o monitoramento; não é um sétimo worker.
+
+| Worker | Responsabilidade e efeitos | Entrada e cadência padrão | Coordenação e recuperação |
+| --- | --- | --- | --- |
+| `worker_flow` | Validar e responder WhatsApp; persistir histórico, etapas, coleta e estado de atendimento/cache | `fila_mensagens`; execução contínua, espera de 1,5s quando vazia | Dono do turno de atendimento; lock de conversa, versão e checkpoints. Solicita consulta inicial quando faltam dados e aplica o resultado. Preserva recuperação já existente |
+| `worker_consulta_dash` | Ler FireAds para completar a abertura e salvar resultado; pode renovar o indicador de digitação, sem enviar resposta ou mudar etapa | `consulta_fireads`; uma reserva por ciclo, espera ociosa 2s | HTTP até 300s, reserva 330s; resultado aplicado pelo flow. Falha/expiração encerra a consulta com resultado próprio e permite atendimento adaptado; supervisor tenta recuperar em 5s |
+| `worker_funil` | Preparar e entregar dashboard e Funil; sincronizar campos permitidos e observações | Conversas elegíveis e filas `envios_dash`/`funil_envios`; 1.800s, lote 100 | Com FireAds, dashboard precede Funil. Confirma origem antes do snapshot. Reserva mínima 960s; retry de lead padrão 3.600s, fila dashboard 30min. Preserva snapshot e recibos |
+| `worker_followup` | Enviar os dois lembretes permitidos e registrar histórico/recibos/stage | Conversas elegíveis; varredura 60s, lote 20, lembretes após 7h | Usa lock do atendimento e revalida fila/janela/bloqueio/pagamento. Flow trata a reação. Falhas de consulta têm espera progressiva 5–300s |
+| `worker_consumo_meta` | Consultar analytics Meta e consolidar consumo local por unidade/mês | Agenda persistida; supervisor 60s, mês atual por hora, lote 100 | Advisory lock próprio; não envia mensagens. Falhas preservam leitura válida; meses pendentes/consolidação seguem a agenda específica de consumo |
+| `worker_origem_fireads` | Ler canal e anúncio para métricas; gravar somente atribuição/verificação no JSON da conversa | Abertura completa que dispensou consulta, antes da elegibilidade comercial; 7.200s após terminar o ciclo; páginas de 100 | Advisory lock exclusivo por ciclo, HTTP até 300s, revalidação antes da leitura e da gravação. Falhas ficam pendentes; não envia WhatsApp, não muda etapas e não escreve na planilha |
+
+### Inicializadores, serviços e logs
+
+Executar os módulos com `python -m`, a partir da raiz do projeto e com o ambiente
+carregado. Em produção, o systemd já fornece usuário, diretório e ambiente.
+
+| Módulo | Serviço systemd | Logger principal |
+| --- | --- | --- |
+| `workers.worker_flow.iniciar_flow_worker` | `chatbot-worker-flow.service` | `worker.response_flow` |
+| `workers.worker_consulta_dash.iniciar_worker_consulta_dash` | `chatbot-worker-consulta-dash.service` | `worker.consulta_dash` |
+| `workers.worker_funil.iniciar_worker_funil` | `chatbot-worker-funil.service` | `worker.funil` |
+| `workers.worker_followup.iniciar_worker_followup` | `chatbot-worker-followup.service` | `worker.followup` |
+| `workers.worker_consumo_meta.iniciar_worker_consumo_meta` | `chatbot-worker-consumo-meta.service` | `worker.consumo_meta` |
+| `workers.worker_origem_fireads.iniciar_worker_origem_fireads` | `chatbot-worker-origem-fireads.service` | `worker.origem_fireads` |
+
+Flags opcionais: `FUNIL_WORKER_ENABLED`, `FOLLOWUP_WORKER_ENABLED`,
+`CONSUMO_META_ENABLED` e `FIREADS_ORIGEM_ATIVO` começam desativadas. Flow e
+consulta inicial são controlados pelos serviços e pelas condições de cada unidade.
+As configurações de intervalo/lote ficam nos respectivos `config.py`.
+
+Para qualquer serviço da tabela, `sudo systemctl status NOME.service --no-pager`
+mostra o estado e `sudo journalctl -u NOME.service -f -n 50` acompanha os logs.
+`start`, `stop` e `restart` controlam sua execução. Respeitar a conclusão/parada
+graciosa e as reservas existentes; não apagar recibos para forçar um novo envio.
+Instalação e sequência de atualização: [guia de deploy](../deploy/README.md).
 
 ## Estrutura
 
@@ -50,6 +89,12 @@ workers/
 │   ├── funil_worker.py
 │   ├── processamento.py
 │   └── exceptions.py
+├── worker_consulta_dash/
+├── worker_consumo_meta/
+├── worker_origem_fireads/
+│   ├── config.py
+│   ├── iniciar_worker_origem_fireads.py
+│   └── origem_worker.py
 └── tratamento_erros_externos/
 ```
 
@@ -474,9 +519,9 @@ totais e última coleta válida. Detalhes em [deploy](../deploy/consumo_mensal_m
 
 ## Reserva com e sem plataforma
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração atual de `atendimento_customizado.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado; pode ser antecipado na coleta de abertura ou salvo na transação de 18 → 19. Com turno antecipado e sem link, a triagem usa 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
@@ -492,3 +537,44 @@ conversas. Não envia WhatsApp, não altera etapas e não escreve no dashboard.
 O flow confirma a pendência e o reagendamento sem consumo de retry; depois aplica
 o resultado completo uma única vez. HTTP ocorre no processo separado, com reserva
 PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/valida_dados_parciais_fireads.md).
+
+## Worker de origem FireAds
+
+O novo worker aguarda `contexto_coleta.status=pronto` e a dispensa explícita da
+consulta inicial, com contextos vinculados à própria conversa e integração.
+Consulta inicial pendente, concluída ou com erro exclui a candidata. Também
+excluem: origem/verificação já concluída, elegibilidade comercial, fila de entrega
+ou recibo dashboard/Funil, integração inválida/desativada ou pagamento inativo.
+Conversas encerradas antes da etapa comercial continuam elegíveis.
+
+`FIREADS_ORIGEM_DESDE` é uma data ISO 8601 **fixa, com fuso**, definida no deploy.
+Só conversas iniciadas desde esse marco e desde a ativação da integração entram.
+O ID máximo delimita apenas o ciclo atual. O ciclo seguinte percorre novamente
+as pendências desse recorte; não perde falhas por avançar um cursor permanente.
+Uma leitura da aba é compartilhada entre páginas da mesma integração no ciclo.
+Não há uma nova fila, mudança de schema ou aumento dos locks 120/110s do flow.
+
+A leitura usa telefone e recência, incluindo os formatos equivalentes existentes.
+Meta/Google aceitam `Anuncio`; outros canais ignoram esse campo. Ausência de
+formulário elegível confirma orgânico. Canal vazio/desconhecido conclui a
+verificação sem inventar origem; anúncio vazio mantém o canal e aparece como
+“Anúncio não informado”. Erros não concluem a verificação e voltam no próximo
+ciclo somente se a conversa continuar elegível.
+
+`contexto_fireads.verificacao_origem` registra a conclusão e
+`atribuicao_monitoramento` registra a origem confirmada, quando disponível.
+O worker mantém o resto do contexto e não altera `origem_fireads`, coleta,
+etapa, fila de mensagens ou cache. O Funil continua confirmando canal/anúncio
+na sua preparação e pode corrigir a captura periódica, preservando-a como
+evidência. Entregas já congeladas não são reconstruídas por esse worker.
+
+HTTP ocorre sem transação de banco aberta. A gravação usa revalidação sob locks
+curtos, `lock_timeout=3s` e `statement_timeout=30s`. Encerrar a sessão libera o
+advisory lock do ciclo; reiniciar o serviço retoma os itens ainda pendentes.
+`SIGTERM`/`SIGINT` interrompem a espera e aguardam a chamada em andamento;
+o serviço permite 330s para parar.
+
+Logs `origem_iniciado`, `origem_consulta_falhou`, `origem_registro_falhou` e
+`origem_ciclo` informam duração, leituras, selecionados, identificados, sem canal,
+sem registro elegível, anúncios não informados, descartados e falhas. Logs de
+erro usam IDs e tipos de exceção, sem telefone, e-mail ou URL do Web App.

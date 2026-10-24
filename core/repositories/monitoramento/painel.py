@@ -250,10 +250,19 @@ def buscar_origens(id_unidade, inicio, fim, cursor):
     f_funil = _periodo('f.enviado_em', inicio, fim, p_funil)
     cursor.execute(f"""
         SELECT c.id_conversa,c.id_cliente,c.contexto_fireads,
+               CASE WHEN c.status_dependente IS TRUE OR c.id_etapa_atual >= 4
+                    OR c.contexto_coleta #>> '{{campos,destinatario,status}}' = 'aceito'
+                    THEN c.status_dependente ELSE NULL END AS status_dependente,
+               cl.idade AS idade_titular, d.idade AS idade_dependente,
                CASE WHEN c.contexto_fireads ? 'atribuicao_monitoramento' THEN NULL ELSE q.dados END AS dados_consulta,
                EXISTS (SELECT 1 FROM chatbot.funil_envios f WHERE f.id_conversa=c.id_conversa
                        AND f.status='sent' {f_funil}) AS foi_funil
           FROM chatbot.conversa c LEFT JOIN chatbot.consulta_fireads q ON q.id_conversa=c.id_conversa
+          JOIN chatbot.cliente cl ON cl.id_cliente=c.id_cliente
+          LEFT JOIN LATERAL (
+              SELECT dp.idade FROM chatbot.dependente dp WHERE dp.id_conversa=c.id_conversa
+              ORDER BY dp.id_dependente LIMIT 1
+          ) d ON TRUE
          WHERE c.id_unidade=%s AND EXISTS (
              SELECT 1 FROM chatbot.historico_mensagens h WHERE h.id_conversa=c.id_conversa
                AND h.quem_enviou='cliente' {filtro})

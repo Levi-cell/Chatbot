@@ -18,6 +18,7 @@ from .apresentacao import (
 from .encerramentos import apresentar_encerramento, montar_tabela_encerramentos
 from .faixa_etaria import consultar_faixa_etaria, distribuir_dependentes_por_titular
 from .origens import montar_origens
+from core.config_env import env_bool
 
 
 FUSO_PAINEL = ZoneInfo('America/Sao_Paulo')
@@ -192,7 +193,9 @@ def carregar_relatorio(acesso, periodo):
         )
         origens = (montar_origens(repositorio.buscar_origens(
             acesso.id_unidade, periodo.inicio, periodo.fim, cursor,
-        )) if unidade.get('fireads_habilitada') else None)
+        ), bpa_ativo=bool(unidade['bpa_ativo'])) if unidade.get('fireads_habilitada') else None)
+    if origens is not None:
+        origens['verificacao_periodica'] = env_bool('FIREADS_ORIGEM_ATIVO', False)
     for grupo in (metricas, anteriores or {}):
         if grupo.get('nota_media') is not None:
             grupo['nota_media'] = float(grupo['nota_media'])

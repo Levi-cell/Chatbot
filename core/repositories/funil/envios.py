@@ -1,6 +1,9 @@
 """Fila transacional e idempotência local dos envios ao Funil."""
 
 
+from .elegibilidade import ETAPA_ELEGIVEL_SQL
+
+
 STATUS_PENDING = "pending"
 STATUS_PROCESSING = "processing"
 STATUS_SENT = "sent"
@@ -11,7 +14,7 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
     _validar_inteiro_positivo(limite, "limite")
 
     cursor.execute(
-        """
+        f"""
         INSERT INTO chatbot.funil_envios (id_conversa)
         SELECT elegiveis.id_conversa
         FROM (
@@ -23,14 +26,8 @@ def sincronizar_envios_elegiveis(cursor, *, limite=100):
               ON e.id_etapa = c.id_etapa_atual
             JOIN chatbot.integracao_funil_unidade integracao
               ON integracao.id_unidade = c.id_unidade
-            WHERE e.elegivel_funil = TRUE
+            WHERE {ETAPA_ELEGIVEL_SQL}
               AND u.status_pagamento IS TRUE
-              AND (
-                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
-                 AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
-                    AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
-              )
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE
@@ -56,7 +53,7 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
     _validar_inteiro_positivo(lease_segundos, "lease_segundos")
 
     cursor.execute(
-        """
+        f"""
         WITH proximo AS (
             SELECT fe.id_funil_envio
             FROM chatbot.funil_envios fe
@@ -80,14 +77,8 @@ def reivindicar_proximo_envio(cursor, *, lease_segundos=900):
                             < NOW() - (%s * INTERVAL '1 second')
                     )
                   )
-              AND e.elegivel_funil = TRUE
+              AND {ETAPA_ELEGIVEL_SQL}
               AND u.status_pagamento IS TRUE
-              AND (
-                (NULLIF(BTRIM(ac.link_agendamento), '') IS NOT NULL
-                 AND c.id_etapa_atual >= 20)
-                OR (NULLIF(BTRIM(ac.link_agendamento), '') IS NULL
-                    AND (c.id_etapa_atual = 19 OR c.id_etapa_atual >= 21))
-              )
               AND c.lead_no_funil IS NOT TRUE
               AND integracao.integracao_ativa = TRUE
               AND integracao.widget_ativo = TRUE

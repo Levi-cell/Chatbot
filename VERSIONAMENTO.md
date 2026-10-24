@@ -178,6 +178,10 @@ Commit: `5ff1681502eeade253f60201cfd691ba5024acf9`
 
 Commit: `fa5c30ca37f35cb34532053ae1190efd0d59fdf1`
 
+### V1.16.1 — Correção da leitura JSONB no monitoramento
+
+Commit: `143d4128aa5e00dc8c625cc12f4263b375a36a5e`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

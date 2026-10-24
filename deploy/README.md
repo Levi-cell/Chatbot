@@ -4,8 +4,83 @@ Os arquivos assumem a aplicacao em `/opt/chatbot/app`, o ambiente virtual em
 `/opt/chatbot/venv` e as variaveis em `/etc/chatbot/chatbot.env`. Os processos
 da aplicacao sao independentes e escrevem seus logs no journald. O
 portal de monitoramento faz parte do processo web `chatbot-webhook`; ele não
-cria outro serviço. O quarto serviço é `chatbot-worker-followup`, implantado na
-V1.2.0. Este guia também cobre a preparação de uma instalação nova.
+cria outro serviço. O inventário atual contém seis workers e esse serviço web;
+responsabilidades e nomes estão em [workers/README.md](../workers/README.md).
+Este guia também cobre a preparação de uma instalação nova.
+
+## Perfis, anúncios Google e worker de origem — 24/10/2026
+
+**Atualização a partir da V1.16.1: não requer migração SQL, novas colunas,
+índices ou alterações no Apps Script.** Reutiliza `conversa.contexto_fireads` e
+as estruturas já migradas de coleta/entregas. Não executar setup/seeds nem
+reaplicar os SQLs históricos. O novo processo é opcional e começa desativado.
+
+1. Atualizar o código na rotina habitual, respeitando a parada dos processos
+   afetados antes do pull. Esta versão altera o leitor de atribuição usado por
+   consulta-dash/Funil, o predicado de elegibilidade do Funil e o serviço web.
+2. Rodar os testes unitários indicados abaixo e `callback/manage.py check` com
+   o ambiente da VM carregado. Os testes PostgreSQL exigem um banco descartável
+   local explícito: **não usar o banco de produção** como banco de teste.
+3. Executar `callback/manage.py collectstatic --noinput` para publicar o novo
+   `origens.js`, o painel e o CSS. Reiniciar/recarregar o web; ele precisa receber
+   também a configuração do próximo passo.
+4. Em `/etc/chatbot/chatbot.env`, definir `FIREADS_ORIGEM_ATIVO=True` e
+   `FIREADS_ORIGEM_DESDE` com a data/hora **fixa** de ativação, em ISO 8601 com
+   fuso. `date --iso-8601=seconds` fornece um valor para copiar uma única vez.
+   Não colocar substituição dinâmica de comando nesse arquivo. Preservar esse
+   marco nos reinícios/deploys seguintes; movê-lo para trás habilita retroação
+   que não faz parte desta entrega. Para apenas publicar a interface, manter a
+   flag falsa: a ajuda não anuncia a verificação periódica nesse caso.
+5. Instalar/iniciar o novo serviço depois das validações e da retomada dos
+   serviços existentes. Nenhuma regra de atendimento espera esse processo.
+
+```bash
+sudo install -m 0644 /opt/chatbot/app/deploy/systemd/chatbot-worker-origem-fireads.service /etc/systemd/system/chatbot-worker-origem-fireads.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now chatbot-worker-origem-fireads.service
+sudo systemctl status chatbot-worker-origem-fireads.service --no-pager
+sudo journalctl -u chatbot-worker-origem-fireads.service -n 60 --no-pager
+```
+
+O primeiro ciclo ocorre ao iniciar; os seguintes esperam 7.200s **após o término**
+do anterior. Um ciclo longo aumenta o intervalo observado; não há promessa de
+identificar tudo em até duas horas. Cada leitura da FireAds tem orçamento 300s;
+uma leitura por integração/aba atende as candidatas do ciclo. Lotes são páginas
+de 100, sem teto de 100 pendências por execução. O marco fixo evita varrer o
+histórico anterior à ativação. Nenhum POST FireAds, WhatsApp ou Funil é feito
+pelo novo serviço.
+
+Validação unitária direcionada (no ambiente Python configurado):
+
+```bash
+/opt/chatbot/venv/bin/python -m unittest \
+  tests.unit.test_origem_fireads \
+  tests.unit.test_monitoramento_origens \
+  tests.unit.test_monitoramento_painel \
+  tests.unit.test_fireads_entrega_telefone \
+  tests.unit.test_fluxo_reserva_link -q
+```
+
+Conferir `origem_iniciado`, ausência de reinícios e os contadores de
+`origem_ciclo`. Um ciclo sem candidatas é normal. No monitoramento da unidade
+integrada, conferir “Ver perfis”, ajuda e os grupos Meta/Google em diferentes
+períodos. Unidade sem FireAds mantém o painel sem esse bloco.
+
+Para desativar a rotina, parar/desabilitar o novo serviço e definir
+`FIREADS_ORIGEM_ATIVO=False`, recarregando o web. Não remover a evidência JSON
+já salva. A flag da interface representa a configuração, não um monitor de
+saúde do processo; estado e falhas devem ser conferidos no systemd/journal.
+Reversão de código precisa manter a leitura de `verificacao_origem` para não
+reinterpretar canal desconhecido como origem orgânica legada.
+
+Contrato real conferido em 24/10/2026: leitura da integração Santo André e GET
+da aba `LEADS GERAL - Feedback` concluídos, com `WhatsApp`, `Canal`, `Data/Hora`
+e `Anuncio` presentes. A interpretação de canais/anúncios foi validada em memória
+com os registros reais Meta/Google, sem escrita no banco ou na FireAds.
+A falha anterior era o caminho Linux do certificado RDS no Windows. A conferência
+usou o bundle oficial AWS local apenas no processo, mantendo `verify-full` e sem
+alterar o `.env` destinado à VM. Após o deploy, conferir também a operação do
+novo serviço pelos logs e por um atendimento elegível, sem reprocessar históricos.
 
 ## Preparar a aplicacao
 

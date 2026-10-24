@@ -431,36 +431,8 @@
     return cartao;
   }
   function interpretar(m){const c=criar('article','cartao como-interpretar');c.appendChild(criar('h2','','Como interpretar os números'));const ul=criar('ul');['Contatos únicos são clientes que enviaram mensagem no período. Um mesmo contato pode ter vários atendimentos, inclusive em canais diferentes.','Na consulta de faixa etária personalizada, cada titular conta uma vez e cada cadastro de dependente conta separadamente. O total pode superar o número de contatos. As idades são as atualmente cadastradas.','Funil é um envio confirmado no registro local; não confirma agendamento ou venda.','A tabela de encerramentos por idade conta conversas, pela data de encerramento e pelos motivos compatíveis com a configuração atual. O filtro Comercial mostra chats cuja última conversa no período exige análise comercial, inclusive menores que não receberam o contato da unidade.','A comparação usa a janela imediatamente anterior com a mesma duração. O histórico total não possui comparação.','A distribuição por etapas considera todos os atendimentos com atividade do cliente no período, usando a etapa registrada de cada um.','Participação em avaliações: '+(m.leads?Math.round((m.avaliacoes||0)/m.leads*1000)/10:0)+'% dos leads.'].forEach(x=>ul.appendChild(criar('li','',x)));c.appendChild(ul);return c;}
-  function origensFireAds(d){
-    const secao=criar('section','cartao origens-fireads');
-    secao.appendChild(titulo('Origem dos atendimentos','FireAds e orgânico · todas as conversas do período'));
-    const resumo=criar('div','resumo-origens');
-    [[d.identificados,'com origem identificada'],[d.contatos_unicos,'contatos únicos'],[d.sem_origem,'ainda sem origem']].forEach(([valor,rotulo])=>{const item=criar('div');item.append(criar('strong','',numero.format(valor)),criar('span','',rotulo));resumo.appendChild(item);});
-    secao.appendChild(resumo);
-    secao.appendChild(criar('p','legenda-origens','Barras: atendimentos identificados · Destaque: enviados ao Funil no período'));
-    const tabela=criar('table','tabela-origens'),head=criar('thead'),tr=criar('tr');
-    ['Canal de origem','Atendimentos','No Funil'].forEach(t=>{const th=criar('th','',t);th.scope='col';tr.appendChild(th);});head.appendChild(tr);tabela.appendChild(head);
-    const body=criar('tbody'),maximo=Math.max(1,...d.canais.map(c=>c.atendimentos));
-    d.canais.forEach(c=>{
-      const linha=criar('tr'),nome=criar('th'),barras=criar('div','barras-origem'),barra=criar('span','barra-origem'),funil=criar('span','barra-funil');
-      nome.scope='row';nome.appendChild(criar('span','',c.rotulo));
-      barras.setAttribute('aria-hidden','true');barra.style.width=(100*c.atendimentos/maximo)+'%';funil.style.width=(100*c.funil/maximo)+'%';barras.append(barra,funil);nome.appendChild(barras);
-      linha.append(nome,criar('td','',numero.format(c.atendimentos)),criar('td','valor-funil',numero.format(c.funil)));body.appendChild(linha);
-    });
-    tabela.appendChild(body);secao.appendChild(tabela);
-    const anuncios=criar('details','anuncios-meta');
-    anuncios.appendChild(criar('summary','','Anúncios da Meta · '+numero.format(d.anuncios.length)+' grupos'));
-    if(!d.anuncios.length)anuncios.appendChild(criar('p','nota-faixa','Nenhum atendimento com origem Meta Ads identificada neste período.'));
-    else{
-      const t=criar('table','tabela-origens'),h=criar('thead'),r=criar('tr');
-      ['Anúncio / criativo','Atendimentos','No Funil'].forEach(x=>{const th=criar('th','',x);th.scope='col';r.appendChild(th);});h.appendChild(r);t.appendChild(h);
-      const b=criar('tbody');d.anuncios.forEach(a=>{const r=criar('tr'),th=criar('th','',a.anuncio||'Anúncio não informado');th.scope='row';r.append(th,criar('td','',numero.format(a.atendimentos)),criar('td','valor-funil',numero.format(a.funil)));b.appendChild(r);});t.appendChild(b);anuncios.appendChild(t);
-    }
-    secao.append(anuncios,criar('p','nota-faixa','Cada conversa conta uma vez. Origem ainda não identificada fica fora dos canais. No Funil considera apenas envios confirmados no período. Estes dados representam atendimentos no chatbot, não todos os formulários da planilha.'));
-    return secao;
-  }
   function renderRelatorio(d){
-    const anunciosAbertos=Boolean(document.querySelector('.anuncios-meta')?.open);
+    const focoOrigem=document.activeElement?.dataset?.perfilOrigem;
     const foco=consultaIdade.cartao?.contains(document.activeElement)?document.activeElement:null;
     const selecao=foco===consultaIdade.idade?[foco.selectionStart,foco.selectionEnd]:null;
     ids('periodoRelatorios').textContent=d.periodo.texto;
@@ -488,7 +460,7 @@
     gradeRelatorio.append(cartaoAtividade,satisfacao(d.satisfacao));
     relatorio.append(
       gradeKpis,
-      ...(d.origens?[origensFireAds(d.origens)]:[]),
+      ...(d.origens?[window.MonitoramentoOrigens.render(d.origens,d.periodo)]:[]),
       encaminhamentos(d),
       gradeRelatorio,
       faixaEtariaPersonalizada(),
@@ -499,12 +471,14 @@
       exportacao('essencial'),
       interpretar(metricasRelatorio),
     );
-    if(anunciosAbertos&&relatorio.querySelector('.anuncios-meta'))relatorio.querySelector('.anuncios-meta').open=true;
+    if(!d.origens)window.MonitoramentoOrigens.fechar();
+    if(focoOrigem)[...relatorio.querySelectorAll('[data-perfil-origem]')].find(b=>b.dataset.perfilOrigem===focoOrigem)?.focus({preventScroll:true});
     if(foco){foco.focus({preventScroll:true});if(selecao)foco.setSelectionRange(...selecao);}
   }
-  async function carregarRelatorio(silencioso=false){if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
+  async function carregarRelatorio(silencioso=false){if(!silencioso)window.MonitoramentoOrigens.aguardar(estado.periodo);if(estado.carregandoRelatorio){estado.recarregarRelatorio=true;return;}estado.carregandoRelatorio=true;const periodo=estado.periodo,seq=++estado.sequenciaRelatorio;if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio','Preparando os indicadores…'));if(estado.secao==='relatorios')status('Atualizando…','atualizando');try{const d=await json(urlPeriodo(urls.relatorio,periodo));if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;renderRelatorio(d);if(estado.secao==='relatorios')status('Atualizado agora');}catch(e){if(seq!==estado.sequenciaRelatorio||periodo!==estado.periodo)return;window.MonitoramentoOrigens.falhou();if(estado.secao==='relatorios')status('Falha ao atualizar','erro');if(!silencioso)ids('conteudoRelatorio').replaceChildren(criar('div','cartao carregando-relatorio',e.message));else toast(e.message);}finally{estado.carregandoRelatorio=false;if(estado.recarregarRelatorio){estado.recarregarRelatorio=false;void carregarRelatorio(true);}}}
   function trocar(secao) {
     estado.secao = secao;
+    if(secao!=='relatorios')window.MonitoramentoOrigens.fechar();
     document.querySelectorAll('[data-secao]').forEach(botao => {
       const ativa = botao.dataset.secao === secao;
       botao.classList.toggle('ativo', ativa);

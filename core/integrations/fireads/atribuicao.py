@@ -7,6 +7,8 @@ from .aba_geral import ORIGENS, CAMPOS_IDENTIDADE, referencia_registro
 from .contrato import normalizar
 
 CHAVE = 'atribuicao_monitoramento'
+CHAVE_VERIFICACAO = 'verificacao_origem'
+CANAIS_ANUNCIO = frozenset({'meta', 'google'})
 CANAIS_FORMULARIO = frozenset({'google', 'meta', 'organico_site', 'chat_fire'})
 ROTULOS = {'google': 'Google Ads', 'meta': 'Meta Ads', 'organico_site': 'Orgânico Site',
            'chat_fire': 'Chat Fire', 'organico': '100% orgânico'}
@@ -16,7 +18,7 @@ def capturar(row, aba, fuso=None, *, momento='consulta_inicial'):
     canal = ORIGENS.get(normalizar(row.get('Canal'))) if row is not None else 'organico'
     if canal not in ROTULOS:
         raise ValueError('Não atribuir canal desconhecido')
-    anuncio = str(row.get('Anuncio') or '').strip() if row is not None and canal == 'meta' else ''
+    anuncio = str(row.get('Anuncio') or '').strip() if row is not None and canal in CANAIS_ANUNCIO else ''
     return {'versao': 1, 'status': 'confirmada', 'canal': canal,
             'formulario': canal in CANAIS_FORMULARIO,
             'anuncio': anuncio or None, 'anuncio_chave': ' '.join(anuncio.split()) or None,
@@ -31,6 +33,9 @@ def vincular(atribuicao, id_conversa, anterior=None):
         inicial = anterior.get('inicial') or (anterior if anterior.get('momento') == 'consulta_inicial' else None)
         if inicial and atual.get('momento') != 'consulta_inicial':
             atual['inicial'] = deepcopy(inicial)
+        periodica = anterior.get('periodica') or (anterior if anterior.get('momento') == 'worker_origem' else None)
+        if periodica and atual.get('momento') != 'worker_origem':
+            atual['periodica'] = deepcopy(periodica)
     return atual
 
 
@@ -44,6 +49,12 @@ def ler(contexto, id_conversa, dados_consulta=None):
             return None
         canal, anuncio = salvo['canal'], salvo.get('anuncio')
     else:
+        verificacao = contexto.get(CHAVE_VERIFICACAO)
+        if (isinstance(verificacao, dict) and verificacao.get('versao') == 1
+                and verificacao.get('id_conversa') == id_conversa
+                and verificacao.get('status') == 'concluida'
+                and contexto.get('canal_confirmado_entrega') is not True):
+            return None
         # Compatibilidade somente com evidência gravada, nunca pelo canal provisório.
         referencia = contexto.get('referencia')
         if contexto.get('canal_confirmado_entrega') is True:
@@ -66,8 +77,8 @@ def ler(contexto, id_conversa, dados_consulta=None):
         iguais = [r for r in rows if isinstance(r, dict) and set(campos) == set(CAMPOS_IDENTIDADE)
                   and all(r.get(c) == campos[c] for c in CAMPOS_IDENTIDADE)]
         linha = [r for r in iguais if r.get('_row') == (referencia or {}).get('linha')]
-        if canal == 'meta' and len(linha or iguais) == 1:
+        if canal in CANAIS_ANUNCIO and len(linha or iguais) == 1:
             anuncio = (linha or iguais)[0].get('Anuncio')
-    anuncio = ' '.join(str(anuncio or '').split()) if canal == 'meta' else ''
+    anuncio = ' '.join(str(anuncio or '').split()) if canal in CANAIS_ANUNCIO else ''
     return {'canal': canal, 'rotulo': ROTULOS[canal], 'fireads': canal in CANAIS_FORMULARIO,
             'anuncio': anuncio or None}

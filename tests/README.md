@@ -459,3 +459,49 @@ Revisão visual local com dados fictícios: Chrome via Playwright, desktop 1440�
 e celular 390×844. Conferidos filtros, submenu FireAds, Escape/Enter, toque,
 lista vazia limpando seleção, cinco barras, anúncios não informados, unidade sem
 integração e ausência de rolagem horizontal. Nenhuma publicação está incluída.
+
+### Perfis por origem, Google Ads e worker periódico — 24/10/2026
+
+`tests.unit.test_origem_fireads` cobre os quatro canais, formatos de telefone,
+recência, canal/anúncio ausente, erro sem atribuição orgânica, prioridade do Funil,
+marco fixo obrigatório, HTTP 300s, leitura compartilhada entre páginas e somas
+por perfil/anúncio. Os testes existentes de monitoramento preservam período,
+autorização e leitura de JSONB em texto.
+
+`tests.integration.test_origem_fireads_postgres` usa PostgreSQL real descartável:
+conclusão no JSON sem DDL novo; abertura pendente/consulta inicial excluídas;
+etapas com e sem link; pagamento/configuração alterados; Funil avançando durante
+HTTP; advisory lock entre sessões e liberação ao fechar; falha seguida de retry;
+nenhuma transação aberta durante HTTP; marco de ativação e releitura pré-HTTP.
+`test_monitoramento_fireads_postgres` também valida idade do participante,
+destinatário ainda desconhecido, soma por anúncio Google e envios no período.
+
+Execução exige `FIREADS_TEST_DSN` apontando explicitamente para loopback e banco
+vazio `test_chatbot_fireads`. Os testes recusam outro destino/schema preexistente,
+criam e removem somente o schema descartável. HTTP real é proibido por mock.
+Nunca configurar esse DSN com RDS ou outro banco compartilhado.
+
+```text
+python -m unittest tests.integration.test_origem_fireads_postgres tests.integration.test_monitoramento_fireads_postgres tests.integration.test_fireads_postgres -q
+```
+
+Resultado local em 24/10/2026: **252 testes unitários direcionados e 52 testes
+PostgreSQL aprovados**, incluindo as regressões de FireAds e atendimento; Django
+system check aprovado no ambiente de teste; sintaxe dos dois arquivos JS validada.
+
+Revisão com Chrome/Playwright e dados fictícios, 1440×1000 e 390×844: canal/anúncio,
+nomes longos, grupos Meta/Google independentes, somas, painel lateral, abertura e
+fechamento, retorno de foco, teclado, toque, atualização automática com detalhe
+aberto, estado de carregamento/erro, ajuda e ausência de overflow horizontal ou
+erros JavaScript. Artefatos locais de revisão em `codex_patch/origens_visual/`
+(ignorados pelo Git, sem dados reais).
+
+Conferência adicional real em 24/10/2026, separada dos testes automatizados:
+conexão de banco em transação READ ONLY e TLS `verify-full`; GET FireAds de Santo
+André concluído em 5,31s. Retorno de 755 linhas com `Anuncio` confirmado; captura
+e leitura da atribuição em memória validadas para 444 linhas Meta e 24 Google.
+Anúncio preenchido em 297 Meta e 1 Google (“Escola de memoria”); campos vazios
+mantiveram canal e anúncio não informado. Nenhuma escrita no banco/API/cache ou
+envio de mensagem. A falha anterior vinha do caminho Linux do certificado local;
+foi usado o bundle oficial AWS no processo Windows sem alterar o `.env`.
+Os totais acima são registros da planilha, não métricas de atendimentos do painel.

@@ -42,6 +42,22 @@ class PainelFireAdsPostgresTests(unittest.TestCase):
                           (cid, data, f'wamid.test.{cid}'))
         return cid
 
+    def test_perfil_por_origem_usa_idade_do_participante_e_conversa_no_periodo(self):
+        dep = self.conversa('2026-10-01', 'Google Ads', dependente=True)
+        self.conversa('2026-10-02', 'Google Ads')
+        self.conversa('2026-10-03', 'Meta Ads', etapa=1)
+        self.conn.execute('UPDATE chatbot.cliente SET idade=65 WHERE id_cliente=1')
+        self.conn.execute('INSERT INTO chatbot.dependente(id_cliente,id_conversa,nome_dependente,idade) VALUES(1,%s,%s,%s)',
+                          (dep, 'Dependente fictício', 13))
+        self.conn.execute("INSERT INTO chatbot.funil_envios(id_conversa,status,enviado_em) VALUES(%s,'sent','2026-10-01 12:00')", (dep,))
+        r = montar_origens(painel.buscar_origens(1, '2026-10-01', '2026-10-04', self.cursor))
+        google = next(c for c in r['canais'] if c['canal']=='google')
+        self.assertEqual((google['atendimentos'], google['funil']), (2, 1))
+        self.assertEqual({p['chave']: (p['atendimentos'], p['funil']) for p in google['perfis']},
+                         {'dependente_menor': (1, 1), 'titular_idoso': (1, 0)})
+        self.assertEqual(r['anuncios_google'][0]['perfis'], google['perfis'])
+        self.assertEqual(r['anuncios'][0]['perfis'][0]['chave'], 'nao_informado')
+
     def test_filtra_periodo_antes_de_escolher_sem_herdar_tags(self):
         a = self.conversa('2026-10-01', 'Meta Ads', dependente=True)
         b = self.conversa('2026-10-02', 'Chat Fire')
