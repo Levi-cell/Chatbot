@@ -17,7 +17,7 @@ MENSAGEM_PADRAO_ETAPA10 = (
 )
 
 ### REPETIÇÃO DA PERGUNTA, SEM REAPRESENTAR A ABERTURA
-MENSAGEM_REPETICAO_ETAPA10 = "Me diz novamente, qual é o seu melhor email?"
+MENSAGEM_REPETICAO_ETAPA10 = "Qual é o seu melhor email?"
 
 
 

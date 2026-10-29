@@ -32,6 +32,21 @@ TIPO_TRATAMENTO_REFORCO_ESCOLAR = "duvida_reforco_escolar"
 TIPO_TRATAMENTO_NOME_INVALIDO = "nome_invalido"
 
 
+def enviar_etapa1_endereco_inicio(
+    cliente_telefone, phone_id_unidade, nome_unidade, nome_agente, genero,
+    endereco, horarios_funcionamento=None,
+):
+    from core.integrations.whatsapp.messages.etapa1_messages import montar_mensagem_endereco_inicio
+    texto = montar_mensagem_endereco_inicio(
+        obter_saudacao_por_horario(), nome_unidade, nome_agente, genero,
+        endereco, horarios_funcionamento,
+    )
+    return _enviar_texto_etapa1(
+        cliente_telefone, phone_id_unidade, texto,
+        evento="enviar_etapa1_endereco_inicio", tipo_tratamento="pedido_endereco",
+    )
+
+
 ###  CENARIO NORMAL
 
 

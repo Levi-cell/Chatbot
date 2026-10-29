@@ -279,6 +279,13 @@ class Unidade(models.Model):
         max_length=100,
     )
     phone_number_id = models.CharField(unique=True, max_length=100)
+    horarios_funcionamento = models.TextField(
+        'horário de funcionamento', blank=True, null=True,
+        help_text=(
+            'Informe somente os dias e horários, sem o prefixo '
+            '“Nosso horário de funcionamento é de”. Deixe vazio para omitir esse trecho.'
+        ),
+    )
     id_fuso = models.IntegerField(blank=True, null=True, editable=False)
     nome_fuso = models.TextField(blank=True, null=True, editable=False)
     fuso_verificado_em = models.DateTimeField(blank=True, null=True, editable=False)
@@ -358,6 +365,29 @@ class Unidade(models.Model):
     class Meta:
         managed = False
         db_table = 'unidade'
+
+
+class EnderecoUnidade(models.Model):
+    id_unidade = models.OneToOneField(
+        Unidade, models.CASCADE, primary_key=True, db_column='id_unidade',
+        related_name='endereco_cadastrado', verbose_name='unidade',
+    )
+    endereco = models.TextField('endereço público')
+
+    def clean(self):
+        super().clean()
+        self.endereco = (self.endereco or '').strip()
+        if not self.endereco:
+            raise ValidationError({'endereco': 'Informe o endereço da unidade.'})
+
+    def __str__(self):
+        return str(self.id_unidade)
+
+    class Meta:
+        managed = False
+        db_table = 'endereco_unidade'
+        verbose_name = 'Endereço da unidade'
+        verbose_name_plural = 'Endereços das unidades'
 
 
 class IntegracaoFunilUnidade(models.Model):

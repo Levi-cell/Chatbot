@@ -654,7 +654,8 @@ um destino. Correções explícitas com vírgula e destinos alternativos
 completos continuam aceitos. A confirmação da etapa 3 é preservada.
 
 Perguntas sobre a gratuidade da demonstração ou experiência recebem o
-tratamento financeiro, sem avanço. Perguntas curtas como `É gratuita?`
+tratamento financeiro, sem avanço nas etapas de pergunta. Na espera da etapa 8,
+a orientação acompanha a abertura da 9. Perguntas curtas como `É gratuita?`
 podem retomar a oferta nas etapas de convite e reserva. Menções a algo
 gratuito fora desse contexto não recebem uma classificação nova genérica.
 
@@ -743,6 +744,11 @@ mensalidade, investimento ou termo equivalente:
 3. a mensagem também reapresentará a pergunta da etapa atual;
 4. a conversa não avançará por causa da pergunta de valor;
 5. `last_message_from` será atualizado para `bot` depois da resposta persistida.
+
+Exceção de retorno: na etapa 8, a mensagem do cliente retoma a oferta da 9 pelo
+evento `cliente_retornou`, precedida da orientação financeira quando aplicável.
+O mesmo vale para reforço escolar e endereço. A pergunta não confirma a reserva;
+o cliente decide pelos botões da etapa 9 em uma nova interação.
 
 Se a conversa iniciar com pergunta de valor, a resposta esperada usará uma das
 duas primeiras linhas conforme o gênero do agente:
@@ -1481,7 +1487,9 @@ mesmos resolvers do atendimento normal. Respeitar as prioridades de cada etapa:
 tratamentos específicos existentes (mídia, financeiro e reforço) permanecem;
 resposta válida segue seu evento, efeitos e destino; resposta sem validação nem
 tratamento específico reapresenta a pergunta neutra, sem reprimenda de contexto.
-A triagem mantém apenas suas opções canônicas, sem ganhar tratamentos novos.
+A triagem mantém apenas suas opções canônicas para registrar respostas. Pedidos
+de endereço, financeiro ou reforço escolar recebem tratamento e a mesma pergunta,
+sem resposta de triagem nem avanço (ampliação de 28/10/2026).
 
 A resposta começa com `Bom te ver novamente, <nome> ☺️` ou a forma sem nome
 `Bom te ver novamente ☺️`. Na etapa 1, nunca usar o nome de atendimento anterior:
@@ -1499,8 +1507,9 @@ normalmente. A resposta seguinte volta à contagem normal de tratamentos.
 `8 → cliente_retornou → 9`, reutilizando o resolver e o mapa do retorno normal.
 Não repetir a mensagem da 8, nem criar ou enviar uma variante de repetição.
 A oferta da 9 preserva titular/dependente, botões e rodapé e recebe somente a
-saudação de follow-up. O conteúdo não é classificado como tratamento ou aceite:
-mesmo uma confirmação nessa reação apenas apresenta a 9; a próxima resposta
+saudação de follow-up, sem outra saudação própria. Dúvidas de endereço, financeiro
+e reforço escolar recebem orientação antes da oferta. Mesmo uma confirmação
+nessa reação apenas apresenta a 9; a próxima resposta
 segue sua validação normal. Não há Funil ou encerramento nessa transição.
 
 O histórico do cliente e o checkpoint conservam a origem 8; a resposta do bot
@@ -1646,9 +1655,10 @@ Procedimento operacional: [Consumo Meta](deploy/consumo_mensal_meta.md).
 
 A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial), ou 17 → 19 quando o turno já estiver salvo. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser salvo na abertura sem link ou na transação de 18 → 19; preferência antecipada permite 17 → 19. É preferência, não confirmação de agendamento. Na 19, dúvidas de endereço, financeiro e reforço escolar, assim como mídia, preservam a etapa e o contato comercial. Demais textos apresentam a nota da 21; não são interpretados como nota nessa mesma interação.
 
-Na etapa 18, os três botões e frases afirmativas como `só posso pela tarde`,
+Na etapa 18, a lista de quatro opções (“Pela manhã”, “Pela tarde”, “Pela noite”,
+“No sábado”) e frases afirmativas como `só posso pela tarde`,
 `prefiro ir de manhã` e `à noite fica melhor para mim` definem um único turno.
 Aceitar caixa, acentos, pontuação e os sinônimos matutino, vespertino e noturno.
 Repetir o mesmo turno não cria uma segunda escolha. Dois turnos distintos,
@@ -1781,7 +1791,8 @@ reutiliza essa referência. Snapshots 4 sincronizam os campos conforme a regra
 acima; os anteriores conservam updates apenas de observações e sua seleção própria.
 
 Manhã, Tarde, Noite e Sábado são preferências válidas. Sábado digitado também é
-aceito na etapa 18. Os três botões permanecem e o texto explica essa alternativa.
+aceito na etapa 18. A lista inclui os quatro turnos; respostas aos três botões
+antigos continuam compatíveis, sem alterar mensagens já persistidas.
 Preferência antecipada fica em conversa.turno e contexto_coleta, sob o lock da
 abertura. Ao concluir a triagem sem link e com turno salvo, a aresta autorizada
 17 → 19 preserva a sexta resposta e envia o contato comercial. Com link atual,
@@ -1822,3 +1833,44 @@ anterior. A ajuda do painel não trata toda origem desconhecida como abandono.
 
 Detalhes operacionais: [workers](workers/README.md) e
 [plano aplicado](plano_relatorios_perfis_origens_anuncios.md).
+
+
+## Endereço da unidade e retorno — 27/10/2026
+
+O endereço público é cadastrado uma vez por unidade em `endereco_unidade`.
+Desde 28/10/2026, `unidade.horarios_funcionamento` guarda texto opcional de dias
+e horários. NULL/vazio omite o parágrafo inteiro. Ponto de referência pode estar
+no próprio endereço, sem inferência. Pedidos como “Aonde fica” recebem o endereço,
+os horários quando cadastrados e a pergunta neutra da etapa,
+sem avançar ou perder os botões. Se não cadastrado, informar a ausência do dado.
+Abertura e etapas 1–22 admitem os três tratamentos: endereço, financeiro e
+reforço escolar. Etapas 23 e 24 ficam excluídas. A prioridade
+continua mídia → reforço escolar → financeiro → endereço; etapa 4 preserva
+os validadores de profissão. As exceções do formulário Meta permanecem.
+
+O pedido pode estar dentro da mensagem e não depende de interrogação, caixa ou
+acentos. São aceitas inversões e abreviações de localização, como “Aonde é”,
+“aonde q fca”, “Onde vcs ficam” e “Fica aonde”. Endereço eletrônico, endereço
+do próprio cliente, localização de elementos digitais e recusa explícita não
+ativam esse tratamento. Uma pergunta física separada continua sendo analisada
+mesmo quando outra oração contém esses assuntos. Não se usa correção aproximada
+de palavras arbitrárias para decidir a intenção.
+
+Na etapa 8, endereço, financeiro e reforço escolar são respondidos antes da
+apresentação da etapa 9, com a transição existente 8 → 9. Não repetir despedida,
+Instagram ou espera; apresentar os botões de reserva/adiamento sem interpretar
+o pedido como aceite. Demais reações também seguem 8 → 9. Na 19, dúvidas
+específicas não iniciam a satisfação.
+No follow-up, tratamento, histórico e conclusão da retomada continuam atômicos.
+Na triagem (12–17), os tratamentos preservam a pergunta canônica, participante,
+faixa e botões; não registram resposta nem avançam. Na nota (21), preservam a
+pergunta e as cinco opções sem registrar avaliação. A próxima resposta válida
+continua seguindo seu evento normal. Comentário livre (23) e finalização (24)
+conservam suas regras próprias, sem esses tratamentos.
+
+A ordem visual é cabeçalho → saudação de retorno → tratamento → repetição da
+etapa, omitindo os blocos que não se aplicam e separando os presentes por
+exatamente `\n\n`. Financeiro e reforço escolar não usam “Vamos lá”. Evitar saudação
+ou celebração redundante depois de “Bom te ver novamente”; preservar a oferta,
+a pergunta e as informações substantivas. O histórico deve conter a mesma
+mensagem enviada. Especificação e implantação: [guia](docs/enderecos_e_retorno.md).

@@ -64,11 +64,16 @@ Meta, Funil, Redis ou RDS. A integração com PostgreSQL local só executa quand
 ser executado como forma de testar sua importação.
 
 `test_botoes_webhook.py`, `test_valida_etapa18.py`, `test_fluxo_reserva_link.py`
-e `test_pywa_compatibilidade.py` cobrem a escolha de turno: JSON dos botões
+e `test_pywa_compatibilidade.py` cobrem a escolha de turno: JSON da lista de quatro opções
 serializado pela PyWa, extração no webhook, tipos `interactive` e
 `interactive_button`, resolução 18 → 19, persistência e replay sem novo envio.
 Cobrem também frases afirmativas e a recusa de respostas ambíguas, múltiplos
 turnos e menções sem escolha. As fronteiras HTTP e SQL são simuladas.
+O contrato com a PyWa real passa as quatro opções (inclusive sábado) pelo
+webhook como `list_reply`, com título ou apenas ID, e verifica a transição e
+persistência do turno. Botões antigos e suas respostas continuam cobertos.
+`test_monitoramento_painel.py` distingue as três opções do histórico antigo das
+quatro opções da lista nova. Retentativas e tratamentos repetem a mesma lista.
 
 Testes unitários pertencem a `tests/unit/`; contratos com PostgreSQL real ficam
 em `tests/integration/` e exigem ambiente descartável explícito. Dados e classes
@@ -83,6 +88,11 @@ as apresentações exclusivas da etapa 1, inatividade com avanço ou tratamento,
 follow-up sem nova apresentação/despedida e participante preservado na reserva.
 Os envios são simulados; a consulta do participante é conferida com cursor
 substituído, sem conexão com banco de produção.
+O agradecimento de entrada na reserva por link é verificado nos dois gêneros,
+para titular/dependente e com/sem retorno. Gênero ausente impede a apresentação
+antes do HTTP, mas não impede a repetição que dispensa agradecimento.
+`test_endereco_unidade.py` verifica a pesquisa após endereço sem a ponte
+“Para continuarmos:”, mantendo título, saudação, separadores e cinco notas.
 
 `test_inicio_informacoes_supera.py` cobre os pedidos de apresentação com e sem
 saudação, acentos e interrogação, rejeição de palavras isoladas e outros assuntos,
@@ -528,3 +538,55 @@ erros JavaScript. Sintaxe JS e `git diff --check` conferidos. Roteiro e capturas
 locais em `codex_patch/origens_visual/verificar_modal.cjs` e `modal-*.png`
 (ignorados pelo Git, sem dados reais). A conferência anterior da ajuda, toque e
 atualização automática também passou com a nova janela.
+
+
+## Endereços e composição de retorno — 27/10/2026
+
+`tests.unit.test_endereco_unidade` cobre pedidos de localização, falsos positivos,
+prioridades, abertura completa/parcial/legada, endereço ausente, titular e
+dependente, todas as etapas previstas, retorno e replay. A suíte de mensagens,
+saudação e follow-up confere título antes da saudação, sem dupla abertura, e
+igualdade entre histórico e texto entregue ao transporte.
+
+A revisão de 28/10/2026 cobre horários presentes, NULL, vazios e com espaços,
+referência incluída no endereço e ordem completa de título/saudação/tratamento/
+pergunta. Confere também o DDL final com TEXT nullable, a migração do banco sem
+a coluna, atualização da versão só com endereços e preservação de dados editados.
+Os três tratamentos cobrem abertura e etapas 1–22, excluindo 23/24. A matriz da
+triagem (12–17) e nota (21) cruza tratamento, participante/faixa e ausência ou
+presença de retorno por inatividade/follow-up. Verifica pergunta e opções
+originais, nenhuma resposta/nota/avanço, prioridade, replay, ausência de
+“Vamos lá” e exatamente `\n\n` entre blocos. Na 23, o comentário livre continua
+sendo coletado mesmo quando contém palavras de preço, reforço ou endereço.
+
+O identificador também é exercitado com perguntas embutidas na mensagem,
+inversões (“Fica aonde”), abreviações (“aonde q fca”, “Onde vcs ficam”), acentos,
+caixa, espaços, emojis e ausência de interrogação. Casos negativos cobrem
+endereço eletrônico/site/IP, dados residenciais, outros destinos, elementos da
+interface, recusas e declarações de que já conhece o local. Mensagens com mais
+de uma oração preservam o pedido físico válido. Abertura, reserva e retorno
+confirmam que essas variantes enviam endereço/horários e preservam a etapa.
+
+```bash
+python -m unittest tests.unit.test_endereco_unidade tests.unit.test_saudacao_retorno tests.unit.test_followup tests.unit.test_retomada_followup tests.unit.test_mensagens_reserva -q
+```
+
+`tests.integration.test_endereco_unidade_postgres` exige `FIREADS_TEST_DSN`
+explícito, host loopback e banco vazio `test_chatbot_fireads`, usando a mesma
+guarda das suítes FireAds. Verifica DDL Python versus migração, seeds por unidade,
+reexecução, constraints, rollback, preservação dos IDs das transições e o fluxo
+real “Aonde fica” na etapa 9, incluindo gravação e replay. HTTP é substituído.
+Confere também tratamento sem resposta/nota nas etapas 12, 17 e 21, histórico
+igual ao envio, replay sem duplicação e resposta válida posterior que avança
+e grava a resposta da triagem ou a nota normalmente.
+Na 8, os testes exigem orientação + etapa 9, sem despedida/Instagram, preservando
+os botões de reserva e adiamento. A consulta do mapa precede o envio. Há casos
+de titular/dependente, retorno comum/inatividade/follow-up, histórico na origem
+e destino corretos, rollback, replay e nova resposta que confirma a reserva.
+
+```bash
+python -m unittest tests.integration.test_endereco_unidade_postgres -v
+```
+
+A auditoria de produção foi somente leitura; DDL/migração/testes de escrita
+foram executados em PostgreSQL local descartável. [Registro](../docs/enderecos_e_retorno.md).

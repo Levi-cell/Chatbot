@@ -87,7 +87,7 @@ class FollowupPostgresTests(unittest.TestCase):
         """
         )
         with patch.object(etapa_transicao_script, "transacao_deploy", transacao_local):
-            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa(incluir_coleta=False)
         aplicar_fireads(cls.cursor)
         cls.conn.commit()
 
@@ -270,7 +270,7 @@ class FollowupPostgresTests(unittest.TestCase):
         self.cursor.execute("SELECT followup_stage,status_ativa FROM chatbot.conversa WHERE id_conversa=1")
         self.assertEqual(self.cursor.fetchone(), (2, False))
 
-    def test_painel_considera_so_ultima_conversa_mesmo_fora_do_periodo(self):
+    def test_painel_considera_ultima_conversa_com_historico_no_periodo(self):
         dados, versao = self._primeiro_followup_vencido()
         fim = self.agora + timedelta(days=1)
         def chats(ate=fim):
@@ -294,9 +294,9 @@ class FollowupPostgresTests(unittest.TestCase):
             INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
             SELECT 2,id_chat,1,1,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=1
         """)
-        # A nova conversa nem possui histórico no período: ainda assim oculta a antiga.
-        self.assertEqual(chats()[0]["followup_stage"], 0)
-        self.assertEqual(chats(self.agora - timedelta(hours=1))[0]["followup_stage"], 0)
+        # Uma conversa sem histórico visível não substitui a última do período.
+        self.assertEqual(chats()[0]["followup_stage"], 2)
+        self.assertEqual(chats(self.agora - timedelta(hours=1))[0]["followup_stage"], 2)
         self.cursor.execute("""
             INSERT INTO chatbot.historico_mensagens
                 (id_conversa,id_etapa,received_data_hora,cliente_telefone,conteudo_texto,tipo_mensagem,
@@ -307,6 +307,9 @@ class FollowupPostgresTests(unittest.TestCase):
         chat = chats()[0]
         self.assertEqual(chat["ids_conversa"], [1, 2])
         self.assertEqual(chat["followup_stage"], 1)
+        anterior = chats(self.agora - timedelta(hours=1))[0]
+        self.assertEqual(anterior["ids_conversa"], [1])
+        self.assertEqual(anterior["followup_stage"], 2)
         self.cursor.execute("UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=2")
         self.assertEqual(chats()[0]["followup_stage"], 0)
 
@@ -433,6 +436,16 @@ class FollowupPostgresTests(unittest.TestCase):
 
     def test_reacao_etapa8_avanca_e_rollback_e_replay_preservam_ciclo(self):
         self._verificar_reacao_real(origem=8, destino=9)
+
+    def test_financeiro_na8_abre9_com_rollback_e_replay(self):
+        self._verificar_reacao_real(origem=8, destino=9, texto='Quanto custa?')
+
+    def test_reforco_na8_abre9_com_rollback_e_replay(self):
+        self._verificar_reacao_real(origem=8, destino=9, texto='Vocês oferecem reforço escolar?')
+
+    def test_endereco_na8_abre9_com_rollback_e_replay(self):
+        self.cursor.execute("INSERT INTO chatbot.endereco_unidade VALUES(1,'Rua A, 10')")
+        self._verificar_reacao_real(origem=8, destino=9, texto='Aonde q fca?')
 
     def test_nome_valido_avanca_e_grava_cliente_com_reset_atomico(self):
         self._verificar_reacao_real(origem=1, destino=2, texto="Antonia")

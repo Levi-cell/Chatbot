@@ -1,6 +1,9 @@
 import logging
 from workers.worker_flow.fireads import email_importado
 from core.validacoes.coleta_abertura import validar_contexto
+from core.repositories.unidades.enderecos import buscar_localizacao_unidade
+from core.repositories.atendimento.followup import buscar_contexto_repeticao
+from workers.worker_flow.response_flow.tratamentos_informativos import classificar_tratamento_informativo
 
 
 from core.logging_config import short_value
@@ -445,6 +448,18 @@ def valida_historico(mensagem, contexto_banco, cursor, *, retorno_followup=False
         "saudacao_retorno": saudacao_retorno,
     }
     contexto_historico.update(contexto_especifico_etapa)
+    # Consulta somente quando haverá tratamento, antes de liberar a transação
+    # para o envio HTTP. Retry com resposta salva não depende destes dados.
+    tratamento = classificar_tratamento_informativo(contexto_historico)
+    if not resposta_bot_para_mensagem_atual and tratamento:
+        if tratamento == "pedido_endereco":
+            contexto_historico.update(buscar_localizacao_unidade(
+                contexto_banco["id_unidade"], cursor
+            ))
+        if contexto_historico["id_etapa_atual"] is not None:
+            contexto_historico["dados_repeticao"] = buscar_contexto_repeticao(
+                id_conversa, contexto_banco["id_unidade"], cursor
+            )
     return contexto_historico
 
 

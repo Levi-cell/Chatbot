@@ -91,7 +91,7 @@ class FireAdsPostgresTests(unittest.TestCase):
             bank_script.criar_tabelas()
             bank_script.criar_funcoes_lock()
             povoar_etapas.insere_etapa_once()
-            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa(incluir_coleta=False)
         self.cursor.execute("""
             INSERT INTO chatbot.unidade(nome_unidade,nome_agente,genero,cnpj,email_responsavel,
                 telefone,numero_comercial,waba_id,phone_number_id)

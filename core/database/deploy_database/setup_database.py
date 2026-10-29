@@ -46,8 +46,9 @@ def setup_database_aws():
 
     # 4. Catálogos executáveis do fluxo de atendimento.
     insere_etapa_once()
-    criar_e_povoar_transicoes_etapa()
+    criar_e_povoar_transicoes_etapa(incluir_coleta=False)
     criar_estrutura_fireads()
+    criar_e_povoar_transicoes_etapa()
 
     # 5. O cache derivado só é reconstruído após o banco estar completo.
     resetar_cache_redis_dev()

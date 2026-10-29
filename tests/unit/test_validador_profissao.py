@@ -76,7 +76,7 @@ class ValidadorProfissaoTests(unittest.TestCase):
                         )
                         self.assertIn("sua *profissão*", texto)
                         self.assertEqual(
-                            "perfil da outra pessoa" in texto, rota_final
+                            "você e a outra pessoa" in texto, rota_final
                         )
                         self.assertEqual(envio["status_dependente_final"], rota_final)
                         self.assertEqual(envio["id_etapa_resultante"], 4)

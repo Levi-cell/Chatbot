@@ -1120,3 +1120,40 @@ persistida. `efeitos_transicao` preserva a sexta resposta também nesse caminho;
 replay usa histórico/mapa e a preferência da conversa. A migração incremental
 `20261021_chat_fire_turno_coleta.sql` amplia origem/turno e adiciona essa aresta,
 sem alterar os estados históricos nem os snapshots de entrega.
+
+
+## Endereço por unidade e repetição compartilhada — 27/10/2026
+
+O cadastro público de endereços é relacional, 1:1 em `endereco_unidade`, sem
+cópia em Redis. Identificação do pedido pertence a `core/validacoes`; leitura
+SQL parametrizada a `core/repositories/unidades/enderecos.py`; composição pura
+a `messages/tratamentos/endereco.py`. `valida_historico` prepara os dados na
+transação de leitura antes do envio externo. Não consultar SQL dentro de sender.
+
+Na revisão de 28/10/2026, a mesma leitura faz LEFT JOIN de unidade/endereço para
+obter também `unidade.horarios_funcionamento TEXT NULL`, sem ampliar o cache.
+A coluna consta no CREATE final do DDL; somente a migração incremental usa ALTER.
+Horários vazios não produzem parágrafo; referências são texto literal do endereço.
+
+`tratamentos_informativos.py` coordena os novos tratamentos, preservando as
+prioridades existentes e os resolvers das demais etapas. O seletor comum
+`repeticao_etapa.py` é usado por tratamento e follow-up; perguntas, botões e
+links continuam pertencendo aos senders originais. Não duplicar catálogos.
+A permanência na etapa não gera aresta nem recalcula elegibilidade do Funil.
+Na espera da etapa 8, a orientação acompanha a abertura da 9. O coordenador
+reutiliza `resolve_etapa8` com a saudação própria desabilitada, preservando
+validação do mapa, evento `cliente_retornou` e persistência normal. Nesse caso,
+`tipo_tratamento` descreve a orientação enviada; `tratamento=True` continua
+reservado às respostas sem avanço. Não enfraquecer as guardas gerais que
+impedem uma resposta de permanência de carregar evento de transição.
+Os três tratamentos cobrem a abertura e etapas 1–22, excluindo 23/24. Nas
+perguntas 12–17, o seletor usa os senders canônicos de triagem, sem o argumento
+`repeticao`; na 21, usa a repetição da satisfação. Nenhum desses tratamentos
+produz evento, resposta da triagem ou nota; os efeitos permanecem exclusivos
+da transição autorizada pela próxima resposta válida.
+
+O compositor aplica títulos antes do prefixo de retorno e remove apenas
+aberturas redundantes conhecidas. `unir_blocos_mensagem` separa os blocos presentes
+com exatamente `\n\n`, preservando o conteúdo interno. Financeiro/reforço não
+acrescentam “Vamos lá”. Envio e histórico devem ser idênticos.
+[Contrato, auditoria do DDL e migração](docs/enderecos_e_retorno.md).

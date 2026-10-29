@@ -1,4 +1,4 @@
-"""Etapa 8: oferta adiada; qualquer retorno, inclusive follow-up, apresenta a 9."""
+"""Despedida ao adiar a oferta; novas mensagens retomam a etapa 9."""
 
 from core.integrations.whatsapp.messages.componentes_compartilhados import (
     RODAPE_ETAPA8_ESPERA,
@@ -15,10 +15,16 @@ MENSAGEM_PADRAO_ETAPA8 = (
     "{link_instagram}"
 )
 
-# Não há mensagem de repetição: quem voltou recebe a oferta da etapa 9.
+# Variante neutra mantida para compatibilidade de chamadas diretas. O fluxo
+# não a usa no retorno: dúvidas acompanham a apresentação da etapa 9.
+MENSAGEM_REPETICAO_ETAPA8 = (
+    "Quando quiser retomar sua reserva, é só me avisar por aqui. 🧡"
+)
 
 
-def montar_mensagem_oferta_adiada_etapa8(link_instagram):
+def montar_mensagem_oferta_adiada_etapa8(link_instagram, *, repeticao=False):
+    if repeticao:
+        return MENSAGEM_REPETICAO_ETAPA8
     link = str(link_instagram or "").strip()
     if not link:
         raise ValueError("Link do Instagram da unidade não configurado")

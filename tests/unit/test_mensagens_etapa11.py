@@ -104,8 +104,9 @@ class MensagensEtapa11Tests(unittest.TestCase):
                         with patch.object(cliente, "WhatsApp", return_value=wa):
                             envio = flow_sender(cx)
                         texto = self.conferir_envio(envio, wa, dependente, prefixo)
-                        self.assertNotIn("antes de prosseguir", texto)
+                        self.assertNotIn("antes de prosseguirmos", texto)
                         self.assertEqual(texto.lower().count("vamos iniciar"), 1)
+                        self.assertEqual(texto.count("Lucas"), int(dependente))
                         self.assertEqual(envio["tipo_tratamento"], tratamento)
                         self.assertNotIn("evento_transicao", envio)
                         if tratamento == "confirmacao_triagem_invalida":
@@ -127,7 +128,7 @@ class MensagensEtapa11Tests(unittest.TestCase):
                     envio, wa, dependente, "Bom te ver novamente, Ana ☺️\n\n"
                 )
                 self.assertEqual(envio["mensagem_bot"], texto)
-                self.assertNotIn("antes de prosseguir", texto)
+                self.assertNotIn("antes de prosseguirmos", texto)
                 self.assertNotIn("Olha, não consegui entender", texto)
                 self.assertNotIn("evento_transicao", envio)
                 self.assertNotIn("tratamento", envio)

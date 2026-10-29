@@ -9,6 +9,7 @@ from .tratamentos.retorno_inatividade import (
     INTERVALO_SAUDACAO_RETORNO,
     montar_saudacao_retorno,
 )
+from .tratamentos.composicao import unir_blocos_mensagem
 
 
 CABECALHO_ETAPA11_TRIAGEM = "Triagem cognitiva"
@@ -26,9 +27,9 @@ MENSAGEM_COM_RODAPE = "{mensagem}\n\n_{rodape}_"
 
 def montar_texto_com_cabecalho(mensagem, cabecalho):
     """Mantém o cabeçalho no corpo para padronizar sua exibição no WhatsApp."""
-    return MENSAGEM_COM_CABECALHO.format(cabecalho=cabecalho, mensagem=mensagem)
+    return unir_blocos_mensagem(f"*{cabecalho.strip()}*", mensagem)
 
 
 def montar_texto_com_rodape(mensagem, rodape):
     """Preenche o modelo visual, sem acrescentar separadores fora dele."""
-    return MENSAGEM_COM_RODAPE.format(mensagem=mensagem, rodape=rodape)
+    return unir_blocos_mensagem(mensagem, f"_{rodape.strip()}_")

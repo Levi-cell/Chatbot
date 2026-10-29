@@ -2,7 +2,10 @@
 
 import re
 
-from core.integrations.whatsapp.messages.etapa18_messages import montar_botoes_etapa18
+from core.integrations.whatsapp.messages.etapa18_messages import (
+    montar_botoes_etapa18,
+    montar_opcoes_etapa18,
+)
 from core.integrations.whatsapp.messages.etapa19_messages import TITULO_BOTAO_COMERCIAL
 
 from core.integrations.whatsapp.messages.etapa2_messages import montar_botoes_etapa2
@@ -81,6 +84,8 @@ def botoes_para_mensagem(mensagem):
     tipo = str(mensagem.get('tipo') or '')
     if mensagem.get('quem_enviou') != 'bot' or not tipo.startswith('interactive'):
         return []
+    if mensagem.get('id_etapa') == 18 and tipo == 'interactive_list':
+        return montar_opcoes_etapa18()
     fabrica = _BOTOES_POR_ETAPA.get(mensagem.get('id_etapa'))
     return list(fabrica()) if fabrica else []
 

@@ -150,6 +150,7 @@ class RetornoTests(unittest.TestCase):
                 "buscar_resposta_bot_por_mensagem_cliente": None,
                 "atualizar_conversa_mensagem_cliente": None,
                 "buscar_contexto_saudacao_retorno": ("Ana", AGORA),
+                "buscar_contexto_repeticao": dados_etapa,
                 "listar_transicoes_permitidas": {
                     evento: destino
                     for origem, evento, destino in TRANSICOES_INICIAIS
@@ -367,7 +368,14 @@ class RepeticaoTests(unittest.TestCase):
                         if etapa == 1
                         else "Bom te ver novamente, Ana ☺️\n"
                     )
-                    self.assertTrue(envio["mensagem_bot"].startswith(saudacao_esperada))
+                    texto = envio["mensagem_bot"]
+                    if texto.startswith('*'):
+                        titulo, texto = texto.split('\n\n', 1)
+                        self.assertIn(titulo, {
+                            '*Triagem cognitiva*', '*Pesquisa de satisfação*',
+                            *(f'*Pergunta {n}*' for n in range(1, 7)),
+                        })
+                    self.assertTrue(texto.startswith(saudacao_esperada))
                     self.assertEqual(
                         envio["mensagem_bot"].count("Bom te ver novamente"), 1
                     )
@@ -408,7 +416,7 @@ class RepeticaoTests(unittest.TestCase):
                     repeticao.enviar_repeticao_followup(contexto())
                 self.assertEqual(
                     cliente.aplicar_prefixo_mensagem_bot("teste"),
-                    "prefixo anterior: teste",
+                    "prefixo anterior:\n\nteste",
                 )
 
     def test_retry_nao_chama_sender(self):

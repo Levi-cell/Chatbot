@@ -8,6 +8,19 @@ cria outro serviço. O inventário atual contém seis workers e esse serviço we
 responsabilidades e nomes estão em [workers/README.md](../workers/README.md).
 Este guia também cobre a preparação de uma instalação nova.
 
+## Endereços, horários e retorno — revisão de 28/10/2026
+
+Esta atualização **exige migração SQL** antes de iniciar o código novo:
+[`migrations/20261027_endereco_unidade.sql`](migrations/20261027_endereco_unidade.sql).
+Cria o cadastro de endereços, preenche as três unidades informadas e acrescenta
+`unidade.horarios_funcionamento TEXT NULL`. Preenche o horário confirmado de
+Santo André somente se vazio; os horários das outras unidades ficam pendentes
+de cadastro. Reexecução preserva dados existentes. O roteiro,
+o escopo dos tratamentos e a auditoria do DDL estão em
+[Endereços e retorno](../docs/enderecos_e_retorno.md).
+Não executar `setup_database.py` ou seeds na produção. O aviso de ausência de
+migração na seção seguinte refere-se somente à atualização anterior.
+
 ## Perfis, anúncios Google e worker de origem — 24/10/2026
 
 **Atualização a partir da V1.16.1: não requer migração SQL, novas colunas,

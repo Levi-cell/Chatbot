@@ -17,19 +17,20 @@ from workers.worker_flow.response_flow.transicoes.resolver_transicao import (
 """
 ESSE ARQUIVO TEM UMA RESPONSABILIDADE
 
-- ENCAMINHAR QUALQUER NOVA MENSAGEM DA ETAPA 8 PARA A ETAPA 9
+- ENCAMINHAR O RETORNO DA ETAPA 8 PARA A ETAPA 9
 """
 
 
 logger = logging.getLogger("worker.etapa8")
 
 
-def resolve_etapa8(contexto_historico):
+def resolve_etapa8(contexto_historico, *, incluir_saudacao=True):
     """
     A etapa 8 representa a espera após o cliente adiar a oferta.
 
-    Qualquer nova mensagem significa que o cliente retornou. Não existem
-    validações de mídia, financeiro ou contexto nesta etapa.
+    Toda nova mensagem retoma a 9. Quando há dúvida de endereço, financeiro
+    ou reforço escolar, o dispatcher acrescenta a orientação antes da oferta.
+    A saudação própria é omitida nesse caso e quando já existe saudação externa.
     """
     mensagem_cliente = contexto_historico["mensagem_cliente_atual"]
     status_dependente = bool(
@@ -39,6 +40,7 @@ def resolve_etapa8(contexto_historico):
     nome_dependente = contexto_historico.get("nome_dependente")
     cliente_telefone = mensagem_cliente["cliente_telefone"]
     phone_id_unidade = mensagem_cliente["id_phone_unidade"]
+    incluir_saudacao = incluir_saudacao and not bool(contexto_historico.get("saudacao_retorno"))
 
     # VALIDANDO DESTINO
     # A própria existência da mensagem produz o único evento da etapa 8.
@@ -66,14 +68,14 @@ def resolve_etapa8(contexto_historico):
             phone_id_unidade,
             nome_titular,
             nome_dependente,
-            incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
+            incluir_saudacao=incluir_saudacao,
         )
     else:
         contexto_envio = enviar_etapa9_cliente(
             cliente_telefone,
             phone_id_unidade,
             nome_titular,
-            incluir_saudacao=not bool(contexto_historico.get("saudacao_retorno")),
+            incluir_saudacao=incluir_saudacao,
         )
 
     return anexar_transicao_ao_contexto_envio(

@@ -464,7 +464,9 @@ antigo; um nome válido na reação é salvo e permite avançar para a 2.
 Os resolvers preservam seus validadores e prioridades: resposta válida avança;
 mídia, financeiro e reforço recebem os tratamentos já existentes naquela etapa;
 contexto inválido genérico usa `repeticao_followup.py` para a pergunta neutra.
-A triagem continua aceitando somente as opções canônicas, sem novos tratamentos.
+A triagem continua aceitando somente as opções canônicas para registrar respostas.
+Desde 28/10/2026, endereço, financeiro e reforço escolar recebem tratamento e
+reapresentação da mesma pergunta, sem avanço ou resposta de triagem.
 Botões, rodapés e participante são preservados. O prefixo aparece uma vez no
 envio e no histórico, inclusive nas mensagens com cabeçalho.
 
@@ -578,3 +580,18 @@ Logs `origem_iniciado`, `origem_consulta_falhou`, `origem_registro_falhou` e
 `origem_ciclo` informam duração, leituras, selecionados, identificados, sem canal,
 sem registro elegível, anúncios não informados, descartados e falhas. Logs de
 erro usam IDs e tipos de exceção, sem telefone, e-mail ou URL do Web App.
+
+
+### Endereços e retorno — 27/10/2026
+
+Não foi criado outro worker. O `worker_flow` identifica pedidos de endereço,
+carrega o cadastro da unidade antes do envio HTTP e responde usando o sender
+neutro da etapa. Os três tratamentos cobrem a abertura e as etapas 1–22, inclusive
+triagem e nota; excluem comentário livre (23) e finalização (24). Financeiro e
+reforço nas etapas 8, 12–17, 19 e 21 usam a coordenação compartilhada; os demais
+resolvers mantêm seus tratamentos. Dúvidas não registram respostas/nota. A reação a
+follow-up conserva validação, recibos e persistência atômica. Na 8, a orientação
+acompanha a abertura da 9 pelo resolver existente: valida o mapa antes de enviar,
+sem repetir a despedida nem considerar o pedido um aceite da reserva.
+O `worker_followup` proativo mantém a elegibilidade
+e os intervalos existentes. [Detalhamento](../docs/enderecos_e_retorno.md).

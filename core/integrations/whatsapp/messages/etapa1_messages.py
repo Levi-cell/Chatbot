@@ -76,6 +76,16 @@ def montar_mensagem_reforco_escolar_inicio(saudacao, nome_unidade, nome_agente, 
     return _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem)
 
 
+def montar_mensagem_endereco_inicio(
+    saudacao, nome_unidade, nome_agente, genero, endereco, horarios_funcionamento=None
+):
+    from core.integrations.whatsapp.messages.tratamentos.endereco import montar_mensagem_tratamento_endereco
+    mensagem = montar_mensagem_tratamento_endereco(
+        MENSAGEM_REPETICAO_ETAPA1, endereco, horarios_funcionamento
+    )
+    return _montar_inicio(saudacao, nome_unidade, nome_agente, genero, mensagem)
+
+
 # TRATAMENTOS APÓS A APRESENTAÇÃO
 
 

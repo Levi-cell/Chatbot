@@ -3,6 +3,7 @@ import logging
 from core.database.deploy_database.transacao_deploy import transacao_deploy
 from core.database.deploy_database.followup_script import criar_tabelas_followup
 from core.database.deploy_database.consumo_meta_script import criar_tabelas_consumo_meta
+from core.database.deploy_database.enderecos_script import criar_tabela_endereco_unidade
 
 logger = logging.getLogger("db.deploy_database")
 
@@ -206,6 +207,7 @@ def criar_tabelas():
             phone_number_id VARCHAR(100) UNIQUE NOT NULL,
             link_agendamento VARCHAR(400) UNIQUE,
             link_instagram VARCHAR(400),
+            horarios_funcionamento TEXT NULL,
             bpa_ativo BOOLEAN NOT NULL DEFAULT FALSE,
             status_pagamento BOOLEAN DEFAULT TRUE,
             id_usuario_monitoramento INT NULL,
@@ -316,8 +318,8 @@ def criar_tabelas():
                     motivo_encerramento IS NULL
                     OR motivo_encerramento IN (
                         'idade_invalida',
-                        'foi_agendado',
                         'encaminhado_suporte_idoso',
+                        'foi_agendado',
                         'followup_sem_resposta',
                         'titular_menor_18', 'dependente_menor_4', 'dependente_menor_5',
                         'suporte_idoso_50', 'suporte_idoso_60', 'suporte_idoso_70', 'suporte_idoso_80',
@@ -595,6 +597,7 @@ def criar_tabelas():
 
         criar_tabelas_followup(cursor)
         criar_tabelas_consumo_meta(cursor)
+        criar_tabela_endereco_unidade(cursor)
 
     logger.info("banco_setup_ok | acao=criar_tabelas")
 

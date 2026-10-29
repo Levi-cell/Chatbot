@@ -31,7 +31,13 @@ MENSAGEM_PADRAO_ETAPA18 = compor_mensagem_inicial(
 
 
 def montar_botoes_etapa18():
+    """Rótulos dos três botões antigos, usados para exibir o histórico."""
     return ["Pela manhã", "Pela tarde", "Pela noite"]
+
+
+def montar_opcoes_etapa18():
+    """Opções da lista atual; os títulos também são respostas textuais válidas."""
+    return [*montar_botoes_etapa18(), "No sábado"]
 
 
 def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=False):
@@ -57,5 +63,4 @@ def montar_mensagem_etapa18(nome_dependente=None, *, tratamento=None, repeticao=
         )
     else:
         raise ValueError("Tratamento desconhecido para escolha de turno")
-    texto += '\n\nSe preferir sábado, escreva *Sábado*.'
     return montar_texto_com_rodape(texto, RODAPE_OPCAO_UNICA)

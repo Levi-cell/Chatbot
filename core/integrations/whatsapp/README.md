@@ -102,7 +102,7 @@ reservar não são aceites; na etapa 20, intenção de reservar não comprova co
 A gratuidade se refere à experiência; o tratamento financeiro explica que os
 valores de investimento são definidos após ela, com orientação da equipe.
 O prefixo é compartilhado em `tratamentos/financeiro.py`; cada etapa fornece
-sua pergunta de retomada, introduzida por `Vamos lá:` uma única vez.
+sua pergunta de retomada, separada da orientação por `\n\n`, sem “Vamos lá”.
 `tratamentos_universais.py` apenas reexporta os imports antigos por compatibilidade.
 Não há personalização por diretor nem campos
 adicionais na unidade. Os montadores são puros, e o histórico conserva o

@@ -182,6 +182,14 @@ Commit: `fa5c30ca37f35cb34532053ae1190efd0d59fdf1`
 
 Commit: `143d4128aa5e00dc8c625cc12f4263b375a36a5e`
 
+### V1.17.0 — Perfis, anúncios Google e origem periódica
+
+Commit: `b662524e768b38cf900b404f61f464f392f6d67e`
+
+### V1.18.0 — Janela de perfis por origem
+
+Commit: `201b6b253af731195d31fb35a11d4d66652f4e89`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

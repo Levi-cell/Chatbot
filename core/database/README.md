@@ -69,6 +69,8 @@ healthcheck
 -> funções de lock
 -> seed de etapas
 -> whitelist de transições de etapas
+-> blocos DDL versionados FireAds/coleta/turno
+-> sincronização das 32 transições atuais, preservando IDs existentes
 -> reset de cache de desenvolvimento
 ```
 
@@ -86,10 +88,13 @@ Os comandos utilizam `IF NOT EXISTS`, `CREATE OR REPLACE` ou `ON CONFLICT` onde
 aplicável. Por isso, um setup interrompido normalmente pode ser executado de
 novo sem apagar o banco.
 
-`bank_script.py` descreve diretamente o schema final da V1. Ele não contém
-`ALTER TABLE`, correções de colunas antigas, dados de unidade ou migrações
-históricas. As tabelas são criadas em ordem de dependência para que chaves
-estrangeiras e constraints já nasçam prontas.
+`bank_script.py` descreve a base das tabelas e chama os módulos de follow-up,
+consumo e endereços. O schema atual completo resulta dessa base e dos blocos
+versionados executados por `fireads_script.py`, incluindo a separação de
+`atendimento_customizado`, chats, consultas, coleta e turno antecipado.
+Esses blocos são parte do bootstrap Python; não executar os arquivos históricos
+inteiros novamente em produção. Os seeds de endereços das unidades pertencem
+somente à migração incremental, não ao setup genérico.
 
 `chatbot.auth_user` é um pré-requisito explícito do DDL de negócio. Sua criação
 continua pertencendo às migrations do Django; o DDL não recria tabelas internas
@@ -294,10 +299,38 @@ agenda/diagnóstico, inclusive antes do primeiro sucesso. Nenhuma conversa/fila
 
 A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado. Pode ser antecipado
+pela coleta de abertura sem link ou salvo na transação 18 → 19; antecipado,
+permite 17 → 19. É preferência, não confirmação. Na 19, mídia, endereço,
+financeiro e reforço escolar preservam a etapa; demais textos apresentam a
+pesquisa da 21, sem interpretar a mesma entrada como nota.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
 Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
+
+
+## Auditoria do schema e endereços — 27/10/2026
+
+O pipeline Python foi executado em PostgreSQL local e comparado ao catálogo
+real de produção, somente leitura. Colunas, constraints, índices, funções,
+gatilhos, etapas e eventos de negócio coincidem, acrescidos apenas da nova
+tabela `endereco_unidade` no código. Essa tabela possui endereço não vazio e
+relação 1:1 com unidade. A migração incremental também cadastra os três
+endereços fornecidos; o setup genérico cria somente a estrutura.
+
+Revisão de 28/10/2026: `horarios_funcionamento TEXT NULL` já está no
+`CREATE TABLE chatbot.unidade` de `bank_script.py`; o DDL Python cria a coluna
+na estrutura final, sem ALTER para essa inclusão. O ALTER fica exclusivamente
+na migração incremental de endereços para atualizar bancos existentes. O dado
+é opcional e não tem valor padrão no DDL. A migração cadastra somente o horário
+confirmado de Santo André quando o campo está vazio; preserva horários existentes.
+
+A sincronização do mapa preserva IDs e inclui as duas arestas de coleta que
+antes dependiam exclusivamente das migrações: `1 → 4` e `17 → 19`. O bootstrap
+usa o catálogo anterior para os blocos históricos e sincroniza o catálogo
+atual ao final. Não se perde coleta ao reexecutar em desenvolvimento.
+
+Escopo, comparação e deploy: [Endereços e retorno](../../docs/enderecos_e_retorno.md).

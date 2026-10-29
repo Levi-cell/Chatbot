@@ -106,19 +106,26 @@ class PywaCompatibilidadeTests(unittest.TestCase):
                          {f"satisfacao_{nota}" for nota in range(1, 6)})
         self.assertEqual(resultado["id_hash_msg_bot"], ID_MENSAGEM)
 
-    def test_cada_botao_real_de_turno_volta_pelo_webhook_avanca_e_persiste(self):
+    def test_cada_opcao_real_de_turno_volta_pelo_webhook_avanca_e_persiste(self):
         # Usa o JSON serializado pela PyWa real. Só HTTP e SQL são substituídos.
         cliente_wa = self._cliente_real()
         with patch.object(etapa18, "conta_wa", return_value=cliente_wa):
-            etapa18.enviar_etapa18(TELEFONE_CLIENTE, PHONE_ID)
-        botoes = self._payload()["interactive"]["action"]["buttons"]
-        self.assertEqual([b["reply"]["title"] for b in botoes],
-                         ["Pela manhã", "Pela tarde", "Pela noite"])
-        for botao, turno in zip(botoes, ("manha", "tarde", "noite")):
+            resultado = etapa18.enviar_etapa18(TELEFONE_CLIENTE, PHONE_ID)
+        interativa = self._payload()["interactive"]
+        self.assertEqual(interativa["type"], "list")
+        self.assertEqual(resultado["tipo_mensagem"], "interactive_list")
+        self.assertEqual(resultado["mensagem_bot"], interativa["body"]["text"])
+        self.assertNotIn("escreva *Sábado*", resultado["mensagem_bot"])
+        linhas = interativa["action"]["sections"][0]["rows"]
+        self.assertEqual([linha["title"] for linha in linhas],
+                         ["Pela manhã", "Pela tarde", "Pela noite", "No sábado"])
+        for linha, turno in zip(linhas, ("manha", "tarde", "noite", "sabado")):
             for tipo in ("interactive", "interactive_button"):
                 for dependente in (False, True):
-                    with self.subTest(botao=botao, tipo=tipo, dependente=dependente):
-                        resposta = {"type": "button_reply", "button_reply": botao["reply"]}
+                    with self.subTest(linha=linha, tipo=tipo, dependente=dependente):
+                        # Sem título, o ID textual também precisa ser uma escolha válida.
+                        opcao = linha if dependente else {"id": linha["id"]}
+                        resposta = {"type": "list_reply", "list_reply": opcao}
                         dados = extrair_dados_whatsapp(payload_botao(tipo, resposta))
                         ctx = contexto(18, dados["conteudo_texto"], dependente=dependente)
                         ctx["tipo_mensagem_atual"] = dados["tipo_mensagem"]

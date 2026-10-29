@@ -22,7 +22,7 @@ Deve facilitar a próxima resposta e valorizar a pessoa, sem parecer um
 formulário nem pressioná-la a continuar.
 
 - Usar frases naturais e fáceis de ler, com uma ação ou pergunta principal.
-- Demonstrar acolhimento com expressões como `Maravilha!`, `Vamos lá?` e
+- Demonstrar acolhimento com expressões como `Maravilha!` e
   `Vou te ajudar a continuar`, quando fizerem sentido naquele momento.
 - Priorizar sorriso acolhedor (`☺️`, `😊`) e coração laranja (`🧡`), com
   moderação. Não é obrigatório colocar um emoji em cada pergunta.
@@ -122,11 +122,11 @@ etapa**, **repetir sua pergunta** e **acolher um retorno** são situações dife
 | Momento | Composição da fala | Efeito no fluxo |
 |---|---|---|
 | Entrada normal em uma etapa | Abertura coerente com o passo anterior + conteúdo/pergunta + componentes necessários | O fluxo já autorizou a apresentação desse destino. |
-| Mídia, financeiro ou reforço em etapa apresentada | Orientação específica + retomada neutra da pergunta atual | O tratamento não autoriza avançar. |
+| Mídia, financeiro ou reforço em etapa de pergunta | Orientação específica + retomada neutra da pergunta atual | O tratamento não autoriza avançar. A espera da etapa 8 segue a regra de retorno abaixo. |
 | Contexto inválido em etapa apresentada | Mensagem própria que já pede a resposta correta, sem concatenar a repetição | Permanece na etapa atual. |
 | Retorno por inatividade, sem follow-up pendente | Uma saudação de retorno + resposta que o fluxo normal produziria | A resposta do cliente continua sendo validada; pode avançar ou receber tratamento. |
 | Reação a follow-up pendente, exceto na etapa 8 | Uma saudação + destino válido, tratamento específico ou repetição neutra | Usa os validadores normais; contexto inválido genérico apenas reapresenta a pergunta. |
-| Reação a follow-up pendente na etapa 8 | Uma saudação de retorno + mensagem da etapa 9 | Avança diretamente de 8 para 9, sem repetir a 8 nem interpretar a reação como aceite da oferta. |
+| Retorno na etapa 8, com ou sem follow-up | Saudação quando aplicável + orientação se houver dúvida + mensagem da etapa 9 | Avança de 8 para 9, sem repetir a 8 nem interpretar a reação como aceite da oferta. |
 | Retry com resposta já persistida | Reutilização do registro existente | Não montar nem enviar outra mensagem. |
 
 O conteúdo reutilizável é a **pergunta ou chamada principal**, não
@@ -147,8 +147,8 @@ Escolha Reservar agora para continuar ou Talvez mais tarde para deixar para outr
 ```
 
 Uma dúvida não precisa receber todo o discurso comercial novamente. O
-tratamento financeiro e o de reforço escolar usam o prefixo compartilhado,
-uma ponte como `Vamos lá:` e a pergunta necessária para continuar.
+tratamento financeiro e o de reforço escolar usam o prefixo compartilhado
+e a pergunta necessária para continuar, separados por `\n\n`, sem “Vamos lá”.
 Não acumular conectivos nem repetir esse prefixo dentro da mesma resposta.
 
 Na etapa 18, a orientação sobre escolher uma preferência e combinar correções
@@ -448,26 +448,25 @@ Na primeira reação aceita com follow-up pendente:
 4. tratamento específico reconhecido: saudação + tratamento + pergunta atual;
 5. sem resposta válida nem tratamento específico: saudação + repetição neutra,
    preservando participante, botões e rodapés nativos, sem orientação de contexto inválido;
-6. na triagem, aceitar somente as opções canônicas; respostas inválidas repetem a
-   pergunta, sem introduzir tratamentos financeiros, de mídia ou reforço;
+6. na triagem, endereço, financeiro e reforço escolar recebem orientação e a
+   mesma pergunta; somente opções canônicas registram resposta e avançam.
+   Mídia e entradas sem tratamento específico conservam a repetição do follow-up;
 7. zerar `followup_stage` no sucesso, junto dos efeitos, histórico e finalização da fila.
    Se não avançar, essa primeira reação não incrementa `turnos_sem_avanco`.
    Uma transição válida zera o contador normalmente; as próximas respostas seguem
    as regras normais. Uma falha reverte a transação inteira.
 
-**Exceção da etapa 8 — oferta adiada:** qualquer reação processada pelo flow
-com follow-up pendente leva diretamente à etapa 9. Não enviar novamente a
-mensagem inicial da 8, uma variante de repetição, sua despedida ou o Instagram.
-A etapa 8 não possui mensagem de repetição. A resposta contém o prefixo de
-follow-up uma única vez e a oferta da etapa 9, preservando titular/dependente,
-botões e rodapé. Mesmo `Quero reservar` nessa reação apenas leva à 9; a próxima
-resposta será validada pela etapa 9.
+**Etapa 8 — oferta adiada (revisada em 28/10/2026):** dúvidas de endereço,
+financeiro e reforço escolar são respondidas antes de apresentar a oferta da
+9, preservando seus botões/rodapé. Demais reações, inclusive `Quero reservar`,
+também abrem a 9; não confirmar a reserva nessa mesma interação. Não repetir
+despedida, Instagram ou espera no retorno.
 
-O worker reutiliza o resolver e a transição normal `8 → cliente_retornou → 9`.
-O histórico da reação permanece na 8; a resposta do bot é registrada na 9.
-Avanço, resposta e conclusão do follow-up são confirmados juntos. Uma falha
-reverte esses efeitos; recuperar uma resposta já confirmada não reenvia nem
-zera um ciclo posterior. Essa regra também vale para retomada legada pendente.
+Toda resposta nova da 8 segue `8 → cliente_retornou → 9`, com orientação
+adicional quando cabível e saudação externa apenas quando aplicável.
+Histórico e conclusão da retomada são confirmados juntos. Replay não reenvia
+nem zera um ciclo posterior. O guia [Endereços e retorno](../../../../docs/enderecos_e_retorno.md)
+detalha as etapas e as prioridades.
 
 Esse prefixo substitui a saudação de três horas; não se somam os dois. Uma
 saudação própria, como a da etapa 9, também deve ser suprimida quando já houver
@@ -481,11 +480,13 @@ As exceções propostas no plano futuro de `user_id` não estão ativas neste c�
 
 ## 6. A triagem tem um contrato próprio
 
-Na base atual, as seis perguntas são as etapas 12–17. Elas não possuem os
-tratamentos específicos de mídia, financeiro e reforço escolar das etapas
-comerciais. Existe apenas a mensagem própria de **resposta da triagem inválida**,
-que orienta responder à pergunta já apresentada usando uma das opções
-`Nunca`, `Às vezes` e `Frequentemente`. Não concatenar novamente a pergunta.
+As seis perguntas são as etapas 12–17. Endereço, financeiro e reforço escolar
+recebem tratamento seguido da mesma pergunta canônica, sem registrar resposta
+nem avançar. Os botões `Nunca`, `Às vezes` e `Frequentemente`, o participante e
+a faixa são preservados. Para outras entradas inválidas, permanece a mensagem
+própria de **resposta da triagem inválida**, sem concatenar outra pergunta;
+na reação ao follow-up, permanece a repetição neutra. Não há novo tratamento
+específico de mídia na triagem.
 
 As perguntas canônicas estão em `core/triagem/perguntas.py`; não duplicá-las
 nos arquivos de mensagens nem reescrever seu significado numa revisão de tom.
@@ -519,7 +520,8 @@ comercial ou celebração a cada resposta da triagem.
 ## 7. Organização dos arquivos e do código
 
 Cada etapa é dona da sua mensagem padrão e da sua mensagem de repetição.
-Na etapa 8 existe somente a mensagem inicial: o retorno apresenta a etapa 9.
+Na etapa 8, dúvidas específicas acrescentam orientação antes de apresentar a 9;
+demais retornos apresentam a 9 diretamente. Não usar a repetição da espera.
 Cada tipo de tratamento é dono da orientação compartilhada. O arquivo da
 etapa importa o montador do tratamento e entrega a ele sua repetição pura:
 **tratamento → ponte, quando necessária → repetição da etapa**.
@@ -613,7 +615,7 @@ Aplicar estes cuidados:
 - Indicar titular e dependente nos blocos que possuem as duas rotas. Os
   tratamentos devem preservar o participante, inclusive no contexto autônomo.
 - Explicar exceções junto do código: contexto inválido já pede a resposta;
-  etapa 8 não se repete e retorna para a 9; etapa 9 evita somar saudações.
+  etapa 8 abre a 9 com orientação quando houver dúvida; etapa 9 evita somar saudações.
 - Na triagem, comentar que a pergunta vem do catálogo central na apresentação
   e no follow-up; contexto inválido usa sua orientação própria, sem repeti-la.
   Não criar seções de tratamentos
@@ -656,9 +658,10 @@ MENSAGEM_TRATAMENTO = compor_tratamento(
 - `compor_tratamento` monta **orientação + ponte opcional + repetição**.
   Recebe apenas a pergunta reutilizável, nunca a mensagem padrão completa.
   Não é usado em contexto inválido, cuja mensagem já contém a orientação completa.
-- Ambas reutilizam `_concatenar_fragmentos` internamente. Esse auxiliar
-  apenas concatena: os espaços e as quebras estão nas variáveis de mensagens.
-  Não escolhe o cenário nem decide o fluxo.
+- `compor_mensagem_inicial` preserva a concatenação literal dos fragmentos.
+  `compor_tratamento` usa `unir_blocos_mensagem`, que remove espaços/quebras
+  apenas nas extremidades e separa blocos presentes por `\n\n`. O mesmo auxiliar
+  separa cabeçalho, saudação, tratamento, repetição e rodapé; não decide o fluxo.
 
 Não inserir a pergunta em `APRESENTACAO` se ela já será acrescentada pelo
 compositor: isso duplicaria o trecho final. Quando apresentação e repetição
@@ -692,7 +695,8 @@ genérico. Etapas terminais e perguntas canônicas não precisam de variantes
 artificiais. A exceção de contexto vale para todas as etapas, não só para nome.
 
 Nos retornos, a saudação é aplicada uma única vez pelo transporte coordenado
-pelo worker. Isso preserva a ordem **retorno → tratamento, se o fluxo normal
+pelo worker. Quando há título, ele vem sempre primeiro. Depois, preserva-se a ordem
+**retorno → tratamento, se o fluxo normal
 o escolher → repetição** na inatividade, exceto contexto: **retorno → mensagem
 própria de contexto**. No follow-up, o worker usa os mesmos validadores e
 tratamentos específicos; somente a resposta inválida sem tratamento específico
@@ -751,7 +755,8 @@ de etapas de um plano não deve ser antecipada no código em produção.
 
 - **Etapa 2:** a repetição retoma a pergunta do destinatário sem `Prazer`.
 - **Etapa 8:** a mensagem com Instagram pertence somente à entrada na etapa.
-  Qualquer reação ao follow-up avança diretamente para a 9, sem repetir a 8.
+  Todos os retornos avançam à 9. Endereço, financeiro e reforço recebem orientação
+  antes da oferta da 9, sem repetir despedida/Instagram nem consumir um aceite.
 - **Mídia:** a orientação compartilhada usa linguagem simples e acolhedora,
   com texto ou botões conforme os recursos reais da etapa.
 - **Etapas 3–6:** a confirmação e a coleta de profissão, nome do dependente
@@ -775,4 +780,45 @@ contêm `acima_99` permanecem como contrato interno; o resolver aplica universal
 
 ### Escolha de turno e contato comercial
 
+Na etapa 18, o sender apresenta uma `SectionList` com “Pela manhã”, “Pela tarde”,
+“Pela noite” e “No sábado”. Cada ID é o próprio título, também aceito como texto
+digitado. As respostas antigas dos três botões continuam válidas. O histórico
+registra `interactive_list`; o painel distingue essa lista dos botões antigos,
+sem acrescentar sábado às mensagens passadas. Repetições e tratamentos mantêm
+a lista, sem instrução separada para digitar sábado.
+
+Na entrada da etapa 20, o contexto da unidade fornece o gênero do agente:
+“Obrigada” para feminino, “Obrigado” para masculino. O gênero é obrigatório
+nessa apresentação e não é inferido do nome. Repetições e tratamentos não
+agradecem novamente. O link ocupa sua própria linha, após `\n\n`, sem espaço
+antes da URL. A orientação de contexto usa “Para escolher o melhor dia e horário”.
+
 A nova etapa 18 pergunta uma única preferência de turno, sem prometer horário. A 19 apresenta o contato comercial com mensagem preenchida. Os tratamentos específicos preservam os componentes e o contexto inválido da escolha de turno é autônomo. Retorno válido ao primeiro follow-up pode avançar; não descartar a escolha recebida. Com plataforma, a apresentação do link passa à etapa 20; a satisfação é compartilhada em 21–24.
+
+
+## Endereço e composição de retorno — 27/10/2026
+
+Endereço usa texto da própria unidade, sem inventar ou copiar de outra. O
+tratamento compartilha os senders de repetição com o follow-up. Está disponível
+na abertura e nas etapas 1–22, assim como financeiro/reforço. Na triagem (12–17)
+e na nota (21), o pedido é respondido e a mesma pergunta reapresentada, sem
+registrar resposta/avaliação. As etapas 23 e 24 ficam excluídas. Abertura
+parcial/FireAds conserva os dados já coletados.
+
+Cabeçalhos ficam antes de toda saudação. Quando já houver prefixo de retorno,
+a composição suprime somente aberturas redundantes conhecidas, como
+“Maravilha, nome!”; preserva explicações e perguntas. Envio e histórico contêm
+a mesma fala. Migração, exemplos e testes: [guia](../../../../docs/enderecos_e_retorno.md).
+
+Revisão de 28/10/2026: endereço começa com “Nossa unidade fica localizada em”.
+`unidade.horarios_funcionamento`, quando preenchido, entra logo depois com
+“Nosso horário de funcionamento é de”; NULL/vazio omite o parágrafo completo.
+Referência pode estar no texto do endereço. Seguem a ponte e a pergunta neutra.
+Título → saudação opcional → tratamento → pergunta é a ordem de composição.
+Todos esses blocos são separados por `\n\n`. Financeiro e reforço não usam
+“Vamos lá”; a ponte do endereço permanece “Para continuarmos:”, exceto nas
+etapas 19, 20 e 21. Nessas etapas, endereço e horários são seguidos diretamente
+da orientação comercial, do link de reserva ou da pergunta de satisfação,
+sempre com `\n\n` entre os blocos. Os demais tratamentos não usam essa ponte.
+O “Certo” meramente introdutório de nome do dependente/email/triagem é omitido
+após a saudação de retorno; confirmações substantivas e despedida são mantidas.

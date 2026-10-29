@@ -36,9 +36,10 @@ def enviar_etapa20(
     nome_dependente=None,
     *,
     repeticao=False,
+    genero=None,
 ):
     mensagem_bot = montar_mensagem_etapa20(
-        link_agendamento, nome_dependente, repeticao=repeticao
+        link_agendamento, nome_dependente, repeticao=repeticao, genero=genero
     )
 
     return _enviar_texto_etapa20(

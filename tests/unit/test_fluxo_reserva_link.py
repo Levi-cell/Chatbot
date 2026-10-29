@@ -226,6 +226,10 @@ class FluxoReservaTests(unittest.TestCase):
             self.assertEqual(envio["tipo_tratamento"], tratamento)
             self.assertNotIn("evento_transicao", envio)
             self.assertNotIn("turno", envio)
+            self.assertEqual(envio["tipo_mensagem"], "interactive_list")
+            linhas = self.http.send_message.call_args.kwargs["buttons"].sections[0].rows
+            self.assertEqual([linha.title for linha in linhas],
+                             ["Pela manhã", "Pela tarde", "Pela noite", "No sábado"])
             if tratamento == "contexto_invalido":
                 self.assertIn("Para continuar, escolha apenas um turno.", envio["mensagem_bot"])
             with patch.object(efeitos, "salvar_turno_conversa") as salvar:
@@ -272,7 +276,7 @@ class FluxoReservaTests(unittest.TestCase):
 
     def test_replay_de_botao_reconstroi_preferencia_sem_reenviar(self):
         for tipo in ("interactive", "interactive_button"):
-            for texto, turno in (("Pela manhã", "manha"), ("Pela tarde", "tarde"), ("Pela noite", "noite")):
+            for texto, turno in (("Pela manhã", "manha"), ("Pela tarde", "tarde"), ("Pela noite", "noite"), ("No sábado", "sabado")):
                 with self.subTest(tipo=tipo, texto=texto):
                     ctx = contexto(18, texto)
                     ctx["tipo_mensagem_atual"] = tipo

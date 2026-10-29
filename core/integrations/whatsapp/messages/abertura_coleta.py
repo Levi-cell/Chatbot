@@ -6,6 +6,7 @@ from core.integrations.whatsapp.messages.etapa4_messages import MENSAGEM_REPETIC
 from core.integrations.whatsapp.messages.tratamentos.financeiro import montar_mensagem_tratamento_financeiro
 from core.integrations.whatsapp.messages.tratamentos.midia import montar_mensagem_tratamento_midia
 from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import montar_mensagem_tratamento_reforco_escolar
+from core.integrations.whatsapp.messages.tratamentos.endereco import montar_mensagem_tratamento_endereco
 
 
 def montar_abertura(contexto, saudacao, tratamento=None):
@@ -20,13 +21,15 @@ def montar_abertura(contexto, saudacao, tratamento=None):
     artigo = 'a' if genero == 'feminino' else 'o'
     apresentacao = f"{saudacao} Sou {artigo} {contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️"
     if estado['formulario_identificado']:
-        apresentacao += ('\n\nVi que você já preencheu um dos nossos formulários. Para continuarmos '
+        apresentacao += ('\n\nVi que você já preencheu um dos nossos formulários. Para avançarmos '
                          'com sua reserva por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?')
     pergunta = {1: 'Me diz, qual o seu nome?', 2: MENSAGEM_REPETICAO_ETAPA2,
                 4: MENSAGEM_REPETICAO_ETAPA4}[estado['etapa_inicial']]
     tratamentos = {'pergunta_financeira': montar_mensagem_tratamento_financeiro,
                    'duvida_reforco_escolar': montar_mensagem_tratamento_reforco_escolar,
-                   'tipo_mensagem_nao_suportado': montar_mensagem_tratamento_midia}
+                   'tipo_mensagem_nao_suportado': montar_mensagem_tratamento_midia,
+                   'pedido_endereco': lambda pergunta: montar_mensagem_tratamento_endereco(
+                       pergunta, contexto.get('endereco_unidade'), contexto.get('horarios_funcionamento'))}
     if tratamento:
         pergunta = tratamentos[tratamento](pergunta)
     return apresentacao + '\n\n' + pergunta

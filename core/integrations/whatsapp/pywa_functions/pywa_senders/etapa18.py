@@ -1,11 +1,11 @@
 """Transporte da escolha de turno, sem validação da resposta ou persistência."""
 
 import logging
-from pywa.types import Button
+from pywa.types import Section, SectionList, SectionRow
 
 from core.integrations.whatsapp.exceptions import ErroEnvioMeta
 from core.integrations.whatsapp.messages.etapa18_messages import (
-    montar_botoes_etapa18,
+    montar_opcoes_etapa18,
     montar_mensagem_etapa18,
 )
 from core.integrations.whatsapp.pywa_functions.cliente import conta_wa
@@ -31,7 +31,13 @@ def enviar_etapa18(
         resposta = conta_wa(phone_id_unidade).send_message(
             to=cliente_telefone,
             text=texto,
-            buttons=[Button(title=t, callback_data=t) for t in montar_botoes_etapa18()],
+            buttons=SectionList(
+                button_title="Escolher turno",
+                sections=[Section(
+                    title="Turno de preferência",
+                    rows=[SectionRow(title=t, callback_data=t) for t in montar_opcoes_etapa18()],
+                )],
+            ),
         )
         id_hash = extrair_id_hash_msg_bot(resposta)
     except Exception as erro:
@@ -48,7 +54,7 @@ def enviar_etapa18(
         "mensagem_bot": texto,
         "id_hash_msg_bot": id_hash,
         "id_etapa_resultante": 18,
-        "tipo_mensagem": "interactive_button",
+        "tipo_mensagem": "interactive_list",
         "canal": "meta_whatsapp",
         "atualizar_conversa": True,
         "atualizar_last_from_bot": True,

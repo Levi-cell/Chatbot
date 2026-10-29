@@ -39,13 +39,23 @@ TRANSICOES_INICIAIS = (
     (22, "comentario_satisfacao_aceito", 23),
     (22, "comentario_satisfacao_recusado", 24),
     (23, "comentario_satisfacao_recebido", 24),
+    # Arestas acrescentadas pelas migrações de coleta. Mantidas no fim para
+    # conservar os IDs históricos também na reexecução do setup.
+    (1, "nome_cliente_valido_destino_coletado", 4),
+    (17, "triagem_concluida_turno_coletado", 19),
 )
 
 # O mapa declara o fluxo completo conhecido. Resolvers e senders continuam
 # responsáveis por produzir somente eventos já implementados na aplicação.
 
 
-def criar_e_povoar_transicoes_etapa():
+def criar_e_povoar_transicoes_etapa(*, incluir_coleta=True):
+    # O bootstrap passa primeiro pelo contrato histórico de 30 arestas.
+    # Depois das migrações, sincroniza o catálogo atual completo.
+    eventos_coleta = {'nome_cliente_valido_destino_coletado', 'triagem_concluida_turno_coletado'}
+    transicoes = tuple(
+        t for t in TRANSICOES_INICIAIS if incluir_coleta or t[1] not in eventos_coleta
+    )
     with transacao_deploy("sincronizar_mapa_transicoes", logger) as cursor:
         cursor.execute(
             """
@@ -77,10 +87,14 @@ def criar_e_povoar_transicoes_etapa():
             """
         )
 
-        # Isto sincroniza dados de catálogo, não migra schema. A whitelist
-        # precisa ser exata e manter IDs previsíveis após uma reexecução.
+        # Preserva IDs existentes (inclusive os atribuídos pelas migrações).
+        # Na fase histórica, as arestas atuais de coleta já existentes ficam
+        # intactas; migrações marcadas como aplicadas não as recriariam.
+        placeholders = ','.join('(%s,%s)' for _ in TRANSICOES_INICIAIS)
         cursor.execute(
-            "TRUNCATE TABLE chatbot.etapa_transicao RESTART IDENTITY;"
+            'DELETE FROM chatbot.etapa_transicao '
+            f'WHERE (id_etapa_origem,evento) NOT IN (VALUES {placeholders})',
+            tuple(valor for origem, evento, _ in TRANSICOES_INICIAIS for valor in (origem, evento)),
         )
 
         cursor.executemany(
@@ -90,12 +104,14 @@ def criar_e_povoar_transicoes_etapa():
                 evento,
                 id_etapa_destino
             )
-            VALUES (%s, %s, %s);
+            VALUES (%s, %s, %s)
+            ON CONFLICT (id_etapa_origem,evento) DO UPDATE
+            SET id_etapa_destino=EXCLUDED.id_etapa_destino;
             """,
-            TRANSICOES_INICIAIS,
+            transicoes,
         )
 
     logger.info(
         "etapa_transicao_setup_ok | acao=sincronizar_mapa quantidade=%s",
-        len(TRANSICOES_INICIAIS),
+        len(transicoes),
     )

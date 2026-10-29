@@ -30,10 +30,17 @@ class RetomadaValidadaTests(unittest.TestCase):
         self.assertEqual(envio["mensagem_bot"], texto_enviado)
         self.assertEqual(texto_enviado.count("Bom te ver novamente"), 1)
         self.assertNotIn("Que bom te ver novamente", texto_enviado)
+        corpo = texto_enviado
+        if corpo.startswith('*'):
+            titulo, corpo = corpo.split('\n\n', 1)
+            self.assertIn(titulo, {
+                '*Triagem cognitiva*', '*Pesquisa de satisfação*',
+                *(f'*Pergunta {n}*' for n in range(1, 7)),
+            })
         if contexto["id_etapa_atual"] == 1:
-            self.assertTrue(texto_enviado.startswith("Bom te ver novamente ☺️\n"))
+            self.assertTrue(corpo.startswith("Bom te ver novamente ☺️\n"))
         else:
-            self.assertTrue(texto_enviado.startswith("Bom te ver novamente, Ana ☺️\n"))
+            self.assertTrue(corpo.startswith("Bom te ver novamente, Ana ☺️\n"))
         return envio, fake.send_message.call_args.kwargs
 
     def test_respostas_validas_avancam_e_preservam_dados_das_duas_rotas(self):
@@ -123,14 +130,30 @@ class RetomadaValidadaTests(unittest.TestCase):
                         self.assertEqual(envio["tipo_tratamento"], tratamento)
                         self.assertTrue(envio["tratamento"])
 
-    def test_continuar_nao_vira_nome_e_triagem_nao_ganha_tratamentos(self):
+    def test_continuar_nao_vira_nome_e_midia_na_triagem_preserva_repeticao(self):
         envio, _ = self.enviar(self.preparar(1, "Quero continuar"))
         self.assertEqual(envio["id_etapa_resultante"], 1)
         self.assertNotIn("primeiro_nome_cliente", envio)
-        for tipo, texto in (("image", ""), ("text", "Quanto custa?")):
-            envio, _ = self.enviar(self.preparar(12, texto, True, tipo))
-            self.assertEqual(envio["id_etapa_resultante"], 12)
-            self.assertFalse(envio.get("tratamento", False))
+        envio, _ = self.enviar(self.preparar(12, "", True, "image"))
+        self.assertEqual(envio["id_etapa_resultante"], 12)
+        self.assertFalse(envio.get("tratamento", False))
+
+    def test_financeiro_e_reforco_na_reacao_a_triagem_e_satisfacao(self):
+        for etapa in (*range(12, 18), 21):
+            for texto, tipo in (("Quanto custa?", "pergunta_financeira"), ("É reforço escolar?", "duvida_reforco_escolar")):
+                envio, _ = self.enviar(self.preparar(etapa, texto, True))
+                self.assertEqual(envio["id_etapa_resultante"], etapa)
+                self.assertEqual(envio["tipo_tratamento"], tipo)
+                self.assertNotIn("evento_transicao", envio)
+                self.assertNotIn("nota_satisfacao", envio)
+                self.assertNotIn("resposta_triagem", envio)
+
+    def test_comentario_livre_nao_e_reinterpretado_como_tratamento(self):
+        for texto in ("Aonde fica a unidade?", "Quanto custa?", "Achei que era reforço escolar"):
+            envio, _ = self.enviar(self.preparar(23, texto))
+            self.assertEqual(envio['id_etapa_resultante'], 24)
+            self.assertEqual(envio['comentario_satisfacao'], texto)
+            self.assertFalse(envio.get('tratamento', False))
 
     def test_inatividade_segue_contexto_invalido_normal(self):
         cx = self.preparar(6, "???", True)

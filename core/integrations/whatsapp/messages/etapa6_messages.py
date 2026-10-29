@@ -100,7 +100,7 @@ def montar_mensagem_contexto_idade_dependente_invalida_etapa6(nome_dependente):
 MENSAGEM_CLIENTE_MENOR_18_ETAPA6 = (
     "Como você tem menos de 18 anos, este atendimento precisa ser realizado "
     "por um adulto responsável.\n"
-    "Peça a um adulto para retornar nosso atendimento. "
+    "Peça a um adulto retornar nosso atendimento. "
     "Um abraço e até logo! 👋☺️"
 )
 

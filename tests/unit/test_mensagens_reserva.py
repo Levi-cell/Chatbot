@@ -74,6 +74,38 @@ def contexto_resposta(etapa, texto, transicoes, *, dependente=False):
     }
 
 
+class GeneroAgendamentoTests(unittest.TestCase):
+    def test_reserva_por_link_agradece_conforme_agente_nas_duas_rotas(self):
+        from tests.unit.test_fluxo_reserva_link import contexto
+
+        for genero, agradecimento in (("feminino", "Obrigada"), ("masculino", "Obrigado")):
+            for dependente in (False, True):
+                for saudacao in (None, "Bom te ver novamente, Ana ☺️\n\n"):
+                    with self.subTest(genero=genero, dependente=dependente, saudacao=saudacao):
+                        ctx = contexto(17, "Nunca", link="https://example.com/reserva", dependente=dependente)
+                        ctx.update(genero_agente_unidade=genero, saudacao_retorno=saudacao)
+                        wa = cliente_simulado()
+                        with patch.object(cliente, "WhatsApp", return_value=wa):
+                            envio = flow_sender(ctx)
+                        texto = envio["mensagem_bot"]
+                        self.assertEqual(texto, wa.send_message.call_args.kwargs["text"])
+                        self.assertTrue(texto.startswith((saudacao or "") + agradecimento + " por responder às perguntas! ☺️\n\n"))
+                        self.assertEqual(envio["evento_transicao"], "triagem_pergunta_6_respondida")
+                        self.assertEqual("de João" in texto, dependente)
+                        self.assertIn("dia e horário:\n\nhttps://example.com/reserva", texto)
+                        self.assertNotIn("\n\n\n", texto)
+
+    def test_genero_ausente_nao_e_inventado_nem_impede_repeticao_sem_agradecimento(self):
+        for genero in (None, "", "outro"):
+            with self.subTest(genero=genero):
+                with patch.object(etapa20, "conta_wa") as transporte:
+                    with self.assertRaisesRegex(ValueError, "Gênero"):
+                        etapa20.enviar_etapa20("cliente", "unidade", "https://example.com", genero=genero)
+                transporte.assert_not_called()
+                texto = etapa20_messages.montar_mensagem_etapa20("https://example.com", repeticao=True, genero=genero)
+                self.assertNotIn("por responder", texto)
+
+
 class DestinoAtendimentoTests(unittest.TestCase):
     def test_negativa_sem_destino_alternativo_repete_pergunta(self):
         for texto in (
@@ -165,7 +197,7 @@ class GratuidadeExperienciaTests(unittest.TestCase):
             self.assertEqual(envio["id_etapa_resultante"], 7)
             self.assertEqual(envio["tipo_tratamento"], "pergunta_financeira")
             self.assertNotIn("evento_transicao", envio)
-            self.assertIn("*experiência supera*", envio["mensagem_bot"].casefold())
+            self.assertIn("experiência supera oferecida por cortesia da unidade", envio["mensagem_bot"].casefold())
             self.assertEqual(envio["mensagem_bot"].count("por cortesia da unidade"), 1)
             self.assertIn("valores de investimento", envio["mensagem_bot"])
 
@@ -206,12 +238,12 @@ class MensagensReservaTests(unittest.TestCase):
                     self.assertEqual(texto, wa.send_message.call_args.kwargs["text"])
                     self.assertEqual(texto.count("Olá novamente"), int(bool(prefixo)))
                     oferta = texto.removeprefix(prefixo or "")
-                    self.assertTrue(oferta.startswith("Maravilha, Maria!"))
-                    self.assertEqual(oferta.count("Maravilha"), 1)
+                    self.assertEqual(oferta.count("Maravilha"), 0 if prefixo else 1)
                     paragrafos = oferta.split("\n\n")
-                    self.assertEqual(paragrafos[0].strip(), "Maravilha, Maria! ☺️")
+                    if not prefixo:
+                        self.assertEqual(paragrafos[0].strip(), "Maravilha, Maria! ☺️")
                     self.assertIn(
-                        "*demonstração prática* por cortesia da unidade", paragrafos[1]
+                        "*demonstração prática* por cortesia da unidade", paragrafos[0 if prefixo else 1]
                     )
                     self.assertIn("*experiência Supera exclusiva*", oferta)
                     self.assertNotIn("{nome", oferta)
@@ -269,7 +301,7 @@ class MensagensReservaTests(unittest.TestCase):
         financeiro = etapa6_messages.montar_mensagem_idade_dependente_etapa6_financeiro(
             "Lucas"
         )
-        self.assertIn("*experiência supera*", financeiro.casefold())
+        self.assertIn("experiência supera oferecida por cortesia da unidade", financeiro.casefold())
         self.assertIn("qual é a idade de Lucas?", financeiro)
         retorno = etapa9_messages.montar_mensagem_retorno_dependente_etapa9(
             "Maria", "Lucas"
@@ -289,6 +321,7 @@ class MensagensReservaTests(unittest.TestCase):
                 ctx.update(
                     idade_pessoa_triagem=12 if dependente else 40,
                     link_agendamento_unidade="https://example.com/horarios",
+                    genero_agente_unidade="feminino",
                 )
                 wa = MagicMock()
                 wa.send_message.return_value = SimpleNamespace(id="wamid.reserva")
@@ -321,7 +354,8 @@ class MensagensReservaTests(unittest.TestCase):
                 wa = MagicMock()
                 wa.send_message.return_value = SimpleNamespace(id="wamid.novo")
                 with patch.object(modulo, "conta_wa", return_value=wa):
-                    envio = enviar("5511999999999", "phone", extra)
+                    opcoes = {"genero": "feminino"} if modulo is etapa20 else {}
+                    envio = enviar("5511999999999", "phone", extra, **opcoes)
                 self.assertEqual(
                     wa.send_message.call_args.kwargs["text"], envio["mensagem_bot"]
                 )

@@ -105,6 +105,9 @@ def classificar_tratamento_abertura(contexto):
         return "duvida_reforco_escolar"
     if validar_pergunta_financeira(texto):
         return "pergunta_financeira"
+    from core.validacoes.endereco import validar_pedido_endereco
+    if validar_pedido_endereco(texto):
+        return "pedido_endereco"
     return None
 
 

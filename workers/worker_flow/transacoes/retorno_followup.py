@@ -189,7 +189,7 @@ def persistir_retorno_followup(contexto, envio, cursor):
 
 
 def _validar_retorno_etapa8(envio):
-    """A reação da etapa 8 abre a etapa 9, nunca responde à oferta seguinte."""
+    """Toda reação abre a 9, com orientação antes da oferta quando houver dúvida."""
     if (
         not envio.get("enviou")
         or envio.get("resposta_ja_existia")

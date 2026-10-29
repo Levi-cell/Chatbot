@@ -16,11 +16,11 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### PERGUNTAS REUTILIZADAS NA INICIAL E NOS TRATAMENTOS, POR PARTICIPANTE
 MENSAGEM_REPETICAO_CLIENTE = (
-    "Vamos continuar com a reserva do seu *momento Supera*? ☺️"
+    "Vamos dar prosseguimento à reserva do seu *momento Supera*? ☺️"
 )
 
 MENSAGEM_REPETICAO_DEPENDENTE = (
-    "Vamos continuar com a reserva do *momento Supera* de "
+    "Vamos dar prosseguimento à reserva do *momento Supera* de "
     "{nome_dependente}? ☺️"
 )
 

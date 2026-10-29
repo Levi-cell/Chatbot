@@ -22,8 +22,10 @@ def enviar_etapa8(
     cliente_telefone,
     phone_id_unidade,
     link_instagram,
+    *,
+    repeticao=False,
 ):
-    mensagem_bot = montar_mensagem_oferta_adiada_etapa8(link_instagram)
+    mensagem_bot = montar_mensagem_oferta_adiada_etapa8(link_instagram, repeticao=repeticao)
 
     return _enviar_texto_etapa8(
         cliente_telefone,

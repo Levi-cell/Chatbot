@@ -27,21 +27,28 @@ RODAPE_ETAPA20_AGENDAMENTO = (
 ### TRECHO COM O LINK, REUTILIZADO NA INICIAL E NOS TRATAMENTOS
 MENSAGEM_REPETICAO_ETAPA20 = (
     "Para reservar {experiencia}, basta clicar neste link e escolher o melhor "
-    "dia e horário:\n\n "
+    "dia e horário:\n\n"
     "{link_agendamento}"
 )
 
 
 ### MENSAGEM INICIAL: AGRADECIMENTO + TRECHO DA RESERVA
-APRESENTACAO_ETAPA20 = "Obrigado por responder às perguntas! ☺️\n\n"
+APRESENTACAO_ETAPA20 = "{agradecimento} por responder às perguntas! ☺️\n\n"
 
 
 # A repetição mantém o link e o rodapé, sem agradecer novamente pelas perguntas.
-def montar_mensagem_etapa20(link_agendamento, nome_dependente=None, *, repeticao=False):
+def montar_mensagem_etapa20(
+    link_agendamento, nome_dependente=None, *, repeticao=False, genero=None
+):
     mensagem = _montar_repeticao(link_agendamento, nome_dependente)
     if not repeticao:
+        agradecimento = {"feminino": "Obrigada", "masculino": "Obrigado"}.get(
+            str(genero or "").strip()
+        )
+        if agradecimento is None:
+            raise ValueError("Gênero do agente inválido para apresentar a reserva")
         mensagem = compor_mensagem_inicial(
-            APRESENTACAO_ETAPA20, mensagem
+            APRESENTACAO_ETAPA20.format(agradecimento=agradecimento), mensagem
         )
     return _com_rodape(mensagem)
 
@@ -75,7 +82,7 @@ def montar_mensagem_contexto_invalido_etapa20(link_agendamento, nome_dependente=
     link = _normalizar_link_agendamento(link_agendamento)
     return _com_rodape(
         f"Olha, não consegui entender. "
-        f"Para escolher o melhor o dia e horário para {experiencia}, basta clicar este link:\n\n "
+        f"Para escolher o melhor dia e horário para {experiencia}, basta clicar neste link:\n\n"
         f"{link}"
     )
 

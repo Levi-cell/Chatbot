@@ -88,8 +88,13 @@ from workers.worker_flow.response_flow.transicoes.eventos import (
 )
 
 
-logger = logging.getLogger("worker.sender")
+from workers.worker_flow.response_flow.tratamentos_informativos import (
+    classificar_tratamento_informativo,
+    enviar_tratamento_informativo,
+)
 
+
+logger = logging.getLogger("worker.sender")
 
 def flow_sender(contexto_historico):
     id_conversa = contexto_historico["id_conversa"]
@@ -180,6 +185,9 @@ def flow_sender(contexto_historico):
             contexto_historico,
             tratamento=classificar_tratamento_abertura(contexto_historico),
         )
+
+    if classificar_tratamento_informativo(contexto_historico):
+        return enviar_tratamento_informativo(contexto_historico)
 
     if id_etapa_atual is None or id_etapa_atual == 1:
         return _resolver_com_saudacao(resolve_etapa1, contexto_historico)

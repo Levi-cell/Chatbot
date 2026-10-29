@@ -115,6 +115,7 @@ def resolve_etapa17(contexto_historico):
         contexto_envio = enviar_etapa20(
             cliente_telefone, phone_id_unidade, link_agendamento,
             nome_dependente=nome_dependente if status_dependente else None,
+            genero=contexto_historico.get("genero_agente_unidade"),
         )
     contexto_envio["resposta_triagem"] = resposta_triagem
     logger.info("triagem_concluida | id_conversa=%s destino=%s", contexto_historico["id_conversa"], etapa_destino)

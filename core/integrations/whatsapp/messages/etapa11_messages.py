@@ -13,13 +13,13 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 
 ### MENSAGENS INICIAIS: APRESENTAR A TRIAGEM DA PESSOA ATENDIDA
 MENSAGEM_PADRAO_CLIENTE_ETAPA11 = (
-    "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
+    "Certo, antes de prosseguirmos com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
     "do seu cérebro. 🔎🧠\n\n"
     "Dessa forma podemos preparar uma experiência personalizada! ☺️"
 )
 MENSAGEM_PADRAO_DEPENDENTE_ETAPA11 = (
-    "Certo, olha, antes de prosseguir com sua reserva, vamos iniciar uma "
+    "Certo, antes de prosseguirmos com sua reserva, vamos iniciar uma "
     "*triagem com 6 perguntas rápidas* para entender melhor como está a saúde "
     "do cérebro de {nome_dependente}. 🔎🧠\n\n"
     "Dessa forma podemos preparar uma experiência personalizada! ☺️"
@@ -31,8 +31,8 @@ MENSAGEM_REPETICAO_CLIENTE_ETAPA11 = (
     "do seu cérebro. 🔎🧠"
 )
 MENSAGEM_REPETICAO_DEPENDENTE_ETAPA11 = (
-    "Vamos iniciar a *triagem* de {nome_dependente}? Ela serve para entender como está "
-    "a saúde do cérebro de {nome_dependente}. 🔎🧠"
+    "Vamos iniciar a *triagem*? Ela serve para entender como está "
+    "a saúde do cérebro de {nome_dependente}. 🔎"
 )
 
 ### CONTEXTO INVÁLIDO: MENSAGEM COMPLETA, SEM CONCATENAR A REPETIÇÃO
@@ -41,8 +41,8 @@ ORIENTACAO_CONTEXTO_CLIENTE_ETAPA11 = (
     "Ela serve para entender como está a saúde do seu cérebro. 🔎🧠"
 )
 ORIENTACAO_CONTEXTO_DEPENDENTE_ETAPA11 = (
-    "Olha, não consegui entender, vamos iniciar a *triagem* de {nome_dependente}? "
-    "Ela serve para entender como está a saúde do cérebro de {nome_dependente}. 🔎🧠"
+    "Olha, não consegui entender, vamos iniciar a *triagem*? "
+    "Ela serve para entender como está a saúde do cérebro de {nome_dependente}. 🔎"
 )
 
 

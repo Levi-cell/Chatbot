@@ -14,13 +14,13 @@ from core.integrations.whatsapp.messages.tratamentos.reforco_escolar import (
 ### MENSAGEM INICIAL DO TITULAR: EXPLICAÇÃO + PERGUNTA DA PROFISSÃO
 MENSAGEM_PADRAO_TITULAR_ETAPA4 = (
     "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
-    "conhecer melhor seu perfil. Me diz, qual a sua *profissão*?"
+    "te conhecer melhor. Me diz, qual a sua *profissão* hoje?"
 )
 
 ### MENSAGEM INICIAL DO DEPENDENTE: A PROFISSÃO CONTINUA SENDO DO TITULAR
 MENSAGEM_PADRAO_DEPENDENTE_ETAPA4 = (
     "Olha, antes de continuar, vou precisar fazer algumas perguntas para "
-    "conhecer melhor o seu perfil e o perfil da outra pessoa. Me diz, qual a sua *profissão* hoje?"
+    "conhecer melhor você e a outra pessoa. Me diz, qual a sua *profissão* hoje?"
 )
 
 ### REPETIÇÃO COMUM ÀS DUAS ROTAS, SEM REAPRESENTAR A ABERTURA
@@ -70,7 +70,7 @@ def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
     abertura = (
         f"{saudacao}, {dados['nome']}! Sou {artigo} "
         f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
-        "Vi que você já preencheu um dos nossos formulários. Para continuarmos "
+        "Vi que você já preencheu um dos nossos formulários. Para avançarmos "
         "com sua reserva por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA4
@@ -80,6 +80,11 @@ def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
         pergunta = montar_mensagem_tratamento_reforco_escolar(pergunta)
     elif tratamento == 'pergunta_financeira':
         pergunta = montar_mensagem_tratamento_financeiro(pergunta)
+    elif tratamento == 'pedido_endereco':
+        from core.integrations.whatsapp.messages.tratamentos.endereco import montar_mensagem_tratamento_endereco
+        pergunta = montar_mensagem_tratamento_endereco(
+            pergunta, contexto.get('endereco_unidade'), contexto.get('horarios_funcionamento')
+        )
     elif tratamento is not None:
         raise ValueError('Tratamento de abertura FireAds desconhecido')
     return abertura + '\n\n' + pergunta

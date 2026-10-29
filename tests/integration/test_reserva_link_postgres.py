@@ -74,7 +74,7 @@ class ReservaLinkPostgresTests(unittest.TestCase):
         ), patch.object(etapa_transicao_script, "transacao_deploy", transacao):
             bank_script.criar_tabelas()
             povoar_etapas.insere_etapa_once()
-            etapa_transicao_script.criar_e_povoar_transicoes_etapa()
+            etapa_transicao_script.criar_e_povoar_transicoes_etapa(incluir_coleta=False)
         cls.conn.execute("""
             CREATE TABLE chatbot.cliente_bloqueado_meta(wa_id_cliente TEXT, phone_id_unidade TEXT);
             CREATE TABLE chatbot.webhook_flood_evento(wa_id_cliente TEXT, phone_id_unidade TEXT, received_at TIMESTAMPTZ);

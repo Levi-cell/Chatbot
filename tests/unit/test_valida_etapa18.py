@@ -35,6 +35,11 @@ class ValidarEtapa18Tests(unittest.TestCase):
                 "Tenho horário livre à noite", "Boa tarde! Prefiro à noite.",
                 "À noite pode ser", "Pela noite dá certo para mim",
             ),
+            "sabado": (
+                "No sábado", "Sábado", "Prefiro no sábado", "Pode ser sábado",
+                "Só posso sábado", "Posso ir no sabado", "Sábado fica melhor para mim",
+                "Bom dia! Quero reservar no sábado, por favor.",
+            ),
         }
         for turno, frases in casos.items():
             for frase in frases:
@@ -55,6 +60,7 @@ class ValidarEtapa18Tests(unittest.TestCase):
             "Boa tarde", "boa noite", "amanhã", "mais tarde", "Hoje à noite chove",
             "Eu trabalho de manhã", "À tarde eu trabalho", "Só depois da manhã",
             "Não sei", "Sim", "14h", "qualquer coisa", "", "👍",
+            "sábado ou tarde", "Não posso sábado", "Tem horário sábado?",
         ):
             with self.subTest(frase=frase):
                 self.assertIsNone(validar_etapa18(frase))

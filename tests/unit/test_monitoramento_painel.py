@@ -225,6 +225,15 @@ class MonitoramentoPainelTests(unittest.TestCase):
         mensagem['quem_enviou'] = 'cliente'
         self.assertEqual(botoes_para_mensagem(mensagem), [])
 
+    def test_turno_lista_atual_nao_acrescenta_sabado_aos_botoes_historicos(self):
+        mensagem = {'quem_enviou': 'bot', 'tipo': 'interactive_button', 'id_etapa': 18}
+        antigos = ['Pela manhã', 'Pela tarde', 'Pela noite']
+        self.assertEqual(botoes_para_mensagem(mensagem), antigos)
+        mensagem['tipo'] = 'interactive_list'
+        self.assertEqual(botoes_para_mensagem(mensagem), antigos + ['No sábado'])
+        mensagem['quem_enviou'] = 'cliente'
+        self.assertEqual(botoes_para_mensagem(mensagem), [])
+
     def test_consolidacao_cria_tags_sem_misturar_unidades(self):
         linhas = [
             {'id_cliente': 1, 'id_conversa': 10, 'nome_cliente': 'Ana', 'waid_telefone': '5511',
