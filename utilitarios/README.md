@@ -385,7 +385,7 @@ sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /op
 
 O comando usa uma transação somente leitura. Confere a existência das três
 tabelas e o motivo de encerramento da segunda camada, conta stages pendentes,
-negativos/maiores que dois, encerramentos do segundo follow-up, marcações do legado e
+negativos/maiores que três, encerramentos por follow-up, marcações do legado e
 datas futuras em `last_interaction_at`, e lista até dez candidatas por ID de
 conversa, unidade e etapa. Não envia mensagens nem adquire lock de processamento.
 
@@ -393,11 +393,11 @@ conversa, unidade e etapa. Não envia mensagens nem adquire lock de processament
 encerra com `REVISAR_ANOMALIAS_ANTES_DE_ATIVAR`; ausência das tabelas falha com
 `SCHEMA_FOLLOWUP_AUSENTE`. Migração da segunda camada pendente falha com
 `SCHEMA_SEGUNDO_FOLLOWUP_AUSENTE`; o worker também verifica isso antes de selecionar
-candidatas. Stage maior que dois aparece para revisão; o legado ativo mantém sua
+candidatas. `SCHEMA_TRES_FOLLOWUPS_AUSENTE` exige a migração de 29/10/2026. Stage maior que três aparece para revisão; o legado ativo mantém sua
 recuperação. Amostra vazia é válida e não significa falha do serviço.
 `ciclos_aguardando_reacao` inclui somente ativas, inclusive o legado marcado, e não
-mede lembretes enviados. `encerradas_no_segundo_followup` conta as inativas em
-stage 2 com motivo `followup_sem_resposta`.
+mede lembretes enviados. `encerradas_por_followup` conta inativas em stage 2 (histórico) ou 3 (atual)
+com motivo `followup_sem_resposta`; encerramentos administrativos não entram nesse total.
 
 ## Conversas suspeitas
 

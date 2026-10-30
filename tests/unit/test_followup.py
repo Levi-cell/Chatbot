@@ -9,6 +9,7 @@ from core.repositories.atendimento import followup as repo
 from core.integrations.whatsapp.messages.followup_messages import (
     MENSAGEM_FOLLOWUP,
     montar_mensagem_followup,
+    montar_mensagem_primeiro_followup,
     montar_mensagem_encerramento_followup,
 )
 from core.integrations.whatsapp.pywa_functions.pywa_senders import followup as sender
@@ -104,6 +105,7 @@ def candidato():
         "unidade_telefone": "5511888888888",
         "id_ancora": 8,
         "ancora_em": AGORA,
+        "vence_em": AGORA,
         "followup_stage": 0,
         "nome_titular": "Ana",
         "nome_dependente": "Bia",
@@ -366,7 +368,7 @@ class RepeticaoTests(unittest.TestCase):
                     saudacao_esperada = (
                         "Bom te ver novamente ☺️\n"
                         if etapa == 1
-                        else "Bom te ver novamente, Ana ☺️\n"
+                        else "Bom te ver novamente ☺️\n"
                     )
                     texto = envio["mensagem_bot"]
                     if texto.startswith('*'):
@@ -614,6 +616,18 @@ class RetornoEtapa8Tests(unittest.TestCase):
 
 
 class ProativoTests(unittest.TestCase):
+    def test_novo_primeiro_lembrete_so_usa_nome_coletado(self):
+        for etapa, nome, esperado in (
+            (1, "Ana", "Você viu minha mensagem?"),
+            (2, " Ana ", "Ana, você viu minha mensagem?"),
+            (5, None, "Você viu minha mensagem?"),
+            (5, "   ", "Você viu minha mensagem?"),
+        ):
+            with self.subTest(etapa=etapa, nome=nome):
+                self.assertEqual(montar_mensagem_primeiro_followup(
+                    id_etapa=etapa, nome_titular=nome,
+                ), esperado)
+
     def test_primeiro_personaliza_convite_sem_reutilizar_nomes_antigos(self):
         for etapa, dependente, nome_dependente, nome_titular, saudacao, convite in (
             (1, False, None, "Ana", "Olá! ☺️", "receber você para sua"),
@@ -769,8 +783,16 @@ class ProativoTests(unittest.TestCase):
         conn.close.assert_called_once()
         conn.rollback.assert_not_called()
 
-    def test_primeiro_usa_rota_e_nomes_da_releitura_antes_do_envio(self):
+    def test_primeiro_curto_usa_nome_da_releitura(self):
         ok, _, enviar, persistir, _, _ = self._processar(dados_releitura={
+            "nome_titular": "Maria", "status_dependente": True, "nome_dependente": "Pedro",
+        })
+        self.assertTrue(ok)
+        self.assertEqual(enviar.call_args.kwargs["mensagem"], "Maria, você viu minha mensagem?")
+        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 0)
+
+    def test_segundo_preserva_convite_antigo_e_nomes_da_releitura(self):
+        ok, _, enviar, persistir, _, _ = self._processar(stage=1, dados_releitura={
             "id_etapa": 8, "nome_titular": "Maria", "status_dependente": True,
             "nome_dependente": "Pedro",
         })
@@ -781,17 +803,17 @@ class ProativoTests(unittest.TestCase):
         self.assertIn("Podemos continuar seu atendimento por aqui?", texto)
         self.assertNotIn("Ana", texto)
         self.assertTrue(texto.endswith("\n\n_Estaremos te esperando!_"))
-        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 0)
+        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 1)
 
-    def test_segundo_envia_despedida_e_so_persiste_apos_confirmacao(self):
-        ok, _, enviar, persistir, _, _ = self._processar(stage=1)
+    def test_terceiro_envia_despedida_e_so_persiste_apos_confirmacao(self):
+        ok, _, enviar, persistir, _, _ = self._processar(stage=2)
         self.assertTrue(ok)
         self.assertIn("Oi Ana, tudo bem? ☺️", enviar.call_args.kwargs["mensagem"])
         self.assertIn("Abraços, Suh.", enviar.call_args.kwargs["mensagem"])
         self.assertNotIn("por cortesia da unidade", enviar.call_args.kwargs["mensagem"])
-        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 1)
+        self.assertEqual(persistir.call_args.args[0]["followup_stage"], 2)
         ok, conn, _, persistir, _, _ = self._processar(
-            stage=1, erro_envio=RuntimeError("Meta")
+            stage=2, erro_envio=RuntimeError("Meta")
         )
         self.assertFalse(ok)
         persistir.assert_not_called()

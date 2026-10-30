@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 INTERVALO_SAUDACAO_RETORNO = timedelta(hours=3)
-MENSAGEM_RETORNO_INATIVIDADE = "Bom te ver novamente, {nome_titular} ☺️\n\n"
+MENSAGEM_RETORNO_INATIVIDADE = "Bom te ver novamente ☺️\n\n"
 
 
 def montar_saudacao_retorno(
@@ -28,4 +28,4 @@ def montar_saudacao_retorno(
         return None
     if intervalo < INTERVALO_SAUDACAO_RETORNO:
         return None
-    return MENSAGEM_RETORNO_INATIVIDADE.format(nome_titular=nome_titular)
+    return MENSAGEM_RETORNO_INATIVIDADE

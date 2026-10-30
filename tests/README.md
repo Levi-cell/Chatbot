@@ -91,8 +91,12 @@ substituído, sem conexão com banco de produção.
 O agradecimento de entrada na reserva por link é verificado nos dois gêneros,
 para titular/dependente e com/sem retorno. Gênero ausente impede a apresentação
 antes do HTTP, mas não impede a repetição que dispensa agradecimento.
-`test_endereco_unidade.py` verifica a pesquisa após endereço sem a ponte
-“Para continuarmos:”, mantendo título, saudação, separadores e cinco notas.
+`test_endereco_unidade.py` verifica todos os envios de tratamento sem a ponte
+“Para continuarmos”, mantendo título, saudação, separadores e opções da etapa.
+Inclui “Me diz o endereço de vocês” durante a coleta do nome do dependente,
+com e sem retorno, sem nome inválido nem avanço. Na abertura FireAds, verifica
+apresentação → endereço → horários opcionais → formulário confirmado → pergunta,
+com dados parciais/completos e na abertura legada.
 
 `test_inicio_informacoes_supera.py` cobre os pedidos de apresentação com e sem
 saudação, acentos e interrogação, rejeição de palavras isoladas e outros assuntos,
@@ -128,14 +132,17 @@ internacional no Google CSV; não remove o DDD nem altera os dados de origem.
 
 ## Follow-up
 
-A segunda camada é coberta em `unit/test_followup.py` (redação por rota, nomes e
-falha de envio) e `integration/test_followup_postgres.py` (7h contadas do primeiro
-envio real, etapas 1–17 e a 18 somente para unidade sem link incluindo 8, guardas de silêncio/fila/janela, encerramento
-atômico com rollback, ausência de terceiro envio e reabertura sem prefixo).
-O teste do painel usa as consultas reais para provar que outra conversa do mesmo
-chat invalida o stage antigo, mesmo fora do período selecionado. A migração de
-segundo follow-up é executada integralmente no PostgreSQL descartável, verificando
-preservação dos dados e o novo domínio do motivo de encerramento.
+As três camadas são cobertas em `unit/test_followup.py`: lembrete curto com nome
+coletado, convite anterior como segundo e despedida anterior como terceiro,
+confirmação antes da persistência e tratamento de falhas.
+`integration/test_followup_postgres.py` executa SQL real com recibos encadeados:
+15min, mais 6h45 e mais 7h, encerramento atômico somente no terceiro, rollback,
+reabertura sem prefixo, silêncio/fila/janela em cada camada e reação ao segundo.
+Confere também o corte inclusivo, recusa de recibos da versão anterior, migração
+integral e idempotente, preservação do histórico, default da versão dos recibos,
+e nova conversa sem bloqueio de 30 dias. As migrações históricas continuam cobertas.
+O painel usa a última conversa de cada chat **dentro** do período selecionado.
+Meta e demais serviços externos são substituídos; PostgreSQL é local e descartável.
 
 `unit/test_mensagens_etapa11.py` cobre a introdução da triagem para titular e
 dependente: nome carregado na entrada 10→11, mensagem inicial, tratamentos,
@@ -296,7 +303,7 @@ A configuração atual de `atendimento_customizado.link_agendamento`, lida diret
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 
@@ -561,11 +568,15 @@ sendo coletado mesmo quando contém palavras de preço, reforço ou endereço.
 
 O identificador também é exercitado com perguntas embutidas na mensagem,
 inversões (“Fica aonde”), abreviações (“aonde q fca”, “Onde vcs ficam”), acentos,
-caixa, espaços, emojis e ausência de interrogação. Casos negativos cobrem
-endereço eletrônico/site/IP, dados residenciais, outros destinos, elementos da
-interface, recusas e declarações de que já conhece o local. Mensagens com mais
-de uma oração preservam o pedido físico válido. Abertura, reserva e retorno
-confirmam que essas variantes enviam endereço/horários e preservam a etapa.
+caixa, espaços, emojis e ausência de interrogação. A regra ampliada de 29/10/2026
+testa a palavra endereço mesmo em declarações, recusas e referências a site/IP;
+email/eletrônico é a exceção por ocorrência. Uma segunda pergunta física na
+mesma mensagem continua válida. Bairro/local/rua aceitam pedidos com artigos,
+preposições e `é/que/q` opcionais; onde/aonde isolados também são cobertos.
+Sem endereço, casos negativos mantêm outros destinos, elementos da interface,
+dados residenciais, palavras sem pedido e trechos de palavras. Abertura, reserva
+e retorno confirmam que essas variantes enviam endereço/horários e preservam
+o fluxo da etapa, incluindo a transição já prevista da espera 8 para a retomada 9.
 
 ```bash
 python -m unittest tests.unit.test_endereco_unidade tests.unit.test_saudacao_retorno tests.unit.test_followup tests.unit.test_retomada_followup tests.unit.test_mensagens_reserva -q

@@ -17,7 +17,7 @@ from workers.worker_flow.transacoes.retorno_followup import _validar_retorno_eta
 
 
 ENDERECO = 'Rua Dr. Eduardo Monteiro, 188 - Jardim Bela Vista, Santo André - SP, CEP 09041-300'
-SAUDACAO = 'Bom te ver novamente, Ana ☺️\n\n'
+SAUDACAO = 'Bom te ver novamente ☺️\n\n'
 HORARIOS = 'segunda a sexta das 9h às 19h, exceto quarta-feira até as 21h, e sábado das 8h30 às 13h30'
 
 
@@ -38,6 +38,52 @@ def atendimento(etapa, texto='Aonde fica', dependente=False):
 
 
 class IdentificacaoTests(unittest.TestCase):
+    def test_palavra_endereco_ativa_sem_exigir_pergunta_ou_intencao(self):
+        for texto in (
+            'Endereço', 'ENDERECO', 'Me diz o endereço de vocês',
+            'Meu endereço é Rua A, 12', 'Quero informar meu endereço',
+            'Preciso atualizar meu endereço', 'Já tenho o endereço',
+            'Não quero o endereço', 'Não me mande o endereço',
+            'Não me diz o endereço', 'Não me diga o endereço de vocês',
+            'Não sei qual o endereço da minha filha',
+            'Me passa o endereço do site', 'Qual o endereço IP?',
+            'Me diz o endereço do site', 'Esqueci o endereço de vocês',
+        ):
+            with self.subTest(texto=texto):
+                self.assertTrue(validar_pedido_endereco(texto))
+
+    def test_endereco_de_email_e_excecao_por_ocorrencia(self):
+        for pedido in (
+            'Qual seu endereço de email?', 'Me diz o endereço de e-mail de vocês',
+            'ENDEREÇO ELETRÔNICO', 'Endereço do email', 'Endereço e-mail',
+            'Endereço de e mail', 'Endereço de\nemail', 'Endereço: email',
+            'Meu endereço de e-mail é ana@example.com',
+        ):
+            with self.subTest(pedido=pedido):
+                self.assertFalse(validar_pedido_endereco(pedido))
+                self.assertTrue(validar_pedido_endereco(pedido + '. E qual o endereço da unidade?'))
+                self.assertTrue(validar_pedido_endereco(pedido + '. E qual a rua de vocês?'))
+                self.assertTrue(validar_pedido_endereco('Me diz o endereço da unidade. ' + pedido))
+
+    def test_pedidos_com_artigos_preposicoes_e_ligacoes_opcionais(self):
+        for pedido in (
+            'Me diz bairro', 'Me diz o bairro', 'Me diz qual é o bairro',
+            'Me diz que bairro', 'Me diz q bairro', 'Me diz em qual bairro',
+            'Qual bairro', 'Qual o bairro', 'Qual é o bairro', 'Qual q é o bairro',
+            'Qual que é o bairro', 'Qual é que é o bairro',
+            'Qual o bairro que vocês ficam', 'Qual o bairro em que fica a unidade',
+            'Me diz local', 'Me diz o local', 'Qual local', 'Qual é o local',
+            'Onde é o local', 'Aonde q é o local', 'Me diz onde é o local',
+            'Me diz rua', 'Me diz a rua', 'Qual rua', 'Qual q é a rua',
+            'Onde é a rua', 'Aonde q é a rua', 'Qual a rua que fica a unidade',
+            'Onde fica', 'Onde é que fica', 'Aonde q fica', 'Aonde é q fica',
+            'Me diz onde q fica', 'Me diz onde é q fica',
+            'Onde', 'Aonde', 'Me diz onde', 'Aonde por favor',
+        ):
+            for sufixo in ('', '?'):
+                with self.subTest(pedido=pedido, sufixo=sufixo):
+                    self.assertTrue(validar_pedido_endereco(pedido + sufixo))
+
     def test_abreviacoes_inversoes_e_perguntas_dentro_da_mensagem(self):
         exemplos = (
             'Onde fica a unidade', 'Aonde é', 'Aonde q fica', 'aonde q fca',
@@ -53,6 +99,9 @@ class IdentificacaoTests(unittest.TestCase):
             'Qual o local da unidade', 'Qual o ponto de referência',
             'Me manda o endereço por favor', 'Me envia sua localização pfv',
             'Pode me informar o endereço', 'Quero saber o CEP da unidade',
+            'Me diz o endereço de vocês', 'me diz o endereco de vcs',
+            'Diz o endereço', 'Me diga o endereço de vocês',
+            'Pode me dizer o endereço de vocês', 'Me diz a localização da unidade',
             'Como eu chego aí', 'Como faço pra chegar', 'Como q eu chego na unidade',
             'Gostaria de saber onde fica a unidade para levar minha filha',
             'Tenho interesse, mas antes queria saber aonde q fca',
@@ -71,7 +120,7 @@ class IdentificacaoTests(unittest.TestCase):
                 with self.subTest(texto=texto, sufixo=sufixo):
                     self.assertTrue(validar_pedido_endereco(texto + sufixo))
 
-    def test_outros_assuntos_e_enderecos_nao_ativam(self):
+    def test_outros_assuntos_sem_palavra_endereco_nao_ativam(self):
         for texto in (
             'Onde fica o botão da pesquisa?', 'Aonde é a pesquisa de satisfação?',
             'Onde fica meu cadastro?', 'Onde está meu formulário?',
@@ -81,16 +130,23 @@ class IdentificacaoTests(unittest.TestCase):
             'Como chegar aos 60 anos saudável?', 'Como chegar na próxima etapa?',
             'Como chegar ao resultado da pesquisa?',
             'Qual seu endereço de e-mail?', 'Qual seu endereço eletrônico?',
-            'Me passa o endereço do site', 'Qual o endereço IP?',
-            'Quero informar meu endereço', 'Preciso atualizar meu endereço',
+            'Onde encontro o link?', 'Onde respondo a pesquisa?',
+            'Qual é o local do botão?', 'Onde é o local do teste?',
+            'Me diz qual o bairro da minha filha', 'Qual a rua da minha casa',
+            'Qual bairro que fica o banco', 'Qual a rua que fica meu trabalho',
+            'Qual local que é a pesquisa', 'Me diz a rua do hospital',
+            'Bairro', 'Local', 'Rua', 'Moro na rua principal',
+            'Endereçamento', 'Reendereçou', 'Sou localizado no centro',
             'Qual o local de trabalho do cliente?',
             'O resultado fica onde?', 'O link fica onde?', 'O teste é onde?',
             'Já sei onde fica', 'Eu sei onde fica a unidade',
             'Já conheço a localização da unidade', 'Não preciso saber onde fica',
-            'Não quero o endereço', 'Não me mande o endereço',
+            'Não me diz o bairro', 'Não me diga a localização de vocês',
+            'Me diz o endereço de e-mail de vocês',
+            'Me diz onde fica minha casa',
             'Eu trabalho onde fica a unidade', 'Moro onde fica o Supera',
-            'Não sei qual o endereço da minha filha', 'Não sei onde fica minha casa',
-            'aonde', 'fica', 'fca', 'q', 'Me diga onde errei',
+            'Não sei onde fica minha casa',
+            'fica', 'fca', 'q', 'Me diga onde errei',
             'Sou professora', 'Meu bairro é Centro', 'Santo André',
             'Tenho interesse em ir até a unidade', 'Tem uma faca na unidade',
             123, [], {},
@@ -121,7 +177,7 @@ class IdentificacaoTests(unittest.TestCase):
                 self.assertTrue(validar_pedido_endereco(texto))
 
     def test_dados_informados_nao_sao_pedidos(self):
-        for texto in (None, '', 'Sou professora', 'meu endereço é Rua A, 12',
+        for texto in (None, '', 'Sou professora',
                       'Endereço de e-mail: ana@example.com', 'ana@example.com',
                       'Qual seu endereço de email?', 'Meu bairro: Centro',
                       'Moro no centro', 'Tenho 18 anos'):
@@ -147,6 +203,8 @@ class EnvioTests(unittest.TestCase):
         fake.send_message.assert_called_once()
         chamada = fake.send_message.call_args.kwargs
         self.assertEqual(envio['mensagem_bot'], chamada['text'])
+        self.assertNotIn('para continuarmos', envio['mensagem_bot'].casefold())
+        self.assertNotIn('\n\n\n', envio['mensagem_bot'])
         self.assertEqual(envio['mensagem_bot'].count(ENDERECO), 1 if cx.get('endereco_unidade') else 0)
         if envio.get('tipo_tratamento') == 'pedido_endereco':
             horario = cx.get('horarios_funcionamento')
@@ -175,9 +233,31 @@ class EnvioTests(unittest.TestCase):
         self.assertIn('buttons', chamada)
         self.assertEqual(envio['id_etapa_resultante'], 9)
 
+    def test_me_diz_o_endereco_na_coleta_do_nome_do_dependente(self):
+        for retorno in ('sem', 'inatividade', 'followup'):
+            with self.subTest(retorno=retorno):
+                cx = atendimento(5, 'Me diz o endereço de vocês', dependente=True)
+                cx['nome_dependente'] = None
+                cx['dados_repeticao']['nome_dependente'] = None
+                if retorno == 'inatividade':
+                    cx['saudacao_retorno'] = SAUDACAO
+                envio, _ = self.enviar(cx, retorno=retorno == 'followup')
+                texto = envio['mensagem_bot']
+                self.assertEqual(envio['tipo_tratamento'], 'pedido_endereco')
+                self.assertEqual(envio['id_etapa_resultante'], 5)
+                self.assertNotIn('evento_transicao', envio)
+                self.assertNotIn('nome_dependente', envio)
+                self.assertIsNone(cx['nome_dependente'])
+                self.assertNotIn('não consegui entender', texto)
+                self.assertNotIn('Pedro', texto)
+                self.assertTrue(texto.endswith('\n\nMe diz, qual o nome da pessoa?'))
+                self.assertEqual(texto.count('Bom te ver novamente'), int(retorno != 'sem'))
+
     def test_pedidos_abreviados_seguem_o_mesmo_tratamento_no_fluxo_e_retorno(self):
         for texto in ('Aonde é', 'aonde q fca', 'FIca aonde',
-                      'Boa tarde, onde vcs ficam?'):
+                      'Boa tarde, onde vcs ficam?', 'Me diz o endereço de vocês',
+                      'Já tenho o endereço', 'Qual q é o bairro',
+                      'Me diz a rua', 'Onde é o local', 'Aonde'):
             for etapa, retorno in ((None, False), (9, False), (8, True), (19, True)):
                 with self.subTest(texto=texto, etapa=etapa, retorno=retorno):
                     envio, _ = self.enviar(atendimento(etapa, texto), retorno=retorno)
@@ -192,15 +272,34 @@ class EnvioTests(unittest.TestCase):
 
     def test_abertura_parcial_e_completa_preserva_campos_ja_coletados(self):
         from tests.unit.test_coleta_abertura import estado, FORM
-        for formulario, etapa in (('Full name: Ana', 2), (FORM, 4)):
+        from core.integrations.whatsapp.messages.etapa2_messages import MENSAGEM_REPETICAO_ETAPA2
+        from core.integrations.whatsapp.messages.etapa4_messages import MENSAGEM_REPETICAO_ETAPA4
+        from core.integrations.whatsapp.messages.componentes_compartilhados import RODAPE_OPCAO_UNICA
+        perguntas = {1: 'Me diz, qual o seu nome?', 2: MENSAGEM_REPETICAO_ETAPA2, 4: MENSAGEM_REPETICAO_ETAPA4}
+        for formulario, etapa in (('Email: ana@example.com', 1), ('Full name: Ana', 2), (FORM, 4)):
             for identificado in (False, True):
-                cx = atendimento(None, formulario + '\nAonde fica?')
-                cx['contexto_coleta'] = estado(formulario)
-                cx['contexto_coleta']['formulario_identificado'] = identificado
-                envio, _ = self.enviar(cx)
-                self.assertEqual(envio['id_etapa_resultante'], etapa)
-                self.assertEqual('formulários' in envio['mensagem_bot'], identificado)
-                self.assertNotIn('qual o seu nome', envio['mensagem_bot'])
+                for horario in (None, HORARIOS):
+                    with self.subTest(etapa=etapa, identificado=identificado, horario=horario):
+                        cx = atendimento(None, formulario + '\nMe diz o endereço de vocês')
+                        cx['horarios_funcionamento'] = horario
+                        cx['contexto_coleta'] = estado(formulario)
+                        cx['contexto_coleta']['formulario_identificado'] = identificado
+                        envio, payload = self.enviar(cx)
+                        texto = envio['mensagem_bot']
+                        self.assertEqual(envio['id_etapa_resultante'], etapa)
+                        self.assertEqual('formulários' in texto, identificado)
+                        self.assertLess(texto.index('assistente do'), texto.index(ENDERECO))
+                        final = perguntas[etapa]
+                        if etapa == 2:
+                            final += '\n\n_' + RODAPE_OPCAO_UNICA + '_'
+                            self.assertEqual([botao.title for botao in payload['buttons']], ['Para mim', 'Para um dependente'])
+                        self.assertTrue(texto.endswith('\n\n' + final))
+                        if identificado:
+                            self.assertLess(texto.index(ENDERECO), texto.index('Vi que você'))
+                            if horario:
+                                self.assertLess(texto.index(HORARIOS), texto.index('Vi que você'))
+                        if etapa != 1:
+                            self.assertNotIn('qual o seu nome', texto)
 
     def test_abertura_fireads_legada_tambem_responde_endereco(self):
         cx = atendimento(None)
@@ -211,6 +310,7 @@ class EnvioTests(unittest.TestCase):
         envio, _ = self.enviar(cx)
         self.assertEqual(envio['id_etapa_resultante'], 4)
         self.assertIn('profissão', envio['mensagem_bot'])
+        self.assertLess(envio['mensagem_bot'].index(HORARIOS), envio['mensagem_bot'].index('Vi que você'))
 
     def test_sem_endereco_cadastrado_nao_inventa_ou_usa_outra_unidade(self):
         cx = atendimento(9)
@@ -300,11 +400,11 @@ class EnvioTests(unittest.TestCase):
                     prefixo = '*Triagem cognitiva*\n\n' + (SAUDACAO if retorno else '')
                     self.assertTrue(texto.startswith(prefixo + 'Nossa unidade fica localizada em '))
                     pergunta = montar_mensagem_triagem_cognitiva_etapa11(repeticao=True)
-                    self.assertIn('Para continuarmos:\n\n' + pergunta, texto)
+                    self.assertIn('\n\n' + pergunta, texto)
                     if horario and horario.strip():
                         self.assertLess(texto.index(ENDERECO), texto.index(HORARIOS))
-                        self.assertLess(texto.index(HORARIOS), texto.index('Para continuarmos:'))
-                    self.assertEqual(texto.count('Ana'), int(retorno))
+                        self.assertLess(texto.index(HORARIOS), texto.index(pergunta))
+                    self.assertNotIn('Ana', texto)
                     self.assertIn('buttons', chamada)
 
     def test_tratamentos_triagem_e_nota_preservam_pergunta_opcoes_e_estado(self):
@@ -385,6 +485,26 @@ class EnvioTests(unittest.TestCase):
 
 
 class ComposicaoTests(unittest.TestCase):
+    def test_aberturas_fireads_endereco_antes_do_formulario_com_cinco_paragrafos(self):
+        from core.integrations.whatsapp.messages.abertura_coleta import montar_abertura
+        from core.integrations.whatsapp.messages.etapa4_messages import montar_abertura_fireads
+        from tests.unit.test_coleta_abertura import estado
+        cx = atendimento(None)
+        cx['contexto_coleta'] = estado('Full name: Edcarlos\nEmail: ed@example.com\nPara quem é: Para meu filho')
+        cx['contexto_coleta']['formulario_identificado'] = True
+        cx['contexto_fireads'] = {'dados_titular': {'nome': 'Edcarlos'}}
+        esperado = '\n\n'.join((
+            'Boa tarde, Edcarlos! Sou a Dora, assistente do Supera Santo André. ☺️',
+            'Nossa unidade fica localizada em ' + ENDERECO + '.',
+            'Nosso horário de funcionamento é de ' + HORARIOS + '.',
+            'Vi que você já preencheu um dos nossos formulários. Para avançarmos com sua reserva '
+            'por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?',
+            'Me diz, qual a sua *profissão* hoje?',
+        ))
+        for montar in (montar_abertura, montar_abertura_fireads):
+            with self.subTest(montar=montar.__name__):
+                self.assertEqual(montar(cx, saudacao='Boa tarde', tratamento='pedido_endereco'), esperado)
+
     def test_separadores_exatos_entre_blocos_e_aplicacao_idempotente(self):
         from core.integrations.whatsapp.messages.tratamentos.composicao import compor_tratamento
         from core.integrations.whatsapp.messages.componentes_compartilhados import montar_texto_com_cabecalho
@@ -411,7 +531,8 @@ class ComposicaoTests(unittest.TestCase):
                 self.assertTrue(texto.startswith('Nossa unidade fica localizada em ' + endereco + '\n\n'))
                 self.assertNotIn('..', texto)
                 self.assertEqual('Nosso horário' in texto, bool(horario and horario.strip()))
-                self.assertTrue(texto.endswith('Para continuarmos:\n\nQual o seu nome?'))
+                self.assertNotIn('para continuarmos', texto.casefold())
+                self.assertTrue(texto.endswith('\n\nQual o seu nome?'))
 
     def test_retorno_retira_abertura_repetida_mas_preserva_confirmacoes_e_participante(self):
         from core.integrations.whatsapp.messages import etapa5_messages, etapa10_messages, etapa11_messages, etapa24_messages

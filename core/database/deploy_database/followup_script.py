@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS chatbot.followup_envio (
     id_historico_bot INTEGER NOT NULL,
     enviado_em TIMESTAMPTZ NOT NULL,
     id_hash_msg VARCHAR(255) NOT NULL,
+    versao_fluxo SMALLINT NOT NULL DEFAULT 2
+        CONSTRAINT ck_followup_envio_versao CHECK (versao_fluxo IN (1, 2)),
     PRIMARY KEY (id_conversa, id_ancora, ancora_em),
     UNIQUE (id_conversa, id_historico_bot, enviado_em)
 );

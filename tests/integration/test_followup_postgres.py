@@ -102,7 +102,8 @@ class FollowupPostgresTests(unittest.TestCase):
         self.conn.rollback()
         self.cursor.execute("SELECT clock_timestamp()")
         self.agora = self.cursor.fetchone()[0]
-        self.ancora = self.agora - timedelta(hours=7, seconds=1)
+        self.ancora = self.agora - timedelta(minutes=15, seconds=1)
+        self.cursor.execute("UPDATE chatbot.conversa SET iniciou_em=GREATEST(iniciou_em, TIMESTAMPTZ '2026-10-29 19:00:01-03:00')")
         self.cursor.execute(
             """
             INSERT INTO chatbot.historico_mensagens
@@ -136,7 +137,7 @@ class FollowupPostgresTests(unittest.TestCase):
         self.cursor.execute("UPDATE chatbot.unidade SET status_pagamento=TRUE")
         self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
 
-    def test_sete_horas_um_envio_e_reinicio_nao_duplica(self):
+    def test_quinze_minutos_um_envio_e_reinicio_nao_duplica(self):
         dados = repo.reler_elegivel(1, self.cursor)
         self.assertIsNotNone(dados)
         ok, versao = tentar_lock_conversa(1, self.cursor)
@@ -169,6 +170,30 @@ class FollowupPostgresTests(unittest.TestCase):
         self.assertIsNone(repo.reler_elegivel(1, self.cursor))
         self.cursor.execute("""
             UPDATE chatbot.historico_mensagens
+               SET received_data_hora=received_data_hora-INTERVAL '6 hours 45 minutes 1 second';
+            UPDATE chatbot.followup_envio
+               SET ancora_em=ancora_em-INTERVAL '6 hours 45 minutes 1 second',
+                   enviado_em=enviado_em-INTERVAL '6 hours 45 minutes 1 second';
+            UPDATE chatbot.conversa
+               SET last_interaction_at=last_interaction_at-INTERVAL '6 hours 45 minutes 1 second',
+                   followup_last_sent_at=followup_last_sent_at-INTERVAL '6 hours 45 minutes 1 second';
+        """)
+        return repo.reler_elegivel(1, self.cursor), versao
+
+    def _confirmar_segundo(self, dados, versao):
+        return repo.persistir_followup(dados, {
+            "enviou": True, "mensagem_bot": "Convite",
+            "id_hash_msg_bot": "wamid.followup2",
+        }, versao, self.cursor)
+
+    def _segundo_followup_vencido(self):
+        dados, versao = self._primeiro_followup_vencido()
+        self._confirmar_segundo(dados, versao)
+        self.cursor.execute("SELECT followup_stage,status_ativa,finalizou_em FROM chatbot.conversa")
+        self.assertEqual(self.cursor.fetchone(), (2, True, None))
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("""
+            UPDATE chatbot.historico_mensagens
                SET received_data_hora=received_data_hora-INTERVAL '7 hours 1 second';
             UPDATE chatbot.followup_envio
                SET ancora_em=ancora_em-INTERVAL '7 hours 1 second',
@@ -179,35 +204,81 @@ class FollowupPostgresTests(unittest.TestCase):
         """)
         return repo.reler_elegivel(1, self.cursor), versao
 
-    def _confirmar_segundo(self, dados, versao):
+    def _confirmar_terceiro(self, dados, versao):
         return repo.persistir_followup(dados, {
             "enviou": True, "mensagem_bot": "Despedida",
-            "id_hash_msg_bot": "wamid.followup2",
+            "id_hash_msg_bot": "wamid.followup3",
         }, versao, self.cursor)
 
-    def test_segundo_apos_mais_sete_horas_fecha_atomicamente_sem_terceiro(self):
-        dados, versao = self._primeiro_followup_vencido()
-        self.assertEqual(dados["followup_stage"], 1)
+    def test_intervalos_sem_antecipar_quando_worker_atrasa(self):
+        for preparar, intervalo in (
+            (lambda: (repo.reler_elegivel(1, self.cursor), None), timedelta(minutes=15)),
+            (self._primeiro_followup_vencido, timedelta(hours=6, minutes=45)),
+            (self._segundo_followup_vencido, timedelta(hours=7)),
+        ):
+            with self.subTest(intervalo=intervalo):
+                self.cursor.execute("SAVEPOINT prazo")
+                dados, _ = preparar()
+                self.assertEqual(dados['vence_em'] - dados['ancora_em'], intervalo)
+                # Traz todo o histórico para um segundo ANTES do prazo.
+                ajuste = self.agora - intervalo + timedelta(seconds=2) - dados['ancora_em']
+                self.cursor.execute("UPDATE chatbot.historico_mensagens SET received_data_hora=received_data_hora+%s", (ajuste,))
+                self.cursor.execute("UPDATE chatbot.followup_envio SET ancora_em=ancora_em+%s,enviado_em=enviado_em+%s", (ajuste,ajuste))
+                self.cursor.execute("UPDATE chatbot.conversa SET last_interaction_at=last_interaction_at+%s,followup_last_sent_at=followup_last_sent_at+%s", (ajuste,ajuste))
+                self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+                self.cursor.execute("ROLLBACK TO SAVEPOINT prazo")
+
+    def test_janela_meta_e_revalidada_nos_tres_lembretes(self):
+        for preparar in (lambda: None, self._primeiro_followup_vencido, self._segundo_followup_vencido):
+            self.cursor.execute("SAVEPOINT janela")
+            preparar()
+            self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+            for idade in (timedelta(hours=24), timedelta(days=10), timedelta(hours=23,minutes=59,seconds=10)):
+                self.cursor.execute("UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='cliente'", (self.agora-idade,))
+                self.assertEqual(repo.listar_elegiveis(self.cursor), [])
+                self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+            self.cursor.execute("ROLLBACK TO SAVEPOINT janela")
+
+    def test_corte_inclusivo_exclui_conversa_antiga_mesmo_com_contador_zerado(self):
+        for inicio in ('2026-10-29 18:59:59-03', '2026-10-29 19:00:00-03'):
+            self.cursor.execute("UPDATE chatbot.conversa SET iniciou_em=%s,followup_stage=0", (inicio,))
+            self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+        self.cursor.execute("UPDATE chatbot.conversa SET iniciou_em='2026-10-29 19:00:01-03'")
+        self.assertIsNotNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_envio_da_sequencia_antiga_nao_e_reinterpretado(self):
+        self._primeiro_followup_vencido()
+        self.cursor.execute("UPDATE chatbot.followup_envio SET versao_fluxo=1")
+        self.assertIsNone(repo.reler_elegivel(1, self.cursor))
+
+    def test_resposta_apos_segundo_reseta_e_permite_novo_primeiro(self):
+        _, versao = self._segundo_followup_vencido()
+        unlock_conversa(1, versao, self.cursor)
+        self._verificar_reacao_real(origem=11, destino=11, stage=2)
+
+    def test_terceiro_apos_mais_sete_horas_fecha_atomicamente_sem_quarto(self):
+        dados, versao = self._segundo_followup_vencido()
+        self.assertEqual(dados["followup_stage"], 2)
         self.cursor.execute("UPDATE chatbot.conversa SET turnos_sem_avanco=4")
         self.cursor.execute("SAVEPOINT antes_despedida")
-        _, encerrada_em = self._confirmar_segundo(dados, versao)
+        _, encerrada_em = self._confirmar_terceiro(dados, versao)
         self.cursor.execute("""
             SELECT followup_stage,status_ativa,motivo_encerramento,finalizou_em,
                    followup_last_sent_at,id_etapa_atual,turnos_sem_avanco
             FROM chatbot.conversa WHERE id_conversa=1
         """)
         self.assertEqual(self.cursor.fetchone(), (
-            2, False, "followup_sem_resposta", encerrada_em, encerrada_em, 11, 4,
+            3, False, "followup_sem_resposta", encerrada_em, encerrada_em, 11, 4,
         ))
         self.assertIsNone(repo.reler_elegivel(1, self.cursor))
         self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
-        self.assertEqual(self.cursor.fetchone()[0], 2)
+        self.assertEqual(self.cursor.fetchone()[0], 3)
         self.cursor.execute("ROLLBACK TO SAVEPOINT antes_despedida")
         self.cursor.execute("SELECT followup_stage,status_ativa,finalizou_em FROM chatbot.conversa")
-        self.assertEqual(self.cursor.fetchone(), (1, True, None))
+        self.assertEqual(self.cursor.fetchone(), (2, True, None))
         self.cursor.execute("SELECT count(*) FROM chatbot.followup_envio")
-        self.assertEqual(self.cursor.fetchone()[0], 1)
-        self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.followup2'")
+        self.assertEqual(self.cursor.fetchone()[0], 2)
+        self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens WHERE id_hash_msg='wamid.followup3'")
         self.assertEqual(self.cursor.fetchone()[0], 0)
 
     def test_segundo_apenas_etapas1_a17_incluindo8_e_guardas_de_silencio(self):
@@ -235,9 +306,9 @@ class FollowupPostgresTests(unittest.TestCase):
                 self.assertIsNone(repo.reler_elegivel(1, self.cursor))
                 self.cursor.execute("ROLLBACK TO SAVEPOINT guarda_segundo")
 
-    def test_retorno_apos_segundo_abre_nova_conversa_sem_prefixo(self):
-        dados, versao = self._primeiro_followup_vencido()
-        self._confirmar_segundo(dados, versao)
+    def test_retorno_apos_terceiro_abre_nova_conversa_sem_prefixo(self):
+        dados, versao = self._segundo_followup_vencido()
+        self._confirmar_terceiro(dados, versao)
         unlock_conversa(1, versao, self.cursor)
         # A fixture usa ID explícito; sincroniza apenas a sequência local do teste.
         self.cursor.execute("SELECT setval(pg_get_serial_sequence('chatbot.conversa','id_conversa'), 1)")
@@ -268,7 +339,7 @@ class FollowupPostgresTests(unittest.TestCase):
         self.assertNotIn("te ver novamente", envio["mensagem_bot"])
         self.assertIn("Suh", envio["mensagem_bot"])
         self.cursor.execute("SELECT followup_stage,status_ativa FROM chatbot.conversa WHERE id_conversa=1")
-        self.assertEqual(self.cursor.fetchone(), (2, False))
+        self.assertEqual(self.cursor.fetchone(), (3, False))
 
     def test_painel_considera_ultima_conversa_com_historico_no_periodo(self):
         dados, versao = self._primeiro_followup_vencido()
@@ -290,6 +361,7 @@ class FollowupPostgresTests(unittest.TestCase):
         """)
         # O mesmo cliente em outra unidade não pode esconder o follow-up daqui.
         self.assertEqual(chats()[0]["followup_stage"], 2)
+        self.cursor.execute("UPDATE chatbot.conversa SET status_ativa=FALSE,finalizou_em=clock_timestamp() WHERE id_conversa=1")
         self.cursor.execute("""
             INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual)
             SELECT 2,id_chat,1,1,1 FROM chatbot.chat WHERE id_cliente=1 AND id_unidade=1
@@ -313,14 +385,14 @@ class FollowupPostgresTests(unittest.TestCase):
         self.cursor.execute("UPDATE chatbot.conversa SET followup_stage=0 WHERE id_conversa=2")
         self.assertEqual(chats()[0]["followup_stage"], 0)
 
-    def test_antes_de_sete_horas_e_fora_da_janela_meta(self):
+    def test_antes_de_quinze_minutos_e_fora_da_janela_meta(self):
         self.cursor.execute(
             "UPDATE chatbot.historico_mensagens SET received_data_hora=%s WHERE quem_enviou='bot'",
-            (self.agora - timedelta(hours=6),),
+            (self.agora - timedelta(minutes=14),),
         )
         self.cursor.execute(
             "UPDATE chatbot.conversa SET last_interaction_at=%s",
-            (self.agora - timedelta(hours=6),),
+            (self.agora - timedelta(minutes=14),),
         )
         self.assertIsNone(repo.reler_elegivel(1, self.cursor))
         self.cursor.execute(
@@ -456,11 +528,16 @@ class FollowupPostgresTests(unittest.TestCase):
     def test_tratamento_especifico_preserva_etapa_e_contador(self):
         self._verificar_reacao_real(origem=6, destino=6, texto="Quanto custa?")
 
-    def _verificar_reacao_real(self, *, origem, destino, texto="???"):
+    def _verificar_reacao_real(self, *, origem, destino, texto="???", stage=1):
+        self.cursor.execute("SELECT COUNT(*) FROM chatbot.historico_mensagens")
+        historicos_antes = self.cursor.fetchone()[0]
+        # A mensagem chega antes da transação que grava a resposta com NOW().
+        # clock_timestamp() da fixture é posterior ao início dessa transação.
+        recebido_em = self.agora - timedelta(seconds=1)
         mensagem = {
             "id_mensagem": 10,
             "id_hash": "wamid.reacao",
-            "data_recebimento": self.agora,
+            "data_recebimento": recebido_em,
             "cliente_telefone": "5511999999999",
             "id_phone_unidade": "phone-teste",
             "unidade_telefone": "5511888888888",
@@ -477,14 +554,14 @@ class FollowupPostgresTests(unittest.TestCase):
             VALUES (10, 1, %s, '5511999999999', %s, 'text',
                     'wamid.reacao', 'phone-teste', '5511888888888', 'processing');
             """,
-            (self.agora, texto),
+            (recebido_em, texto),
         )
         for followup_em in (None, self.agora):
             with self.subTest(legado=followup_em is None):
                 self.cursor.execute("SAVEPOINT ciclo_reacao")
                 self.cursor.execute(
-                    "UPDATE chatbot.conversa SET followup_stage=1, followup_last_sent_at=%s, turnos_sem_avanco=5, id_etapa_atual=%s",
-                    (followup_em, origem),
+                    "UPDATE chatbot.conversa SET followup_stage=%s, followup_last_sent_at=%s, turnos_sem_avanco=5, id_etapa_atual=%s",
+                    (stage, followup_em, origem),
                 )
                 _, versao = tentar_lock_conversa(1, self.cursor)
                 contexto_banco = repo.reler_conversa(
@@ -502,7 +579,7 @@ class FollowupPostgresTests(unittest.TestCase):
                     envio = enviar_retorno_followup(contexto)
                 self.assertEqual(envio["id_etapa_resultante"], destino)
                 self.cursor.execute("SELECT followup_stage FROM chatbot.conversa")
-                self.assertEqual(self.cursor.fetchone()[0], 1)
+                self.assertEqual(self.cursor.fetchone()[0], stage)
 
                 # Uma falha deve reverter histórico, avanço (na etapa 8) e reset juntos.
                 self.cursor.execute("SAVEPOINT confirmacao")
@@ -511,13 +588,13 @@ class FollowupPostgresTests(unittest.TestCase):
                 self.cursor.execute(
                     "SELECT followup_stage, id_etapa_atual, turnos_sem_avanco FROM chatbot.conversa"
                 )
-                self.assertEqual(self.cursor.fetchone(), (1, origem, 5))
+                self.assertEqual(self.cursor.fetchone(), (stage, origem, 5))
                 self.cursor.execute(
                     "SELECT concluida_em FROM chatbot.followup_retomada"
                 )
                 self.assertIsNone(self.cursor.fetchone()[0])
                 self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
-                self.assertEqual(self.cursor.fetchone()[0], 3)
+                self.assertEqual(self.cursor.fetchone()[0], historicos_antes + 1)
 
                 persistir_retorno_followup(contexto, envio, self.cursor)
                 self.cursor.execute(
@@ -527,6 +604,21 @@ class FollowupPostgresTests(unittest.TestCase):
                     self.cursor.fetchone(),
                     (0, followup_em, 0 if origem != destino else 5, destino),
                 )
+                if stage == 2:
+                    # A resposta comum abre outro ciclo, independentemente dos
+                    # dois recibos anteriores, depois de concluir a fila.
+                    self.cursor.execute("SAVEPOINT novo_ciclo")
+                    self.cursor.execute("UPDATE chatbot.fila_mensagens SET status='sent' WHERE id_mensagem=10")
+                    self.cursor.execute("""
+                        UPDATE chatbot.historico_mensagens SET received_data_hora=received_data_hora-INTERVAL '15 minutes 2 seconds';
+                        UPDATE chatbot.followup_envio SET ancora_em=ancora_em-INTERVAL '15 minutes 2 seconds',enviado_em=enviado_em-INTERVAL '15 minutes 2 seconds';
+                        UPDATE chatbot.conversa SET last_interaction_at=last_interaction_at-INTERVAL '15 minutes 2 seconds';
+                    """)
+                    nova_candidata = repo.reler_elegivel(1, self.cursor)
+                    self.assertIsNotNone(nova_candidata)
+                    self.assertEqual(nova_candidata['followup_stage'], 0)
+                    self.assertEqual(nova_candidata['vence_em']-nova_candidata['ancora_em'],timedelta(minutes=15))
+                    self.cursor.execute("ROLLBACK TO SAVEPOINT novo_ciclo")
                 if origem == 1:
                     self.cursor.execute(
                         "SELECT nome FROM chatbot.cliente WHERE id_cliente=1"
@@ -578,7 +670,7 @@ class FollowupPostgresTests(unittest.TestCase):
                 self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
                 self.assertEqual(self.cursor.fetchone()[0], antes_replay)
                 self.cursor.execute("SELECT count(*) FROM chatbot.historico_mensagens")
-                self.assertEqual(self.cursor.fetchone()[0], 4)
+                self.assertEqual(self.cursor.fetchone()[0], historicos_antes + 2)
                 self.cursor.execute("ROLLBACK TO SAVEPOINT ciclo_reacao")
 
     def test_dois_processos_lock_recusa_e_fencing(self):
@@ -722,7 +814,8 @@ class MigracaoSegundoFollowupTests(unittest.TestCase):
             pass
         self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c")
         self.assertEqual(self.cursor.fetchone()[0], antes)
-        repo.validar_schema_followup(self.cursor)
+        with self.assertRaisesRegex(ValueError, "SCHEMA_TRES_FOLLOWUPS_AUSENTE"):
+            repo.validar_schema_followup(self.cursor)
         self.cursor.execute("UPDATE chatbot.conversa SET motivo_encerramento='followup_sem_resposta'")
         self.cursor.execute("SELECT motivo_encerramento FROM chatbot.conversa")
         self.assertEqual(self.cursor.fetchone()[0], "followup_sem_resposta")
@@ -730,6 +823,75 @@ class MigracaoSegundoFollowupTests(unittest.TestCase):
         with self.assertRaises(psycopg.errors.CheckViolation):
             self.cursor.execute("UPDATE chatbot.conversa SET motivo_encerramento='motivo_invalido'")
         self.cursor.execute("ROLLBACK TO SAVEPOINT motivo_invalido")
+
+
+@unittest.skipUnless(DSN, "Defina FOLLOWUP_TEST_DSN para PostgreSQL local descartável")
+class MigracaoTresFollowupsTests(unittest.TestCase):
+    def setUp(self):
+        FollowupPostgresTests.setUpClass.__func__(type(self))
+        self.addCleanup(FollowupPostgresTests.tearDownClass.__func__, type(self))
+        self.sql = (MIGRACAO.parent / '20261029_tres_followups.sql').read_text(encoding='utf-8')
+
+    def aplicar(self):
+        self.conn.commit()
+        self.cursor.execute(self.sql, prepare=False)
+        while self.cursor.nextset():
+            pass
+
+    def test_corte_sem_envio_sem_bloqueio_preserva_historico_e_reexecucao(self):
+        self.cursor.execute("""
+            UPDATE chatbot.etapa SET bloqueio_dias=30 WHERE id_etapa=24;
+            UPDATE chatbot.conversa SET iniciou_em='2026-10-29 19:00:00-03',
+                id_etapa_atual=24,followup_stage=1,processing=TRUE,lock_version=4,
+                followup_last_sent_at='2026-10-29 18:00:00-03';
+            INSERT INTO chatbot.followup_envio
+                (id_conversa,id_ancora,ancora_em,id_historico_bot,enviado_em,id_hash_msg)
+                VALUES(1,100,'2026-10-29 11:00:00-03',101,'2026-10-29 18:00:00-03','recibo-antigo');
+            ALTER TABLE chatbot.followup_envio DROP COLUMN versao_fluxo;
+            INSERT INTO chatbot.cliente(id_cliente,waid_telefone) VALUES(2,'5511777777777');
+            INSERT INTO chatbot.chat(id_cliente,id_unidade) VALUES(2,1);
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual,iniciou_em)
+                SELECT 2,id_chat,2,1,1,'2026-10-29 19:00:01-03' FROM chatbot.chat WHERE id_cliente=2;
+            INSERT INTO chatbot.conversa(id_conversa,id_chat,id_cliente,id_unidade,id_etapa_atual,
+                iniciou_em,status_ativa,finalizou_em,followup_stage,motivo_encerramento)
+                SELECT 3,id_chat,1,1,11,'2026-10-28 10:00:00-03',FALSE,'2026-10-28 23:00:00-03',2,
+                'followup_sem_resposta' FROM chatbot.chat WHERE id_cliente=1;
+        """)
+        self.cursor.execute("SELECT id_conversa,to_jsonb(c) FROM chatbot.conversa c WHERE id_conversa IN(2,3)")
+        preservadas = dict(self.cursor.fetchall())
+        self.aplicar()
+        self.cursor.execute("SELECT status_ativa,motivo_encerramento,followup_stage,id_etapa_atual,processing,lock_version FROM chatbot.conversa WHERE id_conversa=1")
+        self.assertEqual(self.cursor.fetchone(), (False,'atualizacao_followup',1,24,False,5))
+        self.cursor.execute("SELECT versao_fluxo,ancora_em,enviado_em FROM chatbot.followup_envio")
+        recibo = self.cursor.fetchone()
+        self.assertEqual(recibo[0], 1)
+        self.cursor.execute("SELECT id_conversa,to_jsonb(c) FROM chatbot.conversa c WHERE id_conversa IN(2,3)")
+        self.assertEqual(dict(self.cursor.fetchall()), preservadas)
+        self.cursor.execute("SELECT COUNT(*) FROM chatbot.historico_mensagens")
+        self.assertEqual(self.cursor.fetchone()[0], 0)
+        repo.validar_schema_followup(self.cursor)
+        self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa")
+        depois = self.cursor.fetchall()
+        self.aplicar()
+        self.cursor.execute("SELECT to_jsonb(c) FROM chatbot.conversa c ORDER BY id_conversa")
+        self.assertEqual(self.cursor.fetchall(), depois)
+        self.cursor.execute("SELECT setval(pg_get_serial_sequence('chatbot.conversa','id_conversa'),3)")
+        nova = valida_conversa(1, 1, False, self.cursor)
+        self.assertNotEqual(nova['id_conversa'], 1)
+        self.assertTrue(nova['status_ativa'])
+        self.assertEqual(nova['followup_stage'], 0)
+        self.assertIsNone(nova['id_etapa_atual'])
+        self.cursor.execute("""INSERT INTO chatbot.followup_envio
+            (id_conversa,id_ancora,ancora_em,id_historico_bot,enviado_em,id_hash_msg)
+            VALUES(%s,200,clock_timestamp(),201,clock_timestamp(),'novo') RETURNING versao_fluxo""", (nova['id_conversa'],))
+        self.assertEqual(self.cursor.fetchone()[0], 2)
+
+    def test_schema_incompleto_impede_worker_de_despachar(self):
+        self.cursor.execute('ALTER TABLE chatbot.followup_envio DROP COLUMN versao_fluxo')
+        with self.assertRaisesRegex(ValueError, 'SCHEMA_TRES_FOLLOWUPS_AUSENTE'):
+            repo.validar_schema_followup(self.cursor)
+        self.aplicar()
+        repo.validar_schema_followup(self.cursor)
 
 
 if __name__ == "__main__":

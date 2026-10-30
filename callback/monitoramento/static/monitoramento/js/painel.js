@@ -26,7 +26,7 @@
   const filtrosOrigem=['fireads','chat_fire','meta','google','organico_site','organico'];
   function visivel(i){
     if(estado.filtro==='comercial'&&!i.comercial)return false;
-    if(estado.filtro==='followup'&&![1,2].includes(i.followup_stage))return false;
+    if(estado.filtro==='followup'&&![1,2,3].includes(i.followup_stage))return false;
     if(estado.filtro==='funil'&&!i.foi_funil)return false;
     if(estado.filtro==='avaliadas'&&!i.avaliada)return false;
     if(estado.filtro==='titular'&&i.destinatario!=='titular')return false;
@@ -97,7 +97,7 @@
         tags.appendChild(etiqueta);
       }else{
         if(item.ids_conversa.length>1)mini(tags,item.ids_conversa.length+' conversas');
-        if([1,2].includes(item.followup_stage))mini(tags,'Follow-up '+item.followup_stage,'followup');
+        if([1,2,3].includes(item.followup_stage))mini(tags,'Follow-up '+item.followup_stage,'followup');
         if(item.foi_funil)mini(tags,'Funil','funil');
         if(item.avaliada)mini(tags,'Avaliada','nota');
       }

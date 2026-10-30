@@ -143,7 +143,7 @@ usado após os tratamentos de mídia, reforço e financeiro. Essa variante pede
 o nome uma vez e converge para a mesma etapa 2, sem novas colunas ou transições.
 Depois da abertura e no follow-up, preserva-se a coleta do nome já existente.
 
-`tratamentos/retorno_inatividade.py` monta `Bom te ver novamente, <nome> ☺️` quando
+`tratamentos/retorno_inatividade.py` monta `Bom te ver novamente ☺️` quando
 o cliente retorna com `followup_stage = 0` pelo menos três horas após o último envio confirmado do bot
 na mesma conversa. A etapa 1 fica fora da regra; nome ou datas ausentes ou
 incompatíveis não interrompem o atendimento e não produzem prefixo.
@@ -282,7 +282,7 @@ O núcleo transacional e os testes específicos estão descritos em
 ## Lembrete de follow-up
 
 `messages/tratamentos/retorno_followup.py` monta a saudação de retomada com stage
-positivo: `Bom te ver novamente, <nome> ☺️` ou `Bom te ver novamente ☺️`.
+positivo: `Bom te ver novamente ☺️`, sempre sem nome.
 O nome do prefixo vem do cadastro persistido, quando autorizado pela etapa.
 Na etapa 1, o worker passa nome ausente ao formatador, mesmo com cadastro antigo:
 a saudação é sempre genérica. Um nome válido recebido na reação avança para a 2;
@@ -322,6 +322,6 @@ A configuração atual de `unidade.link_agendamento` decide a saída da triagem:
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

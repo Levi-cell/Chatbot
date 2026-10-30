@@ -1,8 +1,10 @@
 # Endereços por unidade e mensagens de retorno
 
-Implementação local de 27/10/2026, revisada em 28/10/2026 para horários e tratamentos nas etapas 1–22. Exige a migração de endereços antes de iniciar
-o código novo na VM. A consulta ao banco de produção nesta revisão foi somente
-de leitura; a migração não foi aplicada nele.
+Implementação iniciada em 27/10/2026, revisada em 28/10/2026 para horários e
+tratamentos nas etapas 1–22. A auditoria inicial do banco de produção foi somente
+de leitura. A instalação desse recurso exige a migração de endereços/horários.
+O ajuste de mensagens e identificação de 29/10/2026 não exige SQL adicional
+para instalações que já aplicaram essa migração na V1.19.0.
 
 ## Comportamento
 
@@ -23,20 +25,20 @@ vazio ou só espaços omitem todo o parágrafo de horários. O repositório lê 
 e horários juntos por ID, inclusive quando ainda não há endereço cadastrado.
 
 O texto fica “Nossa unidade fica localizada em {endereço}.”, seguido de
-“Nosso horário de funcionamento é de {horários}.” quando informado, e da ponte
-“Para continuarmos:” com a pergunta da etapa. Ponto de referência, se conhecido,
+“Nosso horário de funcionamento é de {horários}.” quando informado, e diretamente
+da pergunta ou orientação da etapa. Ponto de referência, se conhecido,
 pode constar no próprio texto do endereço; não é inferido nem obrigatório.
-No encaminhamento ao consultor (19), no link de agendamento (20) e na pesquisa
-de satisfação (21), a ponte é omitida: endereço e horários são seguidos
-diretamente da orientação ou pergunta da etapa, separados por `\n\n`.
-Assim, não há “Para continuarmos:” antes de “Nossa equipe entrará em contato”,
-“Para reservar...” ou “Antes de finalizarmos...”. Financeiro, reforço escolar
-e mídia já seguem diretamente para a repetição, sem essa ponte.
+Na revisão de 29/10/2026, a ponte foi retirada de todas as etapas, incluindo
+abertura e retorno. Financeiro, reforço escolar e mídia também seguem diretamente
+para a repetição. Os blocos são separados por `\n\n`.
 
 Na retomada da reserva (etapa 9), a pergunta é “Vamos dar prosseguimento à
-reserva do seu *momento Supera*?” ou a versão com o nome do dependente, evitando
-repetir “continuar” depois de “Para continuarmos:”. Na apresentação FireAds,
-“Para avançarmos” também evita duplicar essa ponte no mesmo texto.
+reserva do seu *momento Supera*?” ou a versão com o nome do dependente.
+Na abertura com dados FireAds, o pedido de endereço é respondido logo após a
+apresentação: saudação/apresentação → endereço → horários, se cadastrados →
+reconhecimento do formulário → pergunta do campo necessário. Essa ordem vale
+para coleta parcial/completa e para a abertura legada. Sem formulário confirmado,
+o reconhecimento é omitido; as perguntas e opções da etapa são preservadas.
 
 Endereços fornecidos para a migração:
 
@@ -53,18 +55,34 @@ poderá confirmá-lo; não inventa dados nem reutiliza os de outra unidade.
 O identificador aceita perguntas no meio da mensagem, com ou sem interrogação,
 acentos ou diferença de maiúsculas: “Aonde fica”, “Aonde é”, “Aonde q fica”,
 “aonde q fca”, “Fica aonde”, “Onde vcs ficam?”, “Em qual bairro vocês ficam?”,
-“Qual o endereço?”, “Me passa a localização”, “Como chegar aí?” e “Qual é o
-CEP?”. Também considera saudações, emojis, espaços e quebras de linha. As
+“Qual o endereço?”, “Me diz o endereço de vocês”, “Me diga o endereço”,
+“Pode me dizer o endereço”, “Me passa a localização”, “Como chegar aí?” e
+“Qual é o CEP?”. Também considera saudações, emojis, espaços e quebras de linha. As
 abreviações `q`, `vc/vcs`, `ond/aond`, `eh` e `fca/fcam` são reconhecidas em
 construções de localização; não existe correção aproximada de qualquer palavra.
 
-Endereço eletrônico/site/IP, localização de botões ou formulários, dados
-residenciais informados pelo cliente, afirmações como “já sei onde fica” e
-recusas como “não me mande o endereço” não acionam o tratamento. “Não sei onde
-fica” continua sendo um pedido válido. A análise é por oração: uma informação
-residencial ou dúvida de email não oculta um pedido físico separado na mesma
-mensagem. Expressões ambíguas sem indicação de localização não são presumidas
-como pedido de endereço. A ampliação do validador não exige nova migração SQL.
+Regra ampliada aprovada em 29/10/2026: a palavra inteira **endereço** (com ou sem
+acento) ativa mesmo sem pergunta. A única exceção é a ocorrência referente a
+email: “endereço de email”, “endereço de e-mail” ou “endereço eletrônico”.
+A exceção vale por ocorrência: outra menção a endereço ou uma pergunta física
+na mesma mensagem continua válida. Isso deliberadamente inclui frases como
+“Já tenho o endereço”, “Meu endereço é Rua X”, “Não quero o endereço” e
+“Qual o endereço do site/IP”, conforme a regra ampla escolhida pelo usuário.
+
+Para **bairro, local e rua**, é preciso um pedido, como “Me diz o bairro”,
+“Qual bairro”, “Qual q é o bairro”, “Qual é o local” e “Aonde q é a rua”.
+Artigos, preposições e ligações como `é`, `que` e `q` são opcionais nas
+construções reconhecidas. “Onde” e “Aonde” isolados também ativam, assim como
+“Onde é que fica” e “Me diz onde q fica”. As palavras bairro/local/rua isoladas
+ou informações como “Meu bairro é Centro” não bastam.
+
+Sem a palavra endereço, continuam sendo rejeitados outros assuntos e locais:
+“Onde encontro o link?”, “Onde respondo a pesquisa?”, “Qual o local do botão?”
+e “Me diz a rua do hospital”. Afirmações como “já sei onde fica” e recusas
+como “não me diga a localização” também não acionam. “Não sei onde fica”
+continua válido. A análise por oração preserva pedidos físicos separados de
+outros assuntos. Não há correção aproximada nem correspondência por pedaços
+de palavras. A ampliação do validador não exige nova migração SQL.
 
 | Situação | Resposta e efeito |
 | --- | --- |
@@ -98,8 +116,8 @@ Quando há título, a ordem é **cabeçalho → saudação de retorno (se houver
 tratamento (endereço e horários, quando cadastrados) → repetição da etapa**.
 Cada bloco presente é separado do seguinte por exatamente `\n\n` (uma linha
 vazia), inclusive quando os fragmentos recebidos têm quebras nas extremidades.
-Financeiro e reforço escolar não acrescentam “Vamos lá”. Endereço mantém
-“Para continuarmos:” antes da pergunta, exceto nas etapas 19, 20 e 21.
+Financeiro e reforço escolar não acrescentam “Vamos lá”. Nenhum tratamento
+acrescenta a ponte “Para continuarmos”.
 Cabeçalhos e rodapés usam a mesma
 separação; o conteúdo interno de cada fragmento é preservado.
 O texto persistido é o mesmo enviado ao WhatsApp. A composição remove apenas
@@ -123,7 +141,7 @@ Exemplo para a pesquisa:
 
 - `core/validacoes/endereco.py`: identificação pura do pedido.
 - `core/repositories/unidades/enderecos.py`: leitura SQL parametrizada.
-- `core/integrations/whatsapp/messages/tratamentos/endereco.py`: resposta e ponte para a pergunta atual.
+- `core/integrations/whatsapp/messages/tratamentos/endereco.py`: endereço e horários seguidos da pergunta atual.
 - `workers/worker_flow/valida_historico.py`: carrega o endereço e os dados necessários antes do envio HTTP.
 - `workers/worker_flow/response_flow/tratamentos_informativos.py`: classificação, prioridade e composição; na 8 reutiliza o resolver de retorno para abrir a 9, nas demais etapas repete a pergunta sem avanço.
 - `workers/worker_flow/response_flow/repeticao_etapa.py`: seleção de senders neutros compartilhada com o follow-up, sem duplicar perguntas/botões.
@@ -235,3 +253,14 @@ há “Bom te ver novamente”, a composição mantém a regra de omitir esse �
 A pergunta de profissão explica “te conhecer melhor” para titular e “conhecer
 melhor você e a outra pessoa” para dependente, sempre terminando com “Me diz,
 qual a sua *profissão* hoje?”. O encaminhamento por idade foi mantido como está.
+
+Revisão local de 29/10/2026: o pedido “Me diz o endereço de vocês” passa a ser
+reconhecido, inclusive na coleta do nome do dependente e no retorno, preservando
+a etapa. A abertura FireAds responde endereço/horários antes de mencionar o
+formulário, e todos os tratamentos seguem sem a ponte de continuidade.
+Validação após a ampliação do identificador: **232 testes unitários aprovados**,
+incluindo dados parciais, formulário confirmado ou não, horários ausentes,
+títulos, opções e separadores. Os novos casos cobrem artigos/preposições
+opcionais, `é/que/q`, onde/aonde isolados, a palavra endereço sem pergunta e
+a exceção de email sem ocultar outro pedido físico na mesma mensagem.
+Transporte simulado; esta revisão não enviou mensagens reais nem alterou produção.

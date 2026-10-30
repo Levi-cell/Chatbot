@@ -198,7 +198,7 @@ CONSULTA_ELEGIVEIS = """
            cl.waid_telefone, u.phone_number_id, u.telefone,
            b.id_mensagem AS id_ancora, b.received_data_hora AS ancora_em,
            COALESCE(c.followup_stage, 0), cl.nome, ac.nome_agente,
-           c.status_dependente, d.nome_dependente
+           c.status_dependente, d.nome_dependente, agenda.vence_em
     FROM chatbot.conversa c
     JOIN chatbot.cliente cl ON cl.id_cliente = c.id_cliente
     JOIN chatbot.unidade u ON u.id_unidade = c.id_unidade
@@ -211,13 +211,28 @@ CONSULTA_ELEGIVEIS = """
         WHERE h.id_conversa = c.id_conversa AND h.quem_enviou = 'bot' AND h.status_envio = 'sent'
         ORDER BY h.received_data_hora DESC, h.id_mensagem DESC LIMIT 1
     ) b ON TRUE
+    CROSS JOIN LATERAL (
+        SELECT b.received_data_hora + CASE COALESCE(c.followup_stage, 0)
+            WHEN 0 THEN INTERVAL '15 minutes'
+            WHEN 1 THEN INTERVAL '6 hours 45 minutes'
+            WHEN 2 THEN INTERVAL '7 hours'
+        END AS vence_em
+    ) agenda
+    LEFT JOIN chatbot.followup_envio ultimo
+      ON ultimo.id_conversa = c.id_conversa AND ultimo.id_historico_bot = b.id_mensagem
+     AND ultimo.enviado_em = b.received_data_hora AND ultimo.versao_fluxo = 2
+    LEFT JOIN chatbot.followup_envio penultimo
+      ON penultimo.id_conversa = c.id_conversa AND penultimo.id_historico_bot = ultimo.id_ancora
+     AND penultimo.enviado_em = ultimo.ancora_em AND penultimo.versao_fluxo = 2
     WHERE c.status_ativa IS TRUE AND c.finalizou_em IS NULL
+      -- Corte fixo da implantação, por conversa (não por cliente/chat).
+      AND c.iniciou_em > TIMESTAMPTZ '2026-10-29 19:00:00-03:00'
       AND (c.id_etapa_atual BETWEEN 1 AND 17 OR
            (c.id_etapa_atual = 18 AND NULLIF(TRIM(ac.link_agendamento), '') IS NULL))
       AND e.encerra_automaticamente IS FALSE
-      AND COALESCE(c.followup_stage, 0) IN (0, 1) AND c.last_message_from = 'bot'
+      AND COALESCE(c.followup_stage, 0) IN (0, 1, 2) AND c.last_message_from = 'bot'
       AND c.last_interaction_at = b.received_data_hora
-      AND b.received_data_hora <= clock_timestamp() - INTERVAL '7 hours'
+      AND agenda.vence_em <= clock_timestamp()
       AND c.turnos_sem_avanco < 12 AND u.status_pagamento IS TRUE
       AND NULLIF(TRIM(cl.waid_telefone), '') IS NOT NULL
       AND NULLIF(TRIM(u.phone_number_id), '') IS NOT NULL
@@ -228,6 +243,7 @@ CONSULTA_ELEGIVEIS = """
           JOIN chatbot.etapa terminal ON terminal.id_etapa = anterior.id_etapa_atual
           WHERE anterior.id_cliente = c.id_cliente AND anterior.id_unidade = c.id_unidade
             AND anterior.status_ativa IS FALSE AND terminal.bloqueio_dias > 0
+            AND anterior.motivo_encerramento IS DISTINCT FROM 'atualizacao_followup'
             AND anterior.finalizou_em > clock_timestamp() - terminal.bloqueio_dias * INTERVAL '1 day'
       )
       AND NOT EXISTS (
@@ -255,6 +271,7 @@ CONSULTA_ELEGIVEIS = """
           SELECT 1 FROM chatbot.historico_mensagens h
           WHERE h.id_conversa = c.id_conversa AND h.quem_enviou = 'cliente'
             AND h.received_data_hora > clock_timestamp() - INTERVAL '24 hours' + INTERVAL '1 minute'
+            AND h.received_data_hora <= clock_timestamp()
       )
       AND NOT EXISTS (
           SELECT 1 FROM chatbot.followup_envio f WHERE f.id_conversa = c.id_conversa
@@ -266,18 +283,20 @@ CONSULTA_ELEGIVEIS = """
                 AND f.id_historico_bot = b.id_mensagem AND f.enviado_em = b.received_data_hora
           ))
           OR (c.followup_stage = 1 AND c.followup_last_sent_at = b.received_data_hora
-              AND EXISTS (
-                  -- Stage legado sozinho não comprova um primeiro envio.
-                  SELECT 1 FROM chatbot.followup_envio primeiro
-                  WHERE primeiro.id_conversa = c.id_conversa
-                    AND primeiro.id_historico_bot = b.id_mensagem
-                    AND primeiro.enviado_em = b.received_data_hora
-                    AND NOT EXISTS (
-                        SELECT 1 FROM chatbot.followup_envio anterior
-                        WHERE anterior.id_conversa = primeiro.id_conversa
-                          AND anterior.id_historico_bot = primeiro.id_ancora
-                          AND anterior.enviado_em = primeiro.ancora_em
-                    )
+              AND ultimo.id_conversa IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM chatbot.followup_envio anterior
+                  WHERE anterior.id_conversa = c.id_conversa
+                    AND anterior.id_historico_bot = ultimo.id_ancora
+                    AND anterior.enviado_em = ultimo.ancora_em
+              ))
+          OR (c.followup_stage = 2 AND c.followup_last_sent_at = b.received_data_hora
+              AND penultimo.id_conversa IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1 FROM chatbot.followup_envio anterior
+                  WHERE anterior.id_conversa = c.id_conversa
+                    AND anterior.id_historico_bot = penultimo.id_ancora
+                    AND anterior.enviado_em = penultimo.ancora_em
               ))
       )
       AND NOT EXISTS (
@@ -305,6 +324,7 @@ COLUNAS_ELEGIVEL = (
     "nome_agente",
     "status_dependente",
     "nome_dependente",
+    "vence_em",
 )
 
 
@@ -328,8 +348,8 @@ def reler_elegivel(id_conversa, cursor):
 
 def persistir_followup(dados, envio, lock_version, cursor):
     stage_anterior = dados["followup_stage"]
-    if stage_anterior not in (0, 1):
-        raise ValueError("Follow-up proativo só pode partir dos stages 0 ou 1")
+    if stage_anterior not in (0, 1, 2):
+        raise ValueError("Follow-up proativo só pode partir dos stages 0, 1 ou 2")
     stage = stage_anterior + 1
     proteger_conversa(dados["id_conversa"], lock_version, cursor)
     if not envio.get("id_hash_msg_bot") or not envio.get("enviou"):
@@ -357,8 +377,8 @@ def persistir_followup(dados, envio, lock_version, cursor):
     cursor.execute(
         """
         INSERT INTO chatbot.followup_envio
-            (id_conversa, id_ancora, ancora_em, id_historico_bot, enviado_em, id_hash_msg)
-        VALUES (%s, %s, %s, %s, %s, %s);
+            (id_conversa, id_ancora, ancora_em, id_historico_bot, enviado_em, id_hash_msg, versao_fluxo)
+        VALUES (%s, %s, %s, %s, %s, %s, 2);
     """,
         (
             dados["id_conversa"],
@@ -370,16 +390,16 @@ def persistir_followup(dados, envio, lock_version, cursor):
         ),
     )
     # Uma entrada nova na fila após o despacho não invalida a confirmação da Meta.
-    # O flow aguardará este lock: stage 1 retoma; stage 2 abre outra conversa.
+    # O flow aguardará este lock: stages 1/2 retomam; stage 3 abre outra conversa.
     # Confirmação, histórico e encerramento pertencem à mesma transação.
     cursor.execute(
         """
         UPDATE chatbot.conversa
         SET followup_stage = %s, followup_last_sent_at = %s,
             last_message_from = 'bot', last_interaction_at = %s,
-            status_ativa = CASE WHEN %s = 2 THEN FALSE ELSE status_ativa END,
-            finalizou_em = CASE WHEN %s = 2 THEN %s ELSE finalizou_em END,
-            motivo_encerramento = CASE WHEN %s = 2 THEN 'followup_sem_resposta'
+            status_ativa = CASE WHEN %s = 3 THEN FALSE ELSE status_ativa END,
+            finalizou_em = CASE WHEN %s = 3 THEN %s ELSE finalizou_em END,
+            motivo_encerramento = CASE WHEN %s = 3 THEN 'followup_sem_resposta'
                                       ELSE motivo_encerramento END
         WHERE id_conversa = %s AND lock_version = %s AND processing IS TRUE
           AND status_ativa IS TRUE AND finalizou_em IS NULL AND id_etapa_atual = %s
@@ -434,6 +454,22 @@ def validar_schema_followup(cursor):
         raise ValueError(
             "SCHEMA_SEGUNDO_FOLLOWUP_AUSENTE: aplicar 20260924_segundo_followup.sql"
         )
+    cursor.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM pg_attribute
+            WHERE attrelid = 'chatbot.followup_envio'::regclass
+              AND attname = 'versao_fluxo' AND NOT attisdropped AND attnotnull
+        ) AND EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'chatbot.conversa'::regclass
+              AND conname = 'ck_conversa_motivo_encerramento' AND convalidated
+              AND POSITION('atualizacao_followup' IN pg_get_constraintdef(oid)) > 0
+        );
+    """)
+    if not cursor.fetchone()[0]:
+        raise ValueError(
+            "SCHEMA_TRES_FOLLOWUPS_AUSENTE: aplicar 20261029_tres_followups.sql"
+        )
 
 
 def consultar_diagnostico(cursor):
@@ -443,9 +479,9 @@ def consultar_diagnostico(cursor):
     cursor.execute("""
         SELECT COUNT(*) FILTER (WHERE followup_stage > 0 AND status_ativa IS TRUE),
                COUNT(*) FILTER (WHERE followup_stage < 0),
-               COUNT(*) FILTER (WHERE followup_stage > 2),
+               COUNT(*) FILTER (WHERE followup_stage > 3),
                COUNT(*) FILTER (WHERE last_interaction_at > clock_timestamp()),
-               COUNT(*) FILTER (WHERE followup_stage = 2 AND status_ativa IS FALSE
+               COUNT(*) FILTER (WHERE followup_stage IN (2, 3) AND status_ativa IS FALSE
                                  AND motivo_encerramento = 'followup_sem_resposta')
         FROM chatbot.conversa;
     """)
@@ -457,8 +493,8 @@ def consultar_diagnostico(cursor):
         "ciclos_aguardando_reacao": positivos,
         "conversas_marcadas_na_migracao": marcadas_na_migracao,
         "stages_negativos": negativos,
-        "stages_maiores_que_dois": legados,
-        "encerradas_no_segundo_followup": encerrados,
+        "stages_maiores_que_tres": legados,
+        "encerradas_por_followup": encerrados,
         "horarios_futuros": futuros,
         "amostra_elegiveis": [
             {k: item[k] for k in ("id_conversa", "id_unidade", "id_etapa")}

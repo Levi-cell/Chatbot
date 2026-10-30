@@ -61,7 +61,6 @@ def enviar_tratamento_informativo(contexto):
         "duvida_reforco_escolar": montar_mensagem_tratamento_reforco_escolar,
         TIPO_TRATAMENTO_ENDERECO: lambda pergunta: montar_mensagem_tratamento_endereco(
             pergunta, contexto.get("endereco_unidade"), contexto.get("horarios_funcionamento"),
-            incluir_ponte=etapa not in {19, 20, 21},
         ),
     }[tratamento]("")
     prefixo = unir_blocos_mensagem(contexto.get("saudacao_retorno"), prefixo)

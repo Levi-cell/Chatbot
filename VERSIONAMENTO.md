@@ -190,6 +190,10 @@ Commit: `b662524e768b38cf900b404f61f464f392f6d67e`
 
 Commit: `201b6b253af731195d31fb35a11d4d66652f4e89`
 
+### V1.19.0 — Endereços, horários e tratamentos aprimorados
+
+Commit: `15da7ffb8380dcfcd174017957cd43095f73dbb1`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.

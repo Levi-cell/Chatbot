@@ -286,7 +286,37 @@ Para interromper os lembretes, parar e desabilitar a unit de follow-up. Isso man
 o flow apto a tratar retornos de lembretes ou do legado marcado. Não apagar recibos, resetar
 stages em massa nem reverter o flow incompatível enquanto existirem ciclos positivos.
 
-## Segunda camada de follow-up
+## Três follow-ups e corte das conversas antigas — 29/10/2026
+
+Aplicar [`migrations/20261029_tres_followups.sql`](migrations/20261029_tres_followups.sql)
+**inteiro, com webhook e todos os workers parados**, depois de atualizar o código
+e antes de reiniciar os serviços. É uma migração necessária para o novo worker;
+sem o schema compatível ele recusa selecionar candidatas.
+
+- Fecha somente conversas ainda abertas iniciadas até **29/10/2026 às 19h -03**,
+  inclusive, em todas as unidades. O motivo é `atualizacao_followup`, sem bloqueio
+  de 30 dias e sem mensagem automática. Preserva contador, histórico e etapa.
+- Conversas já encerradas continuam com seus dados originais. Não marcar
+  artificialmente stage 3 nem reabrir conversas antigas.
+- `followup_envio.versao_fluxo` diferencia recibos antigos (1) dos novos (2).
+  O DDL canônico cria a estrutura final; a migração pode ser reexecutada.
+- O seletor também exclui conversas anteriores ao corte. Para as novas, os
+  intervalos são 15min, mais 6h45 e mais 7h, sempre dentro da janela do cliente.
+  Se houver demora operacional, os intervalos são preservados desde os envios reais.
+- Atualizar a unit `chatbot-worker-followup.service`, executar `daemon-reload`
+  e `collectstatic --noinput` (o painel passa a mostrar também Follow-up 3).
+- Executar os testes de follow-up, retomada, saudação, mensagens e painel.
+  Depois da migração, `python -m utilitarios.verificar_followup` valida apenas
+  leitura, sem enviar. Retomar flow compatível antes do follow-up.
+
+O resultado SQL `antigas_ainda_abertas` deve ser zero. Não alterar o corte a cada
+reinício nem repetir a migração histórica `followup_registros.sql`. Uma resposta
+após o encerramento administrativo cria outra conversa, dentro das regras atuais.
+No rollback, manter o proativo desligado: a versão antiga não interpreta os
+stages/recibos novos. O código anterior também não conhece a exceção de bloqueio
+administrativo; o schema e o flow precisam permanecer compatíveis.
+
+## Segunda camada de follow-up — histórico, substituído pelo modelo acima
 
 Aplicar [`migrations/20260924_segundo_followup.sql`](migrations/20260924_segundo_followup.sql)
 com os workers parados, antes de iniciar o código novo. O arquivo amplia somente
@@ -337,7 +367,7 @@ A configuração atual de `unidade.link_agendamento` decide a saída da triagem:
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 

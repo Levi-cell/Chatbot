@@ -620,8 +620,8 @@ não significa curso ou matrícula gratuitos. Não há nome/gênero de diretor o
 novas colunas para essa oferta.
 
 Concentrar **por cortesia da unidade** na apresentação inicial da oferta
-(etapa 7) e nos lembretes proativos. O objetivo é reduzir a repetição, não impor
-um limite técnico: a oferta e um ou dois lembretes somam duas ou três menções.
+(etapa 7) e no convite do segundo follow-up. O objetivo é reduzir a repetição,
+não impor um limite técnico: a oferta e esse convite somam duas menções.
 Retomadas, escolha de turno, envio do link, mensagens ao comercial e perguntas
 repetidas usam apenas experiência ou momento Supera, sem esse complemento.
 No tratamento financeiro, manter uma menção na orientação que esclarece a
@@ -629,8 +629,8 @@ cortesia; a pergunta seguinte não a repete. Essa dúvida pode acrescentar uma
 menção ao atendimento. Outros tratamentos não repetem a expressão.
 Não reintroduzir `gratuita` ou `gratuito` nos textos enviados ao cliente.
 
-Cada lembrete pode mencionar a cortesia. A despedida do segundo follow-up
-consecutivo não usa a expressão. Se houver mais pausas com retomada, poderão
+O primeiro lembrete breve e a despedida do terceiro follow-up consecutivo
+não usam a expressão. Se houver mais pausas com retomada, poderão
 ocorrer mais menções. A redução é apenas editorial, sem contador, consulta
 adicional ao banco, coluna ou migração nova.
 Preservar a alternância entre experiência e momento Supera.
@@ -720,7 +720,7 @@ Para etapas ainda sem tratamento específico, a mensagem poderá ser mais genér
 ```text
 Recebi uma mídia, mas nesta etapa eu preciso que você responda por texto ou use os botões disponíveis.
 
-Envie uma mensagem de texto para continuarmos.
+Envie uma mensagem de texto.
 ```
 
 Em ambos os casos:
@@ -885,7 +885,7 @@ tratamento futuro que reapresente conteúdo da etapa.
 
 Depois que o cliente já informou o nome na etapa 1, uma nova mensagem recebida
 na mesma conversa pelo menos três horas após o último envio confirmado do bot
-deverá fazer a resposta começar com `Bom te ver novamente, {nome} ☺️` no caminho normal
+deverá fazer a resposta começar com `Bom te ver novamente ☺️` no caminho normal
 com `followup_stage = 0`. Stage positivo ou retomada já registrada segue o
 [contrato de follow-up](#follow-up-de-inatividade-e-reação-do-cliente), com o
 prefixo de retorno e a validação da resposta; a etapa 8 avança diretamente para a 9.
@@ -1422,7 +1422,7 @@ Implementação principal:
 | Worker continua ou reinicia depois de falha | Implementada em camadas | `funil_worker.py` recupera banco e agenda os ciclos; `iniciar_worker_funil.py` recria o worker após falha crítica. `iniciar_flow_worker.py` mantém a supervisão do atendimento. |
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 20–24, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
-| Follow-up antes do agendamento | Implementada | Primeiro lembrete após 7h; despedida e encerramento após outras 7h sem resposta, nas etapas 1–17 e a 18 somente para unidade sem link, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
+| Follow-up antes do agendamento | Implementada | Lembretes em 15min, 7h e 14h no cronograma normal; encerramento no terceiro, nas etapas 1–17 e a 18 somente para unidade sem link, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
 | Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
 
 ## 22. Orientação para futuras alterações
@@ -1445,42 +1445,42 @@ Implementado na V1.2.0. As instruções de operação vivem nos
 [workers](workers/README.md#worker-de-follow-up) e no
 [deploy](deploy/README.md#ativação-do-follow-up); não dependem dos planos de implementação.
 
-O worker proativo envia o lembrete definido em `messages/followup_messages.py`
-depois de sete horas sem reação à última resposta comum confirmada do bot.
-NULL equivale a stage zero.
-O envio exige conversa ativa em etapa 1–17 e a 18 somente para unidade sem link, unidade válida e adimplente, ausência
-de bloqueios, de entrada posterior no histórico e de fila pending/processing do
-mesmo par cliente/unidade, mesmo se ainda não vinculada à conversa. Uma fila
-respondida mas ainda aberta também adia o proativo até sua finalização.
+O worker proativo usa três lembretes, mantendo as mesmas etapas e bloqueios:
 
-O canal exige janela aberta desde a última mensagem do cliente; este envio em texto
-livre não usa template. A implementação reserva um minuto antes de completar 24h
-para evitar despacho na borda. Isso não altera o limiar de sete horas do bot.
+| Stage confirmado | Espera mínima desde o último envio do bot | Mensagem |
+|---|---|---|
+| 1 | 15 minutos após a resposta comum | `{nome}, você viu minha mensagem?`; sem nome coletado: `Você viu minha mensagem?` |
+| 2 | 6h45 após o primeiro follow-up | Convite anterior, com texto e formatação preservados |
+| 3 | 7h após o segundo follow-up | Despedida anterior + encerramento confirmado |
 
-São dois relógios distintos: a última mensagem de toda a conversa precisa ser
-do bot há pelo menos sete horas, e a mensagem mais recente do cliente, anterior
-a ela, precisa estar dentro de 23h59. Bot há oito horas com cliente há 25 horas
-é inelegível; bot há oito horas com cliente há nove horas pode ser elegível.
+Sem atrasos, os marcos são 15min, 7h e 14h desde a resposta comum do bot.
+Se o worker atrasar, os intervalos mínimos continuam contados do envio efetivo:
+não acumula nem dispara os lembretes em sequência para compensar a parada.
+NULL equivale a stage zero. Na etapa 1, nenhum lembrete usa nome antigo do cadastro.
 
-O worker produz 0 → 1 no primeiro envio. Após outras sete horas sem resposta,
-contadas do primeiro envio confirmado, produz 1 → 2 com a despedida e encerra a
-conversa (`status_ativa = false`, `finalizou_em` e motivo `followup_sem_resposta`).
-Mantém a etapa de origem, sem aplicar o bloqueio de 30 dias. Não há terceiro envio.
-Histórico, recibo, stage 2 e encerramento são gravados na mesma transação, somente
-após confirmação da Meta. Falha no envio mantém a conversa aberta em stage 1.
-Se a janela de 23h59 já expirou, não envia nem simula encerramento.
+O envio exige conversa ativa nas etapas 1–17, ou 18 somente para unidade sem link,
+unidade adimplente, ausência de bloqueios, de entrada posterior no histórico e de
+fila pending/processing do mesmo cliente/unidade, inclusive sem vínculo à conversa.
+A janela é medida desde a mensagem do **cliente**, reservando um minuto antes de
+completar 24h. Envio do bot não renova essa janela. Seleção e releitura sob lock
+aplicam a mesma proteção; conversa sem janela sai das candidatas sem chamar a Meta.
 
-O segundo envio exige recibo real do primeiro, correspondente ao último bot e ao
-`followup_last_sent_at`; marcação de legado sem recibo não permite uma despedida.
-As duas camadas são restritas às etapas 1–17 e a 18 somente para unidade sem link, incluindo a 8. Uma reação antes do
-segundo envio cancela sua elegibilidade e mantém o processamento descrito abaixo.
-Depois do encerramento, outra mensagem abre novo ID de conversa, com stage zero
-e mensagem inicial da etapa 1, sem prefixo de retorno nem nome de cadastro antigo.
+Os stages 1 e 2 mantêm a conversa aberta. Só o terceiro envio confirmado grava
+stage 3, `status_ativa = false`, `finalizou_em` e `followup_sem_resposta`, no mesmo
+commit do histórico e recibo. Preserva a etapa e não cria bloqueio de 30 dias.
+Falha no envio não avança contador nem encerra; sem janela, não simula envio.
+Os recibos comprovam toda a sequência do ciclo; `versao_fluxo = 2` identifica os
+três lembretes. Um recibo da versão anterior não autoriza um lembrete da nova sequência.
 
-O filtro **Follow-up** do painel considera stage 1 ou 2 da conversa mais recente
-do mesmo cliente/unidade dentro do período. Uma conversa posterior só invalida
-o marcador antigo se também participar do recorte. O chat continua reunindo todo
-o histórico permitido pelo período; excluir do filtro não apaga atendimento.
+**Corte de implantação:** conversas iniciadas até `2026-10-29 19:00:00-03:00`
+são inelegíveis no seletor, mesmo se tiverem stage zero. A migração
+`20261029_tres_followups.sql` encerra as que ainda estiverem abertas com motivo
+`atualizacao_followup`, sem bloqueio de 30 dias, sem mensagem e sem inventar stage 3.
+Preserva histórico e encerramentos anteriores. O corte é inclusivo e por conversa;
+um novo atendimento do mesmo cliente pode participar normalmente do modelo novo.
+
+O filtro **Follow-up** e suas tags consideram stages 1, 2 ou 3 da última conversa
+no período do mesmo cliente/unidade; uma nova conversa não apaga o histórico.
 
 A primeira entrada aceita com stage positivo em conversa ainda ativa é armazenada e validada pelos
 mesmos resolvers do atendimento normal. Respeitar as prioridades de cada etapa:
@@ -1491,8 +1491,8 @@ A triagem mantém apenas suas opções canônicas para registrar respostas. Pedi
 de endereço, financeiro ou reforço escolar recebem tratamento e a mesma pergunta,
 sem resposta de triagem nem avanço (ampliação de 28/10/2026).
 
-A resposta começa com `Bom te ver novamente, <nome> ☺️` ou a forma sem nome
-`Bom te ver novamente ☺️`. Na etapa 1, nunca usar o nome de atendimento anterior:
+A resposta começa com `Bom te ver novamente ☺️`, sempre sem nome.
+Na etapa 1, nunca usar o nome de atendimento anterior:
 um nome válido recebido agora é salvo e avança para a 2; caso contrário, tratar
 ou repetir conforme a regra acima. O cadastro antigo não é apagado para saudação.
 O prefixo independe do tempo de retorno, aparece uma vez e substitui a saudação
@@ -1530,10 +1530,10 @@ Novas conversas continuam com stage zero. O setup limpo não marca conversas.
 Histórico, efeitos normais, marcação da retomada, reset para zero, eventual
 encerramento e finalização da fila pertencem ao mesmo commit. followup_last_sent_at permanece como auditoria. Um retry de retomada
 concluída usa a resposta já persistida, sem zerar um ciclo posterior. A mensagem
-seguinte é interpretada normalmente; outro período de sete horas pode iniciar um
+seguinte é interpretada normalmente; outro período de quinze minutos pode iniciar um
 novo ciclo somente nas etapas 1–17 e a 18 somente para unidade sem link e com as demais condições de envio atendidas.
 Stage maior que um em conversa legada ainda ativa segue a mesma recuperação;
-stage 2 encerrado pelo novo proativo permanece como auditoria; negativo falha fechado.
+stage 2 encerrado pela versão antiga ou stage 3 encerrado pela nova permanecem como auditoria; negativo falha fechado.
 
 A exceção deliberada é a repetição neutra diante de contexto inválido genérico
 no primeiro retorno. Stage zero preserva o processamento normal por inteiro.
@@ -1674,7 +1674,7 @@ resposta; não flexibilizar a validação específica de cada etapa nem aceitar 
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 

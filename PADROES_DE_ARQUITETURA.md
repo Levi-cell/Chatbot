@@ -340,9 +340,11 @@ Cada candidata tem conexão, lock de conversa e transação próprios. O envio u
 `core/integrations/whatsapp`; elegibilidade, recibos e fencing ficam em
 `core/repositories/atendimento/followup.py`.
 
-A releitura após adquirir o lock verifica as etapas 1–17 e a 18 somente para unidade sem link, sete horas sem resposta
-ao bot e a janela da última mensagem do cliente. Confirmação do lembrete, histórico
-e stage 1 são persistidos juntos. Uma falha individual não interrompe o lote.
+A releitura verifica etapas 1–17 e 18 somente sem link, o corte por conversa
+em 29/10/2026 19h -03, recibos da versão 2 e intervalos 15min/6h45/7h conforme stage.
+A janela de 23h59 vem da mensagem do cliente, nunca do bot. Histórico, recibo e
+stage são persistidos juntos; só stage 3 encerra. A migração encerra antigas abertas
+com motivo administrativo sem bloqueio. Uma falha individual não interrompe o lote.
 
 O retorno pertence ao `worker_flow`: `transacoes/retorno_followup.py` prepara o
 checkpoint da reação e persiste a repetição, sem controlar commits.
@@ -957,7 +959,7 @@ A configuração atual de `unidade.link_agendamento` decide a saída da triagem:
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. O primeiro vence após 15min; o segundo, 6h45 após o primeiro envio; o terceiro, 7h após o segundo. Recibos e guardas são preservados, e somente o terceiro confirmado encerra o atendimento. A reação ao primeiro ou segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 

@@ -164,7 +164,7 @@ preservando ID, stage anterior e horário da migração. Esse registro não é u
 As tabelas são internas, sem ações no monitoramento ou no admin.
 
 `listar_elegiveis` e `reler_elegivel` usam o mesmo SQL: etapa 1–17 e a 18 somente para unidade sem link, stage 0 ou 1 com recibo válido,
-última mensagem do bot confirmada há pelo menos sete horas, última mensagem do
+última mensagem do bot confirmada há 15min/6h45/7h, conforme o stage, última mensagem do
 cliente dentro de 23h59, unidade adimplente e ausência de bloqueios ou fila aberta.
 Os horários do bot e do cliente são condições separadas. A paginação usa
 `(ancora_em, id_conversa)` para não ficar presa nas primeiras falhas.
@@ -200,6 +200,6 @@ A configuração atual de `unidade.link_agendamento` decide a saída da triagem:
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

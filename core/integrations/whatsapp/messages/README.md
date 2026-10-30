@@ -385,7 +385,7 @@ composição é coordenada pelo worker e aplicada ao envio e ao histórico.
 ### Inatividade normal: a partir de três horas
 
 Com `followup_stage = 0`, o retorno **a partir de três horas**, inclusive,
-desde o último envio confirmado do bot pode receber `Bom te ver novamente, {nome_titular} ☺️`.
+desde o último envio confirmado do bot pode receber `Bom te ver novamente ☺️`.
 O código não usa “até três horas”, nem envia uma mensagem automaticamente
 quando esse prazo passa. Nome válido e horários compatíveis são necessários.
 
@@ -400,14 +400,15 @@ transição. Nunca acrescentá-lo novamente a uma resposta já persistida.
 
 ### Follow-up: lembrete e reação são momentos diferentes
 
-O texto do lembrete proativo é definido em `followup_messages.py`. Ele é enviado
-após sete horas e somente quando os demais critérios de elegibilidade forem
-atendidos. Uma revisão de estilo não autoriza ampliar a elegibilidade do envio.
+O catálogo `followup_messages.py` possui três lembretes, sem ampliar as etapas elegíveis.
+O primeiro, após 15min, é `{nome}, você viu minha mensagem?` ou
+`Você viu minha mensagem?` quando o nome não foi coletado/na etapa 1.
+É uma única frase, sem rodapé, prefixo de retorno ou botões.
+O segundo espera 6h45 desde o primeiro e preserva integralmente o convite anterior.
+O terceiro espera outras 7h e preserva a despedida anterior. Sem atrasos,
+os marcos são 15min, 7h e 14h desde a resposta comum do bot.
 
-Existem duas camadas nas etapas 1–17, inclusive 8: o lembrete após 7h e a despedida
-após mais 7h sem resposta desde o envio real do primeiro.
-
-O primeiro lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
+O segundo lembrete usa `Olá, {nome_titular}! ☺️` quando o nome já foi informado
 no atendimento; na etapa 1, usa `Olá! ☺️`, sem aproveitar nomes antigos.
 Começa com “Queremos muito continuar te ajudando! Será um prazer receber” e oferece a
 **experiência Supera por cortesia da unidade**. A oferta inicial e um ou dois
@@ -430,19 +431,18 @@ Na etapa 1, nunca usa nome de cadastro anterior. Na rota dependente, usa
 se o nome ainda não foi coletado (nulo, vazio ou só espaços), usa a mesma mensagem
 do titular, sem alterar a rota da conversa. O corpo termina com
 `Fico à disposição caso precise falar comigo novamente! ☺️👋` e o rodapé é
-`Abraços, {nome_agente}. 🧡`. Os dois follow-ups usam o componente de rodapé em
+`Abraços, {nome_agente}. 🧡`. O segundo e o terceiro follow-ups usam o componente de rodapé em
 itálico, separado do corpo por `\n\n` (uma linha em branco). Não acrescentar prefixo
 de retorno, tratamento, pergunta da etapa ou botões aos envios proativos.
 
-O segundo envio confirmado encerra a conversa, preservando stage 2. Uma mensagem
+O terceiro envio confirmado encerra a conversa, preservando stage 3. Uma mensagem
 posterior inicia outro atendimento com a mensagem inicial da etapa 1, sem prefixo
 de retorno. As regras de reação abaixo valem para a conversa ainda ativa, antes
 desse encerramento, e para recuperações legadas.
 
 Na primeira reação aceita com follow-up pendente:
 
-1. usar `Bom te ver novamente, {nome_titular} ☺️` ou `Bom te ver novamente ☺️`
-   na etapa 1/sem nome autorizado, sempre uma única vez;
+1. usar `Bom te ver novamente ☺️`, sem nome, sempre uma única vez;
 2. reutilizar os validadores e a ordem de prioridade dos tratamentos da etapa;
 3. resposta válida: avançar normalmente, com saudação + mensagem de destino;
 4. tratamento específico reconhecido: saudação + tratamento + pergunta atual;
@@ -639,7 +639,7 @@ esse fragmento uma única vez e compartilhá-lo:
 
 ```python
 APRESENTACAO = "Vamos conhecer o Supera! ☺️\n"
-ORIENTACAO = "Olha, responda por texto para continuarmos.\n"
+ORIENTACAO = "Olha, responda por texto.\n"
 MENSAGEM_REPETICAO = "Me diz, qual é a sua profissão?"
 
 MENSAGEM_PADRAO = compor_mensagem_inicial(
@@ -813,12 +813,14 @@ a mesma fala. Migração, exemplos e testes: [guia](../../../../docs/enderecos_e
 Revisão de 28/10/2026: endereço começa com “Nossa unidade fica localizada em”.
 `unidade.horarios_funcionamento`, quando preenchido, entra logo depois com
 “Nosso horário de funcionamento é de”; NULL/vazio omite o parágrafo completo.
-Referência pode estar no texto do endereço. Seguem a ponte e a pergunta neutra.
+Referência pode estar no texto do endereço. Segue diretamente a pergunta neutra.
 Título → saudação opcional → tratamento → pergunta é a ordem de composição.
 Todos esses blocos são separados por `\n\n`. Financeiro e reforço não usam
-“Vamos lá”; a ponte do endereço permanece “Para continuarmos:”, exceto nas
-etapas 19, 20 e 21. Nessas etapas, endereço e horários são seguidos diretamente
-da orientação comercial, do link de reserva ou da pergunta de satisfação,
-sempre com `\n\n` entre os blocos. Os demais tratamentos não usam essa ponte.
+“Vamos lá”. A revisão de 29/10/2026 remove a ponte “Para continuarmos” de todas
+as mensagens: endereço e horários são seguidos diretamente da pergunta ou
+orientação da etapa. Na abertura FireAds, tanto parcial/completa quanto legada,
+o endereço e os horários vêm logo após a apresentação, antes do reconhecimento
+do formulário e da pergunta necessária. Sem formulário confirmado, esse
+reconhecimento é omitido. As demais aberturas preservam sua ordem.
 O “Certo” meramente introdutório de nome do dependente/email/triagem é omitido
 após a saudação de retorno; confirmações substantivas e despedida são mantidas.

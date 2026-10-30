@@ -117,6 +117,7 @@ def buscar_estado_conversa(id_cliente, id_unidade, cursor):
                 c.finalizou_em,
                 CASE
                     WHEN COALESCE(e.bloqueio_dias, 0) > 0
+                     AND c.motivo_encerramento IS DISTINCT FROM 'atualizacao_followup'
                      AND c.finalizou_em
                          > NOW() - (
                              COALESCE(e.bloqueio_dias, 0)

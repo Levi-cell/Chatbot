@@ -1,5 +1,7 @@
 """Etapa 4: apresentação, repetição e tratamentos compostos."""
 
+from core.integrations.whatsapp.messages.tratamentos.composicao import unir_blocos_mensagem
+from core.integrations.whatsapp.messages.tratamentos.endereco import montar_mensagem_tratamento_endereco
 from core.integrations.whatsapp.messages.tratamentos.financeiro import (
     montar_mensagem_tratamento_financeiro,
 )
@@ -25,6 +27,11 @@ MENSAGEM_PADRAO_DEPENDENTE_ETAPA4 = (
 
 ### REPETIÇÃO COMUM ÀS DUAS ROTAS, SEM REAPRESENTAR A ABERTURA
 MENSAGEM_REPETICAO_ETAPA4 = "Me diz, qual a sua *profissão* hoje?"
+
+MENSAGEM_FORMULARIO_FIREADS = (
+    "Vi que você já preencheu um dos nossos formulários. Para avançarmos "
+    "com sua reserva por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?"
+)
 
 ORIENTACAO_CONTEXTO_ETAPA4 = (
     "Olha, não consegui entender. Me conta, com o que você "
@@ -67,24 +74,22 @@ def montar_abertura_fireads(contexto, *, saudacao, tratamento=None):
     if genero not in {'masculino', 'feminino'} or not contexto.get('nome_agente'):
         raise ValueError('Apresentação da unidade incompleta')
     artigo = 'a' if genero == 'feminino' else 'o'
-    abertura = (
+    apresentacao = (
         f"{saudacao}, {dados['nome']}! Sou {artigo} "
-        f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️\n\n"
-        "Vi que você já preencheu um dos nossos formulários. Para avançarmos "
-        "com sua reserva por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?"
+        f"{contexto['nome_agente']}, assistente do {contexto['nome_unidade']}. ☺️"
     )
     pergunta = MENSAGEM_REPETICAO_ETAPA4
+    if tratamento == 'pedido_endereco':
+        continuidade = unir_blocos_mensagem(MENSAGEM_FORMULARIO_FIREADS, pergunta)
+        return unir_blocos_mensagem(apresentacao, montar_mensagem_tratamento_endereco(
+            continuidade, contexto.get('endereco_unidade'), contexto.get('horarios_funcionamento')
+        ))
     if tratamento == 'tipo_mensagem_nao_suportado':
         pergunta = montar_mensagem_tratamento_midia(pergunta)
     elif tratamento == 'duvida_reforco_escolar':
         pergunta = montar_mensagem_tratamento_reforco_escolar(pergunta)
     elif tratamento == 'pergunta_financeira':
         pergunta = montar_mensagem_tratamento_financeiro(pergunta)
-    elif tratamento == 'pedido_endereco':
-        from core.integrations.whatsapp.messages.tratamentos.endereco import montar_mensagem_tratamento_endereco
-        pergunta = montar_mensagem_tratamento_endereco(
-            pergunta, contexto.get('endereco_unidade'), contexto.get('horarios_funcionamento')
-        )
     elif tratamento is not None:
         raise ValueError('Tratamento de abertura FireAds desconhecido')
-    return abertura + '\n\n' + pergunta
+    return unir_blocos_mensagem(apresentacao, MENSAGEM_FORMULARIO_FIREADS, pergunta)

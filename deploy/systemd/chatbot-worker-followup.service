@@ -1,5 +1,5 @@
 [Unit]
-Description=Chatbot - lembrete após sete horas sem resposta
+Description=Chatbot - follow-ups de 15 minutos, 7 e 14 horas sem resposta
 Wants=network-online.target
 After=network-online.target
 

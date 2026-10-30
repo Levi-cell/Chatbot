@@ -9,7 +9,6 @@ MENSAGEM_SEM_ENDERECO = (
     "Ainda não tenho o endereço desta unidade cadastrado aqui. "
     "Nossa equipe poderá confirmar essa informação para você.\n\n"
 )
-PONTE_ENDERECO = "Para continuarmos:\n\n"
 
 
 def _frase(texto):
@@ -18,7 +17,7 @@ def _frase(texto):
 
 
 def montar_mensagem_tratamento_endereco(
-    mensagem_repeticao, endereco=None, horarios_funcionamento=None, *, incluir_ponte=True
+    mensagem_repeticao, endereco=None, horarios_funcionamento=None
 ):
     orientacao = (
         MENSAGEM_ENDERECO.format(endereco=_frase(endereco))
@@ -27,7 +26,4 @@ def montar_mensagem_tratamento_endereco(
     )
     if isinstance(horarios_funcionamento, str) and horarios_funcionamento.strip():
         orientacao += MENSAGEM_HORARIOS.format(horarios=_frase(horarios_funcionamento))
-    return compor_tratamento(
-        orientacao, mensagem_repeticao,
-        ponte=PONTE_ENDERECO if incluir_ponte else None,
-    )
+    return compor_tratamento(orientacao, mensagem_repeticao)

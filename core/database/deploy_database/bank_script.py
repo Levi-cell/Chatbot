@@ -321,6 +321,7 @@ def criar_tabelas():
                         'encaminhado_suporte_idoso',
                         'foi_agendado',
                         'followup_sem_resposta',
+                        'atualizacao_followup',
                         'titular_menor_18', 'dependente_menor_4', 'dependente_menor_5',
                         'suporte_idoso_50', 'suporte_idoso_60', 'suporte_idoso_70', 'suporte_idoso_80',
                         'idade_universal_90'

@@ -8,7 +8,7 @@ lembretes, consumo Meta e identificação de origem para o monitoramento.
 - [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md)
 - [Rotina de implementação de etapas](../ROTINA_IMPLEMENTACAO_ETAPAS.md)
 
-## Inventário atual — 24/10/2026
+## Inventário atual — 30/10/2026
 
 São **seis workers** e um serviço web. `chatbot-webhook.service` recebe os
 eventos, alimenta a fila e serve o monitoramento; não é um sétimo worker.
@@ -18,7 +18,7 @@ eventos, alimenta a fila e serve o monitoramento; não é um sétimo worker.
 | `worker_flow` | Validar e responder WhatsApp; persistir histórico, etapas, coleta e estado de atendimento/cache | `fila_mensagens`; execução contínua, espera de 1,5s quando vazia | Dono do turno de atendimento; lock de conversa, versão e checkpoints. Solicita consulta inicial quando faltam dados e aplica o resultado. Preserva recuperação já existente |
 | `worker_consulta_dash` | Ler FireAds para completar a abertura e salvar resultado; pode renovar o indicador de digitação, sem enviar resposta ou mudar etapa | `consulta_fireads`; uma reserva por ciclo, espera ociosa 2s | HTTP até 300s, reserva 330s; resultado aplicado pelo flow. Falha/expiração encerra a consulta com resultado próprio e permite atendimento adaptado; supervisor tenta recuperar em 5s |
 | `worker_funil` | Preparar e entregar dashboard e Funil; sincronizar campos permitidos e observações | Conversas elegíveis e filas `envios_dash`/`funil_envios`; 1.800s, lote 100 | Com FireAds, dashboard precede Funil. Confirma origem antes do snapshot. Reserva mínima 960s; retry de lead padrão 3.600s, fila dashboard 30min. Preserva snapshot e recibos |
-| `worker_followup` | Enviar os dois lembretes permitidos e registrar histórico/recibos/stage | Conversas elegíveis; varredura 60s, lote 20, lembretes após 7h | Usa lock do atendimento e revalida fila/janela/bloqueio/pagamento. Flow trata a reação. Falhas de consulta têm espera progressiva 5–300s |
+| `worker_followup` | Enviar os três lembretes permitidos e registrar histórico/recibos/stage; encerrar após o terceiro confirmado | Conversas elegíveis; varredura 60s, lote 20; primeiro após 15min, segundo 6h45 depois, terceiro 7h depois | Usa lock do atendimento e revalida fila/janela/bloqueio/pagamento. Flow trata a reação. Falhas de consulta têm espera progressiva 5–300s |
 | `worker_consumo_meta` | Consultar analytics Meta e consolidar consumo local por unidade/mês | Agenda persistida; supervisor 60s, mês atual por hora, lote 100 | Advisory lock próprio; não envia mensagens. Falhas preservam leitura válida; meses pendentes/consolidação seguem a agenda específica de consumo |
 | `worker_origem_fireads` | Ler canal e anúncio para métricas; gravar somente atribuição/verificação no JSON da conversa | Abertura completa que dispensou consulta, antes da elegibilidade comercial; 7.200s após terminar o ciclo; páginas de 100 | Advisory lock exclusivo por ciclo, HTTP até 300s, revalidação antes da leitura e da gravação. Falhas ficam pendentes; não envia WhatsApp, não muda etapas e não escreve na planilha |
 
@@ -296,7 +296,7 @@ No caminho normal com `followup_stage = 0`, após a etapa 1,
 `valida_historico.py` compara o horário da mensagem atual do
 cliente com o último envio do bot confirmado como `sent` na mesma conversa.
 Com intervalo de pelo menos três horas e nome disponível, `flow_sender.py`
-prefixa a resposta com `Bom te ver novamente, <nome> ☺️`, inclusive quando ela é um
+prefixa a resposta com `Bom te ver novamente ☺️`, inclusive quando ela é um
 tratamento. O texto enviado e o histórico recebem o mesmo prefixo uma vez.
 
 Essa saudação não é follow-up nem disparo por inatividade: depende de uma nova
@@ -411,46 +411,37 @@ há promessa de retry no lote imediatamente seguinte ou de reenvio fora da janel
 | `FOLLOWUP_POLL_SECONDS` | `60` | 5–3.600 segundos de espera após cada lote. |
 | `FOLLOWUP_BATCH_SIZE` | `20` | 1–100 candidatas por lote; processamento sequencial. |
 
-Os dois textos são montados em `messages/followup_messages.py` com os dados da
-releitura após o lock. O primeiro convida a continuar o atendimento e receber a
-experiência Supera gratuita na unidade, com rodapé `Estaremos te esperando!`.
-Usa o nome do titular já informado no atendimento (nunca nome antigo na etapa 1)
-e adapta o convite para dependente com nome ou, sem o nome, “receber vocês”.
-O segundo é a despedida personalizada, com rodapé `Abraços, {nome_agente}. 🧡`;
-sem nome de dependente coletado, mantém a versão do titular.
-Para despachar, todas as condições
-precisam continuar válidas na releitura após adquirir o lock:
+Os três textos são montados em `messages/followup_messages.py` após a releitura
+sob lock. O primeiro é `{nome}, você viu minha mensagem?`, ou a forma sem nome
+na etapa 1/sem nome coletado. O segundo mantém o convite anterior e o rodapé
+`Estaremos te esperando!`. O terceiro mantém a despedida e o rodapé
+`Abraços, {nome_agente}. 🧡`. As variantes de titular e dependente são preservadas.
 
-- conversa ativa, sem finalização, em etapa 1–17 e a 18 somente para unidade sem link não terminal;
-- primeiro envio: `followup_stage = 0` (`NULL` equivale a zero); segundo: stage 1
-  com recibo do primeiro correspondente ao último bot e ao `followup_last_sent_at`;
-- última mensagem da conversa é do bot, confirmada como `sent`, com pelo menos
-  sete horas, e `last_interaction_at` corresponde a essa mensagem;
-- última mensagem do cliente tem menos de 23h59, reservando um minuto da janela
-  de 24 horas; não existe mensagem do cliente com horário igual ou posterior ao bot;
-- unidade adimplente, destinatário e números da unidade presentes;
-- menos de 12 turnos sem avanço, sem bloqueio persistido ou flood no banco;
-- nenhuma fila `pending`/`processing` do par cliente/unidade, inclusive sem vínculo;
-- nenhum recibo que já cubra a âncora, nem retomada aberta com fila pendente.
-  No segundo, a âncora é o primeiro follow-up, sem encadear um terceiro envio.
+A elegibilidade exige:
 
-Exemplo: bot há 8 horas e cliente há 25 horas não permitem envio; bot há 8 horas
-e cliente há 9 horas permitem, se os demais critérios forem atendidos.
-O relógio de elegibilidade vem do PostgreSQL. Os limites de etapa e de tempo
-são regras do código/SQL, não novas variáveis de ambiente.
+- conversa iniciada depois de `2026-10-29 19:00:00-03:00`, ativa e sem finalização;
+- etapa 1–17, ou 18 somente para unidade sem link, sem etapa terminal;
+- stage 0/NULL: resposta comum do bot há 15min; stage 1: primeiro follow-up há 6h45;
+  stage 2: segundo follow-up há 7h; stages maiores não recebem outro lembrete;
+- recibos reais da versão 2 encadeados no ciclo, correspondentes ao último bot;
+- `last_interaction_at` corresponde ao último bot confirmado, sem resposta posterior;
+- mensagem do cliente dentro de 23h59 (um minuto de margem da janela de 24h);
+- unidade adimplente, destinatário e números presentes, menos de 12 turnos sem avanço;
+- sem bloqueio Meta, flood, fila pending/processing ou retomada pendente do par.
 
-O primeiro sucesso persiste histórico, recibo e stage 1 no mesmo commit. Após
-outras 7h sem resposta, contadas desse envio, a segunda mensagem persiste histórico,
-recibo, stage 2 e encerramento no mesmo commit. Mantém a etapa de origem e não
-gera bloqueio de 30 dias. Sem janela de envio, não envia nem encerra silenciosamente.
-As duas camadas incluem a etapa 8. Marcações legadas sem recibo não geram despedida.
-Uma confirmação da Meta seguida de
-falha no commit local ainda pode resultar em duplicidade no retry; o worker
-registra `followup_commit_falhou` como crítico.
+A seleção e a releitura aplicam as mesmas guardas. O relógio vem do PostgreSQL;
+`vence_em` no log é o prazo da camada atual. Se houver atraso, cada próximo lembrete
+respeita o intervalo desde o envio real, sempre condicionado à janela do cliente.
+Somente o terceiro envio confirmado encerra no mesmo commit de histórico e recibo.
+O primeiro e segundo permanecem ativos. Nenhuma falha simula envio ou encerramento.
+Conversas encerradas administrativamente na migração não impõem bloqueio de 30 dias.
+O schema é validado antes da seleção; exige `20261029_tres_followups.sql`.
+Aceite da Meta seguido de falha no commit ainda pode duplicar no retry; essa falha
+é registrada como `followup_commit_falhou` (risco existente, sem retry HTTP automático).
 
 ### Retomada pelo flow
 
-Depois do segundo envio confirmado, o atendimento está encerrado. `valida_banco`
+Depois do terceiro envio confirmado, o atendimento está encerrado. `valida_banco`
 abre nova conversa, sem etapa persistida e com stage zero; o fluxo inicial pede
 o nome sem prefixo de retorno. Uma leitura da conversa antiga antes do encerramento
 é recusada na releitura sob lock e reagendada sem consumir retry.
@@ -458,8 +449,7 @@ o nome sem prefixo de retorno. Uma leitura da conversa antiga antes do encerrame
 No flow, o contexto é relido sob lock. `transacoes/retorno_followup.py` registra
 um checkpoint e reutiliza `valida_historico.py` para os dados da etapa, sem
 calcular outra saudação de três horas. `retomada_followup.py` chama o `flow_sender`
-normal com o prefixo `Bom te ver novamente, <nome> ☺️`. Na etapa 1, omite o nome
-antigo; um nome válido na reação é salvo e permite avançar para a 2.
+normal com o prefixo `Bom te ver novamente ☺️`, sempre sem nome. Na etapa 1, um nome válido na reação é salvo e permite avançar para a 2.
 
 Os resolvers preservam seus validadores e prioridades: resposta válida avança;
 mídia, financeiro e reforço recebem os tratamentos já existentes naquela etapa;
@@ -527,7 +517,7 @@ A configuração atual de `atendimento_customizado.link_agendamento` decide a sa
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 

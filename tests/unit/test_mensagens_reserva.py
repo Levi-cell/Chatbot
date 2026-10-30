@@ -80,7 +80,7 @@ class GeneroAgendamentoTests(unittest.TestCase):
 
         for genero, agradecimento in (("feminino", "Obrigada"), ("masculino", "Obrigado")):
             for dependente in (False, True):
-                for saudacao in (None, "Bom te ver novamente, Ana ☺️\n\n"):
+                for saudacao in (None, "Bom te ver novamente ☺️\n\n"):
                     with self.subTest(genero=genero, dependente=dependente, saudacao=saudacao):
                         ctx = contexto(17, "Nunca", link="https://example.com/reserva", dependente=dependente)
                         ctx.update(genero_agente_unidade=genero, saudacao_retorno=saudacao)

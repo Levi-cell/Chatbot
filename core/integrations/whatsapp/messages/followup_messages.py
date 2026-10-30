@@ -1,4 +1,4 @@
-"""Duas camadas proativas; a saudação de reação fica em retorno_followup."""
+"""Três lembretes proativos; a saudação de reação fica em retorno_followup."""
 
 from .componentes_compartilhados import montar_texto_com_rodape
 from .tratamentos.retorno_followup import montar_saudacao_retomada_followup
@@ -30,6 +30,12 @@ MENSAGEM_ENCERRAMENTO_FOLLOWUP_DEPENDENTE = (
 )
 
 
+def montar_mensagem_primeiro_followup(*, id_etapa, nome_titular):
+    """Lembrete breve; na etapa 1 nunca reutiliza nome de conversa anterior."""
+    nome = " ".join(str(nome_titular or "").split()) if id_etapa > 1 else ""
+    return f"{nome}, você viu minha mensagem?" if nome else "Você viu minha mensagem?"
+
+
 def montar_mensagem_followup(
     *, id_etapa, nome_titular, status_dependente=False, nome_dependente=None,
 ):
@@ -51,7 +57,7 @@ def montar_mensagem_followup(
 
 
 # Texto completo sem nomes para consumidores que não recebem o contexto da conversa.
-MENSAGEM_FOLLOWUP = montar_mensagem_followup(id_etapa=1, nome_titular=None)
+MENSAGEM_FOLLOWUP = montar_mensagem_primeiro_followup(id_etapa=1, nome_titular=None)
 
 
 def montar_mensagem_encerramento_followup(
@@ -80,6 +86,7 @@ __all__ = [
     "MENSAGEM_FOLLOWUP", "MENSAGEM_ENCERRAMENTO_FOLLOWUP",
     "MENSAGEM_ENCERRAMENTO_FOLLOWUP_DEPENDENTE",
     "montar_mensagem_followup",
+    "montar_mensagem_primeiro_followup",
     "montar_mensagem_encerramento_followup",
     "montar_saudacao_retomada_followup",
 ]

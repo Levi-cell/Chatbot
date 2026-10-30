@@ -92,7 +92,8 @@ class Conversa(models.Model):
         null=True,
         choices=[*ROTULOS_MOTIVOS.items(),
                  ("foi_agendado", "Foi agendado"),
-                 ("followup_sem_resposta", "Segundo follow-up sem resposta")],
+                 ("followup_sem_resposta", "Último follow-up sem resposta"),
+                 ("atualizacao_followup", "Encerrada na atualização dos follow-ups")],
     )
 
     class Meta:

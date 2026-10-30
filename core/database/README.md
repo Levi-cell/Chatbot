@@ -206,15 +206,20 @@ permissões de leitura e escrita nas novas tabelas, por propriedade ou grants.
 O [diagnóstico sem envio](../../utilitarios/README.md#diagnóstico-de-follow-up)
 confere as consultas; ele não comprova as permissões de escrita.
 
-Para habilitar a segunda camada em base existente, aplicar
+Migração histórica da segunda camada (não é o deploy atual):
 [`20260924_segundo_followup.sql`](../../deploy/migrations/20260924_segundo_followup.sql).
 Ela só amplia `ck_conversa_motivo_encerramento` com `followup_sem_resposta` e
 preserva todas as conversas. O DDL de instalação limpa já inclui esse motivo.
 Não há novas colunas ou tabelas. O segundo recibo usa o ID/data do primeiro envio
 como âncora, preservando a unicidade e a rastreabilidade de cada camada.
 
-Histórico, recibo e stage 1 são confirmados juntos pelo worker proativo; no segundo,
-o mesmo commit grava stage 2, status inativo, horário e motivo de encerramento.
+Na sequência atual, histórico, recibo e stage são confirmados juntos. Somente
+no terceiro envio o mesmo commit grava stage 3 e o encerramento. A migração
+`20261029_tres_followups.sql` adiciona `followup_envio.versao_fluxo` (1 = modelo
+antigo, 2 = três lembretes; default 2 para novos recibos) e o motivo
+`atualizacao_followup`. Encerra apenas conversas abertas iniciadas até
+29/10/2026 19h -03, preservando o contador real e sem bloqueio de 30 dias.
+O DDL canônico já contém a coluna e o motivo na definição CREATE final.
 Histórico da resposta, efeitos da etapa, conclusão da retomada, reset do stage,
 eventual encerramento e finalização da fila são confirmados juntos pelo flow.
 A chamada à Meta ocorre fora dessa atomicidade local;
@@ -307,7 +312,7 @@ pesquisa da 21, sem interpretar a mesma entrada como nota.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São três lembretes: 15min após a resposta comum do bot, mais 6h45 e mais 7h desde o envio anterior confirmado; somente o terceiro encerra. Recibos e guardas são preservados. A reação ao primeiro ou ao segundo segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.
 
