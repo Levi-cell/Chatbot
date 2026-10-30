@@ -3,7 +3,7 @@
 from .composicao import compor_tratamento
 
 
-MENSAGEM_ENDERECO = "Nossa unidade fica localizada em {endereco}\n\n"
+MENSAGEM_ENDERECO = "Nossa unidade fica localizada na {endereco}\n\n"
 MENSAGEM_HORARIOS = "Nosso horário de funcionamento é de {horarios}\n\n"
 MENSAGEM_SEM_ENDERECO = (
     "Ainda não tenho o endereço desta unidade cadastrado aqui. "

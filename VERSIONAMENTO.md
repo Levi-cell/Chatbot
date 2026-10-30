@@ -194,6 +194,10 @@ Commit: `201b6b253af731195d31fb35a11d4d66652f4e89`
 
 Commit: `15da7ffb8380dcfcd174017957cd43095f73dbb1`
 
+### V1.20.0 — Três follow-ups e mensagens aprimoradas
+
+Commit: `4c44798d2ed940465adcd1d4a6d7818068cd028a`
+
 ## Padrão de numeração a partir da V1.2.0
 
 Adotamos o formato `VMAJOR.MINOR.PATCH`, seguindo o versionamento semântico.
