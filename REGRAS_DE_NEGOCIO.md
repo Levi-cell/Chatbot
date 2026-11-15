@@ -735,6 +735,13 @@ também apresenta a etapa 1.
 
 ### 11.3. Tratamento financeiro
 
+Na etapa de profissão (4), identificar também pedidos de informação sobre preços,
+mesmo sem interrogação: `Só queria saber valores`, `Me passa os preços` e
+`Pode me informar a mensalidade`. Eles recebem orientação financeira e repetição
+da pergunta de profissão, sem salvar o pedido como profissão nem avançar a etapa.
+O reconhecimento continua contextual: `corretor de valores`, `analista de custos`
+e `trabalho com investimentos` são respostas profissionais válidas.
+
 Quando o cliente enviar texto perguntando sobre valor, custo, preço,
 mensalidade, investimento ou termo equivalente:
 
@@ -1368,9 +1375,7 @@ serviço:
 - caches degradam para fallback ou negam uma operação administrativa que
   produziria inconsistência.
 
-Na produção atual, webhook, worker de atendimento, worker do Funil e worker de
-follow-up são quatro serviços systemd independentes. Os três primeiros usam
-`Restart=always`; follow-up usa `Restart=on-failure`. Todos têm `RestartSec=5s`.
+A implantação dispõe de um serviço web e seis workers. As responsabilidades e políticas de reinício de cada unidade constam no [inventário](workers/README.md) e nas [units systemd](deploy/systemd).
 As camadas de recuperação são complementares:
 
 ```text
@@ -1423,7 +1428,7 @@ Implementação principal:
 | Conversa elegível vira oportunidade no Funil | Implementada e desativada por padrão | Etapas 20–24, `funil_envios`, claim com lease e confirmação lógica da ApiCarrossel. |
 | Uma falha de lead não interrompe o lote do Funil | Implementada | O item volta para `pending`; os demais continuam no mesmo ciclo. |
 | Follow-up antes do agendamento | Implementada | Lembretes em 15min, 7h e 14h no cronograma normal; encerramento no terceiro, nas etapas 1–17 e a 18 somente para unidade sem link, inclusive 8, dentro da janela do cliente. Retorno antes do encerramento valida a resposta; depois, abre nova conversa. |
-| Supervisão dos quatro processos | Implementada | Webhook, flow e Funil usam `Restart=always`; follow-up usa `Restart=on-failure`. Nginx encaminha o endpoint público ao webhook. |
+| Supervisão dos serviços | Implementada | As sete [unidades systemd](deploy/systemd) especificam a política de reinício de cada processo. Nginx encaminha o tráfego público ao webhook. |
 
 ## 22. Orientação para futuras alterações
 
@@ -1543,7 +1548,7 @@ do ciclo; registros de retomada identificam a entrada processada para recuperaç
 
 Os dois workers compartilham o lock de 110 segundos e seu fencing. Entrada aceita
 após o último teste pré-envio pode cruzar com a chamada da Meta: confirmamos o
-envio. No primeiro, o flow lê stage positivo ao obter o lock; no segundo, relê
+envio. Nos dois primeiros envios, o flow lê stage positivo ao obter o lock. Após o terceiro, relê
 o estado encerrado e abre outro atendimento, reagendando uma leitura obsoleta sem
 consumir retry. A janela entre aceite
 externo e commit local continua sujeita à duplicidade rara já aceita na V1.
@@ -1568,67 +1573,7 @@ Nomes compostos desconhecidos usam a primeira palavra. Aparar espaços do e-mail
 normalizar a caixa, preservando seu conteúdo sem testes de estrutura ou domínio.
 Interpretar o destinatário pelas opções explícitas do formulário, nunca por idade.
 
-Com os três campos extraídos e destinatário reconhecido, importar os dados juntos,
-manter a origem Google/Meta/Orgânico Site, abrir na profissão e dispensar a coleta posterior do
-e-mail. O marcador histórico `email_valido` significa coleta aceita do formulário
-nessa rota; o flow não reaplica a validação estrutural. As validações das respostas
-digitadas pelo cliente nas etapas comuns continuam iguais.
-
-Por enquanto, campo vazio mantém o atendimento comum desde a etapa 1, com motivo
-`campos_ausentes`; destinatário fora das opções conhecidas registra
-`destinatario_desconhecido` sem inventar um vínculo. Ausência de telefone, falha
-operacional, timeout e conflito de e-mail no banco conservam os tratamentos atuais.
-Este parágrafo descreve a interpretação legada. Conversas novas usam a coleta
-por campo implementada abaixo, inclusive turno quando a unidade não tem link.
-
-## Entrega do atendimento ao dashboard FireAds
-
-Após a confirmação do Funil, a entrega ao dashboard usa fila independente e
-respeita unidade adimplente e integrações ativas. Consulta e entrega usam somente
-`aba_destino`, exibida como Aba de leads no Admin.
-
-A consulta guarda a identidade da linha selecionada, inclusive no fallback por
-formulário incompleto ou canal não elegível. A entrega confere essa identidade;
-se a linha mudou de posição, relocaliza o mesmo registro. Não troca o alvo por
-um formulário posterior. Registro desaparecido ou sem identidade suficiente fica
-pendente para conferência, sem escrever em outra pessoa nem recriar o cadastro.
-
-Entregas novas com coleta usam snapshot 4: podem atualizar Nome, Email, Para quem é
-e Período preferido com valores aceitos da mensagem ou do atendimento, além de
-acrescentar Observação. Turno só participa para unidade sem link. Dados apenas
-importados da planilha não são regravados em updates; dados ausentes, inválidos
-ou conflitantes não apagam células. Preservar Canal, WhatsApp, Data/Hora,
-Perfil/Faixa e demais colunas. O bloco já gravado só reconcilia o envio quando
-todos os campos solicitados também conferem; caso contrário, reparar esses
-campos sem duplicar observações. E-mail associado a outro telefone impede
-criação. Snapshots legados conservam seleção, texto e updates só de Observação.
-
-Google usa 113336; Meta usa 113340; Orgânico Site, Chat Fire e orgânico usam
-113481. São origens distintas, descritas nas observações. Fallback por dado
-incompleto não afirma campanha nem ausência de cadastro. Sem integração FireAds,
-preservar o canal configurado na unidade.
-
-Novas observações compartilhadas usam o formato compacto, delimitado pelos mesmos
-marcadores `[INICIO CHATBOT:<integração>:<conversa>]` e `[FIM CHATBOT:…]`. O cabeçalho
-é `NOVO LEAD : <CANAL> : TITULAR` ou `DEPENDENTE`, em maiúsculas. Classificar como
-`NOVO LEAD` só quando não há conversa anterior no mesmo chat (cliente/unidade);
-caso contrário usar `NOVO ATENDIMENTO PARA LEAD ANTIGO`. Sem classificação histórica,
-usar `ATENDIMENTO`. Sem FireAds, manter a origem descritiva `META CHATBOT`, sem
-inventar identificador de integração nem alterar o código de canal configurado.
-
-Dados pessoais ocupam linhas consecutivas; profissão do titular precede os dados
-do dependente. Uma linha em branco separa os dados das seis perguntas de triagem,
-cada uma no formato `- Pergunta? : Resposta`, sem linhas vazias entre perguntas.
-Não incluir título adicional, explicação técnica da ESL Tech, descrição redundante
-do canal nem o parágrafo de orientação após a triagem. Preservar os marcadores de
-reconciliação e o conteúdo anterior da coluna Observação. Congelar payload, canal,
-classificação e texto antes do primeiro POST, também para unidades sem FireAds.
-Retry não reconstrói esses dados nem converte blocos antigos para o formato compacto.
-
-A API externa não oferece escrita condicional; edição manual entre leitura e
-POST continua podendo conflitar. Funil aceito antes de uma queda no commit local
-pode ser reenviado. Não reenviar Funil por falha exclusiva no dashboard.
-Operação, migração e limites: [Plano aplicado](atualizar_envio.md).
+A abertura atual aproveita cada campo confirmado. Nome e destinatário determinam a entrada na etapa 1, 2 ou 4. E-mail e, em unidades sem link, turno têm caminhos próprios. O [contrato da FireAds](docs/fireads.md) descreve seleção de formulário, sincronização, decisão orgânica e confirmação do dashboard antes do Funil. O comportamento de snapshots antigos é preservado no replay.
 
 ## Consumo mensal de mensagens Meta
 
@@ -1723,7 +1668,7 @@ consulta extra para métricas. Timeout/origem provisória fica sem identificaç�
 Unidades integradas têm filtro FireAds com os quatro subcanais e filtro 100% orgânico.
 Titular/Dependentes exigem destinatário confirmado; false padrão não prova titular.
 Relatórios exibem barras de atendimentos/envios confirmados ao Funil por canal,
-contando todas as conversas do período e deduplicando retentativas. Para Meta,
+contando todas as conversas do período e deduplicando retentativas. Para Meta Ads e Google Ads,
 agrupar a coluna `Anuncio` (sem acento), com grupo Anúncio não informado quando vazio.
 O nome/código do criativo não é apresentado como ID oficial da Meta. Dados antigos
 só entram quando já existe evidência persistida; não consultar planilha atual
@@ -1757,7 +1702,7 @@ renovam uma consulta já expirada. Na entrega, a reserva é de 960s; o Funil usa
 no mínimo esse prazo. O HTTP fica fora de transações; locks de sessão por contato
 serializam a preparação e escrita entre nossos workers, sem bloquear operadores.
 Não exige nova migração SQL. O plano atualizado está em
-[fireads_sincronizacao_campos.md](docs/fireads_sincronizacao_campos.md).
+[integração FireAds](docs/fireads.md).
 
 
 ## Chat Fire e turno antecipado (21/10/2026)
@@ -1832,7 +1777,7 @@ O Funil reconfirma canal/anúncio e pode corrigir a atribuição; preservar evid
 anterior. A ajuda do painel não trata toda origem desconhecida como abandono.
 
 Detalhes operacionais: [workers](workers/README.md) e
-[plano aplicado](plano_relatorios_perfis_origens_anuncios.md).
+[relatórios, filtros e perfis](docs/monitoramento_fireads_filtros_relatorios.md).
 
 
 ## Endereço da unidade e retorno — 27/10/2026

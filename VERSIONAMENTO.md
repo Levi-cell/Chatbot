@@ -1,5 +1,9 @@
 # Registro de versionamento
 
+## Estado no encerramento do desenvolvimento
+
+A última publicação numerada registrada é V1.20.0 (`4c44798`). O commit posterior `a7c110e` ajusta a redação do endereço. A revisão de 08/11/2026 do validador financeiro da etapa 4 integra a árvore preparada para arquivamento, sem versão numerada própria. O [diagnóstico](docs/diagnostico_financeiro_fireads_20261108.md) registra a reprodução e os limites das evidências históricas.
+
 ## Histórico de versões
 
 ### V1.0.0 — Proteção contra bots

@@ -11,6 +11,10 @@ from workers.worker_flow.response_flow.etapas.validadores_contexto.valida_etapa4
     MOTIVO_PROFISSAO_FORA_CONTEXTO,
     validar_profissao_etapa4,
 )
+from workers.worker_flow.response_flow.etapas.validadores_contexto.validador_financeiro_etapa4 import (
+    validar_pergunta_financeira_etapa4,
+)
+from tests.unit.test_mensagens_reserva import contexto_resposta
 
 
 RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = (
@@ -26,6 +30,80 @@ RESPOSTAS_FORA_CONTEXTO_OBSERVADAS = (
     "Meu filho",
     "Vc ouviu áudio ou ligação",
 )
+
+
+class FinanceiroNaProfissaoTests(unittest.TestCase):
+    def test_pedidos_de_precos_nao_dependem_de_interrogacao(self):
+        for texto in (
+            "Só queria saber valores.",
+            "Queria saber os valores",
+            "Eu gostaria de saber qual é o valor",
+            "Gostaria de saber quais são os preços",
+            "Quero apenas conhecer os custos",
+            "Preciso consultar o valor",
+            "Quero informações sobre os valores",
+            "Me diz os preços",
+            "Me fala sobre o investimento",
+            "Pode me informar os valores",
+            "Poderia passar a mensalidade",
+            "Vocês conseguem me enviar os preços?",
+            "Me passa os valores por favor",
+            "Quais são os valores?",
+            "Quais os preços",
+            "Qual o valor?",
+            "Qual é o custo?",
+            "Qual seria a mensalidade?",
+            "Quanto custa?",
+            "Quanto custam as aulas?",
+            "Sou contador, mas só queria saber valores.",
+            "  SÓ   QUERIA SABER VALORES!!!  ",
+        ):
+            with self.subTest(texto=texto):
+                self.assertTrue(validar_pergunta_financeira_etapa4(texto))
+
+    def test_termos_financeiros_no_trabalho_nao_sao_pedido_de_preco(self):
+        for texto in (
+            "Analista financeiro",
+            "Sou corretor de valores",
+            "Trabalho com valores e investimentos",
+            "Faço análise de custos",
+            "Sou analista de preços",
+            "Trabalho no setor de cobrança",
+            "Consultora de investimentos",
+            "Sou caixa e recebo pagamentos por pix",
+            "Meu trabalho é informar valores aos clientes",
+            "Avalio imóveis para saber valores de mercado",
+            "Trabalho com informações sobre valores de imóveis",
+        ):
+            with self.subTest(texto=texto):
+                self.assertFalse(validar_pergunta_financeira_etapa4(texto))
+                self.assertTrue(validar_profissao_etapa4(texto).valida)
+
+    def test_pedido_financeiro_repete_profissao_sem_salvar_nem_avancar(self):
+        for dependente in (False, True):
+            for retorno in (False, True):
+                with self.subTest(dependente=dependente, retorno=retorno):
+                    contexto = contexto_resposta(
+                        4, "Só queria saber valores.",
+                        {"profissao_dependente_valida": 5, "profissao_titular_valida": 6},
+                        dependente=dependente,
+                    )
+                    if retorno:
+                        contexto['saudacao_retorno'] = "Bom te ver novamente ☺️\n\n"
+                    wa = MagicMock()
+                    wa.send_message.return_value = SimpleNamespace(id="wamid.financeiro")
+                    with patch.object(cliente, "WhatsApp", return_value=wa):
+                        envio = flow_sender(contexto)
+                    wa.send_message.assert_called_once()
+                    self.assertEqual(envio['mensagem_bot'], wa.send_message.call_args.kwargs['text'])
+                    self.assertEqual(envio['id_etapa_resultante'], 4)
+                    self.assertTrue(envio['tratamento'])
+                    self.assertEqual(envio['tipo_tratamento'], 'pergunta_financeira')
+                    self.assertNotIn('profissao', envio)
+                    self.assertNotIn('evento_transicao', envio)
+                    self.assertIn('valores de investimento', envio['mensagem_bot'])
+                    self.assertIn('*profissão*', envio['mensagem_bot'])
+                    self.assertEqual(envio['mensagem_bot'].count('Bom te ver novamente'), int(retorno))
 
 
 class ValidadorProfissaoTests(unittest.TestCase):

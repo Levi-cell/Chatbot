@@ -10,3 +10,6 @@ callback/staticfiles/
 utilitarios/local_settings.py
 
 /monitoramento/
+
+# Cópias de trabalho, clusters de ensaio e prévias geradas.
+/tmp/

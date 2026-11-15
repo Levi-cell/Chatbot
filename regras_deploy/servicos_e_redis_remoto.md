@@ -1,6 +1,6 @@
 # Servicos da VM e Redis remoto
 
-Este e o procedimento canonico para operar os quatro serviços do chatbot e o
+Este e o procedimento canonico para operar os serviços do Supera e o
 Redis de producao.
 
 ## Regra de arquitetura
@@ -23,43 +23,9 @@ Nao use `redis-cli ping` sem informar um host. Esse comando consulta o Redis
 local padrao em `127.0.0.1:6379` e nao prova que a aplicacao alcanca o Redis
 remoto.
 
-## Parar os quatro serviços
+## Operação dos serviços
 
-Execute na VM, um por vez:
-
-```bash
-sudo systemctl stop chatbot-worker-followup.service
-sudo systemctl stop chatbot-webhook.service
-sudo systemctl stop chatbot-worker-flow.service
-sudo systemctl stop chatbot-worker-funil.service
-```
-
-## Iniciar os quatro serviços
-
-Execute na VM, um por vez:
-
-```bash
-sudo systemctl start chatbot-webhook.service
-sudo systemctl start chatbot-worker-flow.service
-sudo systemctl start chatbot-worker-funil.service
-systemctl is-active chatbot-worker-flow.service
-sudo journalctl -u chatbot-worker-flow.service --since "5 minutes ago" -n 60 --no-pager
-```
-
-Depois de confirmar o flow compatível ativo e sem erros, inicie o follow-up
-se os lembretes estavam habilitados antes da manutenção:
-
-```bash
-sudo systemctl start chatbot-worker-followup.service
-```
-
-Confirme os quatro estados:
-
-```bash
-systemctl is-active chatbot-webhook.service chatbot-worker-flow.service chatbot-worker-funil.service chatbot-worker-followup.service
-```
-
-O resultado esperado são quatro linhas `active`.
+O [inventário](../workers/README.md) identifica webhook, flow, consulta inicial FireAds, Funil, follow-up, consumo Meta e origem FireAds. Para uma mudança de schema, consultar a [rotina de deploy](rotina_deploy.md). Em manutenção parcial, usar o nome exato da unit afetada e preservar quais serviços estavam habilitados.
 
 ## Pausar somente os lembretes
 
@@ -106,7 +72,7 @@ sudo -u chatbot env PYTHONPATH=/opt/chatbot/app \
 
 O comando valida que o destino não é local, percorre apenas o padrão
 `conversa_bloqueada:*` e informa `RESET_CACHE_BLOQUEIOS_OK` com o total removido.
-Depois, inicie novamente os quatro serviços com os comandos deste documento.
+Depois, restabeleça os serviços que estavam ativos conforme a [rotina de deploy](rotina_deploy.md).
 
 Importante: se o banco ainda possuir uma conversa encerrada dentro do periodo
 de bloqueio, a regra de recuperacao do sistema pode recriar a chave. Para um
@@ -158,5 +124,5 @@ sudo ss -lntp | grep ':6379'
 O resultado esperado e nenhuma linha. `systemctl status redis-server.service`
 tambem deve informar que a unit nao foi encontrada.
 
-Por fim, inicie os quatro serviços e repita a verificacao
+Por fim, restabeleça os serviços que estavam ativos e repita a verificacao
 `REDIS_REMOTO_OK=True`.

@@ -391,7 +391,7 @@ O núcleo transacional e os testes específicos estão descritos em
 
 ## Worker de follow-up
 
-`worker_followup/iniciar_worker_followup.py` é o quarto serviço da VM. Seu laço
+`worker_followup/iniciar_worker_followup.py` é o inicializador do serviço de lembretes. Seu laço
 seleciona candidatos pelo PostgreSQL e chama `followup_worker.py`, proprietário
 da conexão e dos commits proativos. Não faz dequeue nem chama validadores de etapas.
 `FOLLOWUP_WORKER_ENABLED` é falso por padrão em execução manual; a unit systemd
@@ -528,11 +528,11 @@ Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tor
 conversas. Não envia WhatsApp, não altera etapas e não escreve no dashboard.
 O flow confirma a pendência e o reagendamento sem consumo de retry; depois aplica
 o resultado completo uma única vez. HTTP ocorre no processo separado, com reserva
-PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/valida_dados_parciais_fireads.md).
+PostgreSQL e sem transação aberta. Ver [operação e recuperação](../docs/fireads.md).
 
 ## Worker de origem FireAds
 
-O novo worker aguarda `contexto_coleta.status=pronto` e a dispensa explícita da
+O worker de origem aguarda `contexto_coleta.status=pronto` e a dispensa explícita da
 consulta inicial, com contextos vinculados à própria conversa e integração.
 Consulta inicial pendente, concluída ou com erro exclui a candidata. Também
 excluem: origem/verificação já concluída, elegibilidade comercial, fila de entrega

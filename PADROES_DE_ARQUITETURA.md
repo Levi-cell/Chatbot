@@ -30,9 +30,7 @@ documentada antes da implementação.
 
 ## Modelo de execução da V1 e evolução para a V2
 
-Na V1, a implantação mantém uma instância do `worker_flow`, uma do `worker_funil`
-e, após a migração e ativação específica, uma do `worker_followup`, além do webhook.
-Cada serviço possui seu próprio ciclo de vida.
+A instalação possui webhook e seis workers independentes. O [inventário](workers/README.md) especifica execução, concorrência e recuperação de cada um. O fluxo de atendimento tem seu próprio processo.
 
 "Uma única instância ativa na V1" não deve ser confundida com a regra "um worker
 por conversa". A primeira é uma decisão operacional desta versão; a segunda é
@@ -1072,7 +1070,7 @@ A alternativa por duplicidade só é persistida após recusa explícita do appen
 outro ciclo lê novamente e congela a linha Orgânica alternativa. Erro genérico e
 timeout nunca autorizam essa troca. Contratos antigos continuam consumíveis.
 
-Plano prático atualizado: `docs/fireads_sincronizacao_campos.md`. As quatro
+A [integração FireAds](docs/fireads.md) documenta a sincronização. As quatro
 colunas editáveis e o contrato de recibo da V1.15.0 continuam necessários.
 
 #### Fronteira entre os seis workers

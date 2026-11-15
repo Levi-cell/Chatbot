@@ -1,11 +1,12 @@
 # Integrações externas
 
 Adaptadores compartilhados para serviços externos. A V1 integra WhatsApp Cloud
-API por PyWa e criação de oportunidades no Funil de Vendas por ApiCarrossel.
+API por PyWa, consumo Meta, consulta e entrega FireAds e criação de oportunidades no Funil de Vendas por ApiCarrossel.
 
 - [Portal do projeto](../../README.md)
 - [Padrões de arquitetura](../../PADROES_DE_ARQUITETURA.md#integrações-externas)
 - [Integração WhatsApp](whatsapp/README.md)
+- [Integração FireAds](../../docs/fireads.md)
 - [Integração Funil de Vendas](funil/README.md)
 
 ## Contrato

@@ -1,5 +1,7 @@
 # Implantação do filtro Comercial e das regras de idade
 
+Registro da implantação original deste recurso. Para operar a versão final e conferir os serviços atuais, consulte o [guia de implantação](README.md).
+
 ## Contrato da entrega
 
 - Suporte configurável: desativado, 50, 60, 70 ou 80; somente titular até 89.

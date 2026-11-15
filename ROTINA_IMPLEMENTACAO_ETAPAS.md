@@ -607,10 +607,9 @@ dinâmicos vêm de `buscar_contexto_repeticao`, no repositório de follow-up; n�
 substituem a validação da resposta atual. O catálogo de repetição contempla 1–23,
 exceto a etapa 8, que retorna diretamente à 9.
 
-Antes do segundo envio, a reação passa pelos resolvers normais: resposta válida
+Com um lembrete pendente em conversa ativa, a reação passa pelos resolvers normais: resposta válida
 avança; tratamento específico mantém sua orientação; somente contexto inválido
-genérico repete a pergunta neutra. A saudação `Bom te ver novamente ☺️`, com nome
-quando autorizado, aparece uma vez. O flow persiste resposta, efeitos, reset do
+genérico repete a pergunta neutra. A saudação `Bom te ver novamente ☺️`, sempre sem nome, aparece uma vez. O flow persiste resposta, efeitos, reset do
 stage e conclusão da fila juntos. Sem avanço, a primeira reação não incrementa
 o contador; as respostas seguintes voltam às regras normais.
 Preserve a recuperação pela resposta já gravada e não zere o stage no sender.
@@ -622,15 +621,7 @@ origem 8; o bot responde na 9. Usar a persistência normal da transição e conc
 o follow-up validando o destino 9 no mesmo commit. Testar rollback dos dois
 efeitos e replay sem reenvio ou reset de ciclo posterior, nas duas rotas.
 
-Adicionar uma etapa não a torna elegível ao proativo automaticamente: o limite
-atual é 1–17, antes do agendamento. Mudanças no mapa precisam revisar
-explicitamente esse limite, o catálogo de repetição, as regras e os testes.
-
-A segunda camada chega após mais 7h desde o primeiro envio real sem reação,
-mantendo as guardas de elegibilidade. Seu envio confirmado encerra a conversa em
-stage 2, sem bloqueio de 30 dias. Outra mensagem abre nova conversa e recebe a
-abertura da etapa 1 sem prefixo. Não reaproveitar a retomada do atendimento fechado.
-O comportamento normal com stage zero conserva a saudação de três horas.
+A seleção proativa inclui 1–17 e a 18 somente para unidade sem link. Mudanças no mapa exigem conferir o seletor, o catálogo de repetição e os testes. O primeiro lembrete vence aos 15 minutos, o segundo 6h45 após o primeiro envio e o terceiro 7h após o segundo. O terceiro confirmado encerra a conversa sem bloqueio de 30 dias. Uma nova conversa passa pela coleta de abertura. O comportamento com stage zero conserva a saudação de três horas.
 
 ## Subfluxo da integração WhatsApp
 
@@ -801,7 +792,7 @@ Uma etapa está concluída somente quando:
 [ ] Django check passa
 [ ] compileall passa
 [ ] documentação continua coerente
-[ ] reação ao primeiro follow-up valida, trata ou repete; 8 -> 9; segundo encerra e retorno abre nova conversa sem prefixo
+[ ] reação durante um ciclo ativo valida, trata ou repete; 8 → 9; terceiro envio confirmado encerra e permite nova abertura
 ```
 
 ## O que não fazer
@@ -836,12 +827,12 @@ introduzir exceção arquitetural.
 
 ## Reserva com e sem plataforma
 
-A configuração atual de `unidade.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 (preferência de turno) → 19 (contato comercial). A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
+A configuração de `atendimento_customizado.link_agendamento` decide a saída da triagem: com link, 17 → 20; sem link, 17 → 18 → 19 quando falta o turno, ou 17 → 19 quando ele já foi coletado. A satisfação converge em 21 → 22 → 23 → 24, com salto 22 → 24 na recusa de comentário. As etapas 1–17 conservam suas regras.
 
-`conversa.turno` aceita NULL, manha, tarde ou noite e é salvo somente na transação de 18 → 19. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
+`conversa.turno` aceita NULL, manha, tarde, noite ou sabado e pode ser preenchido na abertura ou na escolha de turno. É preferência, não confirmação de agendamento. Qualquer texto posterior na 19 apresenta a nota da 21; não é interpretado como nota nessa mesma interação. Mídia repete a orientação da 19.
 
 O Funil exige 20–24 com link ou 19/21–24 sem link, considerando a configuração vigente na seleção, no claim e no snapshot. Preservar recibo de sucesso se o CRM já aceitou. O snapshot e o painel incluem turno da própria conversa, quando preenchido.
 
-Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. São preservadas as duas camadas de sete horas, os recibos, o encerramento no segundo lembrete e as guardas existentes. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
+Follow-up proativo: 1–17 em ambas as rotas e 18 somente sem link; a 19 e a 20 não recebem novos lembretes. O terceiro lembrete confirmado encerra a conversa. Os envios preservam recibos, prazos e janela de elegibilidade. A reação ao primeiro segue a validação normal: um turno válido na 18 avança para 19 e é persistido. Contexto inválido genérico repete; tratamentos específicos continuam prioritários. Retomadas legadas são remapeadas por significado; a exceção 8 → 9 permanece.
 
 Instalação existente exige migração própria: IDs antigos 18/19/20/21/22 tornam-se 20/21/22/23/24. Não executar setup ou seeds no banco de produção nem reaplicar migrações históricas. Preservar o Consumo Meta, seus fusos, worker, relatórios e PDFs, a compatibilidade PyWa 4.5.0, a exceção universal de idade 90+, o comentário livre e a despedida por participante.

@@ -1,5 +1,7 @@
 # Implantação do consumo mensal Meta
 
+Registro da implantação original deste recurso. Para operar a versão final e conferir os serviços atuais, consulte o [guia de implantação](README.md).
+
 ## Entrega
 
 O serviço `chatbot-worker-consumo-meta` consulta apenas a Meta (GET), sincroniza

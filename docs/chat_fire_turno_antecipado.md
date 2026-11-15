@@ -1,8 +1,5 @@
 # Chat Fire, apresentações e turno antecipado — 21/10/2026
 
-Complemento aplicado ao contrato de coleta parcial da V1.14.0. O código local
-inclui estas regras; a produção exige as migrações e o deploy coordenado.
-
 ## Abertura
 
 Somente a primeira mensagem de uma conversa nova é extraída, após as guardas de
@@ -65,48 +62,4 @@ novo envio. Mensagem inválida na triagem não aciona o salto. A preferência é
 exibida no contato comercial, monitoramento e observações compartilhadas do
 Funil/dashboard. Não representa confirmação de agendamento.
 
-A etapa 18 mantém seus três botões e aceita Sábado por texto, com orientação na
-pergunta. Nenhum formulário antigo ou conversa já iniciada é reprocessado.
-
-## Canais e entrega
-
-| Origem | Código Funil |
-| --- | --- |
-| Google Ads | 113336 |
-| Meta Ads | 113340 |
-| Orgânico Site | 113481 |
-| Chat Fire | 113481 |
-| Orgânico | 113481 |
-
-Chat Fire é uma origem própria (`chat_fire`), identificada no cabeçalho das
-observações, com código 113481. Novos snapshots 5 resolvem telefone/linha/canal e
-gravam o dashboard antes de enviar ao Funil. Se há apenas canais manuais, Orgânico ou o
-telefone não existe, criar novo Orgânico; se a consulta falhar, manter pendente.
-Recusa explícita de append por telefone duplicado permite usar um Orgânico
-existente no ciclo seguinte; respostas perdidas reconciliam a própria entrega.
-
-Nome, Email, Para quem é e, sem link, Período preferido aceitos da mensagem ou do
-atendimento são sincronizados. Campos apenas importados não são regravados em
-updates. Preservar observações anteriores e demais colunas, incluindo Canal.
-Retries usam a mesma decisão; entrega histórica não é reclassificada. Esta
-revisão não exige nova migração SQL. Ver
-[plano prático](fireads_sincronizacao_campos.md).
-
-## Migração e validação
-
-Se a coleta parcial ainda não foi aplicada, usar apenas o consolidado
-`deploy/migrations/20261021_coleta_chat_fire_completa.sql`, inteiro, com webhook
-e todos os workers parados. Ele reúne os mesmos blocos das duas migrações em uma
-transação; não é necessário executar os arquivos separados nesse deploy.
-
-Como alternativa ao consolidado, com webhook e todos os workers parados, executar primeiro
-`deploy/migrations/20261019_coleta_abertura.sql` se ainda pendente, depois
-`deploy/migrations/20261021_chat_fire_turno_coleta.sql` inteiro. O segundo SQL
-amplia os checks de origem/turno, o tamanho de turno para seis caracteres e a
-aresta 17 → 19. Não reclassifica registros nem reprocessa conversas antigas.
-Conferir migracao_ok, transicao_ok e tamanho_turno=6. Não usar setup em produção.
-
-Testes unitários: `tests.unit.test_chat_fire_turno`, `test_coleta_abertura`,
-`test_fluxo_reserva_link`, `test_fireads_aba_geral`. Integração:
-`tests.integration.test_coleta_abertura_postgres` e `test_fireads_postgres`,
-apenas em PostgreSQL descartável local e com fronteiras externas simuladas.
+A etapa 18 apresenta manhã, tarde, noite e sábado em uma lista e também aceita respostas por texto. A [integração FireAds](fireads.md) descreve a entrega e o tratamento de registros orgânicos. As regras históricas de migração estão nos [scripts incrementais](../deploy/migrations).

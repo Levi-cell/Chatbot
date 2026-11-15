@@ -4,7 +4,7 @@ Projeto Django que reúne o webhook e o aplicativo de monitoramento por unidade.
 O webhook recebe eventos da Meta, valida a entrada e persiste mensagens aceitas
 na fila. O processamento da conversa pertence ao worker. O monitoramento oferece
 login com autenticação Django, autorização por unidade, consulta responsiva de
-conversas e indicadores, além da exportação de contatos.
+conversas e indicadores, consumo Meta e exportação de contatos. Os [critérios de origem, período e perfil](../docs/monitoramento_fireads_filtros_relatorios.md) distinguem o filtro da última conversa do detalhamento de todas as conversas no relatório.
 
 Documentos centrais:
 

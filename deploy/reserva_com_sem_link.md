@@ -1,5 +1,7 @@
 # Implantação da reserva com e sem link
 
+Registro da implantação original deste recurso. Para operar a versão final e conferir os serviços atuais, consulte o [guia de implantação](README.md).
+
 Esta atualização acrescenta a escolha de turno e o contato comercial para
 unidades sem plataforma de agendamento. O código e o catálogo de etapas do
 banco devem entrar juntos. Não executar o setup inicial nem reaplicar migrações

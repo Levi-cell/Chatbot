@@ -1,11 +1,5 @@
 # Endereços por unidade e mensagens de retorno
 
-Implementação iniciada em 27/10/2026, revisada em 28/10/2026 para horários e
-tratamentos nas etapas 1–22. A auditoria inicial do banco de produção foi somente
-de leitura. A instalação desse recurso exige a migração de endereços/horários.
-O ajuste de mensagens e identificação de 29/10/2026 não exige SQL adicional
-para instalações que já aplicaram essa migração na V1.19.0.
-
 ## Comportamento
 
 `chatbot.endereco_unidade` mantém um endereço público por unidade, com chave
@@ -24,7 +18,7 @@ das 9h às 19h, exceto quarta-feira, quando vai até as 21h, e sábado das 8h30
 vazio ou só espaços omitem todo o parágrafo de horários. O repositório lê endereço
 e horários juntos por ID, inclusive quando ainda não há endereço cadastrado.
 
-O texto fica “Nossa unidade fica localizada em {endereço}.”, seguido de
+O texto fica “Nossa unidade fica localizada na {endereço}.”, seguido de
 “Nosso horário de funcionamento é de {horários}.” quando informado, e diretamente
 da pergunta ou orientação da etapa. Ponto de referência, se conhecido,
 pode constar no próprio texto do endereço; não é inferido nem obrigatório.
@@ -133,7 +127,7 @@ Exemplo para a pesquisa:
 
 > **Pesquisa de satisfação**
 >
-> Bom te ver novamente, Edcarlos ☺️
+> Bom te ver novamente ☺️
 >
 > Antes de finalizarmos, qual seu grau de satisfação com o nosso atendimento?
 
@@ -147,120 +141,6 @@ Exemplo para a pesquisa:
 - `workers/worker_flow/response_flow/repeticao_etapa.py`: seleção de senders neutros compartilhada com o follow-up, sem duplicar perguntas/botões.
 - `core/integrations/whatsapp/messages/tratamentos/composicao.py`: título e saudação em ordem, sem dupla abertura.
 
-## DDL e auditoria
+## Banco e instalação
 
-A comparação de 27/10/2026 utilizou os catálogos PostgreSQL de produção em
-transação somente leitura e um banco local criado pelo pipeline Python.
-Foram comparadas colunas/tipos/defaults/nulabilidade, constraints, índices,
-funções, gatilhos, etapas e transições das tabelas de negócio. Tabelas internas
-do Django e partições mensais são geridas separadamente; diferenças de
-representação de NOT NULL entre versões PostgreSQL foram normalizadas.
-
-O resultado final não tem estruturas de negócio exclusivas da produção. A
-única adição local é `endereco_unidade`, com suas duas colunas, PK, FK e CHECK.
-Foi alinhada a ordem textual do CHECK dos motivos de encerramento, sem alterar
-seus valores aceitos. Funções, gatilhos e catálogos de etapas/eventos coincidem.
-Isso não constitui uma auditoria de permissões, roles ou configurações do RDS.
-
-Na revisão de 28/10/2026, o `CREATE TABLE chatbot.unidade` do DDL Python já
-inclui `horarios_funcionamento TEXT NULL`. Não usa ALTER para acrescentar esse
-campo em uma instalação nova. A migração incremental usa `ADD COLUMN IF NOT
-EXISTS` para instalações existentes e foi atualizada no mesmo arquivo ainda
-não implantado. Aceita também o caso em que a tabela de endereços já foi criada.
-Nenhum horário preenchido é sobrescrito na reexecução. A comparação de 27/10
-acima descreve o banco anterior à implantação, que ainda não contém esse campo.
-
-O catálogo Python agora inclui as arestas de coleta `1 → 4` e `17 → 19`.
-A sincronização preserva IDs existentes, em vez de truncar a tabela. O setup
-prepara o catálogo histórico exigido pelo bootstrap FireAds e, ao final,
-sincroniza as 32 arestas atuais. Uma reexecução mantém as arestas mesmo quando
-as migrações já estão marcadas como aplicadas. Fixtures históricas declaram
-explicitamente o catálogo anterior.
-
-O setup continua sendo de instalação/desenvolvimento; não deve ser executado
-contra produção para aplicar esta funcionalidade. A migração incremental é
-`deploy/migrations/20261027_endereco_unidade.sql` e o mesmo CREATE TABLE está em
-`core/database/deploy_database/enderecos_script.py`, coberto por teste de igualdade.
-
-## Implantação
-
-1. Parar webhook e workers na janela de implantação e atualizar o código.
-2. Executar **inteiro** o SQL de endereços no DBeaver. Ele cria a tabela e vincula
-   os três endereços por nome exato das unidades conferidas. Se alguma unidade
-   estiver ausente, reverte a transação, incluindo a nova coluna de horários.
-   Reexecução preserva endereços e horários já editados. Santo André recebe o
-   horário confirmado quando vazio; nas outras unidades, permanece NULL.
-3. Conferir o SELECT final e executar `callback/manage.py check` e os testes
-   unitários de endereço, mensagens, saudação, follow-up e retomada.
-4. Reiniciar os serviços e testar um pedido de endereço no fluxo e no retorno.
-
-Não há mudanças de variáveis de ambiente, serviços systemd, painel estático ou
-Apps Script. Não são necessárias novas configurações de cache.
-A ampliação dos tratamentos e a padronização de quebras não exigem SQL adicional;
-a migração de endereço/horários indicada acima continua sendo a necessária.
-
-## Evidência e regressões
-
-A conversa de referência da Maria, Santo André, tinha o pedido “Aonde fica” na
-etapa 9 e recebeu contexto inválido. O teste de integração reproduz essa
-situação com dados sintéticos: carrega contexto real, responde o endereço,
-mantém a etapa 9, grava o mesmo texto enviado e não duplica no replay.
-
-Os testes cobrem titular/dependente nas etapas elegíveis, botões da reserva,
-endereço ausente, abertura, retorno de follow-up, idempotência, prioridade e
-exclusões; títulos antes da saudação e remoção da abertura redundante; aplicação
-e reexecução da migração (inclusive a partir da versão só com endereço), horários
-presentes/nulos/vazios, ponto de referência literal, rollback por unidade ausente, constraints e
-preservação dos IDs/eventos do catálogo. Toda escrita de teste usa PostgreSQL
-descartável em loopback. Nenhuma mensagem de teste é enviada à Meta.
-
-A cobertura das etapas 12–17 e 21 cruza os três tratamentos com titular,
-dependente infantil/adulto e retorno por inatividade/follow-up. Confere separação,
-pergunta, opções, prioridade, ausência de avanço/nota/resposta e replay. No
-PostgreSQL local, verifica também a ausência desses efeitos no banco e a
-continuidade: depois do tratamento, uma opção válida avança e é persistida.
-
-A revisão da etapa 8 confere os três pedidos para titular/dependente, com e
-sem saudação e follow-up: orientação + pergunta/botões da 9, sem Instagram ou
-despedida. Mapa ausente ou divergente impede o envio. PostgreSQL verifica
-8 → 9, histórico, rollback, reset do follow-up e replay sem afetar ciclo posterior;
-somente uma nova resposta na 9 confirma a reserva.
-
-Validação local de 28/10/2026 após a revisão da etapa 8: **684 testes unitários** e
-**34 testes de integração de endereço/retorno e follow-up com PostgreSQL** aprovados.
-A conferência não enviou mensagens reais nem alterou o banco de produção.
-
-Revisão editorial posterior de 28/10/2026: a etapa 18 passou para lista de quatro
-turnos, incluindo “No sábado”; a reserva por link agradece de acordo com o gênero
-do agente. O texto financeiro usa a redação aprovada sobre necessidades de cada
-aluno e análise da experiência por cortesia. Foram retirados “novamente” da
-repetição do e-mail e o segundo nome do dependente na retomada da triagem.
-O agradecimento final e a despedida da espera foram preservados. O usuário
-encerrou a proposta de alterar o segundo follow-up: sua redação provocativa é
-intencional como estratégia comercial e permanece nas duas rotas existentes.
-Esta revisão trata de naturalidade da fala, sem substituir essa estratégia.
-Esses ajustes não acrescentam SQL à migração de endereço/horários já existente.
-
-Validação dessa revisão editorial: **687 testes unitários** e **41 testes de
-integração PostgreSQL** (endereço/retorno, follow-up e reserva com/sem link)
-aprovados, além de `manage.py check` sem problemas. Banco descartável local e
-transporte HTTP simulado; não houve envio a clientes nem escrita em produção.
-
-Complemento editorial aprovado: a saída para titular menor de idade usa
-“Peça a um adulto retornar nosso atendimento.”. A introdução da triagem começa
-com “Certo, antes de prosseguirmos com sua reserva” nas duas rotas; quando já
-há “Bom te ver novamente”, a composição mantém a regra de omitir esse “Certo”.
-A pergunta de profissão explica “te conhecer melhor” para titular e “conhecer
-melhor você e a outra pessoa” para dependente, sempre terminando com “Me diz,
-qual a sua *profissão* hoje?”. O encaminhamento por idade foi mantido como está.
-
-Revisão local de 29/10/2026: o pedido “Me diz o endereço de vocês” passa a ser
-reconhecido, inclusive na coleta do nome do dependente e no retorno, preservando
-a etapa. A abertura FireAds responde endereço/horários antes de mencionar o
-formulário, e todos os tratamentos seguem sem a ponte de continuidade.
-Validação após a ampliação do identificador: **232 testes unitários aprovados**,
-incluindo dados parciais, formulário confirmado ou não, horários ausentes,
-títulos, opções e separadores. Os novos casos cobrem artigos/preposições
-opcionais, `é/que/q`, onde/aonde isolados, a palavra endereço sem pergunta e
-a exceção de email sem ocultar outro pedido físico na mesma mensagem.
-Transporte simulado; esta revisão não enviou mensagens reais nem alterou produção.
+A migração [20261027_endereco_unidade.sql](../deploy/migrations/20261027_endereco_unidade.sql) registra os três endereços iniciais e o horário de Santo André. Para uma instalação nova, o [DDL declarativo](../core/database/deploy_database) e os models Django representam a tabela e a coluna final. Os valores efetivamente cadastrados dependem da unidade e podem ser editados no Admin.

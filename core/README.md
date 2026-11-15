@@ -15,7 +15,7 @@ operacionais. `core` não conhece o fluxo completo de nenhum ponto de entrada.
 | `repositories/` | SQL de runtime usando cursor recebido | [repositories/README.md](repositories/README.md) |
 | `integrations/` | Comunicação com serviços externos | [integrations/README.md](integrations/README.md) |
 | `triagem/` | Catálogo único das seis perguntas, compartilhado pelo WhatsApp e Funil | [triagem/perguntas.py](triagem/perguntas.py) |
-| `validacoes/` | Validações puras de e-mail e domínio de suporte por idade, sem acesso ao banco ou envio | [email.py](validacoes/email.py), [suporte_por_idade.py](validacoes/suporte_por_idade.py) |
+| `validacoes/` | Validações puras de abertura, endereço, e-mail, idade e outros dados do atendimento | [email.py](validacoes/email.py), [suporte_por_idade.py](validacoes/suporte_por_idade.py) |
 | `config_env.py` | Leitura de `.env`, variáveis de ambiente e validação de tipos | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#configuração-e-segredos) |
 | `logging_config.py` | Configuração comum de logs e redução de identificadores | [Padrões de arquitetura](../PADROES_DE_ARQUITETURA.md#logging-e-exceções) |
 

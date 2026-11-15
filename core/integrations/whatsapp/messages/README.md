@@ -12,8 +12,7 @@ contínuo, mesmo quando precisar de orientação ou voltar depois de uma pausa.
 Este documento não muda validadores, transições, horários, bloqueios ou
 elegibilidade. Uma mudança editorial não autoriza alterar esses contratos.
 Os exemplos ilustram o padrão de composição. Os montadores Python são a
-fonte dos textos enviados; esta organização está implementada no projeto
-local e só chegará à produção no próximo deploy.
+fonte dos textos enviados.
 
 ## 1. A personalidade deve acompanhar o contexto
 

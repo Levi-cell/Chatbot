@@ -1,5 +1,7 @@
 # Publicação do suporte por idade mínima
 
+Registro da implantação original deste recurso. Para operar a versão final e conferir os serviços atuais, consulte o [guia de implantação](README.md).
+
 Este procedimento pertence à entrega que substitui `unidade.suporte_idoso` por
 `idade_minima_suporte`. Código, SQL, Admin e painel devem ser publicados juntos.
 O modelo Django é `managed=False`; `manage.py migrate` não converte essa coluna.

@@ -398,7 +398,7 @@ class EnvioTests(unittest.TestCase):
                     envio, chamada = self.enviar(cx)
                     texto = envio['mensagem_bot']
                     prefixo = '*Triagem cognitiva*\n\n' + (SAUDACAO if retorno else '')
-                    self.assertTrue(texto.startswith(prefixo + 'Nossa unidade fica localizada em '))
+                    self.assertTrue(texto.startswith(prefixo + 'Nossa unidade fica localizada na '))
                     pergunta = montar_mensagem_triagem_cognitiva_etapa11(repeticao=True)
                     self.assertIn('\n\n' + pergunta, texto)
                     if horario and horario.strip():
@@ -495,7 +495,7 @@ class ComposicaoTests(unittest.TestCase):
         cx['contexto_fireads'] = {'dados_titular': {'nome': 'Edcarlos'}}
         esperado = '\n\n'.join((
             'Boa tarde, Edcarlos! Sou a Dora, assistente do Supera Santo André. ☺️',
-            'Nossa unidade fica localizada em ' + ENDERECO + '.',
+            'Nossa unidade fica localizada na ' + ENDERECO + '.',
             'Nosso horário de funcionamento é de ' + HORARIOS + '.',
             'Vi que você já preencheu um dos nossos formulários. Para avançarmos com sua reserva '
             'por cortesia da unidade vamos precisar fazer mais algumas perguntinhas, ok?',
@@ -528,7 +528,7 @@ class ComposicaoTests(unittest.TestCase):
         for horario in (None, '', ' \n ', HORARIOS, HORARIOS + '.'):
             with self.subTest(horario=horario):
                 texto = montar_mensagem_tratamento_endereco('Qual o seu nome?', endereco, horario)
-                self.assertTrue(texto.startswith('Nossa unidade fica localizada em ' + endereco + '\n\n'))
+                self.assertTrue(texto.startswith('Nossa unidade fica localizada na ' + endereco + '\n\n'))
                 self.assertNotIn('..', texto)
                 self.assertEqual('Nosso horário' in texto, bool(horario and horario.strip()))
                 self.assertNotIn('para continuarmos', texto.casefold())

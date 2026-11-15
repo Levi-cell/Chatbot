@@ -9,36 +9,16 @@ nao pelo consumidor nem pelo tipo de comando SQL.
 
 ## Estrutura
 
-```text
-core/repositories/
-|-- atendimento/
-|   |-- clientes.py
-|   |-- conversas.py
-|   |-- dependentes.py
-|   |-- fila.py
-|   |-- followup.py
-|   `-- historico.py
-|-- fluxo/
-|   |-- contextos/
-|   |-- pesquisa_satisfacao.py
-|   |-- politicas.py
-|   |-- transicoes.py
-|   `-- triagem.py
-|-- unidades/
-|   |-- consultas.py
-|   `-- cache_control.py
-|-- seguranca/
-|   |-- bloqueio_meta.py
-|   |-- suspeita_bot.py
-|   `-- turno_cliente.py
-|-- monitoramento/
-|   |-- acessos.py
-|   `-- painel.py
-`-- funil/
-    |-- integracao.py
-    |-- envios.py
-    `-- leads.py
-```
+| Domínio | Responsabilidade |
+| --- | --- |
+| [atendimento](atendimento) | Clientes, chats e conversas, fila, coleta, histórico e follow-up. |
+| [fluxo](fluxo) | Contextos, políticas, transições, triagem e pesquisa. |
+| [unidades](unidades) | Cadastro, personalização, endereço e versão de cache. |
+| [seguranca](seguranca) | Bloqueio, suspeita de bot e ordenação por cliente. |
+| [fireads](fireads) | Consulta de abertura, reservas, resultados e atribuição periódica. |
+| [funil](funil) | Elegibilidade comercial, filas de entrega e snapshots. |
+| [monitoramento](monitoramento) | Controle de acesso por unidade e consultas do painel. |
+| [consumo_meta](consumo_meta) | Agendamento e persistência dos dados de consumo. |
 
 `atendimento` persiste as entidades centrais da conversa. `fluxo` consulta e
 registra regras do mapa de etapas. `unidades` concentra consultas e versao do

@@ -281,9 +281,7 @@ Na meia-noite exata do primeiro dia, a consulta rejeita intervalo vazio; a colet
 deve ocorrer após a virada, conforme a agenda do worker de consumo.
 
 Entrega implementada: [consumo mensal, worker e seção Consumo](../deploy/consumo_mensal_meta.md).
-O [histórico da pesquisa e contador de emergência](../docs/arquivo_pesquisa_meta_e_contador_emergencia.md)
-foi preservado separadamente. Banco, worker, painel e PDFs já estão implementados;
-o contador local de emergência continua sendo uma alternativa não aplicada.
+A hipótese de um contador de emergência está registrada nas [ideias de evolução](../docs/ideias_futuras.md).
 
 O saldo é **estimado**, para números usados exclusivamente em conversas
 individuais pela WABA consultada. Não inclui grupos ou consumo de outras contas
@@ -384,7 +382,7 @@ sudo -u chatbot bash -c 'set -a; source /etc/chatbot/chatbot.env; set +a; cd /op
 ```
 
 O comando usa uma transação somente leitura. Confere a existência das três
-tabelas e o motivo de encerramento da segunda camada, conta stages pendentes,
+tabelas, a versão dos recibos e o motivo de encerramento, conta stages pendentes,
 negativos/maiores que três, encerramentos por follow-up, marcações do legado e
 datas futuras em `last_interaction_at`, e lista até dez candidatas por ID de
 conversa, unidade e etapa. Não envia mensagens nem adquire lock de processamento.
@@ -434,6 +432,16 @@ Na VM, acrescente `--env-file /etc/chatbot/chatbot.env`. Sem `--env-file`, o
 comando usa `utilitarios/local_settings.py`, preservando a execução local pelo
 PyCharm.
 
+## Consulta e remoção por telefone
+
+O [utilitário de manutenção de contato](maintenance/remover_contato.py) recebe um telefone brasileiro com DDD e procura as variantes aceitas no banco e no cache. O comando abaixo, com o telefone do ambiente em análise, executa a consulta e exibe um resumo.
+
+```bash
+python -m utilitarios.maintenance.remover_contato TELEFONE_COM_DDD --resumo
+```
+
+A opção `--excluir` remove os vínculos do contato no banco e no Redis. `--limpar-residuos` trata fila órfã e chaves do Redis quando o cliente já foi excluído. A opção `--dashboard` acrescenta uma consulta de leitura às planilhas. A exclusão local tem alcance distinto de uma remoção na FireAds ou no Funil.
+
 ## Partições do histórico
 
 ```bash
@@ -475,8 +483,7 @@ Em cada bloco, somente `send-test` envia uma oportunidade real, e isso exige a
 flag de confirmação. Em Santo André, executar o arquivo ou módulo sem argumentos
 é o atalho intencional para esse mesmo envio confirmado, permitindo usar
 diretamente o botão **Run** do PyCharm. Cada sonda usa um lead fictício
-identificado para sua própria unidade. Como Santo André ainda não existe no
-banco, seu snapshot usa `id_unidade=-1` apenas para satisfazer o contrato
+identificado para sua própria unidade. A sonda de Santo André usa um snapshot fictício com `id_unidade=-1` apenas para satisfazer o contrato
 interno; esse campo não é incluído no payload da ApiCarrossel. Importar os
 módulos nunca realiza uma requisição externa.
 

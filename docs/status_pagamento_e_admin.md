@@ -1,9 +1,5 @@
 # Personalização no Admin e suspensão da unidade
 
-Atualização local de 09/10/2026, posterior ao deploy da V1.10.0
-(`49af8d5`). Exige novo deploy. Nenhuma unidade de produção foi desativada
-por esta alteração.
-
 ## Organização do Admin
 
 - **Unidades:** identidade, contatos administrativos, WABA, phone ID,
@@ -52,25 +48,5 @@ Uma operação já autorizada/em andamento no momento da gravação pode conclui
 se houver confirmação externa, ela continua sendo registrada para não provocar
 reenvio por falta de registro local. Não é um cancelamento remoto de requisições.
 
-## Implantação
 
-1. Parar webhook/workers e atualizar o código pelo procedimento habitual.
-2. Executar inteiro no DBeaver
-   [`20261009_status_pagamento_workers.sql`](../deploy/migrations/20261009_status_pagamento_workers.sql).
-   O SQL unificado atualiza a função da fila e remove a antiga view na mesma
-   transação. Exige o código de [consultas diretas](consultas_diretas_unidade.md).
-   Não move colunas nem altera o status de nenhuma unidade. Pode reexecutar;
-   não é necessário executar também o arquivo de remoção isolada.
-3. Validar Django e reiniciar os serviços.
-4. No Admin, editar a unidade desejada e definir **Status pagamento / unidade
-   ativa = Não**. Salvar. A suspensão completa exige esta versão em execução.
-
-Os testes de regressão abrangem unidade inativa e valor nulo, preservação do
-histórico e pendências, reativação, migração/reexecução da fila, desativação durante
-um ciclo, isolamento entre unidades e cadastro/edição no Admin. As verificações
-usam PostgreSQL local descartável e chamadas externas simuladas.
-
-Validação da alteração de pagamento, antes da remoção da view, em 09/10/2026:
-**495 testes passaram, sem falhas, erros ou testes
-pulados**. Django models/Admin sem apontamentos; sintaxe dos arquivos alterados
-válida; SQL da função no setup e na migração conferidos como equivalentes.
+A alteração histórica do schema consta em [migrações](../deploy/migrations/20261009_status_pagamento_workers.sql).

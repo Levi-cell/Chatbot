@@ -16,15 +16,35 @@ _TERMOS_FINANCEIROS_ISOLADOS = {
     "valores",
 }
 
+# Na profissão, a intenção de pedir preços precisa acompanhar o assunto.
+# Apenas mencionar valores/custos/investimentos também pode descrever trabalho.
+_ASSUNTO_FINANCEIRO = (
+    r"(?:custos?|precos?|valor(?:es)?|mensalidades?|investimentos?|orcamentos?)"
+)
+_PEDIDO_INFORMACAO = (
+    r"(?:"
+    r"(?:quero|queria|gostaria|preciso) (?:so |apenas )?(?:de )?"
+    r"(?:saber|conhecer|consultar|entender|informacoes)|"
+    r"(?:me|nos) (?:diz|diga|fala|fale|informe|manda|mande|envia|envie|passa|passe)|"
+    r"(?:pode|podem|poderia|poderiam|consegue|conseguem) (?:(?:me|nos) )?"
+    r"(?:informar|dizer|falar|passar|enviar|mostrar)"
+    r")"
+)
+
 _PADROES_PERGUNTA_FINANCEIRA = (
     re.compile(
-        r"\bqual(?: e| seria)? (?:(?:o|a) )?"
-        r"(?:custo|preco|valor|mensalidade|investimento)\b"
+        rf"\b(?:qual|quais)(?: e| sao| seria| seriam)? (?:(?:os?|as?) )?"
+        rf"{_ASSUNTO_FINANCEIRO}\b"
+    ),
+    re.compile(
+        rf"\b{_PEDIDO_INFORMACAO} "
+        rf"(?:(?:sobre|de|do|dos|da|das|o|os|a|as|qual|quais|e|sao|seria|seriam) ){{0,5}}"
+        rf"{_ASSUNTO_FINANCEIRO}\b"
     ),
     re.compile(
         r"\bquanto "
         r"(?:"
-        r"custa|custaria|e|fica|sai|pago|"
+        r"custam?|custariam?|e|fica|sai|pago|"
         r"eu pago|vou pagar|tenho que pagar|"
         r"vou investir|preciso investir|vai ser"
         r")\b"

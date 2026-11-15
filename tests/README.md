@@ -80,6 +80,13 @@ em `tests/integration/` e exigem ambiente descartável explícito. Dados e class
 auxiliares exclusivos de teste ficam em `tests/`, nunca nos módulos de produção.
 Sem `FOLLOWUP_TEST_DSN`, a descoberta pula a integração PostgreSQL.
 
+`test_validador_profissao.py` reproduz `Só queria saber valores.` na etapa 4,
+nas rotas titular/dependente e com/sem saudação de retorno. Verifica orientação
+financeira + pergunta de profissão, sem persistir profissão nem produzir transição.
+Cobre pedidos sem interrogação, singular/plural e profissões legítimas que
+mencionam valores, custos, preços, investimentos e pagamentos. O transporte é
+simulado; esses testes não enviam mensagens nem acessam o banco real.
+
 `test_mensagens_reserva.py` cobre negativas na escolha do participante,
 gratuidade contextual, preservação do aceite flexível, retomada com uma
 saudação, barreira terminal e igualdade entre texto enviado e histórico.
@@ -431,7 +438,7 @@ estão persistidos antes do POST e que quedas antes/depois da escrita completa
 conservam o mesmo envio, sem duplicar o bloco. Usa PostgreSQL descartável local,
 com HTTP simulado; não confirma liberação de colunas no Apps Script publicado.
 Contrato, arquivos completos e pré-requisito externo estão no
-[plano aplicado](../docs/fireads_sincronizacao_campos.md).
+[contrato da integração](../docs/fireads.md).
 
 
 ### Telefone e entrega FireAds antes do Funil — 22/10/2026
@@ -450,7 +457,7 @@ continuam cobrindo contratos 1–4. Não chama serviços de produção.
 
 ### Monitoramento por período e origem FireAds — 22/10/2026
 
-`test_monitoramento_origens` verifica atribuição comprovada, anúncio só Meta,
+`test_monitoramento_origens` verifica atribuição comprovada, anúncios de Meta Ads e Google Ads,
 origens provisórias fora dos totais, compatibilidade com a referência histórica,
 conversas versus contatos únicos, isolamento dos dados públicos e habilitação
 do recurso pelo servidor. `test_monitoramento_painel` e
